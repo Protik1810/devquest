@@ -1,0 +1,73 @@
+### rle | Easy
+fn: `fun rle(s: String): String`
+hint: `buildString { append(...) }` is the idiomatic way to build a string.
+--- stub
+fun rle(s: String): String {
+    // TODO
+    return ""
+}
+--- sol
+fun rle(s: String): String = buildString {
+    var i = 0
+    while (i < s.length) {
+        var j = i
+        while (j < s.length && s[j] == s[i]) j++
+        append(s[i]).append(j - i)
+        i = j
+    }
+}
+--- main
+fun main() {
+    for (s in listOf("aaabccdddd", "z", "aabbaa", "abc")) println("$s -> ${rle(s)}")
+}
+
+### anagrams | Medium
+fn: `fun groupAnagrams(words: List<String>): List<List<String>>`
+hint: `groupBy` keeps keys in first-seen order, so it does almost all the work.
+--- stub
+fun groupAnagrams(words: List<String>): List<List<String>> {
+    // TODO
+    return words.map { listOf(it) }
+}
+--- sol
+fun groupAnagrams(words: List<String>): List<List<String>> =
+    words.groupBy { it.toCharArray().sorted().joinToString("") }.values.toList()
+--- main
+fun main() {
+    val inputs = listOf(
+        listOf("eat", "tea", "tan", "ate", "nat", "bat"),
+        listOf("listen", "silent", "enlist", "google", "gogole", "cat", "act"),
+    )
+    for (words in inputs) {
+        for (group in groupAnagrams(words)) println(group.joinToString(" "))
+    }
+}
+
+### intervals | Hard
+fn: `fun merge(intervals: List<IntArray>): List<IntArray>`
+hint: `sortedBy { it[0] }` returns a sorted copy; `lastOrNull()` gives the last merged interval or null.
+--- stub
+fun merge(intervals: List<IntArray>): List<IntArray> {
+    // TODO
+    return intervals
+}
+--- sol
+fun merge(intervals: List<IntArray>): List<IntArray> {
+    val result = mutableListOf<IntArray>()
+    for (iv in intervals.sortedBy { it[0] }) {
+        val last = result.lastOrNull()
+        if (last != null && iv[0] <= last[1]) last[1] = maxOf(last[1], iv[1])
+        else result.add(intArrayOf(iv[0], iv[1]))
+    }
+    return result
+}
+--- main
+fun main() {
+    val cases = listOf(
+        listOf(intArrayOf(1, 3), intArrayOf(2, 6), intArrayOf(8, 10), intArrayOf(15, 18)),
+        listOf(intArrayOf(1, 4), intArrayOf(4, 5)),
+        listOf(intArrayOf(5, 7), intArrayOf(1, 2), intArrayOf(2, 3)),
+        listOf(intArrayOf(1, 10), intArrayOf(2, 3), intArrayOf(4, 5)),
+    )
+    for (c in cases) println(merge(c).joinToString(" ") { "[${it[0]},${it[1]}]" })
+}

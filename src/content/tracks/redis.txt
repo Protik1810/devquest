@@ -1,0 +1,467 @@
++++ track
+id: redis
+title: Redis
+icon: 🟥
+tier: 6
+color: #dc382d
+kind: core
+blurb: The in-memory data store behind caches, sessions, queues, rate limiters and leaderboards: keys and strings, expiry, lists, hashes, sets, sorted sets and the patterns that use them, practised with redis-cli commands that run right here.
++++
+
+=== lesson redis-intro | Keys, strings & counters | 50
+**Redis** (REmote DIctionary Server) is an **in-memory data structure store**. It keeps data in RAM, which makes reads and writes take microseconds, and it's used as a **cache**, **session store**, **message queue**, **rate limiter** and **real-time leaderboard** by a huge share of web apps.
+
+Everything is a **key** pointing at a value. The value can be a string, list, hash, set, sorted set or stream, and each type has its own commands. You talk to Redis with **`redis-cli`**, one command per line:
+
+```
+SET site:name "DevQuest"        → OK
+GET site:name                   → "DevQuest"
+GET nothing-here                → (nil)
+INCR page:views                 → (integer) 1
+MSET a 1 b 2                    → OK      (set several keys at once)
+MGET a b                        → 1) "1"  2) "2"
+DEL a b                         → (integer) 2  (how many were deleted)
+EXISTS a                        → (integer) 0
+```
+
+**Key naming:** use `object:id:field` with colons, such as `user:42`, `user:42:sessions` or `cache:weather:london`. Consistent names make keys easy to find and expire.
+
+**Why counters are safe:** Redis executes commands **one at a time** (single-threaded command execution), so `INCR` is atomic. A thousand clients incrementing `page:views` at once never lose an update, unlike "read, add 1, write back" in application code.
+
+In DevQuest, your commands run on a **Redis practice engine** inside the app. Lines starting with `#` are comments (a DevQuest convenience; real redis-cli doesn't support them).
+--- exercise code redis
+::prompt
+1. Store `site:name` = `DevQuest` and `site:version` = `0.6` with **one** `MSET`.
+2. Count three visits: increment `visits:today` **three times** (the key doesn't exist yet).
+3. Delete the leftover key `temp`.
+
+A hidden checker then reads the keys back.
+::starter
+# 1. MSET site:name and site:version
+
+# 2. three visits
+
+# 3. clean up temp
+::solution
+MSET site:name DevQuest site:version 0.6
+INCR visits:today
+INCR visits:today
+INCR visits:today
+DEL temp
+::setup
+SET temp scratch
+::verify
+MGET site:name site:version
+GET visits:today
+EXISTS temp
+::expected
+1) "DevQuest"
+2) "0.6"
+"3"
+(integer) 0
+::hints
+- `MSET key1 value1 key2 value2`
+- `INCR` on a missing key starts from 0.
+- `DEL temp`
+--- cards
+Redis :: An in-memory data structure store (strings, lists, hashes, sets, sorted sets, streams) used for caching, sessions, queues and more.
+INCR atomicity :: Redis runs commands one at a time, so INCR never loses concurrent updates.
+
+=== lesson redis-expiry | Expiry, TTL & caching | 55
+Any key can **expire**: Redis deletes it automatically after a timeout. That's what makes Redis a great cache and session store.
+
+```
+SET weather:london "12C" EX 60     → OK        (expires in 60 seconds)
+TTL weather:london                 → (integer) 60
+EXPIRE user:42:token 3600          → (integer) 1
+PERSIST user:42:token              → (integer) 1   (remove the timeout)
+TTL no-such-key                    → (integer) -2  (-2 = missing, -1 = no expiry)
+SET lock:job NX EX 30              → OK, or (nil) if the key already exists
+```
+
+**Cache-aside**, the most common caching pattern:
+1. Look in Redis: `GET cache:product:7`.
+2. On a **miss**, read from the database, then `SET cache:product:7 <json> EX 300`.
+3. On writes to the product, `DEL cache:product:7` so the next read refreshes it.
+
+Always give cache entries a TTL, so stale data and unused keys clean themselves up. Add a little randomness to TTLs ("jitter") so thousands of keys don't expire at the same second and stampede your database.
+
+DevQuest's engine uses a simulated clock: **`DEBUG SLEEP 61`** moves time forward 61 seconds instantly. On a real server, `DEBUG SLEEP` would actually freeze Redis, so never run it in production.
+--- exercise code redis
+::prompt
+1. Cache `weather:london` = `12C` for **60 seconds**.
+2. Store the session `session:abc` = `user:1` for **30 minutes**.
+3. `config:theme` was saved with an expiry by mistake: make it **permanent**.
+
+The checker then looks at the TTLs, lets 61 seconds pass, and checks again.
+::starter
+# 1. cache for 60 s
+
+# 2. session for 30 minutes
+
+# 3. make config:theme permanent
+::solution
+SET weather:london 12C EX 60
+SET session:abc user:1 EX 1800
+PERSIST config:theme
+::setup
+SET config:theme dark EX 10
+::verify
+TTL weather:london
+DEBUG SLEEP 61
+GET weather:london
+TTL session:abc
+TTL config:theme
+GET config:theme
+::expected
+(integer) 60
+OK
+(nil)
+(integer) 1739
+(integer) -1
+"dark"
+::hints
+- `SET key value EX seconds`
+- 30 minutes is 1800 seconds.
+- `PERSIST key` removes a key's timeout.
+--- cards
+TTL replies :: A positive number of seconds left; -1 = the key has no expiry; -2 = the key doesn't exist.
+Cache-aside :: Read the cache; on a miss load from the database and SET it with a TTL; delete the cache entry when the data changes.
+
+=== lesson redis-lists | Lists: queues & activity feeds | 55
+A Redis **list** is an ordered sequence of strings with fast pushes and pops at both ends: a natural **queue** or **stack**.
+
+```
+RPUSH jobs email:1 email:2      → (integer) 2   (append to the right/tail)
+LPUSH jobs urgent:9             → (integer) 3   (prepend to the left/head)
+LRANGE jobs 0 -1                → all items (-1 = the last one)
+LPOP jobs                       → "urgent:9"
+LLEN jobs                       → (integer) 2
+LTRIM feed:ada 0 99             → keep only items 0-99
+```
+
+**Job queue:** producers `RPUSH`, workers `LPOP` (or **`BLPOP`**, which *blocks* until a job arrives instead of polling).
+
+**Reliable queue:** if a worker crashes after popping, the job is lost. **`LMOVE jobs processing LEFT RIGHT`** atomically moves the job into a `processing` list, and the worker removes it from there only when it's done.
+
+**Capped feed:** for "the 100 latest activities", `LPUSH feed:user:42 <item>` then `LTRIM feed:user:42 0 99`. The list never grows beyond 100.
+--- exercise code redis
+::prompt
+The `jobs` queue holds `email:1`, `email:2`, `email:3`, and `feed:ada` holds Ada's activity feed (newest first).
+1. Add the job `report:7` to the **end** of `jobs`.
+2. Take the **oldest** job and move it, atomically, to the **end** of `jobs:done` (one command).
+3. Push `p6` onto the **front** of `feed:ada`, then trim the feed to its **3 newest** items.
+::starter
+# 1. enqueue report:7
+
+# 2. oldest job → jobs:done (LMOVE)
+
+# 3. new feed item, keep the 3 newest
+::solution
+RPUSH jobs report:7
+LMOVE jobs jobs:done LEFT RIGHT
+LPUSH feed:ada p6
+LTRIM feed:ada 0 2
+::setup
+RPUSH jobs email:1 email:2 email:3
+LPUSH feed:ada p1 p2 p3 p4 p5
+::verify
+LRANGE jobs 0 -1
+LRANGE jobs:done 0 -1
+LRANGE feed:ada 0 -1
+::expected
+1) "email:2"
+2) "email:3"
+3) "report:7"
+1) "email:1"
+1) "p6"
+2) "p5"
+3) "p4"
+::hints
+- The oldest job is at the left (head) of the list.
+- `LMOVE source destination LEFT RIGHT` pops from the left of source and pushes to the right of destination.
+- `LTRIM key 0 2` keeps items 0, 1 and 2.
+--- cards
+BLPOP :: Blocking pop: waits until a list has an item (or a timeout), so workers don't need to poll.
+Capped list :: LPUSH a new item then LTRIM key 0 N-1 to keep only the newest N.
+
+=== lesson redis-hashes | Hashes: storing objects | 50
+A **hash** maps fields to values inside one key, which is perfect for objects like users, products or settings, without serialising JSON:
+
+```
+HSET user:42 name "Grace" role admin logins 0   → (integer) 3   (fields added)
+HGET user:42 name                                → "Grace"
+HINCRBY user:42 logins 1                         → (integer) 1
+HGETALL user:42                                  → field, value, field, value…
+HDEL user:42 role                                → (integer) 1
+HEXISTS user:42 role                             → (integer) 0
+```
+
+**Hash or string with JSON?**
+- **Hash:** read or update **individual fields** (`HINCRBY`, `HSET` one field) without rewriting the whole object; small hashes are also very memory-efficient.
+- **JSON string:** the object is always read and written as a whole, or has nested structure.
+
+Expiry applies to the **whole key**, not to single fields (recent Redis versions add per-field TTLs with `HEXPIRE`).
+--- exercise code redis
+::prompt
+`user:42` already has a leftover field `temp_token`.
+1. Add the fields `name` = `Grace`, `role` = `admin` and `logins` = `0` with one command.
+2. Record **two** logins by incrementing `logins` by 2.
+3. Remove the `temp_token` field.
+::starter
+# 1. three fields at once
+
+# 2. two logins
+
+# 3. remove temp_token
+::solution
+HSET user:42 name Grace role admin logins 0
+HINCRBY user:42 logins 2
+HDEL user:42 temp_token
+::setup
+HSET user:42 temp_token abc123
+::verify
+HGETALL user:42
+HEXISTS user:42 temp_token
+::expected
+1) "name"
+2) "Grace"
+3) "role"
+4) "admin"
+5) "logins"
+6) "2"
+(integer) 0
+::hints
+- `HSET key field value field value …`
+- `HINCRBY user:42 logins 2`
+- `HDEL user:42 temp_token`
+--- cards
+Redis hash :: A key holding field → value pairs; ideal for objects whose fields are read or updated individually.
+HINCRBY :: Atomically increments an integer field inside a hash.
+
+=== lesson redis-sets | Sets: tags, uniques & mutual friends | 50
+A **set** is an unordered collection of **unique** strings, and the set operations run on the server:
+
+```
+SADD tags:post:1 redis cache nosql   → (integer) 3   (new members added)
+SISMEMBER tags:post:1 redis          → (integer) 1
+SCARD tags:post:1                    → (integer) 3   (size)
+SINTER friends:ada friends:linus     → members in BOTH sets
+SUNION a b / SDIFF a b               → in either / in a but not in b
+SINTERSTORE mutual friends:ada friends:linus   → saves the result as a new set
+```
+
+Typical uses: **unique visitors** per day (`SADD visitors:2026-03-01 <userId>`, then `SCARD`), **tags**, **"who liked this"**, **mutual friends** and **permissions**. For counting millions of uniques approximately in a few kilobytes, Redis also offers **HyperLogLog** (`PFADD` and `PFCOUNT`).
+
+Real Redis returns set members in **no particular order**; DevQuest's engine prints them sorted so lesson output is stable.
+--- exercise code redis
+::prompt
+1. Ada made a new friend: add `barbara` to `friends:ada`.
+2. Save the **mutual friends** of Ada and Linus as the set `mutual:ada:linus` (one command).
+::starter
+# 1. add barbara
+
+# 2. mutual friends → mutual:ada:linus
+::solution
+SADD friends:ada barbara
+SINTERSTORE mutual:ada:linus friends:ada friends:linus
+::setup
+SADD friends:ada linus grace alan
+SADD friends:linus ada grace ken
+::verify
+SMEMBERS friends:ada
+SMEMBERS mutual:ada:linus
+SCARD friends:ada
+::expected
+1) "alan"
+2) "barbara"
+3) "grace"
+4) "linus"
+1) "grace"
+(integer) 4
+::hints
+- `SADD friends:ada barbara`
+- `SINTERSTORE destination key1 key2` stores the intersection.
+--- cards
+Redis set :: Unordered collection of unique strings with server-side intersection, union and difference.
+HyperLogLog :: Probabilistic structure (PFADD/PFCOUNT) that counts unique items approximately in ~12 KB.
+
+=== lesson redis-zsets | Sorted sets: leaderboards & rankings | 60
+A **sorted set** is a set where every member has a **score**, kept sorted by score. It's the go-to structure for **leaderboards**, rankings, priority queues and "top N" lists:
+
+```
+ZADD scores 120 ada 95 linus 150 grace     → (integer) 3
+ZINCRBY scores 80 linus                    → "175"
+ZREVRANGE scores 0 2 WITHSCORES            → top 3, highest first, with scores
+ZREVRANK scores ada                        → (integer) 2   (0 = first place)
+ZSCORE scores grace                        → "150"
+ZRANGEBYSCORE scores 100 200               → members scoring 100..200
+ZCARD scores                               → (integer) 4
+```
+
+Inserting, updating and ranking are all **O(log n)**, so a game with millions of players can show anyone's rank instantly. Members with equal scores are ordered alphabetically.
+
+Other uses: **delayed jobs** (score = run-at timestamp, then `ZRANGEBYSCORE jobs -inf <now>`), **sliding-window rate limits** (score = request time), and **trending items** (score = popularity).
+--- exercise code redis
+::prompt
+`scores` holds ada 120, linus 95 and grace 150.
+1. Linus just won **80** points: increase his score.
+2. Add the new player **alan** with **60** points.
+
+The checker reads the top 3 with scores, Ada's rank (highest first) and the number of players.
+::starter
+# 1. linus +80
+
+# 2. add alan
+::solution
+ZINCRBY scores 80 linus
+ZADD scores 60 alan
+::setup
+ZADD scores 120 ada 95 linus 150 grace
+::verify
+ZREVRANGE scores 0 2 WITHSCORES
+ZREVRANK scores ada
+ZCARD scores
+::expected
+1) "linus"
+2) "175"
+3) "grace"
+4) "150"
+5) "ada"
+6) "120"
+(integer) 2
+(integer) 4
+::hints
+- `ZINCRBY key increment member`
+- `ZADD key score member`
+--- cards
+Sorted set :: Unique members ordered by a numeric score; O(log n) inserts and rank lookups. Perfect for leaderboards.
+ZREVRANK :: A member's position when sorted from the highest score (0 = top).
+
+=== lesson redis-patterns | Rate limits, locks & transactions | 65
+Small commands combine into powerful patterns:
+
+**Fixed-window rate limiter:** "at most 100 requests per user per minute":
+
+```
+INCR rate:user7:202603011200        → (integer) 1, 2, 3 …
+EXPIRE rate:user7:202603011200 60   (set when the counter is first created)
+```
+
+If the counter is above the limit, reject the request. The key name contains the minute, so each window starts fresh, and the expiry cleans old windows up.
+
+**Distributed lock:** "only one worker may build this report":
+
+```
+SET lock:report worker-1 NX PX 30000   → OK = you hold the lock; (nil) = someone else does
+```
+
+`NX` sets the key only if it doesn't exist, and `PX` makes it expire, so a crashed worker can't hold the lock forever. Release it only if the value is still yours (check-and-delete, done atomically with a small Lua script).
+
+**Transactions:** `MULTI` queues commands and `EXEC` runs them all at once, with no other client's command in between:
+
+```
+MULTI
+DECRBY points:ada 25
+INCRBY points:linus 25
+EXEC
+```
+
+Redis transactions don't roll back if one command fails; they guarantee **isolation**, not undo. Use `WATCH` for optimistic locking, or a Lua script (`EVAL`) for logic that must be fully atomic.
+--- exercise code redis
+::prompt
+1. **Rate limiter:** count **three** requests in the window key `rate:7:202603011200` and make the key expire in **60 seconds**.
+2. **Lock:** acquire `lock:report` with value `worker-1`, **only if it's free**, expiring after **30 seconds** (use milliseconds: `PX`).
+3. **Transfer:** in a `MULTI`/`EXEC` transaction, move **25** points from `points:ada` to `points:linus`.
+::starter
+# 1. three requests + expiry
+
+# 2. lock (NX + PX)
+
+# 3. transaction
+::solution
+INCR rate:7:202603011200
+INCR rate:7:202603011200
+INCR rate:7:202603011200
+EXPIRE rate:7:202603011200 60
+SET lock:report worker-1 NX PX 30000
+MULTI
+DECRBY points:ada 25
+INCRBY points:linus 25
+EXEC
+::setup
+SET points:ada 100
+SET points:linus 10
+::verify
+GET rate:7:202603011200
+TTL rate:7:202603011200
+GET lock:report
+PTTL lock:report
+MGET points:ada points:linus
+::expected
+"3"
+(integer) 60
+"worker-1"
+(integer) 30000
+1) "75"
+2) "35"
+::hints
+- `INCR` three times, then `EXPIRE key 60`.
+- `SET lock:report worker-1 NX PX 30000`
+- `MULTI`, then `DECRBY points:ada 25` and `INCRBY points:linus 25`, then `EXEC`.
+--- cards
+SET NX PX :: Set only if the key doesn't exist, with a millisecond expiry: the basis of a Redis lock.
+MULTI/EXEC :: Queue commands and run them together without interleaving; no automatic rollback on errors.
+
+=== lesson redis-production | Redis in production | 55
+Running Redis well means knowing what happens to your data in memory.
+
+**Persistence:**
+- **RDB snapshots** save the whole dataset every N minutes: compact and fast to restart, but you can lose the last few minutes.
+- **AOF (append-only file)** logs every write; with `appendfsync everysec` you lose at most about one second. Many setups use both.
+- Treat Redis as a cache unless persistence is configured and tested.
+
+**Memory limits:** set `maxmemory` and an **eviction policy**: `allkeys-lru` (evict least recently used keys, the classic cache choice), `allkeys-lfu`, `volatile-ttl`, or `noeviction` (writes fail when full, best for queues and data you can't lose).
+
+**Scaling & availability:**
+- **Replication:** replicas copy a primary and can serve reads.
+- **Sentinel:** monitors the primary and promotes a replica automatically on failure.
+- **Redis Cluster:** shards keys across nodes using **16,384 hash slots**. Multi-key commands need their keys in the same slot (use hash tags like `{user42}:cart`).
+
+**Habits that keep it fast:** never run **`KEYS *`** on a big production instance (it blocks the server); iterate with **`SCAN`**. Avoid huge keys (a 10-million-item list). Use pipelining to batch many commands.
+
+**Pub/Sub vs Streams:** `PUBLISH`/`SUBSCRIBE` is fire-and-forget (offline subscribers miss messages); **Streams** (`XADD`, `XREADGROUP`) persist messages with consumer groups and acknowledgements, like a lightweight Kafka.
+
+**Security:** never expose port 6379 to the internet, require authentication (ACL users with least privilege), and enable TLS between hosts. In 2024 Redis changed its license, and the Linux Foundation's open-source fork **Valkey** is now a common drop-in alternative.
+--- quiz
+? Your Redis cache is full. Which eviction policy fits a pure cache best?
+- noeviction
++ allkeys-lru
+- volatile-ttl only on keys without expiry
+- Disable maxmemory
+> allkeys-lru evicts the least recently used keys, which is what a cache wants.
+? Why should you avoid KEYS * in production?
+- It returns keys in random order
++ It scans every key and blocks the single-threaded server while it runs
+- It deletes expired keys
+- It only works in Redis Cluster
+> Use SCAN to iterate incrementally instead.
+? Which persistence option loses at most about a second of writes?
+- RDB snapshots every 15 minutes
++ AOF with appendfsync everysec
+- No persistence
+- Replication alone
+? Messages must survive a consumer being offline and be acknowledged. Use…
+- PUBLISH/SUBSCRIBE
++ Streams with consumer groups (XADD/XREADGROUP/XACK)
+- A string key per message with no expiry
+- KEYS to find new messages
+? In Redis Cluster, MGET {cart}:a {cart}:b works because…
++ The {cart} hash tag puts both keys in the same hash slot
+- Cluster ignores multi-key commands
+- Keys are always on one node
+- MGET is converted to two GETs automatically
+--- cards
+RDB vs AOF :: RDB = periodic snapshots (compact, may lose minutes); AOF = log of every write (with everysec, loses ≤ ~1 s).
+SCAN :: Iterates keys incrementally without blocking Redis, unlike KEYS *.
+Redis Cluster hash slots :: Keys are spread over 16,384 slots; hash tags {…} keep related keys in the same slot.

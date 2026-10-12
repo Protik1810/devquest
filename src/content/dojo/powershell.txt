@@ -1,0 +1,76 @@
+### sieve | Easy
+fn: `Get-Primes [int]$n`
+hint: `New-Object bool[] ($n + 1)` makes the flags; a `System.Collections.Generic.List[int]` collects the primes.
+--- stub
+function Get-Primes([int]$n) {
+    # TODO: sieve of Eratosthenes
+    return @()
+}
+--- sol
+function Get-Primes([int]$n) {
+    $composite = New-Object bool[] ($n + 1)
+    $primes = New-Object System.Collections.Generic.List[int]
+    for ($p = 2; $p -le $n; $p++) {
+        if ($composite[$p]) { continue }
+        $primes.Add($p)
+        for ($m = $p * $p; $m -le $n; $m += $p) { $composite[$m] = $true }
+    }
+    return $primes.ToArray()
+}
+--- main
+"primes(50): " + ((Get-Primes 50) -join ' ')
+"count(100): " + @(Get-Primes 100).Count
+"primes(2): " + ((Get-Primes 2) -join ' ')
+
+### wordfreq | Medium
+fn: `Get-TopWords [string]$text [int]$n`
+hint: The pipeline does the work: `-split '[^a-z]+'`, `Group-Object`, `Sort-Object` with two keys, `Select-Object -First`.
+--- stub
+function Get-TopWords([string]$text, [int]$n) {
+    # TODO
+    return @()
+}
+--- sol
+function Get-TopWords([string]$text, [int]$n) {
+    $text.ToLower() -split '[^a-z]+' |
+        Where-Object { $_ } |
+        Group-Object |
+        Sort-Object @{ Expression = 'Count'; Descending = $true }, @{ Expression = 'Name'; Descending = $false } |
+        Select-Object -First $n |
+        ForEach-Object { "$($_.Name): $($_.Count)" }
+}
+--- main
+Get-TopWords "the cat and the hat and the bat sat on the mat" 3
+Get-TopWords "Go go GO! Rust, rust; C." 3
+
+### intervals | Hard
+fn: `Merge-Intervals $intervals`
+hint: `$intervals | Sort-Object { $_[0] }` sorts by start. Collect results in a `List[object]` and output it (without a leading comma) so the pipeline sends one interval at a time.
+--- stub
+function Merge-Intervals($intervals) {
+    # TODO: sort by start, then extend or append
+    return $intervals
+}
+--- sol
+function Merge-Intervals($intervals) {
+    $merged = New-Object System.Collections.Generic.List[object]
+    foreach ($iv in ($intervals | Sort-Object { $_[0] })) {
+        if ($merged.Count -gt 0 -and $iv[0] -le $merged[$merged.Count - 1][1]) {
+            $last = $merged[$merged.Count - 1]
+            $last[1] = [Math]::Max($last[1], $iv[1])
+        } else {
+            $merged.Add(@($iv[0], $iv[1]))
+        }
+    }
+    return $merged
+}
+--- main
+$cases = @(
+    @(@(1, 3), @(2, 6), @(8, 10), @(15, 18)),
+    @(@(1, 4), @(4, 5)),
+    @(@(5, 7), @(1, 2), @(2, 3)),
+    @(@(1, 10), @(2, 3), @(4, 5))
+)
+foreach ($c in $cases) {
+    (Merge-Intervals $c | ForEach-Object { "[$($_[0]),$($_[1])]" }) -join ' '
+}

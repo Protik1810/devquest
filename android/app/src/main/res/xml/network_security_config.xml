@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  HTTPS everywhere by default. Plain HTTP is only used for AI servers the learner runs themselves
+  (Ollama, LM Studio, Solframe on this phone or on a PC in the same Wi-Fi). Android can't allow-list
+  IP ranges here, so the app itself refuses http:// to anything but loopback and private-network
+  addresses (see src/engine/nativeFetch.ts).
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

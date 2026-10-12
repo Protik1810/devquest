@@ -1,0 +1,88 @@
+### rle | Easy
+fn: `rle(s)`
+hint: `s:sub(i, i)` reads one character; collect pieces in a table and `table.concat` them at the end.
+--- stub
+local function rle(s)
+  -- TODO
+  return ""
+end
+--- sol
+local function rle(s)
+  local out = {}
+  local i = 1
+  while i <= #s do
+    local c = s:sub(i, i)
+    local j = i
+    while j <= #s and s:sub(j, j) == c do j = j + 1 end
+    out[#out + 1] = c .. (j - i)
+    i = j
+  end
+  return table.concat(out)
+end
+--- main
+for _, s in ipairs({"aaabccdddd", "z", "aabbaa", "abc"}) do
+  print(s .. " -> " .. rle(s))
+end
+
+### brackets | Medium
+fn: `is_balanced(s)`
+hint: `table.remove(stack)` pops the last element (or returns nil when empty).
+--- stub
+local function is_balanced(s)
+  -- TODO
+  return false
+end
+--- sol
+local function is_balanced(s)
+  local opener = { [")"] = "(", ["]"] = "[", ["}"] = "{" }
+  local stack = {}
+  for c in s:gmatch(".") do
+    if c == "(" or c == "[" or c == "{" then
+      stack[#stack + 1] = c
+    elseif opener[c] then
+      if table.remove(stack) ~= opener[c] then return false end
+    end
+  end
+  return #stack == 0
+end
+--- main
+for _, s in ipairs({"([]{})", "([)]", "((", "a(b[c]d)e", "}{"}) do
+  print(s .. " -> " .. tostring(is_balanced(s)))
+end
+
+### intervals | Hard
+fn: `merge(intervals)`
+hint: `table.sort(t, function(a, b) return a[1] < b[1] end)` sorts by start. Copy the intervals first so the input isn't changed.
+--- stub
+local function merge(intervals)
+  -- TODO
+  return intervals
+end
+--- sol
+local function merge(intervals)
+  local sorted = {}
+  for i, iv in ipairs(intervals) do sorted[i] = { iv[1], iv[2] } end
+  table.sort(sorted, function(a, b) return a[1] < b[1] end)
+  local out = {}
+  for _, iv in ipairs(sorted) do
+    local last = out[#out]
+    if last and iv[1] <= last[2] then
+      last[2] = math.max(last[2], iv[2])
+    else
+      out[#out + 1] = iv
+    end
+  end
+  return out
+end
+--- main
+local cases = {
+  { {1, 3}, {2, 6}, {8, 10}, {15, 18} },
+  { {1, 4}, {4, 5} },
+  { {5, 7}, {1, 2}, {2, 3} },
+  { {1, 10}, {2, 3}, {4, 5} },
+}
+for _, c in ipairs(cases) do
+  local parts = {}
+  for _, iv in ipairs(merge(c)) do parts[#parts + 1] = "[" .. iv[1] .. "," .. iv[2] .. "]" end
+  print(table.concat(parts, " "))
+end

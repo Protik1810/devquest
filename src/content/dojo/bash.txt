@@ -1,0 +1,68 @@
+### caesar | Easy
+fn: `caesar TEXT K`
+hint: `tr` maps one alphabet onto another. Build the shifted alphabet with substrings: `${lower:s}${lower:0:s}`.
+--- stub
+caesar() {
+  local text=$1 k=$2
+  # TODO: build shifted alphabets and translate with tr
+  echo "$text"
+}
+--- sol
+caesar() {
+  local text=$1 k=$2
+  local lower=abcdefghijklmnopqrstuvwxyz upper=ABCDEFGHIJKLMNOPQRSTUVWXYZ
+  local s=$(( (k % 26 + 26) % 26 ))
+  local lshift=${lower:s}${lower:0:s} ushift=${upper:s}${upper:0:s}
+  echo "$text" | tr "$lower$upper" "$lshift$ushift"
+}
+--- main
+caesar "Hello, World!" 3
+caesar "xyz ABC" 2
+caesar "Khoor, Zruog!" -3
+caesar "DevQuest" 13
+
+### wordfreq | Medium
+fn: `top_words TEXT N`
+hint: A classic pipeline: `tr -cs 'a-z' '\n'` puts one word per line, then `sort | uniq -c | sort -k1,1nr -k2,2 | head`.
+--- stub
+top_words() {
+  local text=$1 n=$2
+  # TODO: lower-case, one word per line, count, sort, take n, print "word: count"
+  :
+}
+--- sol
+top_words() {
+  local text=$1 n=$2
+  echo "$text" | tr 'A-Z' 'a-z' | tr -cs 'a-z' '\n' | grep -v '^$' |
+    sort | uniq -c | sort -k1,1nr -k2,2 | head -n "$n" |
+    awk '{ print $2 ": " $1 }'
+}
+--- main
+top_words "the cat and the hat and the bat sat on the mat" 3
+top_words "Go go GO! Rust, rust; C." 3
+
+### roman | Hard
+fn: `roman_to_int NUMERAL`
+hint: `declare -A val=([I]=1 [V]=5 ...)` makes an associative array; `${s:i:1}` is the character at index i; `(( ))` does arithmetic.
+--- stub
+roman_to_int() {
+  local s=$1
+  # TODO
+  echo 0
+}
+--- sol
+roman_to_int() {
+  local s=$1 total=0 i v next
+  declare -A val=([I]=1 [V]=5 [X]=10 [L]=50 [C]=100 [D]=500 [M]=1000)
+  for (( i = 0; i < ${#s}; i++ )); do
+    v=${val[${s:i:1}]}
+    next=0
+    (( i + 1 < ${#s} )) && next=${val[${s:i+1:1}]}
+    if (( next > v )); then (( total -= v )); else (( total += v )); fi
+  done
+  echo "$total"
+}
+--- main
+for s in MCMXCIV XLII III CDXLIV MMXXVI; do
+  echo "$s = $(roman_to_int "$s")"
+done

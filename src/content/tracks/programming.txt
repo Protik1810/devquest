@@ -1,0 +1,916 @@
++++ track
+id: programming
+title: Programming Foundations
+icon: 🧱
+tier: 1
+color: #f97316
+kind: core
+blurb: The base every developer stands on, whatever the language: problem solving, data types, number systems, text encoding, logic, loops, functions, errors, data formats, regular expressions, files, speed and testing. Hands-on in Python.
++++
+
+=== lesson fd-thinking | Thinking like a programmer | 45
+Programming is mostly **problem solving**; typing the code is the last step. A reliable process:
+
+1. **Understand** the problem. What goes in, what comes out? Work 2-3 examples by hand, including edge cases (empty input, one item, negatives).
+2. **Decompose** it into smaller steps that you already know how to do.
+3. Write the steps as **pseudocode**: plain language, structured like code.
+4. **Translate** the pseudocode into real code, one step at a time.
+5. **Test** with your examples, then improve.
+
+Example: *"the average of the even numbers in a list"*:
+
+```
+set total to 0 and count to 0
+for each number in the list:
+    if the number is even:
+        add it to total, add 1 to count
+if count is 0: the answer is 0
+otherwise: the answer is total / count
+```
+
+An **algorithm** is exactly that: a finite, precise sequence of steps that solves a problem. The same algorithm can be written in any language. Good habits: name things clearly (`total`, not `t`), solve the simple case first, and check the edge cases you listed in step 1.
+--- exercise code python
+::prompt
+Turn the pseudocode above into a function **`average_of_evens(nums)`** that returns the average of the even numbers in `nums`, or `0` when there are none.
+::starter
+def average_of_evens(nums):
+    # follow the pseudocode step by step
+    pass
+::solution
+def average_of_evens(nums):
+    total = 0
+    count = 0
+    for n in nums:
+        if n % 2 == 0:
+            total += n
+            count += 1
+    if count == 0:
+        return 0
+    return total / count
+::tests
+assert average_of_evens([1, 2, 3, 4]) == 3, average_of_evens([1, 2, 3, 4])
+assert average_of_evens([1, 3, 5]) == 0, 'no even numbers should give 0'
+assert average_of_evens([]) == 0, 'an empty list should give 0'
+assert average_of_evens([-4, 10, 7]) == 3
+assert average_of_evens([6]) == 6
+::hints
+- An even number has no remainder when divided by 2: `n % 2 == 0`.
+- Keep two variables, `total` and `count`, and update both inside the `if`.
+- Check `count == 0` before dividing.
+--- cards
+Algorithm :: A finite, precise sequence of steps that solves a problem, independent of any programming language.
+Decomposition :: Breaking a problem into smaller sub-problems you already know how to solve.
+
+=== lesson fd-types | Values, types & conversions | 50
+Every value has a **type** that decides what you can do with it:
+
+| Type | Examples | Notes |
+|---|---|---|
+| `int` | `42`, `-7` | whole numbers, exact |
+| `float` | `3.14`, `0.1` | **approximate** binary fractions |
+| `str` | `'hi'`, `"42"` | text: `"42"` is not the number 42 |
+| `bool` | `True`, `False` | results of comparisons |
+| `None` | `None` | "no value" |
+
+**Conversions** are explicit: `int("42")`, `float("3.5")`, `str(7)`, `round(2.675, 2)`.
+
+**Floats are approximate.** `0.1 + 0.2 == 0.3` is **False**, because 0.1 has no exact binary representation (just like 1/3 has no exact decimal one). For money, work in **whole cents** (integers) or use `decimal.Decimal`.
+
+**Division:** `7 / 2` is `3.5`, `7 // 2` is `3` (floor division) and `7 % 2` is `1` (the remainder). Together, `//` and `%` split things fairly: 1000 cents between 3 people is `1000 // 3 = 333` each, plus `1000 % 3 = 1` cent left over.
+--- exercise code python
+::prompt
+Write two functions:
+1. **`parse_price(text)`** turns a price like `"€12.50"`, `"12.5"` or `"€ 3"` into **whole cents** as an `int` (`1250`, `1250`, `300`). Ignore the `€` sign and spaces.
+2. **`split_bill(total_cents, people)`** returns a list with each person's share in cents. The shares must **add up exactly** to the total, and the first people pay the leftover cents (`split_bill(1000, 3)` → `[334, 333, 333]`).
+::starter
+def parse_price(text):
+    pass
+
+
+def split_bill(total_cents, people):
+    pass
+::solution
+def parse_price(text):
+    cleaned = text.replace("€", "").replace(" ", "")
+    return round(float(cleaned) * 100)
+
+
+def split_bill(total_cents, people):
+    base = total_cents // people
+    extra = total_cents % people
+    return [base + 1 if i < extra else base for i in range(people)]
+::tests
+assert parse_price("€12.50") == 1250, parse_price("€12.50")
+assert parse_price("12.5") == 1250
+assert parse_price("€ 3") == 300
+assert parse_price("0.29") == 29, 'watch out for float rounding: 0.29 * 100 is 28.999999999999996'
+assert isinstance(parse_price("1.10"), int), 'return an int number of cents'
+assert split_bill(1000, 3) == [334, 333, 333], split_bill(1000, 3)
+assert split_bill(900, 3) == [300, 300, 300]
+assert sum(split_bill(1001, 7)) == 1001
+assert split_bill(5, 1) == [5]
+::hints
+- Remove characters with `.replace("€", "")`, then convert with `float(...)`.
+- `0.29 * 100` is `28.999999999999996`, so use `round(...)` instead of `int(...)`.
+- `base = total // people`, `extra = total % people`: the first `extra` people pay one more cent.
+--- cards
+Float precision :: Floats are binary approximations: 0.1 + 0.2 != 0.3. Use integer cents or Decimal for money.
+// and % :: Floor division and remainder: 1000 // 3 == 333 and 1000 % 3 == 1.
+
+=== lesson fd-binary | Number systems: binary & hex | 55
+Computers store everything as **bits** (0 or 1). Eight bits make a **byte** (256 values: 0 to 255).
+
+**Positional notation** works the same in every base: each position is worth *base* times the one to its right.
+
+| Base | Digits | 13 is written | Prefix in code |
+|---|---|---|---|
+| 10 (decimal) | 0-9 | `13` | |
+| 2 (binary) | 0-1 | `1101` (8+4+1) | `0b1101` |
+| 16 (hexadecimal) | 0-9, a-f | `d` | `0xd` |
+
+Hex is popular because **one hex digit = 4 bits**, so a byte is exactly two hex digits (`0xff` = 255). That's why colours look like `#ff8800` and memory addresses look like `0x7ffe…`.
+
+**Converting to binary** by hand: divide by 2 repeatedly and read the remainders backwards (13 → 1, 0, 1, 1 → `1101`).
+
+**Negative numbers** use **two's complement**: in *n* bits, `-x` is stored as `2**n - x`. In 8 bits, -1 is `11111111` (255) and -128 is `10000000`. The top bit acts as the sign, and addition just works for both signs.
+--- exercise code python
+::prompt
+Implement, **without** `bin()`, `hex()` or `int(text, base)`:
+1. **`to_binary(n)`**: the binary string of a non-negative int (`to_binary(13)` → `"1101"`, `to_binary(0)` → `"0"`).
+2. **`from_hex(text)`**: the value of a hex string, upper or lower case (`from_hex("ff")` → `255`).
+3. **`twos_complement(n, bits)`**: the bit pattern of `n` (possibly negative) as an unsigned number in `bits` bits (`twos_complement(-1, 8)` → `255`, `twos_complement(5, 8)` → `5`).
+::starter
+def to_binary(n):
+    pass
+
+
+def from_hex(text):
+    pass
+
+
+def twos_complement(n, bits):
+    pass
+::solution
+def to_binary(n):
+    if n == 0:
+        return "0"
+    digits = ""
+    while n > 0:
+        digits = str(n % 2) + digits
+        n //= 2
+    return digits
+
+
+def from_hex(text):
+    value = 0
+    for ch in text.lower():
+        value = value * 16 + "0123456789abcdef".index(ch)
+    return value
+
+
+def twos_complement(n, bits):
+    return n % (2 ** bits)
+::tests
+_real = {"bin": bin, "hex": hex}
+assert to_binary(13) == "1101", to_binary(13)
+assert to_binary(0) == "0"
+assert to_binary(255) == "11111111"
+assert to_binary(1024) == "10000000000"
+assert from_hex("ff") == 255, from_hex("ff")
+assert from_hex("FF") == 255
+assert from_hex("7f3a") == 0x7F3A
+assert from_hex("0") == 0
+assert twos_complement(-1, 8) == 255
+assert twos_complement(-128, 8) == 128
+assert twos_complement(5, 8) == 5
+assert twos_complement(-2, 16) == 65534
+::hints
+- Binary: repeat `n % 2` (next digit) and `n //= 2`, building the string from the right.
+- Hex: for each character, `value = value * 16 + digit_value`; `"0123456789abcdef".index(ch)` gives the digit value.
+- Two's complement in n bits is just `n % 2**bits` in Python.
+--- cards
+Byte :: 8 bits: 256 values (0-255), written as two hex digits (00-ff).
+Two's complement :: Stores -x in n bits as 2**n - x; -1 in 8 bits is 11111111.
+
+=== lesson fd-text | Text & encodings: ASCII, Unicode, UTF-8 | 50
+Text is numbers too. Each character has a **code point**: `ord('A')` is 65 and `chr(9731)` is ☃.
+
+- **ASCII** (1963) covers 128 characters: English letters, digits and punctuation, in 7 bits.
+- **Unicode** gives every character in every script (plus emoji) a code point, with over 150,000 assigned: `U+00E9` é, `U+4E2D` 中, `U+1F600` 😀.
+- **UTF-8** is how most files and web pages *store* Unicode as bytes. It uses a variable length: **1 byte** for ASCII (so ASCII files are valid UTF-8), **2 bytes** up to U+07FF (é, ß, Cyrillic), **3 bytes** up to U+FFFF (most CJK) and **4 bytes** beyond (emoji).
+
+```python
+"héllo".encode("utf-8")      # b'h\xc3\xa9llo': 6 bytes for 5 characters
+b'h\xc3\xa9llo'.decode("utf-8")
+```
+
+**Mojibake** (garbled text like `Ã©`) happens when bytes written in one encoding are read as another. Rule: **decode at the input, work with `str`, encode at the output**, and use UTF-8 everywhere.
+
+`len("😀")` is 1 character, but it's 4 bytes in UTF-8, so string length isn't byte size.
+--- exercise code python
+::prompt
+Write:
+1. **`utf8_size(text)`**: how many bytes `text` takes in UTF-8, computed from each character's code point with the size rules above (**don't** call `.encode`).
+2. **`char_stats(text)`**: a dict counting `"letters"`, `"digits"`, `"spaces"` and `"other"` characters (use `str` methods like `.isalpha()`).
+::starter
+def utf8_size(text):
+    pass
+
+
+def char_stats(text):
+    pass
+::solution
+def utf8_size(text):
+    total = 0
+    for ch in text:
+        cp = ord(ch)
+        if cp < 0x80:
+            total += 1
+        elif cp < 0x800:
+            total += 2
+        elif cp < 0x10000:
+            total += 3
+        else:
+            total += 4
+    return total
+
+
+def char_stats(text):
+    stats = {"letters": 0, "digits": 0, "spaces": 0, "other": 0}
+    for ch in text:
+        if ch.isalpha():
+            stats["letters"] += 1
+        elif ch.isdigit():
+            stats["digits"] += 1
+        elif ch.isspace():
+            stats["spaces"] += 1
+        else:
+            stats["other"] += 1
+    return stats
+::tests
+for sample in ["hello", "héllo", "中文", "hi 😀", "", "naïve café — ok"]:
+    assert utf8_size(sample) == len(sample.encode("utf-8")), f"utf8_size({sample!r}) gave {utf8_size(sample)}, expected {len(sample.encode('utf-8'))}"
+assert char_stats("R2-D2 says hi!") == {"letters": 8, "digits": 2, "spaces": 2, "other": 2}, char_stats("R2-D2 says hi!")
+assert char_stats("") == {"letters": 0, "digits": 0, "spaces": 0, "other": 0}
+assert char_stats("é1 ") == {"letters": 1, "digits": 1, "spaces": 1, "other": 0}
+::hints
+- `ord(ch)` gives the code point; compare it with `0x80`, `0x800` and `0x10000`.
+- Start the dict with all four keys at 0 so every key exists even for empty text.
+--- cards
+Unicode vs UTF-8 :: Unicode assigns code points to characters; UTF-8 encodes those code points as 1-4 bytes.
+Mojibake :: Garbled text from decoding bytes with the wrong encoding (e.g. UTF-8 read as Latin-1: Ã©).
+
+=== lesson fd-logic | Boolean logic & conditions | 45
+Conditions are **boolean expressions**: they're `True` or `False`.
+
+| a | b | `a and b` | `a or b` | `a != b` (xor) |
+|---|---|---|---|---|
+| F | F | F | F | F |
+| F | T | F | T | T |
+| T | F | F | T | T |
+| T | T | T | T | F |
+
+**De Morgan's laws** help simplify and negate conditions:
+- `not (a and b)` == `(not a) or (not b)`
+- `not (a or b)` == `(not a) and (not b)`
+
+**Short-circuiting:** `and` stops at the first false value and `or` at the first true one, so `user and user.is_admin` never crashes when `user` is `None`.
+
+**Truthiness:** `0`, `""`, `[]`, `{}` and `None` count as false in conditions; almost everything else is true.
+
+Readable conditions beat clever ones: give complex conditions names (`is_adult = age >= 18`) and avoid deep nesting with early returns.
+--- exercise code python
+::prompt
+1. **`can_vote(age, is_citizen, is_registered)`**: true when the person is at least 18, a citizen **and** registered.
+2. **`xor(a, b)`**: exclusive or, true when exactly one is true.
+3. **`truth_table(fn)`**: for a two-argument function, return a list of `(a, b, fn(a, b))` for the four inputs in the order `(False, False)`, `(False, True)`, `(True, False)`, `(True, True)`.
+::starter
+def can_vote(age, is_citizen, is_registered):
+    pass
+
+
+def xor(a, b):
+    pass
+
+
+def truth_table(fn):
+    pass
+::solution
+def can_vote(age, is_citizen, is_registered):
+    return age >= 18 and is_citizen and is_registered
+
+
+def xor(a, b):
+    return bool(a) != bool(b)
+
+
+def truth_table(fn):
+    rows = []
+    for a in (False, True):
+        for b in (False, True):
+            rows.append((a, b, fn(a, b)))
+    return rows
+::tests
+assert can_vote(18, True, True) is True
+assert can_vote(17, True, True) is False
+assert can_vote(40, False, True) is False
+assert can_vote(40, True, False) is False
+assert [xor(a, b) for a in (False, True) for b in (False, True)] == [False, True, True, False]
+assert truth_table(lambda a, b: a and b) == [(False, False, False), (False, True, False), (True, False, False), (True, True, True)]
+assert truth_table(xor) == [(False, False, False), (False, True, True), (True, False, True), (True, True, False)]
+nand = lambda a, b: not (a and b)
+demorgan = lambda a, b: (not a) or (not b)
+assert truth_table(nand) == truth_table(demorgan), "De Morgan's law should hold"
+::hints
+- `and` chains all three conditions.
+- Two booleans differ exactly when one of them is true: `bool(a) != bool(b)`.
+- Two nested loops over `(False, True)` give the four rows in the right order.
+--- cards
+De Morgan :: not (a and b) == (not a) or (not b); not (a or b) == (not a) and (not b).
+Short-circuit evaluation :: and/or stop as soon as the result is known, so `x and x.attr` is safe when x is None.
+
+=== lesson fd-loops | Loop patterns you'll use forever | 55
+Most loops are one of a few **patterns**. Recognise them and code gets easy:
+
+| Pattern | Idea | Sketch |
+|---|---|---|
+| **Accumulator** | build up a result | `total += x` |
+| **Counter** | count matches | `if cond: count += 1` |
+| **Search** | stop at the first match | `if found: return i` |
+| **Tracker** | remember the best so far | `if x > best: best = x` |
+| **Filter / map** | keep or transform items | `[f(x) for x in xs if cond]` |
+| **Nested** | every pair / grid cell | `for row in grid: for cell in row:` |
+
+```python
+best = None
+for x in nums:
+    if best is None or x > best:   # "is None" handles the first item
+        best = x
+```
+
+Off-by-one errors are the most common loop bug: decide whether a range is *inclusive* or *exclusive*, and test with empty and one-item inputs. Prefer `for x in items` over index loops unless you really need the index (then use `enumerate`).
+--- exercise code python
+::prompt
+Write **`summarize(nums)`** that returns a dict with:
+- `"smallest"` and `"largest"` (or `None` for an empty list), using the **tracker** pattern, not `min()`/`max()`,
+- `"positives"`: how many numbers are greater than 0 (**counter**),
+- `"first_negative"`: the **index** of the first negative number, or `-1` (**search**),
+- `"running"`: the list of running totals (**accumulator**), e.g. `[1, 2, 3]` → `[1, 3, 6]`.
+::starter
+def summarize(nums):
+    pass
+::solution
+def summarize(nums):
+    smallest = largest = None
+    positives = 0
+    first_negative = -1
+    running = []
+    total = 0
+    for i, n in enumerate(nums):
+        if smallest is None or n < smallest:
+            smallest = n
+        if largest is None or n > largest:
+            largest = n
+        if n > 0:
+            positives += 1
+        if n < 0 and first_negative == -1:
+            first_negative = i
+        total += n
+        running.append(total)
+    return {"smallest": smallest, "largest": largest, "positives": positives, "first_negative": first_negative, "running": running}
+::tests
+r = summarize([3, -1, 4, -5, 9, 0])
+assert r == {"smallest": -5, "largest": 9, "positives": 3, "first_negative": 1, "running": [3, 2, 6, 1, 10, 10]}, r
+assert summarize([]) == {"smallest": None, "largest": None, "positives": 0, "first_negative": -1, "running": []}, summarize([])
+assert summarize([7])["running"] == [7]
+assert summarize([-2, -8])["largest"] == -2
+::hints
+- Start `smallest` and `largest` at `None` and set them on the first item.
+- `enumerate(nums)` gives you `(index, value)` pairs.
+- Only record the first negative: check `first_negative == -1` before setting it.
+--- cards
+Tracker pattern :: Keep the best value seen so far (starting from None) and update it when a better one appears.
+Off-by-one error :: A loop that runs one time too many or too few; test empty and single-item inputs.
+
+=== lesson fd-functions | Functions, scope & clean code | 50
+A **function** packages steps under a name, with **parameters** in and a **return value** out:
+
+```python
+def to_fahrenheit(celsius):
+    """Convert °C to °F."""          # docstring: what it does
+    return celsius * 9 / 5 + 32
+```
+
+**`return` vs `print`.** `print` shows text to a human; `return` hands a value back to the code that called the function, so it can be stored, tested and reused. Functions that compute should *return*; let one place at the edge of the program do the printing.
+
+**Scope.** Variables created inside a function are **local** and disappear when it returns. Avoid changing global variables from functions; pass values in and return results instead.
+
+**Pure functions** (output depends only on input, no side effects) are the easiest to test and reuse. **Single responsibility:** each function does one thing. If its name needs "and", split it.
+
+**Default and keyword arguments:** `def greet(name, greeting="Hello")` can be called as `greet("Ada", greeting="Hi")`. Never use a mutable default like `def f(items=[])`, because that list is shared between calls.
+--- exercise code python
+::prompt
+Build a small temperature report from **three small, pure functions**:
+1. **`to_fahrenheit(c)`** returns °F (`c * 9 / 5 + 32`).
+2. **`label(c)`** returns `"freezing"` below 0, `"cold"` below 15, `"mild"` below 25, else `"hot"`.
+3. **`report(readings)`** takes a dict `{city: celsius}` and **returns** (doesn't print) a list of lines like `"Oslo: -3°C / 26.6°F (freezing)"`, sorted by city name. Fahrenheit has one decimal.
+::starter
+def to_fahrenheit(c):
+    pass
+
+
+def label(c):
+    pass
+
+
+def report(readings):
+    pass
+::solution
+def to_fahrenheit(c):
+    return c * 9 / 5 + 32
+
+
+def label(c):
+    if c < 0:
+        return "freezing"
+    if c < 15:
+        return "cold"
+    if c < 25:
+        return "mild"
+    return "hot"
+
+
+def report(readings):
+    lines = []
+    for city in sorted(readings):
+        c = readings[city]
+        lines.append(f"{city}: {c}°C / {to_fahrenheit(c):.1f}°F ({label(c)})")
+    return lines
+::tests
+assert to_fahrenheit(100) == 212 and to_fahrenheit(-40) == -40
+assert [label(c) for c in (-1, 0, 14, 15, 24, 25)] == ["freezing", "cold", "cold", "mild", "mild", "hot"]
+out = report({"Oslo": -3, "Cairo": 31, "Lisbon": 18})
+assert out == ["Cairo: 31°C / 87.8°F (hot)", "Lisbon: 18°C / 64.4°F (mild)", "Oslo: -3°C / 26.6°F (freezing)"], out
+assert report({}) == []
+::hints
+- `report` should *build a list and return it*; the tests read the returned value.
+- `sorted(readings)` gives the city names in order.
+- Format with an f-string: `f"{to_fahrenheit(c):.1f}"`
+--- cards
+return vs print :: return hands a value back to the calling code; print only shows text to a person.
+Pure function :: Output depends only on inputs and there are no side effects; easy to test and reuse.
+
+=== lesson fd-errors | Errors, exceptions & defensive code | 55
+Errors are information. A Python **traceback** reads bottom-up: the **last line** says *what* went wrong (`ZeroDivisionError: division by zero`), and the lines above show *where* (file, line, function), from the outermost call down to the line that failed.
+
+Three kinds of errors:
+- **Syntax errors**: the code isn't valid Python, and nothing runs.
+- **Runtime exceptions**: valid code meets bad data (`KeyError`, `TypeError`, `ValueError`, `IndexError`).
+- **Logic errors**: no crash, just a wrong answer. Only tests catch these.
+
+**Handling exceptions:**
+
+```python
+try:
+    age = int(text)
+except ValueError:
+    print("Please enter a number")
+else:
+    print("ok")        # runs only if no exception
+finally:
+    print("always runs, e.g. close files")
+```
+
+Catch **specific** exceptions you can handle, never a bare `except:` that hides bugs. **Raise** your own errors with a clear message when input breaks your rules: `raise ValueError("age must be between 0 and 150")`. Validating at the boundary (user input, files, network) and failing loudly is called **defensive programming**.
+--- exercise code python
+::prompt
+1. **`safe_divide(a, b)`** returns `a / b`, or `None` when `b` is zero (catch `ZeroDivisionError`).
+2. **`parse_age(text)`** returns the age as an int. It must **raise `ValueError`** with a message containing `"not a number"` for text like `"abc"`, and containing `"out of range"` for ages below 0 or above 150. Surrounding spaces are fine (`" 42 "` → `42`).
+::starter
+def safe_divide(a, b):
+    pass
+
+
+def parse_age(text):
+    pass
+::solution
+def safe_divide(a, b):
+    try:
+        return a / b
+    except ZeroDivisionError:
+        return None
+
+
+def parse_age(text):
+    try:
+        age = int(text.strip())
+    except ValueError:
+        raise ValueError(f"{text!r} is not a number")
+    if age < 0 or age > 150:
+        raise ValueError(f"age {age} is out of range")
+    return age
+::tests
+assert safe_divide(10, 4) == 2.5
+assert safe_divide(1, 0) is None
+assert parse_age(" 42 ") == 42
+for bad, word in [("abc", "not a number"), ("", "not a number"), ("4.5", "not a number"), ("-1", "out of range"), ("151", "out of range")]:
+    try:
+        parse_age(bad)
+    except ValueError as e:
+        assert word in str(e), f"parse_age({bad!r}) raised {e!r}, expected a message containing {word!r}"
+    else:
+        raise AssertionError(f"parse_age({bad!r}) should raise ValueError")
+::hints
+- Wrap `int(text.strip())` in `try/except ValueError` and raise a new `ValueError("... not a number")`.
+- Check the range *after* converting, and raise `ValueError("... out of range")`.
+--- cards
+Reading a traceback :: Start at the last line (the error type and message), then look up for the line in your code that triggered it.
+Defensive programming :: Validate input at boundaries and fail loudly with clear errors instead of continuing with bad data.
+
+=== lesson fd-formats | Data formats: JSON & CSV | 55
+Programs exchange data as text in standard formats.
+
+**JSON** (JavaScript Object Notation) is the language of web APIs: objects `{}`, arrays `[]`, strings (double quotes only), numbers, `true`/`false`/`null`.
+
+```python
+import json
+data = json.loads('{"name": "Ada", "skills": ["math"]}')   # text → Python dict
+text = json.dumps(data, indent=2)                          # Python → text
+```
+
+**CSV** (comma-separated values) is the language of spreadsheets: one record per line, the first line usually holds the headers. Never split on commas yourself, because values can contain quoted commas (`"London, UK"`). Use the `csv` module:
+
+```python
+import csv, io
+rows = list(csv.DictReader(io.StringIO(text)))   # [{'name': 'Ada', 'age': '36'}, ...]
+```
+
+Everything read from CSV is a **string**, so convert numbers yourself. Other formats you'll meet: **YAML** (config files), **XML** (older APIs and documents), **TOML** (`pyproject.toml`) and binary formats like **Protocol Buffers** and **Parquet** for speed.
+--- exercise code python
+::prompt
+Write **`csv_to_json(text)`** that converts CSV text (with a header line) into a **JSON string**: a list of objects, one per row. Values that look like **whole numbers** become ints (`"36"` → `36`, `"-2"` → `-2`); everything else stays a string. Return `json.dumps(...)` of the list.
+::starter
+import csv
+import io
+import json
+
+
+def csv_to_json(text):
+    pass
+::solution
+import csv
+import io
+import json
+
+
+def convert(value):
+    try:
+        return int(value)
+    except ValueError:
+        return value
+
+
+def csv_to_json(text):
+    rows = []
+    for row in csv.DictReader(io.StringIO(text)):
+        rows.append({key: convert(value) for key, value in row.items()})
+    return json.dumps(rows)
+::tests
+import json as _json
+sample = 'name,city,age\nAda,"London, UK",36\nLinus,Helsinki,28\n'
+out = csv_to_json(sample)
+assert isinstance(out, str), 'return a JSON string (use json.dumps)'
+assert _json.loads(out) == [{"name": "Ada", "city": "London, UK", "age": 36}, {"name": "Linus", "city": "Helsinki", "age": 28}], out
+assert _json.loads(csv_to_json('sku,qty,note\nA1,-2,ok\nB2,3.5,\n')) == [{"sku": "A1", "qty": -2, "note": "ok"}, {"sku": "B2", "qty": "3.5", "note": ""}]
+assert _json.loads(csv_to_json('a,b\n')) == []
+::hints
+- `csv.DictReader(io.StringIO(text))` gives one dict per row, handling quoted commas for you.
+- Try `int(value)` inside `try/except ValueError` and keep the string when it fails.
+- Finish with `json.dumps(rows)`.
+--- cards
+JSON :: Text format with objects, arrays, double-quoted strings, numbers, true/false/null; the default for web APIs.
+CSV pitfall :: Values can contain quoted commas, so parse with a CSV library instead of splitting on ','.
+
+=== lesson fd-regex | Regular expressions | 60
+A **regular expression** (regex) is a small pattern language for finding and validating text. It's supported by almost every language, editor and command-line tool (`grep`).
+
+| Pattern | Matches |
+|---|---|
+| `\d` `\w` `\s` | a digit, a word character (letter/digit/_), whitespace |
+| `.` | any character except newline |
+| `[aeiou]` `[^0-9]` | one of these / not one of these |
+| `*` `+` `?` `{2,4}` | 0+, 1+, 0 or 1, 2 to 4 repetitions |
+| `^` `$` | start and end of the string |
+| `( … )` | a group you can extract |
+| `\b` | a word boundary |
+
+```python
+import re
+re.findall(r"\d+", "3 cats, 12 dogs")            # ['3', '12']
+re.fullmatch(r"\d{4}-\d{2}-\d{2}", "2026-03-01")  # matches the whole string, or None
+re.sub(r"\s+", " ", "a   lot    of space")         # 'a lot of space'
+```
+
+Always write patterns as **raw strings** (`r"..."`) so backslashes reach the regex engine. Regex is great for *shapes* of text; don't use it to parse HTML or to fully validate emails. Combine it with real checks (is the month 1-12?).
+--- exercise code python
+::prompt
+Using the `re` module:
+1. **`find_emails(text)`**: a list of email addresses in the text (simple shape: letters, digits, `._%+-`, then `@`, a domain with dots, a 2+ letter ending).
+2. **`is_date(text)`**: true when the **whole** text is `YYYY-MM-DD` *and* the month is 01-12 and the day 01-31.
+3. **`mask_digits(text)`**: replace every digit except the **last 4** of each run of 8+ digits with `*` (`"card 1234567812345678"` → `"card ************5678"`).
+::starter
+import re
+
+
+def find_emails(text):
+    pass
+
+
+def is_date(text):
+    pass
+
+
+def mask_digits(text):
+    pass
+::solution
+import re
+
+
+def find_emails(text):
+    return re.findall(r"[\w.%+-]+@[\w-]+(?:\.[\w-]+)*\.[A-Za-z]{2,}", text)
+
+
+def is_date(text):
+    m = re.fullmatch(r"(\d{4})-(\d{2})-(\d{2})", text)
+    if not m:
+        return False
+    month, day = int(m.group(2)), int(m.group(3))
+    return 1 <= month <= 12 and 1 <= day <= 31
+
+
+def mask_digits(text):
+    return re.sub(r"\d{8,}", lambda m: "*" * (len(m.group()) - 4) + m.group()[-4:], text)
+::tests
+assert find_emails("Mail ada@x.dev or linus.t@kernel.org, not @nope or a@b") == ["ada@x.dev", "linus.t@kernel.org"], find_emails("Mail ada@x.dev or linus.t@kernel.org, not @nope or a@b")
+assert find_emails("none here") == []
+assert is_date("2026-03-01") is True
+assert is_date("2026-13-01") is False
+assert is_date("2026-00-10") is False
+assert is_date("2026-3-1") is False
+assert is_date("x2026-03-01") is False
+assert mask_digits("card 1234567812345678") == "card ************5678", mask_digits("card 1234567812345678")
+assert mask_digits("pin 1234, id 987654321") == "pin 1234, id *****4321"
+::hints
+- `re.findall(pattern, text)` returns all matches; build the email pattern from `[\w.%+-]+@`, the domain and `\.[A-Za-z]{2,}`.
+- `re.fullmatch` with groups `(\d{4})-(\d{2})-(\d{2})`, then check the numbers.
+- `re.sub` accepts a function: `lambda m: ...` builds the replacement from `m.group()`.
+--- cards
+Raw string :: r"..." keeps backslashes, so regex escapes like \d reach the regex engine unchanged.
+re.fullmatch vs re.search :: fullmatch must match the entire string; search finds a match anywhere.
+
+=== lesson fd-files | Files, paths & the filesystem | 50
+Files outlive your program. The essentials:
+
+```python
+with open("notes.txt", "w", encoding="utf-8") as f:   # 'w' overwrites, 'a' appends, 'r' reads
+    f.write("first line\n")
+
+with open("notes.txt", encoding="utf-8") as f:
+    for line in f:                                      # one line at a time: memory-friendly
+        print(line.rstrip("\n"))
+```
+
+- **`with`** closes the file automatically, even if an error happens.
+- Always pass **`encoding="utf-8"`**; the default differs between operating systems.
+- **Paths:** absolute (`/home/ada/data.csv`, `C:\Users\Ada\data.csv`) vs relative (to the *current working directory*, which isn't always your script's folder). Use `pathlib` to join paths portably: `Path("data") / "scores.csv"`.
+- **Text vs binary:** images and zips are opened with `"rb"`/`"wb"` and give `bytes`.
+
+Write files safely: write to a temporary file, then rename it over the old one, so a crash mid-write never leaves a half-written file (that's how DevQuest saves your progress). This exercise runs in Python's in-memory filesystem, so it's safe to experiment.
+--- exercise code python
+::prompt
+Implement:
+1. **`save_scores(path, scores)`**: write the dict `{name: score}` to `path` as lines `name,score`, sorted by name.
+2. **`load_scores(path)`**: read such a file back into a dict with **int** scores, skipping blank lines. Return `{}` if the file **doesn't exist**.
+3. **`add_score(path, name, points)`**: add `points` to a player's score (new players start at 0) and save the file again.
+::starter
+from pathlib import Path
+
+
+def save_scores(path, scores):
+    pass
+
+
+def load_scores(path):
+    pass
+
+
+def add_score(path, name, points):
+    pass
+::solution
+from pathlib import Path
+
+
+def save_scores(path, scores):
+    with open(path, "w", encoding="utf-8") as f:
+        for name in sorted(scores):
+            f.write(f"{name},{scores[name]}\n")
+
+
+def load_scores(path):
+    if not Path(path).exists():
+        return {}
+    scores = {}
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            name, score = line.split(",")
+            scores[name] = int(score)
+    return scores
+
+
+def add_score(path, name, points):
+    scores = load_scores(path)
+    scores[name] = scores.get(name, 0) + points
+    save_scores(path, scores)
+::tests
+import os
+p = "/tmp/devquest_scores.csv"
+if os.path.exists(p):
+    os.remove(p)
+assert load_scores(p) == {}, "a missing file should give an empty dict"
+save_scores(p, {"linus": 7, "ada": 12})
+with open(p, encoding="utf-8") as f:
+    assert f.read() == "ada,12\nlinus,7\n", "lines must be name,score sorted by name"
+with open(p, "a", encoding="utf-8") as f:
+    f.write("\n")
+assert load_scores(p) == {"ada": 12, "linus": 7}
+add_score(p, "ada", 3)
+add_score(p, "grace", 5)
+assert load_scores(p) == {"ada": 15, "grace": 5, "linus": 7}, load_scores(p)
+::hints
+- Open with `"w"` to (over)write, and write `f"{name},{scores[name]}\n"` for each name in `sorted(scores)`.
+- `Path(path).exists()` tells you whether to return `{}`.
+- `add_score` = load, update with `scores.get(name, 0) + points`, save.
+--- cards
+with open(...) :: Opens a file and guarantees it's closed afterwards, even on errors.
+Atomic save :: Write a temporary file, then rename it over the original, so a crash never leaves a half-written file.
+
+=== lesson fd-speed | How fast is my code? | 60
+Two programs can give the same answer at wildly different speeds. **Big-O** describes how the work grows with the input size *n*:
+
+| Big-O | Name | 1,000 items | 1,000,000 items |
+|---|---|---|---|
+| O(1) | constant | 1 step | 1 step |
+| O(log n) | logarithmic | ~10 | ~20 |
+| O(n) | linear | 1,000 | 1,000,000 |
+| O(n log n) | sorting | ~10,000 | ~20,000,000 |
+| O(n²) | quadratic | 1,000,000 | 1,000,000,000,000 😱 |
+
+The classic trap is a **loop inside a loop** over the same data:
+
+```python
+def has_duplicates_slow(items):          # O(n²): compares every pair
+    for i in range(len(items)):
+        for j in range(i + 1, len(items)):
+            if items[i] == items[j]:
+                return True
+    return False
+```
+
+**Data structures matter.** `x in some_list` checks items one by one (O(n)), but `x in some_set` or `x in some_dict` is O(1) on average, thanks to hashing. Swapping a list for a set often turns O(n²) into O(n).
+
+Measure, don't guess: `time.perf_counter()` before and after, and test with *large* inputs, because small inputs hide slow algorithms. This exercise's tests use 100,000 numbers, so an O(n²) solution runs out of time.
+--- exercise code python
+::prompt
+Write two **O(n)** functions (a loop inside a loop will time out on the big test):
+1. **`has_duplicates(items)`**: true if any value appears twice.
+2. **`pair_with_sum(nums, target)`**: return a tuple `(a, b)` of two numbers from the list (different positions) that add up to `target`, with `a` appearing **before** `b`; return `None` if there's none.
+::starter
+def has_duplicates(items):
+    pass
+
+
+def pair_with_sum(nums, target):
+    pass
+::solution
+def has_duplicates(items):
+    seen = set()
+    for x in items:
+        if x in seen:
+            return True
+        seen.add(x)
+    return False
+
+
+def pair_with_sum(nums, target):
+    seen = set()
+    for b in nums:
+        a = target - b
+        if a in seen:
+            return (a, b)
+        seen.add(b)
+    return None
+::tests
+assert has_duplicates([3, 1, 4, 1]) is True
+assert has_duplicates([3, 1, 4]) is False
+assert has_duplicates([]) is False
+assert pair_with_sum([2, 7, 11, 15], 9) == (2, 7)
+assert pair_with_sum([3, 3], 6) == (3, 3)
+assert pair_with_sum([1, 2, 3], 7) is None
+assert pair_with_sum([5], 10) is None, 'one number cannot pair with itself'
+big = list(range(100_000))
+assert has_duplicates(big) is False
+assert has_duplicates(big + [99_999]) is True
+assert pair_with_sum(big, 199_997) == (99_998, 99_999)
+assert pair_with_sum(big, -5) is None
+::hints
+- Keep a `set` of values you've already seen; checking membership in a set is O(1).
+- For the pair: for each `b`, the partner you need is `target - b`; check whether you've seen it.
+- Add the current number to the set *after* checking, so a number can't pair with itself.
+--- cards
+Big-O :: How an algorithm's work grows with input size n: O(1), O(log n), O(n), O(n log n), O(n²)…
+list vs set membership :: `x in list` is O(n); `x in set` is O(1) on average thanks to hashing.
+
+=== lesson fd-testing | Testing your own code | 55
+You can't see a bug you never test for. **Automated tests** are small programs that check your code and can be re-run in a second after every change.
+
+**A good test** has three parts (**Arrange, Act, Assert**):
+
+```python
+def test_discount():
+    price = 100                     # arrange
+    result = apply_discount(price, 0.2)   # act
+    assert result == 80             # assert
+```
+
+**What to test:**
+- the normal case, from the examples in the task;
+- **edge cases**: empty input, zero, one item, the largest/smallest allowed value, duplicates;
+- **invalid input**: does it raise the error you promised?
+- **boundaries**: if the rule is "over 18", test 17, 18 and 19.
+
+**Test-driven development (TDD):** write a failing test first, make it pass with the simplest code, then refactor, in a red → green → refactor loop. Tools like `pytest` (Python), Jest/Vitest (JavaScript) and JUnit (Java) run hundreds of tests and report which ones fail.
+
+A test suite is a **safety net**: you can refactor fearlessly because the tests tell you the moment behaviour changes.
+--- exercise code python
+::prompt
+Implement **`grade(score)`** following these rules, then make sure your own boundary tests pass:
+- `90-100` → `"A"`, `80-89` → `"B"`, `70-79` → `"C"`, `60-69` → `"D"`, `0-59` → `"F"`;
+- a score that isn't an `int` raises **`TypeError`**, and one outside 0-100 raises **`ValueError`**.
+
+The checker runs a thorough suite including every boundary (59/60, 89/90, 100/101 …).
+::starter
+def grade(score):
+    pass
+
+
+# Your own tests: Arrange, Act, Assert
+assert grade(95) == "A"
+::solution
+def grade(score):
+    if isinstance(score, bool) or not isinstance(score, int):
+        raise TypeError("score must be an int")
+    if score < 0 or score > 100:
+        raise ValueError("score must be between 0 and 100")
+    if score >= 90:
+        return "A"
+    if score >= 80:
+        return "B"
+    if score >= 70:
+        return "C"
+    if score >= 60:
+        return "D"
+    return "F"
+
+
+# Your own tests: Arrange, Act, Assert
+assert grade(95) == "A"
+assert grade(90) == "A" and grade(89) == "B"
+assert grade(0) == "F" and grade(100) == "A"
+::tests
+cases = {100: "A", 90: "A", 89: "B", 80: "B", 79: "C", 70: "C", 69: "D", 60: "D", 59: "F", 0: "F"}
+for score, want in cases.items():
+    assert grade(score) == want, f"grade({score}) should be {want!r}, got {grade(score)!r}"
+for bad in (-1, 101, 1000):
+    try:
+        grade(bad)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError(f"grade({bad}) should raise ValueError")
+for bad in ("90", 90.5, None):
+    try:
+        grade(bad)
+    except TypeError:
+        pass
+    else:
+        raise AssertionError(f"grade({bad!r}) should raise TypeError")
+::hints
+- Check the type first with `isinstance(score, int)`, then the range, then the grade bands from the top down.
+- With `if score >= 90: return "A"` first, each next check only needs the lower bound.
+- `True` is technically an int in Python; rejecting booleans is a nice touch.
+--- cards
+Arrange-Act-Assert :: Structure for a unit test: set up inputs, call the code, check the result.
+Boundary testing :: Test values just below, at and just above every limit in the rules (e.g. 59, 60, 61).

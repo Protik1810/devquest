@@ -1,0 +1,27 @@
+name: CI
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Unit & content tests
+        run: npm test
+      - name: Build (downloads the offline Python/React runtimes)
+        run: npm run build
+      - name: Verify native-language exercises with real compilers
+        # Exercises for toolchains that aren't installed on the runner are skipped
+        run: |
+          sudo apt-get update && sudo apt-get install -y golang-go ruby php-cli r-base-core lua5.4 || true
+          npm run verify:native

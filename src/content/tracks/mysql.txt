@@ -1,0 +1,473 @@
++++ track
+id: mysql
+title: MySQL
+icon: 🐬
+tier: 6
+color: #00758f
+kind: core
+blurb: The database behind WordPress, countless web apps and the classic LAMP stack: InnoDB tables, MySQL's SQL dialect, joins with GROUP_CONCAT, dates, upserts and transactions, MySQL 8 window functions, indexes and running MySQL in production.
++++
+
+=== lesson mysql-intro | MySQL, databases & tables | 55
+**MySQL** is the most widely deployed open-source relational database: it powers WordPress, Shopify-era stores, and the classic **LAMP** stack (Linux, Apache, MySQL, PHP). **MariaDB** is a community fork, largely compatible, created by MySQL's original author.
+
+A MySQL server holds several **databases** (also called schemas), each with **tables**:
+
+```sql
+CREATE DATABASE shop;
+USE shop;
+CREATE TABLE books (
+  id     INT AUTO_INCREMENT PRIMARY KEY,
+  title  VARCHAR(200) NOT NULL,
+  price  DECIMAL(6,2) NOT NULL DEFAULT 9.99,
+  format ENUM('paper', 'ebook') NOT NULL DEFAULT 'paper'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+SHOW TABLES;
+DESCRIBE books;
+```
+
+**MySQL-flavoured details:**
+- `AUTO_INCREMENT` numbers new rows automatically.
+- `VARCHAR(n)` is text up to *n* characters; `DECIMAL(6,2)` is exact money up to 9999.99.
+- `ENUM(...)` restricts a column to a list of values.
+- **InnoDB** is the default storage engine: transactions, row locking, foreign keys and crash recovery.
+- Always use **`utf8mb4`**: MySQL's old `utf8` stores only 3-byte characters, so emoji 😀 break it.
+- Identifiers can be quoted with backticks: `` `order` ``.
+
+In DevQuest your statements run on a **MySQL practice engine** inside the app: MySQL syntax is translated and executed on an embedded database. Query results match MySQL for these lessons, but server features (users, storage engines, exact error messages) aren't simulated.
+--- exercise code mysql
+::prompt
+Create a **`books`** table (InnoDB, utf8mb4) with:
+- `id`: INT, AUTO_INCREMENT, primary key
+- `title`: VARCHAR(200), required
+- `author`: VARCHAR(100), required
+- `year`: SMALLINT
+- `price`: DECIMAL(6,2), required, default **9.99**
+- `format`: ENUM('paper', 'ebook'), required, default **'paper'**
+
+Then insert (without giving `id`): *Dune* by Frank Herbert, 1965, 12.50 (paper format by default); *Neuromancer* by William Gibson, 1984, as an **ebook** with the default price; *The Hobbit* by J.R.R. Tolkien, 1937, 8.00.
+::starter
+CREATE TABLE books (
+  -- columns here
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- inserts here
+::solution
+CREATE TABLE books (
+  id     INT AUTO_INCREMENT PRIMARY KEY,
+  title  VARCHAR(200) NOT NULL,
+  author VARCHAR(100) NOT NULL,
+  year   SMALLINT,
+  price  DECIMAL(6,2) NOT NULL DEFAULT 9.99,
+  format ENUM('paper', 'ebook') NOT NULL DEFAULT 'paper'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+INSERT INTO books (title, author, year, price) VALUES ('Dune', 'Frank Herbert', 1965, 12.50);
+INSERT INTO books (title, author, year, format) VALUES ('Neuromancer', 'William Gibson', 1984, 'ebook');
+INSERT INTO books (title, author, year, price) VALUES ('The Hobbit', 'J.R.R. Tolkien', 1937, 8.00);
+::reference
+CREATE TABLE books (id INT AUTO_INCREMENT PRIMARY KEY, title VARCHAR(200) NOT NULL, author VARCHAR(100) NOT NULL, year SMALLINT, price DECIMAL(6,2) NOT NULL DEFAULT 9.99, format ENUM('paper', 'ebook') NOT NULL DEFAULT 'paper') ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+INSERT INTO books (title, author, year, price) VALUES ('Dune', 'Frank Herbert', 1965, 12.50);
+INSERT INTO books (title, author, year, format) VALUES ('Neuromancer', 'William Gibson', 1984, 'ebook');
+INSERT INTO books (title, author, year, price) VALUES ('The Hobbit', 'J.R.R. Tolkien', 1937, 8.00);
+::verify
+SELECT id, title, author, year, price, format FROM books ORDER BY id;
+::ordered
+true
+::hints
+- Each column: `name TYPE options`, e.g. `price DECIMAL(6,2) NOT NULL DEFAULT 9.99`.
+- `id INT AUTO_INCREMENT PRIMARY KEY`
+- Leave out the columns that should use their default value in each INSERT.
+--- cards
+InnoDB :: MySQL's default storage engine: transactions, row-level locking, foreign keys and crash recovery.
+utf8mb4 :: MySQL's real UTF-8 (4 bytes per character); the legacy utf8 can't store emoji.
+
+=== lesson mysql-select | Filtering, sorting & LIMIT | 50
+The everyday query shape:
+
+```sql
+SELECT name, price
+FROM products
+WHERE category = 'tech' AND price BETWEEN 20 AND 300
+ORDER BY price DESC
+LIMIT 10;
+```
+
+**MySQL specifics worth knowing:**
+- **`LIMIT offset, count`**: `LIMIT 20, 10` skips 20 rows and returns 10 (page 3 of 10). `LIMIT 10 OFFSET 20` means the same.
+- **`IF(cond, a, b)`** is a compact CASE: `IF(price >= 100, 'premium', 'standard')`.
+- **`IFNULL(email, '(none)')`** replaces NULL (the standard `COALESCE` works too).
+- **`LIKE 'Lap%'`**: `%` is any text and `_` is one character.
+- String comparisons are **case-insensitive** by default (the default collation `utf8mb4_0900_ai_ci` is *case and accent insensitive*), so `WHERE name = 'ada'` finds "Ada". Use a `_bin` or `_cs` collation when case matters.
+- `CONCAT(first, ' ', last)` joins strings. In MySQL, `||` means OR, not concatenation.
+
+Tables today: `customers(id, name, city, email)`, `products(id, name, category, price)`, `orders(id, customer_id, ordered_on, status)`, `order_items(order_id, product_id, qty)`.
+--- exercise code mysql
+::prompt
+List **tech** products priced **between 20 and 300**, with columns `name`, `price` and `tier` (`IF` price ≥ 100 then `'premium'`, else `'standard'`), most expensive first, but **skip the first row and return the next 2** (use the `LIMIT offset, count` form).
+::starter
+SELECT name, price
+FROM products;
+::solution
+SELECT name, price, IF(price >= 100, 'premium', 'standard') AS tier
+FROM products
+WHERE category = 'tech' AND price BETWEEN 20 AND 300
+ORDER BY price DESC
+LIMIT 1, 2;
+::reference
+SELECT name, price, IF(price >= 100, 'premium', 'standard') AS tier FROM products WHERE category = 'tech' AND price BETWEEN 20 AND 300 ORDER BY price DESC LIMIT 1, 2;
+::ordered
+true
+::setup
+CREATE TABLE products (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(50) NOT NULL, category VARCHAR(30), price DECIMAL(10,2));
+INSERT INTO products (name, category, price) VALUES ('Keyboard', 'tech', 80), ('Mouse', 'tech', 25), ('Laptop', 'tech', 1200), ('Desk', 'furniture', 300), ('Chair', 'furniture', 150), ('Lamp', 'furniture', 40), ('Monitor', 'tech', 250);
+::hints
+- `WHERE category = 'tech' AND price BETWEEN 20 AND 300`
+- `IF(price >= 100, 'premium', 'standard') AS tier`
+- `ORDER BY price DESC LIMIT 1, 2` skips one row and returns two.
+--- cards
+LIMIT offset, count :: MySQL paging: LIMIT 20, 10 skips 20 rows and returns 10 (same as LIMIT 10 OFFSET 20).
+MySQL default collation :: utf8mb4_0900_ai_ci: comparisons ignore case and accents ('ada' = 'Ada').
+
+=== lesson mysql-joins | Joins, GROUP BY & GROUP_CONCAT | 60
+Joins combine tables through their keys; `GROUP BY` then summarises each group:
+
+```sql
+SELECT c.name, COUNT(o.id) AS orders
+FROM customers c
+LEFT JOIN orders o ON o.customer_id = c.id
+GROUP BY c.id, c.name;
+```
+
+`INNER JOIN` keeps only matching rows; `LEFT JOIN` keeps every customer, with NULLs when there's no order. MySQL has no `FULL OUTER JOIN`: emulate it with a `UNION` of a LEFT and a RIGHT join.
+
+**`GROUP_CONCAT`**, MySQL's favourite aggregate, turns a group's values into one string:
+
+```sql
+GROUP_CONCAT(p.name ORDER BY p.name SEPARATOR ', ')   -- 'Keyboard, Mouse'
+```
+
+The result is truncated at `group_concat_max_len` (1024 bytes by default), which matters for big groups.
+
+**ONLY_FULL_GROUP_BY:** MySQL 5.7+ rejects selecting a column that's neither grouped nor aggregated (older versions silently picked a random value). Group by every non-aggregated column.
+
+**HAVING** filters groups after aggregation, for example `HAVING COUNT(o.id) > 1`.
+--- exercise code mysql
+::prompt
+For **every customer** (also those without orders), show `name`, `orders` (the number of their **non-cancelled** orders) and `products`: the names of all products in those orders, **sorted alphabetically** and joined with `', '` (NULL when there are none). Order by customer name.
+::starter
+SELECT c.name
+FROM customers c
+ORDER BY c.name;
+::solution
+SELECT c.name,
+       COUNT(DISTINCT o.id) AS orders,
+       GROUP_CONCAT(p.name ORDER BY p.name SEPARATOR ', ') AS products
+FROM customers c
+LEFT JOIN orders o ON o.customer_id = c.id AND o.status <> 'cancelled'
+LEFT JOIN order_items oi ON oi.order_id = o.id
+LEFT JOIN products p ON p.id = oi.product_id
+GROUP BY c.id, c.name
+ORDER BY c.name;
+::reference
+SELECT c.name, COUNT(DISTINCT o.id) AS orders, GROUP_CONCAT(p.name ORDER BY p.name SEPARATOR ', ') AS products
+FROM customers c
+LEFT JOIN orders o ON o.customer_id = c.id AND o.status <> 'cancelled'
+LEFT JOIN order_items oi ON oi.order_id = o.id
+LEFT JOIN products p ON p.id = oi.product_id
+GROUP BY c.id, c.name ORDER BY c.name;
+::ordered
+true
+::setup
+CREATE TABLE customers (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(50) NOT NULL, city VARCHAR(50), email VARCHAR(100));
+INSERT INTO customers (name, city, email) VALUES ('Ada', 'London', 'ada@x.dev'), ('Linus', 'Helsinki', 'linus@x.dev'), ('Grace', 'New York', 'grace@x.dev'), ('Alan', 'London', NULL);
+CREATE TABLE products (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(50) NOT NULL, category VARCHAR(30), price DECIMAL(10,2));
+INSERT INTO products (name, category, price) VALUES ('Keyboard', 'tech', 80), ('Mouse', 'tech', 25), ('Laptop', 'tech', 1200), ('Desk', 'furniture', 300), ('Chair', 'furniture', 150), ('Lamp', 'furniture', 40), ('Monitor', 'tech', 250);
+CREATE TABLE orders (id INT AUTO_INCREMENT PRIMARY KEY, customer_id INT NOT NULL, ordered_on DATE, status ENUM('pending', 'shipped', 'cancelled'), FOREIGN KEY (customer_id) REFERENCES customers(id));
+INSERT INTO orders VALUES (101, 1, '2026-03-01', 'shipped'), (102, 2, '2026-03-01', 'shipped'), (103, 1, '2026-02-14', 'pending'), (104, 3, '2026-03-03', 'shipped'), (105, 2, '2026-02-20', 'cancelled'), (106, 3, '2026-04-04', 'shipped');
+CREATE TABLE order_items (order_id INT, product_id INT, qty INT, PRIMARY KEY (order_id, product_id));
+INSERT INTO order_items VALUES (101, 1, 1), (101, 2, 2), (102, 3, 1), (103, 7, 2), (104, 4, 1), (104, 5, 2), (105, 2, 5), (106, 2, 1), (106, 6, 3);
+::hints
+- Start from `customers` and LEFT JOIN orders (with `o.status <> 'cancelled'` in the ON clause), order_items and products.
+- `COUNT(DISTINCT o.id)` counts orders once even though each has several items.
+- `GROUP_CONCAT(p.name ORDER BY p.name SEPARATOR ', ')`
+--- cards
+GROUP_CONCAT :: MySQL aggregate that joins a group's values into one string: GROUP_CONCAT(x ORDER BY x SEPARATOR ', ').
+ONLY_FULL_GROUP_BY :: MySQL mode rejecting selected columns that are neither grouped nor aggregated.
+
+=== lesson mysql-dates | Dates & built-in functions | 55
+Reports are mostly about **time**. MySQL's date toolbox:
+
+| Function | Example | Result |
+|---|---|---|
+| `DATE_FORMAT(d, fmt)` | `DATE_FORMAT('2026-03-07', '%Y-%m')` | `'2026-03'` |
+| `YEAR(d)`, `MONTH(d)`, `DAY(d)` | `MONTH('2026-03-07')` | `3` |
+| `DATEDIFF(a, b)` | `DATEDIFF('2026-03-07', '2026-02-27')` | `8` (days) |
+| `DATE_ADD(d, INTERVAL n unit)` | `DATE_ADD('2026-01-31', INTERVAL 1 DAY)` | `'2026-02-01'` |
+| `NOW()`, `CURDATE()` | | current datetime / date |
+
+Format codes: `%Y` year, `%m` month (01-12), `%d` day, `%H:%i:%s` time, `%M` month name, `%W` weekday name.
+
+Column types: `DATE`, `DATETIME` (no time zone, stored as written) and `TIMESTAMP` (converted to UTC and back using the session time zone). A common rule is to store UTC and convert in the app.
+
+**Strings:** `UPPER`, `LOWER`, `CONCAT`, `SUBSTRING(s, start, len)`, `LEFT/RIGHT(s, n)`, `TRIM`, `REPLACE`, `LPAD`. **Numbers:** `ROUND(x, 2)`, `FLOOR`, `CEIL`, `ABS`.
+
+Grouping by a formatted date (`GROUP BY DATE_FORMAT(ordered_on, '%Y-%m')`) is the classic monthly report. MySQL lets you `GROUP BY` the SELECT alias.
+--- exercise code mysql
+::prompt
+Build a **monthly report of shipped orders**: columns `month` (formatted `YYYY-MM` with `DATE_FORMAT`), `orders` (distinct shipped orders that month) and `revenue` (sum of qty × price), ordered by month.
+::starter
+SELECT o.ordered_on AS month
+FROM orders o;
+::solution
+SELECT DATE_FORMAT(o.ordered_on, '%Y-%m') AS month,
+       COUNT(DISTINCT o.id) AS orders,
+       SUM(oi.qty * p.price) AS revenue
+FROM orders o
+JOIN order_items oi ON oi.order_id = o.id
+JOIN products p ON p.id = oi.product_id
+WHERE o.status = 'shipped'
+GROUP BY month
+ORDER BY month;
+::reference
+SELECT DATE_FORMAT(o.ordered_on, '%Y-%m') AS month, COUNT(DISTINCT o.id) AS orders, SUM(oi.qty * p.price) AS revenue
+FROM orders o JOIN order_items oi ON oi.order_id = o.id JOIN products p ON p.id = oi.product_id
+WHERE o.status = 'shipped' GROUP BY month ORDER BY month;
+::ordered
+true
+::setup
+CREATE TABLE products (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(50) NOT NULL, category VARCHAR(30), price DECIMAL(10,2));
+INSERT INTO products (name, category, price) VALUES ('Keyboard', 'tech', 80), ('Mouse', 'tech', 25), ('Laptop', 'tech', 1200), ('Desk', 'furniture', 300), ('Chair', 'furniture', 150), ('Lamp', 'furniture', 40), ('Monitor', 'tech', 250);
+CREATE TABLE orders (id INT AUTO_INCREMENT PRIMARY KEY, customer_id INT NOT NULL, ordered_on DATE, status ENUM('pending', 'shipped', 'cancelled'));
+INSERT INTO orders VALUES (101, 1, '2026-03-01', 'shipped'), (102, 2, '2026-03-01', 'shipped'), (103, 1, '2026-02-14', 'pending'), (104, 3, '2026-03-03', 'shipped'), (105, 2, '2026-02-20', 'cancelled'), (106, 3, '2026-04-04', 'shipped');
+CREATE TABLE order_items (order_id INT, product_id INT, qty INT, PRIMARY KEY (order_id, product_id));
+INSERT INTO order_items VALUES (101, 1, 1), (101, 2, 2), (102, 3, 1), (103, 7, 2), (104, 4, 1), (104, 5, 2), (105, 2, 5), (106, 2, 1), (106, 6, 3);
+::hints
+- `DATE_FORMAT(o.ordered_on, '%Y-%m') AS month`
+- Join order_items and products, filter `o.status = 'shipped'`.
+- `GROUP BY month ORDER BY month`
+--- cards
+DATE_FORMAT :: MySQL date formatting: DATE_FORMAT(d, '%Y-%m-%d'); %M = month name, %W = weekday.
+DATETIME vs TIMESTAMP :: DATETIME stores the value as written; TIMESTAMP converts to UTC and back using the session time zone.
+
+=== lesson mysql-upsert | Upserts, transactions & constraints | 60
+**Insert or update** in one statement, MySQL style:
+
+```sql
+INSERT INTO inventory (sku, qty) VALUES ('KB-1', 2)
+ON DUPLICATE KEY UPDATE qty = qty + VALUES(qty);
+```
+
+If the insert would break a PRIMARY KEY or UNIQUE index, MySQL updates the existing row instead. `VALUES(qty)` means "the value I tried to insert". MySQL 8.0.19+ also allows an alias form: `INSERT … VALUES ('KB-1', 2) AS new ON DUPLICATE KEY UPDATE qty = qty + new.qty`.
+
+Relatives:
+- `INSERT IGNORE` skips rows that would violate a key, silently, so use it carefully.
+- `REPLACE INTO` deletes the old row and inserts the new one, which fires delete triggers and cascades.
+
+**Transactions (InnoDB):**
+
+```sql
+START TRANSACTION;
+UPDATE accounts SET balance = balance - 50 WHERE id = 1;
+UPDATE accounts SET balance = balance + 50 WHERE id = 2;
+COMMIT;   -- or ROLLBACK;
+```
+
+MySQL runs with **autocommit** on: each statement is its own transaction unless you start one. The default isolation level is **REPEATABLE READ**, and InnoDB adds *gap locks* so ranges you read can't get new rows mid-transaction.
+
+**Constraints:** PRIMARY KEY, UNIQUE, NOT NULL, FOREIGN KEY (InnoDB only), and `CHECK`, which is enforced since MySQL **8.0.16** (older versions parsed and ignored it).
+--- exercise code mysql
+::prompt
+1. Create **`inventory`** (InnoDB) with `sku` VARCHAR(20) as primary key and `qty` INT, required, with a **CHECK** that it's never negative.
+2. Insert `('KB-1', 5)` and `('MS-2', 3)`.
+3. In **one** statement, insert `('KB-1', 2)` and `('MN-4', 1)` so that existing skus **add** the new quantity (`ON DUPLICATE KEY UPDATE`).
+4. Try `INSERT IGNORE` of `('MS-2', 100)`: it must leave MS-2 unchanged.
+::starter
+-- 1. table
+
+-- 2. first stock
+
+-- 3. upsert
+
+-- 4. insert ignore
+::solution
+CREATE TABLE inventory (
+  sku VARCHAR(20) PRIMARY KEY,
+  qty INT NOT NULL,
+  CHECK (qty >= 0)
+) ENGINE=InnoDB;
+
+INSERT INTO inventory VALUES ('KB-1', 5), ('MS-2', 3);
+
+INSERT INTO inventory (sku, qty) VALUES ('KB-1', 2), ('MN-4', 1)
+ON DUPLICATE KEY UPDATE qty = qty + VALUES(qty);
+
+INSERT IGNORE INTO inventory VALUES ('MS-2', 100);
+::reference
+CREATE TABLE inventory (sku VARCHAR(20) PRIMARY KEY, qty INT NOT NULL, CHECK (qty >= 0)) ENGINE=InnoDB;
+INSERT INTO inventory VALUES ('KB-1', 5), ('MS-2', 3);
+INSERT INTO inventory (sku, qty) VALUES ('KB-1', 2), ('MN-4', 1) ON DUPLICATE KEY UPDATE qty = qty + VALUES(qty);
+INSERT IGNORE INTO inventory VALUES ('MS-2', 100);
+::verify
+SELECT sku, qty FROM inventory ORDER BY sku;
+::ordered
+true
+::hints
+- A table-level check: `CHECK (qty >= 0)` after the columns.
+- `INSERT INTO inventory (sku, qty) VALUES (...), (...) ON DUPLICATE KEY UPDATE qty = qty + VALUES(qty);`
+- `INSERT IGNORE INTO inventory VALUES ('MS-2', 100);`
+--- cards
+ON DUPLICATE KEY UPDATE :: MySQL upsert: if a PRIMARY/UNIQUE key collides, update the existing row instead.
+MySQL default isolation :: REPEATABLE READ (InnoDB, with gap locks).
+
+=== lesson mysql-window | Window functions & CTEs (MySQL 8) | 60
+MySQL **8.0** added the modern SQL features that used to require painful self-joins:
+
+**CTEs (`WITH`)** name subqueries and support recursion (`WITH RECURSIVE`) for hierarchies.
+
+**Window functions** compute across related rows without collapsing them:
+
+```sql
+SELECT category, name, price,
+       RANK()       OVER (PARTITION BY category ORDER BY price DESC) AS price_rank,
+       SUM(price)   OVER (PARTITION BY category)                     AS category_total,
+       LAG(price)   OVER (ORDER BY price)                            AS cheaper_neighbour
+FROM products;
+```
+
+- `ROW_NUMBER()` numbers rows 1, 2, 3; `RANK()` gives ties the same rank with gaps; `DENSE_RANK()` has no gaps.
+- `PARTITION BY` restarts the calculation per group.
+- To filter on a window result ("top 2 per category"), compute it in a CTE and filter outside: you can't use window functions in WHERE.
+
+If you're stuck on MySQL 5.7, these queries need variables or self-joins, which is one good reason to upgrade.
+--- exercise code mysql
+::prompt
+Show the **two most expensive products in each category**: columns `category`, `name`, `price`, using `RANK()` in a CTE. Order by category, then by rank.
+::starter
+WITH ranked AS (
+  SELECT category, name, price
+  FROM products
+)
+SELECT category, name, price FROM ranked;
+::solution
+WITH ranked AS (
+  SELECT category, name, price,
+         RANK() OVER (PARTITION BY category ORDER BY price DESC) AS rnk
+  FROM products
+)
+SELECT category, name, price
+FROM ranked
+WHERE rnk <= 2
+ORDER BY category, rnk;
+::reference
+WITH ranked AS (SELECT category, name, price, RANK() OVER (PARTITION BY category ORDER BY price DESC) AS rnk FROM products)
+SELECT category, name, price FROM ranked WHERE rnk <= 2 ORDER BY category, rnk;
+::ordered
+true
+::setup
+CREATE TABLE products (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(50) NOT NULL, category VARCHAR(30), price DECIMAL(10,2));
+INSERT INTO products (name, category, price) VALUES ('Keyboard', 'tech', 80), ('Mouse', 'tech', 25), ('Laptop', 'tech', 1200), ('Desk', 'furniture', 300), ('Chair', 'furniture', 150), ('Lamp', 'furniture', 40), ('Monitor', 'tech', 250);
+::hints
+- `RANK() OVER (PARTITION BY category ORDER BY price DESC) AS rnk`
+- Filter the CTE: `WHERE rnk <= 2`
+- `ORDER BY category, rnk`
+--- cards
+RANK vs DENSE_RANK vs ROW_NUMBER :: Ties: RANK 1,1,3; DENSE_RANK 1,1,2; ROW_NUMBER 1,2,3.
+Top N per group :: Rank with a window function in a CTE, then filter WHERE rank <= N outside.
+
+=== lesson mysql-indexes | Indexes & InnoDB internals | 60
+InnoDB stores every table as a **clustered index**: rows live inside the B-tree of the **primary key**, sorted by it. Every **secondary index** stores the indexed columns *plus the primary key*, then looks the row up through the PK. So:
+- keep primary keys **short** (an INT/BIGINT, not a long string), because every secondary index copies them;
+- auto-increment keys insert at the end of the tree, which is fast; random UUIDs scatter inserts all over it.
+
+```sql
+CREATE INDEX idx_orders_customer_date ON orders (customer_id, ordered_on);
+CREATE UNIQUE INDEX uq_customers_email ON customers (email);
+SHOW INDEX FROM orders;
+```
+
+**Composite indexes follow the leftmost-prefix rule:** `(customer_id, ordered_on)` helps `WHERE customer_id = 7` and `WHERE customer_id = 7 AND ordered_on > '2026-01-01'`, but **not** `WHERE ordered_on > …` alone. Put equality columns first and the range or sort column last.
+
+A **covering index** contains every column a query needs, so MySQL never touches the table (EXPLAIN shows `Using index`).
+
+**EXPLAIN** shows the plan: check `type` (`ALL` = full scan, bad on big tables; `ref`/`range`/`const` = good), `key` (the index chosen) and `rows` (estimated rows examined). `EXPLAIN ANALYZE` (8.0.18+) runs the query and shows real timings.
+--- exercise code mysql
+::prompt
+Create two indexes:
+1. **`idx_orders_customer_date`** on `orders (customer_id, ordered_on)`: a composite index for "a customer's orders by date".
+2. **`uq_customers_email`**: a **unique** index on `customers (email)`.
+
+The checker reads the indexes defined on the tables.
+::starter
+-- 1. composite index
+
+-- 2. unique index
+::solution
+CREATE INDEX idx_orders_customer_date ON orders (customer_id, ordered_on);
+CREATE UNIQUE INDEX uq_customers_email ON customers (email);
+::reference
+CREATE INDEX idx_orders_customer_date ON orders (customer_id, ordered_on);
+CREATE UNIQUE INDEX uq_customers_email ON customers (email);
+::verify
+SELECT m.name AS tbl, il.name AS idx, il.`unique` AS is_unique, (SELECT group_concat(ii.name, ',') FROM pragma_index_info(il.name) ii) AS cols FROM sqlite_master m JOIN pragma_index_list(m.name) il WHERE m.type = 'table' AND il.origin = 'c' ORDER BY idx;
+::ordered
+true
+::setup
+CREATE TABLE customers (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(50) NOT NULL, city VARCHAR(50), email VARCHAR(100));
+INSERT INTO customers (name, city, email) VALUES ('Ada', 'London', 'ada@x.dev'), ('Linus', 'Helsinki', 'linus@x.dev'), ('Grace', 'New York', 'grace@x.dev'), ('Alan', 'London', NULL);
+CREATE TABLE orders (id INT AUTO_INCREMENT PRIMARY KEY, customer_id INT NOT NULL, ordered_on DATE, status ENUM('pending', 'shipped', 'cancelled'));
+INSERT INTO orders VALUES (101, 1, '2026-03-01', 'shipped'), (102, 2, '2026-03-01', 'shipped'), (103, 1, '2026-02-14', 'pending'), (104, 3, '2026-03-03', 'shipped'), (105, 2, '2026-02-20', 'cancelled'), (106, 3, '2026-04-04', 'shipped');
+::hints
+- `CREATE INDEX name ON table (col1, col2);`
+- `CREATE UNIQUE INDEX name ON table (col);`
+- Column order matters in a composite index: customer_id first.
+--- cards
+Clustered index (InnoDB) :: Rows are stored in the primary key's B-tree; secondary indexes store the PK to find rows.
+Leftmost prefix rule :: A composite index (a, b) helps queries filtering on a, or a and b, but not on b alone.
+
+=== lesson mysql-production | MySQL in production | 55
+Keeping MySQL healthy and safe:
+
+**Replication:** the primary writes every change to the **binary log (binlog)**; replicas replay it. Use **GTIDs** (global transaction IDs) so failover and re-pointing replicas is simple. Replication is usually **asynchronous**, so replicas can lag; read-your-own-writes may need the primary. **Group Replication / InnoDB Cluster** add automatic failover.
+
+**Backups:** `mysqldump` (logical SQL dump; fine for small databases), **Percona XtraBackup** or MySQL Enterprise Backup (fast physical hot backups), plus the binlog for point-in-time recovery. A backup you haven't **restored in a test** isn't a backup.
+
+**Performance:** enable the **slow query log**, read it with `pt-query-digest`, and fix the worst queries with indexes. Size `innodb_buffer_pool_size` to hold the working set (often 50-75% of RAM on a dedicated server). Use a **connection pool** in the app.
+
+**Schema changes** on big tables can lock them: use online DDL (`ALGORITHM=INPLACE`/`INSTANT`) or tools like gh-ost and pt-online-schema-change.
+
+**Security:** never use `root` from the app; create a user per app with only the privileges it needs (`GRANT SELECT, INSERT, UPDATE ON shop.* TO 'app'@'10.0.%'`). Use parameterised queries against SQL injection, and TLS between app and database.
+
+**MySQL or PostgreSQL?** Both are excellent. MySQL is simpler to operate at huge scale for straightforward OLTP workloads and has a vast hosting ecosystem. PostgreSQL offers richer SQL, extensions (PostGIS, pgvector), stricter defaults and powerful JSONB.
+--- quiz
+? What makes MySQL replicas possible?
+- The slow query log
++ The binary log (binlog), replayed by replicas
+- The InnoDB buffer pool
+- mysqldump running every minute
+? A replica serves a page right after a user saved data on the primary, and the change is missing. Why?
++ Replication is asynchronous, so the replica lagged behind
+- InnoDB lost the write
+- GROUP_CONCAT truncated it
+- Replicas only copy schemas
+> Read from the primary right after writes, or use semi-synchronous/group replication.
+? The app connects as root. The best fix?
+- Rename root to admin
++ Create a dedicated user with only the privileges the app needs
+- Put the password in the code
+- Disable authentication on the private network
+? Which tool finds the queries worth optimising first?
+- SHOW TABLES
++ The slow query log, summarised with pt-query-digest
+- DESCRIBE
+- ENUM columns
+? Why prefer utf8mb4 over utf8 in MySQL?
++ utf8 stores at most 3 bytes per character, so emoji and some symbols fail
+- utf8mb4 is faster for ASCII
+- utf8 is only for MyISAM
+- They are identical
+--- cards
+Binary log (binlog) :: MySQL's log of changes, used for replication and point-in-time recovery.
+GTID :: Global transaction identifier: makes replication positions unambiguous across servers.
+innodb_buffer_pool_size :: InnoDB's main memory cache for data and indexes; size it to the working set.

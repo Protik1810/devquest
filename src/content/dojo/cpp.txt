@@ -1,0 +1,122 @@
+### twosum | Easy
+fn: `std::string twoSum(const std::vector<int>& nums, int target)`
+hint: `std::unordered_map::emplace` does not overwrite an existing key, so the first index wins.
+--- head
+#include <iostream>
+#include <string>
+#include <unordered_map>
+#include <vector>
+--- stub
+// Return "i j" for the first pair that adds up to target, or "none".
+std::string twoSum(const std::vector<int>& nums, int target) {
+    // TODO
+    (void)nums; (void)target;
+    return "none";
+}
+--- sol
+// Return "i j" for the first pair that adds up to target, or "none".
+std::string twoSum(const std::vector<int>& nums, int target) {
+    std::unordered_map<int, int> seen;
+    for (int i = 0; i < (int)nums.size(); i++) {
+        auto it = seen.find(target - nums[i]);
+        if (it != seen.end()) return std::to_string(it->second) + " " + std::to_string(i);
+        seen.emplace(nums[i], i);
+    }
+    return "none";
+}
+--- main
+int main() {
+    std::cout << twoSum({2, 7, 11, 15}, 9) << "\n";
+    std::cout << twoSum({3, 2, 4}, 6) << "\n";
+    std::cout << twoSum({3, 3}, 6) << "\n";
+    std::cout << twoSum({1, 2, 3}, 7) << "\n";
+}
+
+### wordfreq | Medium
+fn: `std::vector<std::string> topWords(const std::string& text, size_t n)`
+hint: A `std::map` is already sorted by key; a `std::stable_sort` by count then keeps ties alphabetical.
+--- head
+#include <algorithm>
+#include <cctype>
+#include <iostream>
+#include <map>
+#include <string>
+#include <vector>
+--- stub
+// Return the top n words as "word: count", most frequent first, alphabetical on ties.
+std::vector<std::string> topWords(const std::string& text, size_t n) {
+    // TODO
+    (void)text; (void)n;
+    return {};
+}
+--- sol
+// Return the top n words as "word: count", most frequent first, alphabetical on ties.
+std::vector<std::string> topWords(const std::string& text, size_t n) {
+    std::map<std::string, int> counts;
+    std::string word;
+    for (char ch : text + " ") {
+        char c = (char)std::tolower((unsigned char)ch);
+        if (c >= 'a' && c <= 'z') {
+            word += c;
+        } else if (!word.empty()) {
+            counts[word]++;
+            word.clear();
+        }
+    }
+    std::vector<std::pair<std::string, int>> items(counts.begin(), counts.end());
+    std::stable_sort(items.begin(), items.end(), [](const std::pair<std::string, int>& a, const std::pair<std::string, int>& b) { return a.second > b.second; });
+    std::vector<std::string> out;
+    for (size_t i = 0; i < items.size() && i < n; i++) out.push_back(items[i].first + ": " + std::to_string(items[i].second));
+    return out;
+}
+--- main
+int main() {
+    std::vector<std::string> texts = {"the cat and the hat and the bat sat on the mat", "Go go GO! Rust, rust; C."};
+    for (const auto& text : texts) {
+        for (const auto& line : topWords(text, 3)) std::cout << line << "\n";
+    }
+}
+
+### intervals | Hard
+fn: `std::vector<Interval> mergeIntervals(std::vector<Interval> intervals)`
+hint: `std::sort` on pairs sorts by `.first`, then `.second`; `out.back()` is the last merged interval.
+--- head
+#include <algorithm>
+#include <iostream>
+#include <utility>
+#include <vector>
+
+using Interval = std::pair<int, int>;
+--- stub
+// Merge overlapping (or touching) intervals; return them sorted by start.
+std::vector<Interval> mergeIntervals(std::vector<Interval> intervals) {
+    // TODO
+    return intervals;
+}
+--- sol
+// Merge overlapping (or touching) intervals; return them sorted by start.
+std::vector<Interval> mergeIntervals(std::vector<Interval> intervals) {
+    std::sort(intervals.begin(), intervals.end());
+    std::vector<Interval> out;
+    for (const auto& iv : intervals) {
+        if (!out.empty() && iv.first <= out.back().second) out.back().second = std::max(out.back().second, iv.second);
+        else out.push_back(iv);
+    }
+    return out;
+}
+--- main
+int main() {
+    std::vector<std::vector<Interval>> cases = {
+        {{1, 3}, {2, 6}, {8, 10}, {15, 18}},
+        {{1, 4}, {4, 5}},
+        {{5, 7}, {1, 2}, {2, 3}},
+        {{1, 10}, {2, 3}, {4, 5}},
+    };
+    for (const auto& c : cases) {
+        auto merged = mergeIntervals(c);
+        for (size_t i = 0; i < merged.size(); i++) {
+            std::cout << (i ? " " : "") << "[" << merged[i].first << "," << merged[i].second << "]";
+        }
+        std::cout << "\n";
+    }
+}

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Back up progress files, never the encrypted API keys (their Keystore key can't move to another device). -->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="sharedpref" path="devquest_secrets.xml" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="sharedpref" path="devquest_secrets.xml" />
+    </device-transfer>
+</data-extraction-rules>

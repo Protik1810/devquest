@@ -1,0 +1,93 @@
+### twosum | Easy
+fn: `string TwoSum(int[] nums, int target)`
+hint: `Dictionary.TryGetValue` checks for the complement and fetches its index in one call.
+--- head
+using System;
+using System.Collections.Generic;
+--- stub
+string TwoSum(int[] nums, int target)
+{
+    // TODO: return "i j" or "none"
+    return "none";
+}
+--- sol
+string TwoSum(int[] nums, int target)
+{
+    var seen = new Dictionary<int, int>();
+    for (int i = 0; i < nums.Length; i++)
+    {
+        if (seen.TryGetValue(target - nums[i], out int j)) return $"{j} {i}";
+        seen.TryAdd(nums[i], i);
+    }
+    return "none";
+}
+--- main
+Console.WriteLine(TwoSum(new[] { 2, 7, 11, 15 }, 9));
+Console.WriteLine(TwoSum(new[] { 3, 2, 4 }, 6));
+Console.WriteLine(TwoSum(new[] { 3, 3 }, 6));
+Console.WriteLine(TwoSum(new[] { 1, 2, 3 }, 7));
+
+### wordfreq | Medium
+fn: `string[] TopWords(string text, int n)`
+hint: LINQ reads like the task: `GroupBy`, `OrderByDescending`, `ThenBy`, `Take`, `Select`.
+--- head
+using System;
+using System.Linq;
+using System.Text.RegularExpressions;
+--- stub
+string[] TopWords(string text, int n)
+{
+    // TODO: Regex.Split, then LINQ
+    return Array.Empty<string>();
+}
+--- sol
+string[] TopWords(string text, int n) =>
+    Regex.Split(text.ToLowerInvariant(), "[^a-z]+")
+        .Where(w => w.Length > 0)
+        .GroupBy(w => w)
+        .OrderByDescending(g => g.Count())
+        .ThenBy(g => g.Key, StringComparer.Ordinal)
+        .Take(n)
+        .Select(g => $"{g.Key}: {g.Count()}")
+        .ToArray();
+--- main
+foreach (var text in new[] { "the cat and the hat and the bat sat on the mat", "Go go GO! Rust, rust; C." })
+    foreach (var line in TopWords(text, 3))
+        Console.WriteLine(line);
+
+### intervals | Hard
+fn: `List<int[]> Merge(int[][] intervals)`
+hint: `result[^1]` is the last element of a list (C# index-from-end).
+--- head
+using System;
+using System.Collections.Generic;
+using System.Linq;
+--- stub
+List<int[]> Merge(int[][] intervals)
+{
+    // TODO
+    return intervals.ToList();
+}
+--- sol
+List<int[]> Merge(int[][] intervals)
+{
+    var result = new List<int[]>();
+    foreach (var iv in intervals.OrderBy(i => i[0]))
+    {
+        if (result.Count > 0 && iv[0] <= result[^1][1])
+            result[^1][1] = Math.Max(result[^1][1], iv[1]);
+        else
+            result.Add(new[] { iv[0], iv[1] });
+    }
+    return result;
+}
+--- main
+int[][][] cases =
+{
+    new[] { new[] { 1, 3 }, new[] { 2, 6 }, new[] { 8, 10 }, new[] { 15, 18 } },
+    new[] { new[] { 1, 4 }, new[] { 4, 5 } },
+    new[] { new[] { 5, 7 }, new[] { 1, 2 }, new[] { 2, 3 } },
+    new[] { new[] { 1, 10 }, new[] { 2, 3 }, new[] { 4, 5 } },
+};
+foreach (var c in cases)
+    Console.WriteLine(string.Join(" ", Merge(c).Select(iv => $"[{iv[0]},{iv[1]}]")));

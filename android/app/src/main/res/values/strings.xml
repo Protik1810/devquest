@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">DevQuest</string>
+    <string name="title_activity_main">DevQuest</string>
+    <string name="package_name">com.protik.devquest</string>
+    <string name="custom_url_scheme">com.protik.devquest</string>
+</resources>

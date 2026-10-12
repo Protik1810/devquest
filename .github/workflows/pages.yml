@@ -1,0 +1,47 @@
+name: Deploy web app to GitHub Pages
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # Fetches the offline runtimes (Pyodide, React) into public/, then builds dist/
+      - run: npm run build
+      # The Download page reads this list; the app builds themselves are GitHub Release assets
+      # (GitHub Pages can't host files over 100 MB). Regenerate with:
+      #   node scripts/downloads.mjs --release-base https://github.com/<owner>/<repo>/releases/download/v<version>/ --out deploy/downloads.json
+      - name: Publish the downloads list
+        run: |
+          mkdir -p dist/downloads
+          if [ -f deploy/downloads.json ]; then cp deploy/downloads.json dist/downloads/manifest.json; fi
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

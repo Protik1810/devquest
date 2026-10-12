@@ -1,0 +1,11 @@
+{
+  "appId": "com.protik.devquest",
+  "appName": "DevQuest",
+  "webDir": "dist",
+  "android": {
+    "allowMixedContent": true
+  },
+  "plugins": {
+    "SplashScreen": { "launchShowDuration": 0 }
+  }
+}

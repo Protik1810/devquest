@@ -1,0 +1,165 @@
+/* ===================== Responsive & touch layer ===================== */
+/* Breakpoints: ≤ 780px phone (bottom tab bar + slide-in menu), 781–1100px tablet, > 1100px desktop. */
+
+.bottom-nav, .nav-scrim { display: none; }
+.credit { margin-top: 6px; }
+
+/* Larger touch targets on touch screens */
+@media (pointer: coarse) {
+  button, .primary-btn, select, input { min-height: 40px; }
+  button.small { min-height: 34px; }
+  a.card:hover, .node:hover { transform: none; }
+}
+
+/* ---------- Tablet ---------- */
+@media (max-width: 1100px) {
+  .sidebar { width: 200px; }
+  .content { padding: 18px 20px 80px; }
+  .tier { grid-template-columns: 180px 1fr; }
+}
+
+/* ---------- Phone ---------- */
+@media (max-width: 780px) {
+  body { font-size: 15px; }
+
+  /* Side menu becomes a slide-in drawer opened from the bottom bar's "More" */
+  .sidebar {
+    position: fixed;
+    inset: 0 auto 0 0;
+    width: min(280px, 82vw);
+    z-index: 60;
+    transform: translateX(-105%);
+    transition: transform 0.22s ease;
+    padding-top: calc(16px + env(safe-area-inset-top));
+    padding-bottom: calc(76px + env(safe-area-inset-bottom));
+    overflow-y: auto;
+  }
+  .nav-open .sidebar { transform: none; box-shadow: 8px 0 30px #0009; }
+  .nav-scrim { display: block; position: fixed; inset: 0; background: #0007; z-index: 55; animation: fadeIn 0.2s; }
+  .nav-toggle { display: none !important; }
+
+  .bottom-nav {
+    display: flex;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 65;
+    background: color-mix(in srgb, var(--bg2) 92%, transparent);
+    backdrop-filter: blur(14px);
+    border-top: 1px solid var(--border);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .bottom-nav a, .bottom-nav button {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1px;
+    padding: 7px 0 6px;
+    min-height: 56px;
+    color: var(--muted);
+    background: none;
+    border: 0;
+    border-radius: 0;
+    font-size: 0.7rem;
+    text-decoration: none;
+  }
+  .bottom-nav .bn-icon { font-size: 1.3rem; line-height: 1.2; }
+  .bottom-nav .active { color: var(--accent2); font-weight: 700; }
+  .bottom-nav .active .bn-icon { transform: translateY(-1px) scale(1.08); }
+
+  .topbar { padding: calc(8px + env(safe-area-inset-top)) 12px 8px; gap: 6px; }
+  .level-chip .small { display: none; }
+  .xpbar { width: 64px; }
+  .chip { padding: 3px 8px; font-size: 0.8rem; }
+
+  .content { padding: 14px 12px calc(96px + env(safe-area-inset-bottom)); }
+  h1 { font-size: 1.45rem; }
+  h2 { font-size: 1.15rem; }
+  .card { padding: 14px; border-radius: 14px; }
+  .lesson-body { padding: 16px 14px; }
+
+  .grid-3, .grid-2, .welcome-features, .sq-grid { grid-template-columns: 1fr; }
+  .tier { grid-template-columns: 1fr; gap: 10px; }
+  .tier-tracks, .track-grid, .project-grid { grid-template-columns: 1fr; }
+  .skillmap::before { display: none; }
+  .node { padding: 10px; }
+
+  .page-hero > div { padding: 20px 16px; min-height: 150px; }
+  .project-head, .track-banner { height: 130px; }
+  .track-head { gap: 12px; padding: 10px 0 10px 14px; }
+  .track-head h1 { font-size: 1.3rem; }
+
+  /* Editors, previews and terminals sized for small screens */
+  .editor .cm-editor { height: auto !important; min-height: 180px; max-height: 46vh; }
+  .editor .cm-scroller { min-height: 180px; }
+  .web-preview iframe { height: 280px !important; }
+  .terminal { height: 300px; font-size: 12.5px; padding: 10px; }
+  .terminal pre { font-size: 12.5px; }
+  .ex-actions { gap: 6px; }
+  .ex-actions .spacer { display: none; }
+  .ex-actions button { flex: 1 1 auto; justify-content: center; }
+
+  .lesson-nav { flex-direction: column; align-items: stretch; }
+  .lesson-nav a, .lesson-nav button { text-align: center; justify-content: center; }
+  .complete-banner .primary-btn { width: 100%; justify-content: center; }
+  .dojo-item { gap: 10px; padding: 10px 12px; }
+  .filters { flex-direction: column; align-items: stretch; }
+  .filters select { width: 100%; }
+  .criteria { grid-template-columns: 1fr; }
+  .bs-row { grid-template-columns: repeat(8, 1fr); }
+  .bars { height: 160px; gap: 2px; }
+  .atlas-controls { top: calc(48px + env(safe-area-inset-top)); }
+  .md pre { font-size: 0.8rem; }
+
+  /* Tutor: floating button above the bottom bar; chat opens full-screen */
+  .tutor-fab { right: 14px; bottom: calc(72px + env(safe-area-inset-bottom)); width: 52px; height: 52px; font-size: 1.6rem; }
+  .tutor {
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    right: 0;
+    bottom: 0;
+    border-radius: 0;
+    z-index: 70;
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .toasts { top: calc(56px + env(safe-area-inset-top)); left: 12px; right: 12px; align-items: stretch; }
+  .toast { min-width: 0; }
+
+  /* Inputs at 16px stop mobile browsers zooming in on focus */
+  input, select, textarea { font-size: 16px; }
+
+  .welcome-card { padding: 20px 16px; }
+  .welcome-card h1 { font-size: 1.8rem; }
+}
+
+/* Short landscape phones: keep the bottom bar slim */
+@media (max-width: 920px) and (max-height: 500px) and (orientation: landscape) {
+  .bottom-nav a, .bottom-nav button { min-height: 44px; flex-direction: row; gap: 6px; }
+  .tutor-fab { bottom: calc(56px + env(safe-area-inset-bottom)); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.center { text-align: center; }
+.about img { border-radius: 14px; }
+.credit-line { opacity: 0.85; }
+
+/* Execution mode banner on exercises */
+.exec-mode { font-size: 0.8rem; padding: 6px 10px; border-radius: 8px; margin: 8px 0; border: 1px solid var(--border); background: var(--bg2); }
+.exec-mode.m-local { border-color: #22c55e88; }
+.exec-mode.m-ai { border-color: #a855f788; }
+.exec-mode.m-self { border-color: #f59e0b88; }
+details.expected { margin-top: 6px; }
+details.expected pre { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; margin: 6px 0 0; font-size: 0.85rem; }
+.self-check { border-color: var(--warn); }
+
+.playground-bar { margin-bottom: 10px; }
+.playground-bar .exec-mode { margin: 0; }

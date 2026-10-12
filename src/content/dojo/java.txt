@@ -1,0 +1,114 @@
+### sieve | Easy
+fn: `static List<Integer> primesUpTo(int n)`
+hint: `new boolean[n + 1]` starts all false, so treat false as "maybe prime".
+--- head
+import java.util.*;
+
+public class Main {
+--- stub
+    static List<Integer> primesUpTo(int n) {
+        // TODO
+        return new ArrayList<>();
+    }
+--- sol
+    static List<Integer> primesUpTo(int n) {
+        boolean[] composite = new boolean[n + 1];
+        List<Integer> primes = new ArrayList<>();
+        for (int p = 2; p <= n; p++) {
+            if (composite[p]) continue;
+            primes.add(p);
+            for (long m = (long) p * p; m <= n; m += p) composite[(int) m] = true;
+        }
+        return primes;
+    }
+--- main
+    static String join(List<Integer> xs) {
+        StringBuilder sb = new StringBuilder();
+        for (int x : xs) sb.append(sb.length() > 0 ? " " : "").append(x);
+        return sb.toString();
+    }
+
+    public static void main(String[] args) {
+        System.out.println("primes(50): " + join(primesUpTo(50)));
+        System.out.println("count(100): " + primesUpTo(100).size());
+        System.out.println("primes(2): " + join(primesUpTo(2)));
+    }
+}
+
+### roman | Medium
+fn: `static int romanToInt(String s)`
+hint: A `switch` on `s.charAt(i)` is a simple way to look up each symbol.
+--- head
+public class Main {
+--- stub
+    static int romanToInt(String s) {
+        // TODO
+        return 0;
+    }
+--- sol
+    static int value(char c) {
+        switch (c) {
+            case 'I': return 1;
+            case 'V': return 5;
+            case 'X': return 10;
+            case 'L': return 50;
+            case 'C': return 100;
+            case 'D': return 500;
+            case 'M': return 1000;
+            default: throw new IllegalArgumentException("not a numeral: " + c);
+        }
+    }
+
+    static int romanToInt(String s) {
+        int total = 0;
+        for (int i = 0; i < s.length(); i++) {
+            int v = value(s.charAt(i));
+            if (i + 1 < s.length() && value(s.charAt(i + 1)) > v) total -= v;
+            else total += v;
+        }
+        return total;
+    }
+--- main
+    public static void main(String[] args) {
+        for (String s : new String[] {"MCMXCIV", "XLII", "III", "CDXLIV", "MMXXVI"}) {
+            System.out.println(s + " = " + romanToInt(s));
+        }
+    }
+}
+
+### longest | Hard
+fn: `static String longestUnique(String s)`
+hint: A `HashMap<Character, Integer>` remembers where each character was last seen.
+--- head
+import java.util.*;
+
+public class Main {
+--- stub
+    static String longestUnique(String s) {
+        // TODO
+        return "";
+    }
+--- sol
+    static String longestUnique(String s) {
+        Map<Character, Integer> last = new HashMap<>();
+        int start = 0, bestStart = 0, best = 0;
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            Integer seen = last.get(c);
+            if (seen != null && seen >= start) start = seen + 1;
+            last.put(c, i);
+            if (i - start + 1 > best) {
+                best = i - start + 1;
+                bestStart = start;
+            }
+        }
+        return s.substring(bestStart, bestStart + best);
+    }
+--- main
+    public static void main(String[] args) {
+        for (String s : new String[] {"abcabcbb", "bbbbb", "pwwkew", "dvdf", "devquest"}) {
+            String sub = longestUnique(s);
+            System.out.println(s + " -> " + sub.length() + " " + sub);
+        }
+    }
+}

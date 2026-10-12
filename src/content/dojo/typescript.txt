@@ -1,0 +1,72 @@
+### caesar | Easy
+fn: `caesar(text: string, k: number): string`
+hint: `String.fromCharCode` and `charCodeAt(0)` convert between letters and numbers.
+--- stub
+function caesar(text: string, k: number): string {
+  // TODO
+  return text;
+}
+--- sol
+function caesar(text: string, k: number): string {
+  const s = ((k % 26) + 26) % 26;
+  const shift = (c: string, base: number) => String.fromCharCode(((c.charCodeAt(0) - base + s) % 26) + base);
+  return [...text].map((c) => (c >= 'A' && c <= 'Z' ? shift(c, 65) : c >= 'a' && c <= 'z' ? shift(c, 97) : c)).join('');
+}
+--- main
+console.log(caesar('Hello, World!', 3));
+console.log(caesar('xyz ABC', 2));
+console.log(caesar('Khoor, Zruog!', -3));
+console.log(caesar('DevQuest', 13));
+
+### brackets | Medium
+fn: `isBalanced(s: string): boolean`
+hint: A `Record<string, string>` mapping each closer to its opener keeps the check short.
+--- stub
+function isBalanced(s: string): boolean {
+  // TODO
+  return false;
+}
+--- sol
+function isBalanced(s: string): boolean {
+  const pairs: Record<string, string> = { ')': '(', ']': '[', '}': '{' };
+  const stack: string[] = [];
+  for (const ch of s) {
+    if ('([{'.includes(ch)) stack.push(ch);
+    else if (ch in pairs && stack.pop() !== pairs[ch]) return false;
+  }
+  return stack.length === 0;
+}
+--- main
+for (const s of ['([]{})', '([)]', '((', 'a(b[c]d)e', '}{']) {
+  console.log(s + ' -> ' + isBalanced(s));
+}
+
+### intervals | Hard
+fn: `merge(intervals: [number, number][]): [number, number][]`
+hint: Copy before sorting (`[...intervals].sort(...)`) so you don't change the caller's array.
+--- stub
+function merge(intervals: [number, number][]): [number, number][] {
+  // TODO
+  return intervals;
+}
+--- sol
+function merge(intervals: [number, number][]): [number, number][] {
+  const sorted = [...intervals].sort((a, b) => a[0] - b[0]);
+  const out: [number, number][] = [];
+  for (const [start, end] of sorted) {
+    const last = out[out.length - 1];
+    if (last && start <= last[1]) last[1] = Math.max(last[1], end);
+    else out.push([start, end]);
+  }
+  return out;
+}
+--- main
+const cases: [number, number][][] = [
+  [[1, 3], [2, 6], [8, 10], [15, 18]],
+  [[1, 4], [4, 5]],
+  [[5, 7], [1, 2], [2, 3]],
+  [[1, 10], [2, 3], [4, 5]],
+];
+for (const c of cases) {
+  console.log(merge(c).map(([s, e]) => '[' + s + ',' + e + ']').join(' '));
+}

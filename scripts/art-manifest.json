@@ -1,0 +1,426 @@
+{
+  "style": "isometric 3d digital illustration, soft volumetric lighting, vibrant, clean composition, highly detailed, game art",
+  "negative": "text, letters, words, typography, watermark, logo, signature, blurry, lowres, deformed, nsfw, nudity",
+  "items": [
+    {
+      "name": "theme-void",
+      "w": 1344,
+      "h": 768,
+      "raw": true,
+      "prompt": "deep space void, dark violet and cyan nebula, subtle stars, cinematic wallpaper, minimal, moody, ultra detailed"
+    },
+    {
+      "name": "theme-neon",
+      "w": 1344,
+      "h": 768,
+      "raw": true,
+      "prompt": "neon cyberpunk city skyline at night, cyan and magenta lights, rain reflections, cinematic wallpaper, no people"
+    },
+    {
+      "name": "theme-cinema",
+      "w": 1344,
+      "h": 768,
+      "raw": true,
+      "prompt": "luxurious dark golden cinema theater interior, warm amber light beams, film grain, elegant art deco, cinematic wallpaper, no people"
+    },
+    {
+      "name": "theme-synthwave",
+      "w": 1344,
+      "h": 768,
+      "raw": true,
+      "prompt": "synthwave retro sunset, pink and purple neon grid landscape, chrome mountains, 80s outrun wallpaper"
+    },
+    {
+      "name": "theme-anime",
+      "w": 1344,
+      "h": 768,
+      "raw": true,
+      "prompt": "anime fantasy landscape at dusk, floating islands, glowing crystals, deep blue sky with pink highlights, studio ghibli inspired wallpaper, no people"
+    },
+    {
+      "name": "theme-matrix",
+      "w": 1344,
+      "h": 768,
+      "raw": true,
+      "prompt": "dark emerald digital forest of glowing green circuit trees, falling green light particles, matrix style, cinematic wallpaper"
+    },
+    {
+      "name": "track-foundations",
+      "w": 1344,
+      "h": 768,
+      "prompt": "a cutaway of a computer showing a glowing cpu chip, ram sticks and circuit board paths, tiny binary light particles"
+    },
+    {
+      "name": "track-python",
+      "w": 1344,
+      "h": 768,
+      "prompt": "a friendly blue and yellow python snake coiled around a glowing laptop on a cozy desk"
+    },
+    {
+      "name": "track-javascript",
+      "w": 1344,
+      "h": 768,
+      "prompt": "glowing yellow web browser windows floating above a futuristic workshop, gears and lightning, interactive buttons"
+    },
+    {
+      "name": "track-shell",
+      "w": 1344,
+      "h": 768,
+      "prompt": "a retro computer terminal with glowing green screen inside a seashell shaped room, cables and amber lights"
+    },
+    {
+      "name": "track-git",
+      "w": 1344,
+      "h": 768,
+      "prompt": "a glowing tree whose branches split and merge like a timeline, orange lights at each node, magical garden"
+    },
+    {
+      "name": "track-dsa",
+      "w": 1344,
+      "h": 768,
+      "prompt": "floating colorful blocks arranged into towers, trees and graphs, a robot sorting blocks by height, puzzle world"
+    },
+    {
+      "name": "track-systems",
+      "w": 1344,
+      "h": 768,
+      "prompt": "inside a giant machine with red glowing memory banks, conveyor belts carrying data cubes, threads of light"
+    },
+    {
+      "name": "track-networking",
+      "w": 1344,
+      "h": 768,
+      "prompt": "a globe wrapped in glowing teal fiber optic cables, tiny packets of light traveling between cities, routers as towers"
+    },
+    {
+      "name": "track-web",
+      "w": 1344,
+      "h": 768,
+      "prompt": "a giant pink spider web made of glowing links connecting floating website cards, dreamy night"
+    },
+    {
+      "name": "track-sql",
+      "w": 1344,
+      "h": 768,
+      "prompt": "a vast cyan glowing library of database cylinders and tables, organized shelves, light beams connecting them"
+    },
+    {
+      "name": "track-devops",
+      "w": 1344,
+      "h": 768,
+      "prompt": "a rocket launching from a futuristic shipping container port, stacked blue containers, conveyor pipelines, clouds"
+    },
+    {
+      "name": "track-architecture",
+      "w": 1344,
+      "h": 768,
+      "prompt": "a majestic purple futuristic city blueprint coming to life, buildings connected by bridges, load balancer towers"
+    },
+    {
+      "name": "track-polyglot",
+      "w": 1344,
+      "h": 768,
+      "prompt": "a world map made of floating islands, each island a different colorful programming workshop, hot air balloons"
+    },
+    {
+      "name": "track-ai",
+      "w": 1344,
+      "h": 768,
+      "prompt": "a glowing magenta neural network brain made of light nodes floating above a desk, friendly robot assistant"
+    },
+    {
+      "name": "track-career",
+      "w": 1344,
+      "h": 768,
+      "prompt": "a golden staircase leading up to a bright modern office with a mountain summit view, trophy and laptop"
+    },
+    {
+      "name": "hero-welcome",
+      "w": 1344,
+      "h": 768,
+      "prompt": "an adventurer standing at the entrance of a magical floating city made of code blocks and glowing terminals, epic sunrise"
+    },
+    {
+      "name": "hero-projects",
+      "w": 1344,
+      "h": 768,
+      "prompt": "a busy maker workshop with blueprints, tools and half-built robots and apps glowing on screens"
+    },
+    {
+      "name": "hero-dojo",
+      "w": 1344,
+      "h": 768,
+      "prompt": "a peaceful japanese dojo at night with glowing code scrolls hanging on the walls, training dummies made of circuits"
+    },
+    {
+      "name": "hero-guide",
+      "w": 1344,
+      "h": 768,
+      "prompt": "a friendly wise owl with glasses holding a glowing map, standing on a stack of books, cozy study"
+    },
+    {
+      "name": "proj-guess-game",
+      "w": 1344,
+      "h": 768,
+      "prompt": "a playful carnival game table with a giant glowing question mark sculpture and colorful numbered balls in a glass jar, plain booth without signs"
+    },
+    {
+      "name": "proj-todo-manager",
+      "w": 1344,
+      "h": 768,
+      "prompt": "a tidy desk with a giant floating checklist and glowing check marks"
+    },
+    {
+      "name": "proj-password-checker",
+      "w": 1344,
+      "h": 768,
+      "prompt": "a glowing padlock with a strength meter shield, security vault door"
+    },
+    {
+      "name": "proj-bank-system",
+      "w": 1344,
+      "h": 768,
+      "prompt": "a futuristic bank vault with floating gold coins and glowing account cards"
+    },
+    {
+      "name": "proj-expense-report",
+      "w": 1344,
+      "h": 768,
+      "prompt": "colorful floating bar charts and pie charts above receipts and a wallet"
+    },
+    {
+      "name": "proj-markdown-converter",
+      "w": 1344,
+      "h": 768,
+      "prompt": "a machine that turns paper scrolls into beautiful formatted web pages, magical transformation"
+    },
+    {
+      "name": "proj-tic-tac-toe",
+      "w": 1344,
+      "h": 768,
+      "prompt": "a glowing tic tac toe board on a table with a small robot opponent thinking"
+    },
+    {
+      "name": "proj-maze-solver",
+      "w": 1344,
+      "h": 768,
+      "prompt": "a top down hedge maze with a glowing path found from entrance to treasure"
+    },
+    {
+      "name": "proj-calculator",
+      "w": 1344,
+      "h": 768,
+      "prompt": "a giant retro calculator with floating math symbols and parentheses made of light"
+    },
+    {
+      "name": "proj-search-engine",
+      "w": 1344,
+      "h": 768,
+      "prompt": "a magnifying glass over a sea of floating documents with the best ones glowing"
+    },
+    {
+      "name": "proj-library-system",
+      "w": 1344,
+      "h": 768,
+      "prompt": "a cozy magical library with books flying to shelves by themselves, index cards"
+    },
+    {
+      "name": "proj-web-portfolio",
+      "w": 1344,
+      "h": 768,
+      "prompt": "an elegant personal website displayed on a large monitor in a sunny studio with plants"
+    },
+    {
+      "name": "proj-web-kanban",
+      "w": 1344,
+      "h": 768,
+      "prompt": "a kanban board with colorful sticky note cards moving between columns on a glass wall"
+    },
+    {
+      "name": "proj-custom",
+      "w": 1344,
+      "h": 768,
+      "prompt": "a magic wand creating a glowing new invention from sparkles above an empty workbench"
+    },
+    {
+      "name": "track-typescript",
+      "w": 1344,
+      "h": 768,
+      "prompt": "a glowing blue crystal blueprint of a web application with type labels as floating holographic tags, precise and organized"
+    },
+    {
+      "name": "track-go",
+      "w": 1344,
+      "h": 768,
+      "prompt": "a cute gopher mascot directing many tiny parallel conveyor belts of glowing packages in a cloud data center"
+    },
+    {
+      "name": "track-java",
+      "w": 1344,
+      "h": 768,
+      "prompt": "a steaming coffee cup floating above a large enterprise city of servers, orange and blue lights"
+    },
+    {
+      "name": "track-kotlin",
+      "w": 1344,
+      "h": 768,
+      "prompt": "a sleek purple and orange smartphone workshop where a robot assembles android app screens"
+    },
+    {
+      "name": "track-csharp",
+      "w": 1344,
+      "h": 768,
+      "prompt": "a purple game engine studio with a 3d character on a stage and floating code panels, unity-like scene editor"
+    },
+    {
+      "name": "track-swift",
+      "w": 1344,
+      "h": 768,
+      "prompt": "an elegant orange bird made of light flying over sleek unbranded smartphones and a laptop on a minimal white desk, no logos, no text"
+    },
+    {
+      "name": "track-dart",
+      "w": 1344,
+      "h": 768,
+      "prompt": "a blue dart hitting the center of a target made of colorful mobile app screens, flutter widgets floating around"
+    },
+    {
+      "name": "track-rust",
+      "w": 1344,
+      "h": 768,
+      "prompt": "a friendly orange crab engineer in a clean steel workshop forging safe glowing gears, industrial"
+    },
+    {
+      "name": "track-c",
+      "w": 1344,
+      "h": 768,
+      "prompt": "a vintage computer motherboard city with glowing memory cells and tiny workers moving bytes between registers"
+    },
+    {
+      "name": "track-cpp",
+      "w": 1344,
+      "h": 768,
+      "prompt": "a powerful high-tech engine room with turbines made of code, blue light, performance and speed"
+    },
+    {
+      "name": "track-php",
+      "w": 1344,
+      "h": 768,
+      "prompt": "a friendly purple elephant building websites from blocks on a sunny construction site"
+    },
+    {
+      "name": "track-ruby",
+      "w": 1344,
+      "h": 768,
+      "prompt": "a giant glowing red ruby gem on rails like a train track, elegant craftsman workshop"
+    },
+    {
+      "name": "track-r",
+      "w": 1344,
+      "h": 768,
+      "prompt": "a scientist desk with floating colorful statistical charts, bell curves and scatter plots in blue light"
+    },
+    {
+      "name": "track-lua",
+      "w": 1344,
+      "h": 768,
+      "prompt": "a crescent moon over a fantasy game world with scripted characters and quest markers, magical"
+    },
+    {
+      "name": "track-bash",
+      "w": 1344,
+      "h": 768,
+      "prompt": "a green glowing terminal window on a server rack in a dark data center with pipes connecting machines"
+    },
+    {
+      "name": "track-powershell",
+      "w": 1344,
+      "h": 768,
+      "prompt": "a dark blue command console controlling a fleet of windows servers and cloud icons, automation"
+    },
+    {
+      "name": "track-solidity",
+      "w": 1344,
+      "h": 768,
+      "prompt": "a translucent smart contract scroll made of chain links floating above an ethereum-like crystal"
+    },
+    {
+      "name": "track-databases",
+      "w": 1344,
+      "h": 768,
+      "prompt": "a vast library of glowing data cylinders with a tree index structure of light connecting shelves, organized"
+    },
+    {
+      "name": "track-methodology",
+      "w": 1344,
+      "h": 768,
+      "prompt": "a team of friendly engineers around a kanban board covered in blank colorful sticky notes, sprint planning, warm office, no text, no lettering"
+    },
+    {
+      "name": "track-react",
+      "w": 1344,
+      "h": 768,
+      "prompt": "glowing cyan atom symbol orbiting above modular UI component blocks snapping together"
+    },
+    {
+      "name": "track-data-analysis",
+      "w": 1344,
+      "h": 768,
+      "prompt": "a cute panda analyst surrounded by floating spreadsheets, bar charts and tables"
+    },
+    {
+      "name": "track-security",
+      "w": 1344,
+      "h": 768,
+      "prompt": "a glowing red and blue shield protecting a server fortress from shadowy hackers, cyber defense"
+    },
+    {
+      "name": "track-gamedev",
+      "w": 1344,
+      "h": 768,
+      "prompt": "a colorful game development studio with a level editor, sprites, and a running platformer game on screens"
+    },
+    {
+      "name": "track-mobile",
+      "w": 1344,
+      "h": 768,
+      "prompt": "many floating smartphones and tablets showing colorful app interfaces connected by light beams"
+    },
+    {
+      "name": "track-blockchain",
+      "w": 1344,
+      "h": 768,
+      "prompt": "a chain of glowing transparent cubes linked together floating in space, each cube containing data"
+    },
+    {
+      "name": "track-programming",
+      "w": 1344,
+      "h": 768,
+      "prompt": "isometric workshop where a friendly robot stacks glowing building blocks labelled with simple symbols into a sturdy tower, blueprints on a desk, warm light, no text, no lettering"
+    },
+    {
+      "name": "track-postgresql",
+      "w": 1344,
+      "h": 768,
+      "prompt": "a calm blue elephant made of light standing beside neatly organized glowing database tables and index trees in a futuristic library, isometric, no text, no logos"
+    },
+    {
+      "name": "track-mongodb",
+      "w": 1344,
+      "h": 768,
+      "prompt": "a lush green leaf-shaped data garden where nested glowing document cards grow like leaves on branches, isometric, soft green light, no text, no logos"
+    },
+    {
+      "name": "track-mysql",
+      "w": 1344,
+      "h": 768,
+      "prompt": "a friendly blue dolphin made of light leaping over rows of glowing server racks and neatly stacked data tables, isometric, ocean-blue palette, no text, no logos"
+    },
+    {
+      "name": "track-redis",
+      "w": 1344,
+      "h": 768,
+      "prompt": "a glowing red crystal cube core in a futuristic server room, with fast streams of light-speed data packets orbiting it like a race track, isometric, red and dark palette, no text, no logos"
+    }
+  ]
+}

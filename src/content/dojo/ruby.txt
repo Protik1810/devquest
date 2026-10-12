@@ -1,0 +1,64 @@
+### rle | Easy
+fn: `rle(s)`
+hint: `s.chars.chunk_while { |a, b| a == b }` splits the string into runs for you.
+--- stub
+def rle(s)
+  # TODO
+  ""
+end
+--- sol
+def rle(s)
+  s.chars.chunk_while { |a, b| a == b }.map { |run| "#{run[0]}#{run.size}" }.join
+end
+--- main
+%w[aaabccdddd z aabbaa abc].each do |s|
+  puts "#{s} -> #{rle(s)}"
+end
+
+### wordfreq | Medium
+fn: `top_words(text, n)`
+hint: `scan(/[a-z]+/)` finds the words, `tally` counts them, and `sort_by { |w, c| [-c, w] }` orders them.
+--- stub
+def top_words(text, n)
+  # TODO
+  []
+end
+--- sol
+def top_words(text, n)
+  text.downcase.scan(/[a-z]+/).tally
+      .sort_by { |word, count| [-count, word] }
+      .first(n)
+      .map { |word, count| "#{word}: #{count}" }
+end
+--- main
+["the cat and the hat and the bat sat on the mat", "Go go GO! Rust, rust; C."].each do |text|
+  puts top_words(text, 3)
+end
+
+### longest | Hard
+fn: `longest_unique(s)`
+hint: `s.each_char.with_index` gives each character with its index; `s[start, length]` slices.
+--- stub
+def longest_unique(s)
+  # TODO
+  ""
+end
+--- sol
+def longest_unique(s)
+  last = {}
+  start = best = best_start = 0
+  s.each_char.with_index do |c, i|
+    start = last[c] + 1 if last[c] && last[c] >= start
+    last[c] = i
+    if i - start + 1 > best
+      best = i - start + 1
+      best_start = start
+    end
+  end
+  s[best_start, best]
+end
+--- main
+%w[abcabcbb bbbbb pwwkew dvdf devquest].each do |s|
+  sub = longest_unique(s)
+  puts "#{s} -> #{sub.length} #{sub}"
+end

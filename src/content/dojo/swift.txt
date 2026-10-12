@@ -1,0 +1,84 @@
+### sieve | Easy
+fn: `func primes(upTo n: Int) -> [Int]`
+hint: `[Bool](repeating: false, count: n + 1)` creates the flags.
+--- stub
+func primes(upTo n: Int) -> [Int] {
+    // TODO
+    return []
+}
+--- sol
+func primes(upTo n: Int) -> [Int] {
+    guard n >= 2 else { return [] }
+    var composite = [Bool](repeating: false, count: n + 1)
+    var result: [Int] = []
+    for p in 2...n where !composite[p] {
+        result.append(p)
+        var m = p * p
+        while m <= n {
+            composite[m] = true
+            m += p
+        }
+    }
+    return result
+}
+--- main
+func joined(_ xs: [Int]) -> String { xs.map { String($0) }.joined(separator: " ") }
+
+print("primes(50): " + joined(primes(upTo: 50)))
+print("count(100): \(primes(upTo: 100).count)")
+print("primes(2): " + joined(primes(upTo: 2)))
+
+### brackets | Medium
+fn: `func isBalanced(_ s: String) -> Bool`
+hint: `stack.popLast()` returns an optional, which compares cleanly with the expected opener.
+--- stub
+func isBalanced(_ s: String) -> Bool {
+    // TODO
+    return false
+}
+--- sol
+func isBalanced(_ s: String) -> Bool {
+    let pairs: [Character: Character] = [")": "(", "]": "[", "}": "{"]
+    var stack: [Character] = []
+    for ch in s {
+        if "([{".contains(ch) {
+            stack.append(ch)
+        } else if let open = pairs[ch] {
+            if stack.popLast() != open { return false }
+        }
+    }
+    return stack.isEmpty
+}
+--- main
+for s in ["([]{})", "([)]", "((", "a(b[c]d)e", "}{"] {
+    print("\(s) -> \(isBalanced(s))")
+}
+
+### longest | Hard
+fn: `func longestUnique(_ s: String) -> String`
+hint: Convert to `Array(s)` first: Swift strings can't be indexed by integers.
+--- stub
+func longestUnique(_ s: String) -> String {
+    // TODO
+    return ""
+}
+--- sol
+func longestUnique(_ s: String) -> String {
+    let chars = Array(s)
+    var last: [Character: Int] = [:]
+    var start = 0, best = 0, bestStart = 0
+    for (i, c) in chars.enumerated() {
+        if let seen = last[c], seen >= start { start = seen + 1 }
+        last[c] = i
+        if i - start + 1 > best {
+            best = i - start + 1
+            bestStart = start
+        }
+    }
+    return String(chars[bestStart..<bestStart + best])
+}
+--- main
+for s in ["abcabcbb", "bbbbb", "pwwkew", "dvdf", "devquest"] {
+    let sub = longestUnique(s)
+    print("\(s) -> \(sub.count) \(sub)")
+}

@@ -1,0 +1,159 @@
+### rle | Easy
+fn: `func rle(s string) string`
+hint: A `strings.Builder` builds strings efficiently; `strconv.Itoa` turns the count into text.
+--- head
+package main
+
+import (
+	"fmt"
+	"strconv"
+	"strings"
+)
+--- stub
+func rle(s string) string {
+	var b strings.Builder
+	_ = strconv.Itoa // TODO: use me
+	return b.String()
+}
+--- sol
+func rle(s string) string {
+	var b strings.Builder
+	r := []rune(s)
+	for i := 0; i < len(r); {
+		j := i
+		for j < len(r) && r[j] == r[i] {
+			j++
+		}
+		b.WriteRune(r[i])
+		b.WriteString(strconv.Itoa(j - i))
+		i = j
+	}
+	return b.String()
+}
+--- main
+func main() {
+	for _, s := range []string{"aaabccdddd", "z", "aabbaa", "abc"} {
+		fmt.Printf("%s -> %s\n", s, rle(s))
+	}
+}
+
+### wordfreq | Medium
+fn: `func topWords(text string, n int) []string`
+hint: `strings.FieldsFunc` splits on any rune your function rejects; `sort.Slice` sorts with a custom less function.
+--- head
+package main
+
+import (
+	"fmt"
+	"sort"
+	"strings"
+)
+--- stub
+func topWords(text string, n int) []string {
+	// TODO: split, count in a map[string]int, sort, take n
+	_ = sort.Strings
+	_ = strings.ToLower
+	return nil
+}
+--- sol
+func topWords(text string, n int) []string {
+	words := strings.FieldsFunc(strings.ToLower(text), func(r rune) bool { return r < 'a' || r > 'z' })
+	counts := map[string]int{}
+	for _, w := range words {
+		counts[w]++
+	}
+	keys := make([]string, 0, len(counts))
+	for w := range counts {
+		keys = append(keys, w)
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		if counts[keys[i]] != counts[keys[j]] {
+			return counts[keys[i]] > counts[keys[j]]
+		}
+		return keys[i] < keys[j]
+	})
+	if len(keys) > n {
+		keys = keys[:n]
+	}
+	out := make([]string, len(keys))
+	for i, w := range keys {
+		out[i] = fmt.Sprintf("%s: %d", w, counts[w])
+	}
+	return out
+}
+--- main
+func main() {
+	texts := []string{"the cat and the hat and the bat sat on the mat", "Go go GO! Rust, rust; C."}
+	for _, t := range texts {
+		for _, line := range topWords(t, 3) {
+			fmt.Println(line)
+		}
+	}
+}
+
+### spiral | Hard
+fn: `func spiral(m [][]int) []int`
+--- head
+package main
+
+import (
+	"fmt"
+	"strings"
+)
+--- stub
+func spiral(m [][]int) []int {
+	// TODO
+	return nil
+}
+--- sol
+func spiral(m [][]int) []int {
+	out := []int{}
+	if len(m) == 0 {
+		return out
+	}
+	top, bottom, left, right := 0, len(m)-1, 0, len(m[0])-1
+	for top <= bottom && left <= right {
+		for c := left; c <= right; c++ {
+			out = append(out, m[top][c])
+		}
+		top++
+		for r := top; r <= bottom; r++ {
+			out = append(out, m[r][right])
+		}
+		right--
+		if top <= bottom {
+			for c := right; c >= left; c-- {
+				out = append(out, m[bottom][c])
+			}
+			bottom--
+		}
+		if left <= right {
+			for r := bottom; r >= top; r-- {
+				out = append(out, m[r][left])
+			}
+			left++
+		}
+	}
+	return out
+}
+--- main
+func matrix(rows, cols int) [][]int {
+	m := make([][]int, rows)
+	for r := range m {
+		m[r] = make([]int, cols)
+		for c := range m[r] {
+			m[r][c] = r*cols + c + 1
+		}
+	}
+	return m
+}
+
+func main() {
+	for _, d := range [][2]int{{3, 4}, {4, 4}, {1, 3}, {3, 1}} {
+		parts := []string{}
+		for _, v := range spiral(matrix(d[0], d[1])) {
+			parts = append(parts, fmt.Sprint(v))
+		}
+		fmt.Println(strings.Join(parts, " "))
+	}
+}

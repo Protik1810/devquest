@@ -1,0 +1,110 @@
+### rle | Easy
+fn: `fn rle(s: &str) -> String`
+hint: Collect `s.chars()` into a `Vec<char>` so you can index it.
+--- stub
+fn rle(s: &str) -> String {
+    // TODO
+    let _ = s;
+    String::new()
+}
+--- sol
+fn rle(s: &str) -> String {
+    let chars: Vec<char> = s.chars().collect();
+    let mut out = String::new();
+    let mut i = 0;
+    while i < chars.len() {
+        let mut j = i;
+        while j < chars.len() && chars[j] == chars[i] {
+            j += 1;
+        }
+        out.push(chars[i]);
+        out.push_str(&(j - i).to_string());
+        i = j;
+    }
+    out
+}
+--- main
+fn main() {
+    for s in ["aaabccdddd", "z", "aabbaa", "abc"] {
+        println!("{} -> {}", s, rle(s));
+    }
+}
+
+### brackets | Medium
+fn: `fn is_balanced(s: &str) -> bool`
+hint: `stack.pop()` returns an `Option<char>`; compare it with `Some(expected)`.
+--- stub
+fn is_balanced(s: &str) -> bool {
+    // TODO
+    let _ = s;
+    false
+}
+--- sol
+fn is_balanced(s: &str) -> bool {
+    let mut stack = Vec::new();
+    for c in s.chars() {
+        match c {
+            '(' | '[' | '{' => stack.push(c),
+            ')' | ']' | '}' => {
+                let open = match c {
+                    ')' => '(',
+                    ']' => '[',
+                    _ => '{',
+                };
+                if stack.pop() != Some(open) {
+                    return false;
+                }
+            }
+            _ => {}
+        }
+    }
+    stack.is_empty()
+}
+--- main
+fn main() {
+    for s in ["([]{})", "([)]", "((", "a(b[c]d)e", "}{"] {
+        println!("{} -> {}", s, is_balanced(s));
+    }
+}
+
+### anagrams | Hard
+fn: `fn group_anagrams(words: &[&str]) -> Vec<Vec<String>>`
+hint: A `HashMap<String, usize>` from key to group index keeps groups in first-seen order (a HashMap alone is unordered).
+--- head
+use std::collections::HashMap;
+--- stub
+fn group_anagrams(words: &[&str]) -> Vec<Vec<String>> {
+    // TODO
+    let _index: HashMap<String, usize> = HashMap::new();
+    words.iter().map(|w| vec![w.to_string()]).collect()
+}
+--- sol
+fn group_anagrams(words: &[&str]) -> Vec<Vec<String>> {
+    let mut index: HashMap<String, usize> = HashMap::new();
+    let mut groups: Vec<Vec<String>> = Vec::new();
+    for w in words {
+        let mut letters: Vec<char> = w.chars().collect();
+        letters.sort();
+        let key: String = letters.into_iter().collect();
+        match index.get(&key).copied() {
+            Some(i) => groups[i].push(w.to_string()),
+            None => {
+                index.insert(key, groups.len());
+                groups.push(vec![w.to_string()]);
+            }
+        }
+    }
+    groups
+}
+--- main
+fn main() {
+    let inputs: [&[&str]; 2] = [
+        &["eat", "tea", "tan", "ate", "nat", "bat"],
+        &["listen", "silent", "enlist", "google", "gogole", "cat", "act"],
+    ];
+    for words in inputs {
+        for group in group_anagrams(words) {
+            println!("{}", group.join(" "));
+        }
+    }
+}

@@ -1,0 +1,556 @@
++++ track
+id: mongodb
+title: MongoDB
+icon: 🍃
+tier: 6
+color: #10b981
+kind: core
+blurb: The most popular document database: documents and collections, queries, updates, aggregation pipelines, indexes and schema design, practised in a MongoDB shell that runs right here.
++++
+
+=== lesson mongo-intro | Documents, collections & your first inserts | 50
+**MongoDB** is a *document database*. Instead of rows in tables, it stores **documents**: JSON-like objects grouped into **collections**.
+
+| Relational (SQL) | MongoDB |
+|---|---|
+| database | database |
+| table | collection |
+| row | document |
+| column | field |
+| JOIN | embedding, or `$lookup` |
+
+A document can hold nested objects and arrays, so data that belongs together is stored together:
+
+```js
+{
+  _id: ObjectId('65f1…'),
+  name: 'Ada',
+  skills: ['math', 'engines'],
+  address: { city: 'London', country: 'UK' }
+}
+```
+
+- Every document has a unique **`_id`**. If you don't give one, MongoDB creates an **ObjectId** (12 bytes: timestamp + random + counter).
+- Documents in one collection *can* have different shapes (a **flexible schema**). In practice you keep them consistent and can enforce it with schema validation.
+- On disk MongoDB uses **BSON** (binary JSON), which adds types such as dates, 64-bit integers and decimals.
+
+**The shell.** You talk to MongoDB with `mongosh`. Collections are created the first time you insert into them:
+
+```js
+db.heroes.insertOne({ name: 'Ada', level: 7 })
+db.heroes.insertMany([{ name: 'Linus' }, { name: 'Grace' }])
+db.heroes.countDocuments()            // 3
+db.heroes.findOne({ name: 'Ada' })    // the first match, or null
+```
+
+In DevQuest's MongoDB shell, `print(...)` and `printjson(...)` show values the way `mongosh` does.
+
+**When to choose MongoDB:** data that is naturally hierarchical (product catalogues, user profiles, content), schemas that change often, and horizontal scaling. **When to prefer SQL:** many relationships, complex joins and reporting, and multi-table transactions everywhere.
+--- exercise code mongodb
+::prompt
+Insert three documents into a **`heroes`** collection (in this order): Ada (class `'mage'`, level `7`), Linus (class `'warrior'`, level `5`) and Grace (class `'mage'`, level `9`). Use the field names `name`, `class` and `level`. The two lines at the bottom then print the count and Grace's document.
+::starter
+// Insert the three heroes here (insertMany takes an array)
+
+
+print(db.heroes.countDocuments())
+printjson(db.heroes.findOne({ name: 'Grace' }, { _id: 0 }))
+::solution
+db.heroes.insertMany([
+  { name: 'Ada', class: 'mage', level: 7 },
+  { name: 'Linus', class: 'warrior', level: 5 },
+  { name: 'Grace', class: 'mage', level: 9 },
+])
+
+print(db.heroes.countDocuments())
+printjson(db.heroes.findOne({ name: 'Grace' }, { _id: 0 }))
+::expected
+3
+{ name: 'Grace', class: 'mage', level: 9 }
+::hints
+- `db.heroes.insertMany([ {...}, {...}, {...} ])`
+- Each document looks like `{ name: 'Ada', class: 'mage', level: 7 }`.
+--- cards
+Document :: A JSON-like record (BSON on disk) with fields, nested objects and arrays; stored in a collection.
+_id :: Every MongoDB document's unique primary key. Defaults to an ObjectId if you don't provide one.
+
+=== lesson mongo-query | Querying with filters & operators | 55
+`find(filter, projection)` returns a **cursor** over every matching document. The filter is itself a document:
+
+```js
+db.books.find({ author: 'Andy Weir' })              // equality
+db.books.find({ year: { $gte: 2000, $lt: 2010 } })   // range
+db.books.find({ genres: 'sci-fi' })                  // matches if the ARRAY contains 'sci-fi'
+db.books.find({ title: /^the/i })                    // regular expression
+```
+
+**Comparison operators:** `$eq $ne $gt $gte $lt $lte $in $nin`. **Logical:** fields listed together are ANDed; use `$or`, `$and`, `$nor` and `$not` for more:
+
+```js
+db.books.find({ $or: [{ stock: 0 }, { price: { $gt: 20 } }] })
+db.books.find({ subtitle: { $exists: false } })
+```
+
+**Projection** picks the fields to return: `1` includes, `0` excludes. `_id` is included unless you exclude it:
+
+```js
+db.books.find({ genres: 'fantasy' }, { _id: 0, title: 1, price: 1 })
+```
+
+**Counting:** `countDocuments(filter)`. **Iterating:** `cursor.forEach(printjson)` or `cursor.toArray()`.
+
+Today's collection, **`books`**, has fields `title`, `author`, `year`, `genres` (array), `price`, `stock` and `ratings` (array).
+--- exercise code mongodb
+::prompt
+1. Print the **titles only** (no `_id`) of **sci-fi** books published **after 1980** that cost **less than 12**.
+2. Print how many books are **out of stock or have fewer than 5 copies** (use `$or`).
+::starter
+const query = {} // TODO: sci-fi, after 1980, price under 12
+db.books.find(query, { _id: 0, title: 1 }).forEach(printjson)
+
+print('low stock:', db.books.countDocuments({ /* TODO */ }))
+::solution
+const query = { genres: 'sci-fi', year: { $gt: 1980 }, price: { $lt: 12 } }
+db.books.find(query, { _id: 0, title: 1 }).forEach(printjson)
+
+print('low stock:', db.books.countDocuments({ $or: [{ stock: 0 }, { stock: { $lt: 5 } }] }))
+::setup
+db.books.insertMany([
+  { _id: 1, title: 'Dune', author: 'Frank Herbert', year: 1965, genres: ['sci-fi'], price: 9.99, stock: 12, ratings: [5, 4, 5] },
+  { _id: 2, title: 'Neuromancer', author: 'William Gibson', year: 1984, genres: ['sci-fi', 'cyberpunk'], price: 8.5, stock: 0, ratings: [4, 4] },
+  { _id: 3, title: 'The Hobbit', author: 'J.R.R. Tolkien', year: 1937, genres: ['fantasy'], price: 7.25, stock: 30, ratings: [5, 5, 4, 5] },
+  { _id: 4, title: 'Snow Crash', author: 'Neal Stephenson', year: 1992, genres: ['sci-fi', 'cyberpunk', 'satire'], price: 10, stock: 4, ratings: [4, 3] },
+  { _id: 5, title: 'Project Hail Mary', author: 'Andy Weir', year: 2021, genres: ['sci-fi'], price: 14.99, stock: 7, ratings: [5, 5, 5] },
+  { _id: 6, title: 'The Name of the Wind', author: 'Patrick Rothfuss', year: 2007, genres: ['fantasy'], price: 11.5, stock: 2, ratings: [5, 4] },
+])
+::expected
+{ title: 'Neuromancer' }
+{ title: 'Snow Crash' }
+low stock: 3
+::hints
+- Several conditions in one filter are ANDed: `{ genres: 'sci-fi', year: { $gt: 1980 }, ... }`
+- Matching an array field against a single value checks whether the array contains it.
+- `{ $or: [ {...}, {...} ] }`
+--- cards
+$in :: Matches when the field equals any value in the list: { status: { $in: ['new', 'open'] } }.
+Projection :: The second argument of find(): which fields to return (1 = include, 0 = exclude).
+
+=== lesson mongo-sort | Sorting, paging & distinct values | 50
+Cursors can be shaped before you read them:
+
+```js
+db.books.find().sort({ price: 1 })            // 1 = ascending, -1 = descending
+db.books.find().sort({ year: -1, title: 1 })  // tie-breaker on the second key
+db.books.find().limit(5)                       // at most 5
+db.books.find().skip(10).limit(5)              // page 3 when a page holds 5
+db.books.distinct('genres')                    // unique values (arrays are flattened)
+```
+
+**Pagination.** Page *p* (counting from 1) with page size *n* is `skip((p - 1) * n).limit(n)`. Always sort when paging, otherwise the order (and so the pages) isn't guaranteed. For very deep pages, `skip` gets slow because the server still walks the skipped documents. Large apps use **range pagination** instead: "items with `_id` greater than the last one I showed".
+
+The order in which you call `sort`, `skip` and `limit` on a cursor doesn't matter: MongoDB always sorts first, then skips, then limits.
+--- exercise code mongodb
+::prompt
+1. Print the **3 cheapest books that are in stock** (`stock > 0`), cheapest first, showing only `title` and `price`.
+2. Sorting all books by title A→Z with **2 books per page**, print the titles on **page 2** (one per line).
+3. Print the **distinct genres**.
+::starter
+db.books.find({ /* TODO */ }, { _id: 0, title: 1, price: 1 }) /* TODO: sort and limit */ .forEach(printjson)
+
+db.books.find() /* TODO: page 2 */ .forEach((b) => print(b.title))
+
+printjson(/* TODO */ [])
+::solution
+db.books.find({ stock: { $gt: 0 } }, { _id: 0, title: 1, price: 1 }).sort({ price: 1 }).limit(3).forEach(printjson)
+
+db.books.find().sort({ title: 1 }).skip(2).limit(2).forEach((b) => print(b.title))
+
+printjson(db.books.distinct('genres'))
+::setup
+db.books.insertMany([
+  { _id: 1, title: 'Dune', author: 'Frank Herbert', year: 1965, genres: ['sci-fi'], price: 9.99, stock: 12, ratings: [5, 4, 5] },
+  { _id: 2, title: 'Neuromancer', author: 'William Gibson', year: 1984, genres: ['sci-fi', 'cyberpunk'], price: 8.5, stock: 0, ratings: [4, 4] },
+  { _id: 3, title: 'The Hobbit', author: 'J.R.R. Tolkien', year: 1937, genres: ['fantasy'], price: 7.25, stock: 30, ratings: [5, 5, 4, 5] },
+  { _id: 4, title: 'Snow Crash', author: 'Neal Stephenson', year: 1992, genres: ['sci-fi', 'cyberpunk', 'satire'], price: 10, stock: 4, ratings: [4, 3] },
+  { _id: 5, title: 'Project Hail Mary', author: 'Andy Weir', year: 2021, genres: ['sci-fi'], price: 14.99, stock: 7, ratings: [5, 5, 5] },
+  { _id: 6, title: 'The Name of the Wind', author: 'Patrick Rothfuss', year: 2007, genres: ['fantasy'], price: 11.5, stock: 2, ratings: [5, 4] },
+])
+::expected
+{ title: 'The Hobbit', price: 7.25 }
+{ title: 'Dune', price: 9.99 }
+{ title: 'Snow Crash', price: 10 }
+Project Hail Mary
+Snow Crash
+[ 'cyberpunk', 'fantasy', 'satire', 'sci-fi' ]
+::hints
+- `.sort({ price: 1 }).limit(3)`
+- Page 2 with 2 per page skips the first 2: `.sort({ title: 1 }).skip(2).limit(2)`
+- `db.books.distinct('genres')`
+--- cards
+Pagination formula :: skip((page - 1) * size).limit(size), always with a sort.
+Range pagination :: Ask for items after the last one shown (e.g. _id > lastId) instead of skip, so deep pages stay fast.
+
+=== lesson mongo-update | Updating & deleting documents | 60
+Updates take a **filter** and an **update document** made of operators:
+
+```js
+db.books.updateOne({ title: 'Dune' }, { $set: { price: 8.99 } })
+db.books.updateMany({ stock: 0 }, { $set: { status: 'sold out' } })
+db.books.updateOne({ _id: 1 }, { $inc: { stock: -1 } })   // atomic counter
+```
+
+| Operator | Effect |
+|---|---|
+| `$set` / `$unset` | set or remove fields |
+| `$inc` / `$mul` | add to / multiply a number |
+| `$push` / `$addToSet` | append to an array (`$addToSet` skips duplicates) |
+| `$pull` | remove matching array elements |
+| `$rename` | rename a field |
+
+**Upsert** updates a match, or inserts a new document when nothing matches:
+
+```js
+db.books.updateOne({ title: 'Leviathan Wakes' }, { $set: { year: 2011 } }, { upsert: true })
+```
+
+**Deleting:** `deleteOne(filter)` and `deleteMany(filter)`. Beware `deleteMany({})`: an empty filter matches *everything*.
+
+Every write to a **single document** is atomic, even when it changes many fields or nested arrays. That's one reason MongoDB encourages keeping data that changes together in one document. For multi-document atomicity MongoDB also has transactions, at a performance cost.
+--- exercise code mongodb
+::prompt
+Make these changes, in order:
+1. Restock **Neuromancer**: increase its `stock` by **10**.
+2. Add the genre **`'classic'`** to every book published **before 1970** (without creating duplicates).
+3. Reduce the `price` of every **fantasy** book by **1**.
+4. **Upsert** a book titled `'Leviathan Wakes'`, setting `author: 'James S. A. Corey'` and `year: 2011`.
+5. Delete every book with **fewer than 3** copies in stock.
+
+The code at the bottom prints the result.
+::starter
+// 1. restock Neuromancer
+
+// 2. 'classic' for books before 1970
+
+// 3. fantasy discount
+
+// 4. upsert Leviathan Wakes
+
+// 5. delete low-stock books
+
+
+db.books.find().sort({ title: 1 }).forEach((b) =>
+  print(`${b.title} | stock ${b.stock ?? '-'} | $${b.price ?? '-'} | ${(b.genres ?? []).join(', ') || '-'}`))
+::solution
+db.books.updateOne({ title: 'Neuromancer' }, { $inc: { stock: 10 } })
+db.books.updateMany({ year: { $lt: 1970 } }, { $addToSet: { genres: 'classic' } })
+db.books.updateMany({ genres: 'fantasy' }, { $inc: { price: -1 } })
+db.books.updateOne({ title: 'Leviathan Wakes' }, { $set: { author: 'James S. A. Corey', year: 2011 } }, { upsert: true })
+db.books.deleteMany({ stock: { $lt: 3 } })
+
+db.books.find().sort({ title: 1 }).forEach((b) =>
+  print(`${b.title} | stock ${b.stock ?? '-'} | $${b.price ?? '-'} | ${(b.genres ?? []).join(', ') || '-'}`))
+::setup
+db.books.insertMany([
+  { _id: 1, title: 'Dune', author: 'Frank Herbert', year: 1965, genres: ['sci-fi'], price: 9.99, stock: 12, ratings: [5, 4, 5] },
+  { _id: 2, title: 'Neuromancer', author: 'William Gibson', year: 1984, genres: ['sci-fi', 'cyberpunk'], price: 8.5, stock: 0, ratings: [4, 4] },
+  { _id: 3, title: 'The Hobbit', author: 'J.R.R. Tolkien', year: 1937, genres: ['fantasy'], price: 7.25, stock: 30, ratings: [5, 5, 4, 5] },
+  { _id: 4, title: 'Snow Crash', author: 'Neal Stephenson', year: 1992, genres: ['sci-fi', 'cyberpunk', 'satire'], price: 10, stock: 4, ratings: [4, 3] },
+  { _id: 5, title: 'Project Hail Mary', author: 'Andy Weir', year: 2021, genres: ['sci-fi'], price: 14.99, stock: 7, ratings: [5, 5, 5] },
+  { _id: 6, title: 'The Name of the Wind', author: 'Patrick Rothfuss', year: 2007, genres: ['fantasy'], price: 11.5, stock: 2, ratings: [5, 4] },
+])
+::expected
+Dune | stock 12 | $9.99 | sci-fi, classic
+Leviathan Wakes | stock - | $- | -
+Neuromancer | stock 10 | $8.5 | sci-fi, cyberpunk
+Project Hail Mary | stock 7 | $14.99 | sci-fi
+Snow Crash | stock 4 | $10 | sci-fi, cyberpunk, satire
+The Hobbit | stock 30 | $6.25 | fantasy, classic
+::hints
+- `{ $inc: { stock: 10 } }` adds; a negative number subtracts.
+- `$addToSet` appends only if the value isn't there yet.
+- `updateOne(filter, update, { upsert: true })`
+- Documents without a `stock` field don't match `{ stock: { $lt: 3 } }`.
+--- cards
+Upsert :: Update the matching document, or insert one built from the filter + update when nothing matches.
+Single-document atomicity :: In MongoDB every write to one document is atomic, including nested fields and arrays.
+
+=== lesson mongo-nested | Nested documents & arrays | 60
+Real documents nest. Query inside them with **dot notation** (always quoted):
+
+```js
+db.orders.find({ 'customer.city': 'London' })
+db.orders.find({ 'items.sku': 'MS-2' })          // any element of the items array
+db.orders.find({ items: { $size: 2 } })           // exactly two items
+```
+
+**The array trap.** Conditions on an array of sub-documents are checked *independently*:
+
+```js
+// "some item has sku MN-4" AND "some (maybe other) item has qty >= 2"
+db.orders.find({ 'items.sku': 'MN-4', 'items.qty': { $gte: 2 } })
+```
+
+To require **one element** to satisfy every condition, use **`$elemMatch`**:
+
+```js
+db.orders.find({ items: { $elemMatch: { sku: 'MN-4', qty: { $gte: 2 } } } })
+```
+
+**Modelling: embed or reference?**
+- **Embed** when the data is read together, owned by the parent and bounded in size (order lines, addresses).
+- **Reference** (store an id) when the data is shared, large, unbounded or changes independently (authors of posts, products in orders when the catalogue changes). You'll join references with `$lookup` later.
+
+A document can be at most **16 MB**, so never let an array grow forever (think "comments on a viral post").
+--- exercise code mongodb
+::prompt
+The `orders` collection embeds the customer and the order lines (`items: [{ sku, qty, price }]`). Print the order `_id`s for:
+1. orders from customers in **London** (dot notation),
+2. orders with an item whose sku is **`'MS-2'` and** whose qty is **at least 2**, in the **same** item (`$elemMatch`),
+3. the *same idea for sku `'MN-4'` but without `$elemMatch`* (`'items.sku'` and `'items.qty'` separately). Notice that it matches an order it shouldn't!
+::starter
+const ids = (cursor) => cursor.map((o) => o._id).join(', ')
+
+print('london:', ids(db.orders.find({ /* TODO */ })))
+print('bulk mice:', ids(db.orders.find({ /* TODO */ })))
+print('without $elemMatch:', ids(db.orders.find({ /* TODO */ })))
+::solution
+const ids = (cursor) => cursor.map((o) => o._id).join(', ')
+
+print('london:', ids(db.orders.find({ 'customer.city': 'London' })))
+print('bulk mice:', ids(db.orders.find({ items: { $elemMatch: { sku: 'MS-2', qty: { $gte: 2 } } } })))
+print('without $elemMatch:', ids(db.orders.find({ 'items.sku': 'MN-4', 'items.qty': { $gte: 2 } })))
+::setup
+db.orders.insertMany([
+  { _id: 101, customer: { name: 'Ada', city: 'London' }, items: [{ sku: 'KB-1', qty: 1, price: 80 }, { sku: 'MS-2', qty: 2, price: 25 }], status: 'shipped' },
+  { _id: 102, customer: { name: 'Linus', city: 'Helsinki' }, items: [{ sku: 'LP-9', qty: 1, price: 1200 }], status: 'pending' },
+  { _id: 103, customer: { name: 'Grace', city: 'New York' }, items: [{ sku: 'MS-2', qty: 5, price: 25 }, { sku: 'MN-4', qty: 1, price: 250 }], status: 'shipped' },
+  { _id: 104, customer: { name: 'Ada', city: 'London' }, items: [{ sku: 'MN-4', qty: 2, price: 240 }], status: 'cancelled' },
+])
+::expected
+london: 101, 104
+bulk mice: 101, 103
+without $elemMatch: 103, 104
+::hints
+- Quote dotted paths: `{ 'customer.city': 'London' }`
+- `{ items: { $elemMatch: { sku: 'MS-2', qty: { $gte: 2 } } } }`
+- Order 103 has an MN-4 line (qty 1) and a *different* line with qty 5, so the separate conditions both match.
+--- cards
+$elemMatch :: Requires a single array element to satisfy all the given conditions.
+Embed vs reference :: Embed data read together, owned and bounded; reference data that's shared, large, unbounded or independently changing.
+
+=== lesson mongo-aggregate | The aggregation pipeline | 70
+For reports and transformations, MongoDB runs documents through a **pipeline** of stages. Each stage's output feeds the next:
+
+```js
+db.orders.aggregate([
+  { $match: { status: 'shipped' } },                          // filter (like WHERE)
+  { $unwind: '$items' },                                      // one document per array element
+  { $group: { _id: '$items.sku', units: { $sum: '$items.qty' } } },   // like GROUP BY
+  { $sort: { units: -1 } },
+  { $limit: 3 },
+])
+```
+
+| Stage | SQL cousin |
+|---|---|
+| `$match` | WHERE |
+| `$group` with `$sum $avg $min $max $push $count` | GROUP BY + aggregates |
+| `$project`, `$addFields` | SELECT expressions |
+| `$sort`, `$limit`, `$skip` | ORDER BY, LIMIT, OFFSET |
+| `$unwind` | turning an array into rows |
+| `$lookup` | LEFT OUTER JOIN |
+
+**Field paths** start with `$` (`'$items.qty'`). **Expressions** compute values: `{ $multiply: ['$items.qty', '$items.price'] }`, `{ $concat: ['$first', ' ', '$last'] }`.
+
+Put `$match` (and `$sort` on indexed fields) **as early as possible**, so later stages handle fewer documents and indexes can be used.
+--- exercise code mongodb
+::prompt
+1. For orders that are **not cancelled**, compute per **sku** the total `units` (sum of qty) and `revenue` (sum of qty × price), sorted by revenue, highest first.
+2. Count orders per **status**, sorted by status name.
+
+The printing code is provided.
+::starter
+const bySku = db.orders.aggregate([
+  // TODO: $match, $unwind, $group, $sort
+]).toArray()
+bySku.forEach((r) => print(`${r._id}: ${r.units} units, $${r.revenue}`))
+
+const byStatus = db.orders.aggregate([
+  // TODO
+]).toArray()
+byStatus.forEach((s) => print(`${s._id}: ${s.count}`))
+::solution
+const bySku = db.orders.aggregate([
+  { $match: { status: { $ne: 'cancelled' } } },
+  { $unwind: '$items' },
+  { $group: { _id: '$items.sku', units: { $sum: '$items.qty' }, revenue: { $sum: { $multiply: ['$items.qty', '$items.price'] } } } },
+  { $sort: { revenue: -1 } },
+]).toArray()
+bySku.forEach((r) => print(`${r._id}: ${r.units} units, $${r.revenue}`))
+
+const byStatus = db.orders.aggregate([
+  { $group: { _id: '$status', count: { $sum: 1 } } },
+  { $sort: { _id: 1 } },
+]).toArray()
+byStatus.forEach((s) => print(`${s._id}: ${s.count}`))
+::setup
+db.orders.insertMany([
+  { _id: 101, customer: { name: 'Ada', city: 'London' }, items: [{ sku: 'KB-1', qty: 1, price: 80 }, { sku: 'MS-2', qty: 2, price: 25 }], status: 'shipped' },
+  { _id: 102, customer: { name: 'Linus', city: 'Helsinki' }, items: [{ sku: 'LP-9', qty: 1, price: 1200 }], status: 'pending' },
+  { _id: 103, customer: { name: 'Grace', city: 'New York' }, items: [{ sku: 'MS-2', qty: 5, price: 25 }, { sku: 'MN-4', qty: 1, price: 250 }], status: 'shipped' },
+  { _id: 104, customer: { name: 'Ada', city: 'London' }, items: [{ sku: 'MN-4', qty: 2, price: 240 }], status: 'cancelled' },
+])
+::expected
+LP-9: 1 units, $1200
+MN-4: 1 units, $250
+MS-2: 7 units, $175
+KB-1: 1 units, $80
+cancelled: 1
+pending: 1
+shipped: 2
+::hints
+- `{ $match: { status: { $ne: 'cancelled' } } }` then `{ $unwind: '$items' }`
+- `revenue: { $sum: { $multiply: ['$items.qty', '$items.price'] } }`
+- Counting documents in a group: `count: { $sum: 1 }`
+--- cards
+$unwind :: Outputs one document per element of an array field, so you can group or filter by elements.
+Pipeline order :: Put $match early so later stages process fewer documents and indexes can help.
+
+=== lesson mongo-indexes | Indexes, uniqueness & $lookup | 70
+Without an index, a query has to read **every document** (a **COLLSCAN**). An **index** is a sorted structure (a B-tree) over one or more fields, so MongoDB can jump straight to matches (an **IXSCAN**):
+
+```js
+db.posts.createIndex({ author: 1 })                      // single field
+db.posts.createIndex({ author: 1, likes: -1 })           // compound: filter by author, sort by likes
+db.users.createIndex({ email: 1 }, { unique: true })     // also enforces uniqueness
+db.posts.find({ author: 'u1' }).explain().queryPlanner.winningPlan
+```
+
+Indexes speed up reads but cost **memory and slower writes** (each insert updates every index). Index the fields you filter and sort by most, and check with `explain()`.
+
+**Joining references with `$lookup`.** When documents refer to each other by id, join at read time:
+
+```js
+db.posts.aggregate([
+  { $lookup: { from: 'users', localField: 'author', foreignField: '_id', as: 'user' } },
+  { $unwind: '$user' },
+  { $project: { _id: 0, title: 1, name: '$user.name' } },
+])
+```
+
+`$lookup` is a left outer join: `user` is an *array* of matches, which is why it's usually followed by `$unwind`.
+--- exercise code mongodb
+::prompt
+1. Create a **unique index** on `users.email`, then try to insert a user with the existing email `'ada@x.dev'`. The try/catch prints `duplicate rejected` if your index works.
+2. Create an index on `posts.author`. The given line prints the query plan's stage, which should become `IXSCAN`.
+3. With an aggregation on `posts`, compute the **total likes per author**, join each author's **user document** with `$lookup`, and sort by likes, highest first. Print `name: likes`.
+::starter
+// 1. unique email
+
+try {
+  db.users.insertOne({ _id: 'u4', name: 'Ada Again', email: 'ada@x.dev' })
+  print('duplicate accepted')
+} catch (e) {
+  print('duplicate rejected')
+}
+
+// 2. index on posts.author
+
+print(db.posts.find({ author: 'u1' }).explain().queryPlanner.winningPlan.inputStage?.stage ?? 'COLLSCAN')
+
+// 3. likes per author with their names
+db.posts.aggregate([
+  // TODO
+]).forEach((r) => print(`${r.name}: ${r.likes}`))
+::solution
+db.users.createIndex({ email: 1 }, { unique: true })
+
+try {
+  db.users.insertOne({ _id: 'u4', name: 'Ada Again', email: 'ada@x.dev' })
+  print('duplicate accepted')
+} catch (e) {
+  print('duplicate rejected')
+}
+
+db.posts.createIndex({ author: 1 })
+
+print(db.posts.find({ author: 'u1' }).explain().queryPlanner.winningPlan.inputStage?.stage ?? 'COLLSCAN')
+
+db.posts.aggregate([
+  { $group: { _id: '$author', likes: { $sum: '$likes' } } },
+  { $lookup: { from: 'users', localField: '_id', foreignField: '_id', as: 'user' } },
+  { $unwind: '$user' },
+  { $project: { _id: 0, name: '$user.name', likes: 1 } },
+  { $sort: { likes: -1 } },
+]).forEach((r) => print(`${r.name}: ${r.likes}`))
+::setup
+db.users.insertMany([
+  { _id: 'u1', name: 'Ada', email: 'ada@x.dev' },
+  { _id: 'u2', name: 'Linus', email: 'linus@x.dev' },
+  { _id: 'u3', name: 'Grace', email: 'grace@x.dev' },
+])
+db.posts.insertMany([
+  { _id: 1, author: 'u1', title: 'Engines', likes: 12 },
+  { _id: 2, author: 'u2', title: 'Kernels', likes: 40 },
+  { _id: 3, author: 'u1', title: 'Notes', likes: 7 },
+  { _id: 4, author: 'u3', title: 'Compilers', likes: 25 },
+])
+::expected
+duplicate rejected
+IXSCAN
+Linus: 40
+Grace: 25
+Ada: 19
+::hints
+- `db.users.createIndex({ email: 1 }, { unique: true })`
+- Group first: `{ $group: { _id: '$author', likes: { $sum: '$likes' } } }`, then `$lookup` with `localField: '_id'`.
+- `$lookup` gives an array; `$unwind: '$user'` turns it into a single document.
+--- cards
+COLLSCAN vs IXSCAN :: A collection scan reads every document; an index scan jumps to matches through a sorted index.
+$lookup :: Aggregation stage that left-joins documents from another collection into an array field.
+
+=== lesson mongo-design | Schema design & production MongoDB | 60
+Designing for MongoDB starts from **how the app reads and writes**, not from normalisation rules.
+
+**Patterns you'll meet:**
+- **Embedded one-to-few:** a user's 2-3 addresses live inside the user.
+- **One-to-many with references:** a product stores `categoryId`; the category list is its own collection.
+- **Subset pattern:** keep the 10 newest reviews embedded for the product page, and all reviews in a separate collection.
+- **Computed pattern:** store `ratingAvg` and `ratingCount`, updated with `$inc` on each review, instead of recomputing every read.
+- **Bucket pattern:** group time-series readings per sensor per hour into one document.
+
+**Consistency & scale:**
+- **Replica sets:** one primary takes writes; secondaries copy its oplog and take over automatically on failure.
+- **Write concern** (`w: 'majority'`) decides how many replicas must confirm a write. **Read concern** decides what you may read.
+- **Sharding** splits a collection across servers by a **shard key**. Choose one with high cardinality that spreads writes (not an ever-increasing timestamp alone).
+- **Transactions** across documents exist, but a design that needs them everywhere may fit SQL better.
+
+**Security basics:** enable authentication, never expose port 27017 to the internet, use least-privilege roles, and validate input. Operators like `$where` or a raw user-supplied `{ "$gt": "" }` in a filter enable **NoSQL injection**.
+--- quiz
+? A product page shows the product with its 5 most recent reviews, but products can have 50,000 reviews. Best design?
+- Embed all reviews in the product
++ Embed the newest few (subset pattern) and keep all reviews in a reviews collection
+- Store reviews only in another database
+- Put each review in its own database
+> Embedding everything would hit the 16 MB limit and slow every product read.
+? Which shard key spreads inserts best for an app logging events from many devices?
+- The insertion timestamp alone
++ A compound key like { deviceId: 1, timestamp: 1 }
+- A boolean field
+- The collection name
+> Monotonic keys send every new insert to the same shard ("hot shard").
+? A login form passes { "password": { "$ne": "" } } straight into a filter. This is…
+- Harmless, MongoDB ignores operators in input
++ NoSQL injection that can bypass the password check
+- A schema validation error
+- Only a problem in SQL databases
+> Always validate types: the password must be a string, never an object.
+? Write concern w: 'majority' means…
+- The write is cached on the client
++ A majority of replica-set members confirmed the write
+- Every shard got the write
+- The write is skipped if the server is busy
+--- cards
+Subset pattern :: Embed a small, frequently-read part of a large related set (e.g. newest reviews); keep the rest in its own collection.
+Shard key :: The field(s) that decide which shard stores a document; should have high cardinality and spread writes.
+NoSQL injection :: Passing user-controlled objects (like { "$ne": "" }) into query filters. Prevent it by validating types.

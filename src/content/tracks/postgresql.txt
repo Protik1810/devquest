@@ -1,0 +1,590 @@
++++ track
+id: postgresql
+title: PostgreSQL
+icon: 🐘
+tier: 6
+color: #336791
+kind: core
+blurb: The world's most advanced open-source relational database, running for real inside DevQuest: types and constraints, joins, CTEs and recursion, window functions, JSONB, upserts and transactions, indexes and how Postgres works inside.
++++
+
+=== lesson pg-intro | PostgreSQL, tables & types | 55
+**PostgreSQL** ("Postgres") is a free, open-source relational database known for correctness, rich SQL and extensibility. It powers everything from startups to banks. The database you type into here is **real PostgreSQL**, compiled to WebAssembly and running inside DevQuest.
+
+You usually talk to Postgres with the **`psql`** terminal client (or a GUI). Handy `psql` commands: `\l` (databases), `\dt` (tables), `\d tablename` (columns and indexes), `\x` (expanded output), `\q` (quit).
+
+**Creating a table** with sensible types:
+
+```sql
+CREATE TABLE members (
+  id     integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,  -- auto-numbered
+  name   text NOT NULL,
+  email  text NOT NULL UNIQUE,
+  level  integer NOT NULL DEFAULT 1,
+  joined timestamptz NOT NULL DEFAULT now()
+);
+```
+
+| Need | Postgres type |
+|---|---|
+| whole numbers | `integer`, `bigint` |
+| money, exact decimals | `numeric(10,2)` (never `float` for money) |
+| text | `text` (no length limit needed) |
+| true/false | `boolean` |
+| dates and times | `date`, `timestamptz` (time zone aware) |
+| ids from other systems | `uuid` |
+| flexible documents | `jsonb` |
+
+**`RETURNING`** gives you back the rows you just wrote, which is perfect for getting generated ids:
+
+```sql
+INSERT INTO members (name, email) VALUES ('Ada', 'ada@x.dev') RETURNING id, joined;
+```
+--- exercise code postgres
+::prompt
+Create a table **`members`** with:
+- `id`: an integer primary key that numbers itself (`GENERATED ALWAYS AS IDENTITY`),
+- `name`: text, required,
+- `email`: text, required and **unique**,
+- `level`: integer, required, **defaulting to 1**.
+
+Then insert **Ada** (`ada@x.dev`) and **Linus** (`linus@x.dev`) without giving `id` or `level`. The checker then inspects your table's columns, constraints and rows.
+::starter
+CREATE TABLE members (
+  -- TODO: four columns
+);
+
+-- TODO: insert Ada and Linus
+::solution
+CREATE TABLE members (
+  id    integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  name  text NOT NULL,
+  email text NOT NULL UNIQUE,
+  level integer NOT NULL DEFAULT 1
+);
+
+INSERT INTO members (name, email) VALUES ('Ada', 'ada@x.dev'), ('Linus', 'linus@x.dev') RETURNING id, name;
+::reference
+CREATE TABLE members (
+  id    integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  name  text NOT NULL,
+  email text NOT NULL UNIQUE,
+  level integer NOT NULL DEFAULT 1
+);
+INSERT INTO members (name, email) VALUES ('Ada', 'ada@x.dev'), ('Linus', 'linus@x.dev');
+::verify
+SELECT c.column_name, c.data_type, c.is_nullable,
+       (SELECT count(*) FROM pg_constraint WHERE conrelid = 'members'::regclass AND contype = 'u') AS unique_constraints,
+       (SELECT string_agg(name || ':' || level, ', ' ORDER BY id) FROM members) AS rows
+FROM information_schema.columns c
+WHERE c.table_name = 'members'
+ORDER BY c.ordinal_position;
+::ordered
+true
+::hints
+- Each column is `name type constraints`, separated by commas.
+- `level integer NOT NULL DEFAULT 1`
+- `INSERT INTO members (name, email) VALUES ('Ada', 'ada@x.dev'), ('Linus', 'linus@x.dev');`
+--- cards
+numeric vs float :: Use numeric for money and exact decimals; float is approximate (0.1 + 0.2 ≠ 0.3).
+RETURNING :: Postgres clause that returns columns of the rows an INSERT/UPDATE/DELETE changed, e.g. generated ids.
+
+=== lesson pg-select | Filtering, sorting & CASE | 50
+A `SELECT` reads in this logical order: **FROM → WHERE → GROUP BY → HAVING → SELECT → ORDER BY → LIMIT**. That's why you can't use a SELECT alias inside WHERE, but you can in ORDER BY.
+
+```sql
+SELECT name, price
+FROM products
+WHERE category = 'tech' AND price BETWEEN 20 AND 300
+ORDER BY price DESC
+LIMIT 3;
+```
+
+**Postgres goodies:**
+- `ILIKE` is case-insensitive `LIKE`: `name ILIKE 'key%'`.
+- `IS NULL` / `IS NOT NULL` (never `= NULL`), and `COALESCE(email, '(none)')` to replace NULLs.
+- `CASE` builds a value from conditions:
+
+```sql
+SELECT name,
+       CASE WHEN price < 50  THEN 'budget'
+            WHEN price < 500 THEN 'mid'
+            ELSE 'premium' END AS band
+FROM products;
+```
+
+- `DISTINCT ON (category)` keeps the first row per group (with ORDER BY), which is great for "the cheapest product per category".
+
+Tables today: `products(id, name, category, price)`, `customers(id, name, city, email)`, `orders(id, customer_id, ordered_on, status)`, `order_items(order_id, product_id, qty)`.
+--- exercise code postgres
+::prompt
+List the products whose category is **tech** (match it case-insensitively with `ILIKE`) with columns `name`, `price` and `band`, where `band` is `'budget'` under 50, `'mid'` under 500, otherwise `'premium'`. Order by price, **most expensive first**.
+::starter
+SELECT name, price
+FROM products;
+::solution
+SELECT name, price,
+       CASE WHEN price < 50 THEN 'budget'
+            WHEN price < 500 THEN 'mid'
+            ELSE 'premium' END AS band
+FROM products
+WHERE category ILIKE 'TECH'
+ORDER BY price DESC;
+::reference
+SELECT name, price, CASE WHEN price < 50 THEN 'budget' WHEN price < 500 THEN 'mid' ELSE 'premium' END AS band
+FROM products WHERE category ILIKE 'tech' ORDER BY price DESC;
+::ordered
+true
+::setup
+CREATE TABLE customers (id int PRIMARY KEY, name text NOT NULL, city text, email text);
+INSERT INTO customers VALUES (1, 'Ada', 'London', 'ada@x.dev'), (2, 'Linus', 'Helsinki', 'linus@x.dev'), (3, 'Grace', 'New York', 'grace@x.dev'), (4, 'Alan', 'London', NULL);
+CREATE TABLE products (id int PRIMARY KEY, name text NOT NULL, category text, price numeric(10,2));
+INSERT INTO products VALUES (1, 'Keyboard', 'Tech', 80), (2, 'Mouse', 'tech', 25), (3, 'Laptop', 'TECH', 1200), (4, 'Desk', 'furniture', 300), (5, 'Chair', 'furniture', 150), (6, 'Lamp', 'furniture', 40), (7, 'Monitor', 'tech', 250);
+::hints
+- `WHERE category ILIKE 'tech'` matches Tech, tech and TECH.
+- `CASE WHEN price < 50 THEN 'budget' WHEN price < 500 THEN 'mid' ELSE 'premium' END AS band`
+- `ORDER BY price DESC`
+--- cards
+SQL logical order :: FROM → WHERE → GROUP BY → HAVING → SELECT → ORDER BY → LIMIT.
+COALESCE :: Returns its first non-NULL argument, e.g. COALESCE(email, '(none)').
+
+=== lesson pg-joins | Joins & aggregation | 60
+Joins combine rows from tables that share a key:
+
+| Join | Keeps |
+|---|---|
+| `INNER JOIN` | only rows with a match on both sides |
+| `LEFT JOIN` | every row of the left table; NULLs where the right has no match |
+| `FULL JOIN` | everything from both sides |
+| `CROSS JOIN` | every combination (rarely what you want) |
+
+```sql
+SELECT c.name, o.id AS order_id
+FROM customers c
+LEFT JOIN orders o ON o.customer_id = c.id;   -- customers without orders still appear
+```
+
+**Aggregating** collapses rows into groups: `count`, `sum`, `avg`, `min`, `max`, `string_agg`, `array_agg`. Every selected column must be grouped or aggregated. Filter groups with **`HAVING`** (WHERE filters rows *before* grouping).
+
+**Classic traps:**
+- A condition on the right table in `WHERE` turns a LEFT JOIN back into an INNER JOIN. Put it in the `ON` clause instead.
+- Joining two one-to-many tables multiplies rows, so counts and sums inflate. Use `count(DISTINCT …)` or aggregate in a subquery first.
+- `sum()` of no rows is NULL: wrap it in `COALESCE(sum(...), 0)`.
+--- exercise code postgres
+::prompt
+For **every customer** (also those without orders), show `name`, `orders` (the number of their **non-cancelled** orders) and `revenue` (the sum of qty × price over those orders, **0** when none). Order by revenue, highest first, then by name.
+::starter
+SELECT c.name
+FROM customers c;
+::solution
+SELECT c.name,
+       count(DISTINCT o.id) AS orders,
+       COALESCE(sum(oi.qty * p.price), 0) AS revenue
+FROM customers c
+LEFT JOIN orders o ON o.customer_id = c.id AND o.status <> 'cancelled'
+LEFT JOIN order_items oi ON oi.order_id = o.id
+LEFT JOIN products p ON p.id = oi.product_id
+GROUP BY c.id, c.name
+ORDER BY revenue DESC, c.name;
+::reference
+SELECT c.name, count(DISTINCT o.id) AS orders, COALESCE(sum(oi.qty * p.price), 0) AS revenue
+FROM customers c
+LEFT JOIN orders o ON o.customer_id = c.id AND o.status <> 'cancelled'
+LEFT JOIN order_items oi ON oi.order_id = o.id
+LEFT JOIN products p ON p.id = oi.product_id
+GROUP BY c.id, c.name ORDER BY revenue DESC, c.name;
+::ordered
+true
+::setup
+CREATE TABLE customers (id int PRIMARY KEY, name text NOT NULL, city text, email text);
+INSERT INTO customers VALUES (1, 'Ada', 'London', 'ada@x.dev'), (2, 'Linus', 'Helsinki', 'linus@x.dev'), (3, 'Grace', 'New York', 'grace@x.dev'), (4, 'Alan', 'London', NULL);
+CREATE TABLE products (id int PRIMARY KEY, name text NOT NULL, category text, price numeric(10,2));
+INSERT INTO products VALUES (1, 'Keyboard', 'tech', 80), (2, 'Mouse', 'tech', 25), (3, 'Laptop', 'tech', 1200), (4, 'Desk', 'furniture', 300), (5, 'Chair', 'furniture', 150), (6, 'Lamp', 'furniture', 40), (7, 'Monitor', 'tech', 250);
+CREATE TABLE orders (id int PRIMARY KEY, customer_id int REFERENCES customers(id), ordered_on date, status text);
+INSERT INTO orders VALUES (101, 1, '2026-03-01', 'shipped'), (102, 2, '2026-03-01', 'shipped'), (103, 1, '2026-03-02', 'pending'), (104, 3, '2026-03-03', 'shipped'), (105, 2, '2026-03-03', 'cancelled'), (106, 3, '2026-03-04', 'shipped');
+CREATE TABLE order_items (order_id int REFERENCES orders(id), product_id int REFERENCES products(id), qty int);
+INSERT INTO order_items VALUES (101, 1, 1), (101, 2, 2), (102, 3, 1), (103, 7, 2), (104, 4, 1), (104, 5, 2), (105, 2, 5), (106, 2, 1), (106, 6, 3);
+::hints
+- Start from customers and LEFT JOIN orders, order_items and products.
+- Put `o.status <> 'cancelled'` in the ON clause, not in WHERE (or Alan disappears).
+- `count(DISTINCT o.id)` and `COALESCE(sum(oi.qty * p.price), 0)`
+--- cards
+LEFT JOIN + WHERE trap :: A WHERE condition on the right table removes the NULL rows, turning a LEFT JOIN into an INNER JOIN; put it in ON.
+HAVING vs WHERE :: WHERE filters rows before grouping; HAVING filters groups after aggregation.
+
+=== lesson pg-cte | CTEs, subqueries & recursion | 65
+A **CTE** (Common Table Expression) names a subquery with `WITH`, so complex queries read top-to-bottom:
+
+```sql
+WITH big_orders AS (
+  SELECT order_id, sum(qty) AS units FROM order_items GROUP BY order_id HAVING sum(qty) > 2
+)
+SELECT o.id, o.status, b.units
+FROM orders o JOIN big_orders b ON b.order_id = o.id;
+```
+
+Subqueries work too: in `WHERE x IN (SELECT …)`, `WHERE EXISTS (SELECT …)` or as a column.
+
+**Recursive CTEs** walk hierarchies such as org charts, category trees and dependency graphs. They have an *anchor* (where to start) and a *recursive part* (how to take one step), joined by `UNION ALL`:
+
+```sql
+WITH RECURSIVE chain AS (
+  SELECT id, name, 0 AS depth FROM employees WHERE manager_id IS NULL      -- anchor
+  UNION ALL
+  SELECT e.id, e.name, c.depth + 1 FROM employees e JOIN chain c ON e.manager_id = c.id   -- step
+)
+SELECT * FROM chain;
+```
+
+The recursion stops when a step returns no new rows. A cycle in the data (A manages B manages A) would loop forever, so add a depth limit or track visited ids when data can contain cycles.
+--- exercise code postgres
+::prompt
+`employees(id, name, manager_id, title)` stores an org chart. Write a recursive query returning every employee's `name`, `depth` (0 for the CEO, who has no manager) and `path`: the chain of names from the CEO, joined with `' > '` (e.g. `Ada > Linus > Alan`). Order by `path`.
+::starter
+WITH RECURSIVE chain AS (
+  -- anchor: the CEO
+
+  -- UNION ALL
+
+  -- step: people whose manager is already in chain
+
+)
+SELECT name, depth, path FROM chain ORDER BY path;
+::solution
+WITH RECURSIVE chain AS (
+  SELECT id, name, 0 AS depth, name AS path
+  FROM employees
+  WHERE manager_id IS NULL
+  UNION ALL
+  SELECT e.id, e.name, c.depth + 1, c.path || ' > ' || e.name
+  FROM employees e
+  JOIN chain c ON e.manager_id = c.id
+)
+SELECT name, depth, path FROM chain ORDER BY path;
+::reference
+WITH RECURSIVE chain AS (
+  SELECT id, name, 0 AS depth, name AS path FROM employees WHERE manager_id IS NULL
+  UNION ALL
+  SELECT e.id, e.name, c.depth + 1, c.path || ' > ' || e.name FROM employees e JOIN chain c ON e.manager_id = c.id
+)
+SELECT name, depth, path FROM chain ORDER BY path;
+::ordered
+true
+::setup
+CREATE TABLE employees (id int PRIMARY KEY, name text NOT NULL, manager_id int REFERENCES employees(id), title text);
+INSERT INTO employees VALUES (1, 'Ada', NULL, 'CEO'), (2, 'Linus', 1, 'CTO'), (3, 'Grace', 1, 'CFO'), (4, 'Alan', 2, 'Engineer'), (5, 'Barbara', 2, 'Engineer'), (6, 'Ken', 4, 'Intern');
+::hints
+- Anchor: `SELECT id, name, 0 AS depth, name AS path FROM employees WHERE manager_id IS NULL`
+- Step: join employees to chain on `e.manager_id = c.id`, with `c.depth + 1` and `c.path || ' > ' || e.name`
+- Both halves must return the same columns in the same order.
+--- cards
+CTE :: A named subquery introduced with WITH, used to make complex queries readable (and recursive with WITH RECURSIVE).
+Recursive CTE parts :: An anchor query, UNION ALL, and a recursive step that joins back to the CTE; it stops when a step adds no rows.
+
+=== lesson pg-window | Window functions | 70
+**Window functions** compute across related rows *without* collapsing them like GROUP BY does. The `OVER (...)` clause defines the window:
+
+```sql
+SELECT name, category, price,
+       rank()      OVER (PARTITION BY category ORDER BY price DESC) AS rank_in_category,
+       avg(price)  OVER (PARTITION BY category)                      AS category_avg,
+       price - lag(price) OVER (ORDER BY price)                      AS gap_to_cheaper
+FROM products;
+```
+
+| Function | Gives |
+|---|---|
+| `row_number()`, `rank()`, `dense_rank()` | position in the window (ties differ) |
+| `lag(x)`, `lead(x)` | the value from the previous / next row |
+| `sum(x) OVER (ORDER BY …)` | a **running total** |
+| `first_value`, `last_value`, `ntile(n)` | edges and buckets |
+
+`PARTITION BY` restarts the window per group, and `ORDER BY` inside `OVER` defines the order (and turns aggregates into running ones). Window functions run after WHERE and GROUP BY, so to filter by them ("top 3 per category"), wrap the query in a CTE and filter outside.
+--- exercise code postgres
+::prompt
+Build a daily sales report from **non-cancelled** orders with columns `ordered_on`, `revenue` (that day's sum of qty × price), `running_total` (cumulative revenue up to that day) and `change` (revenue minus the previous day's revenue; NULL on the first day). Order by date.
+::starter
+WITH daily AS (
+  SELECT o.ordered_on, 0 AS revenue -- TODO
+  FROM orders o
+  GROUP BY o.ordered_on
+)
+SELECT ordered_on, revenue
+FROM daily
+ORDER BY ordered_on;
+::solution
+WITH daily AS (
+  SELECT o.ordered_on, sum(oi.qty * p.price) AS revenue
+  FROM orders o
+  JOIN order_items oi ON oi.order_id = o.id
+  JOIN products p ON p.id = oi.product_id
+  WHERE o.status <> 'cancelled'
+  GROUP BY o.ordered_on
+)
+SELECT ordered_on,
+       revenue,
+       sum(revenue) OVER (ORDER BY ordered_on) AS running_total,
+       revenue - lag(revenue) OVER (ORDER BY ordered_on) AS change
+FROM daily
+ORDER BY ordered_on;
+::reference
+WITH daily AS (
+  SELECT o.ordered_on, sum(oi.qty * p.price) AS revenue
+  FROM orders o JOIN order_items oi ON oi.order_id = o.id JOIN products p ON p.id = oi.product_id
+  WHERE o.status <> 'cancelled' GROUP BY o.ordered_on
+)
+SELECT ordered_on, revenue, sum(revenue) OVER (ORDER BY ordered_on) AS running_total, revenue - lag(revenue) OVER (ORDER BY ordered_on) AS change
+FROM daily ORDER BY ordered_on;
+::ordered
+true
+::setup
+CREATE TABLE products (id int PRIMARY KEY, name text NOT NULL, category text, price numeric(10,2));
+INSERT INTO products VALUES (1, 'Keyboard', 'tech', 80), (2, 'Mouse', 'tech', 25), (3, 'Laptop', 'tech', 1200), (4, 'Desk', 'furniture', 300), (5, 'Chair', 'furniture', 150), (6, 'Lamp', 'furniture', 40), (7, 'Monitor', 'tech', 250);
+CREATE TABLE orders (id int PRIMARY KEY, customer_id int, ordered_on date, status text);
+INSERT INTO orders VALUES (101, 1, '2026-03-01', 'shipped'), (102, 2, '2026-03-01', 'shipped'), (103, 1, '2026-03-02', 'pending'), (104, 3, '2026-03-03', 'shipped'), (105, 2, '2026-03-03', 'cancelled'), (106, 3, '2026-03-04', 'shipped');
+CREATE TABLE order_items (order_id int REFERENCES orders(id), product_id int REFERENCES products(id), qty int);
+INSERT INTO order_items VALUES (101, 1, 1), (101, 2, 2), (102, 3, 1), (103, 7, 2), (104, 4, 1), (104, 5, 2), (105, 2, 5), (106, 2, 1), (106, 6, 3);
+::hints
+- In the CTE, join order_items and products and filter `o.status <> 'cancelled'`.
+- `sum(revenue) OVER (ORDER BY ordered_on) AS running_total`
+- `revenue - lag(revenue) OVER (ORDER BY ordered_on) AS change`
+--- cards
+Window function :: A calculation across related rows (defined by OVER) that keeps every row, unlike GROUP BY.
+lag / lead :: Window functions returning a value from the previous / next row in the window's order.
+
+=== lesson pg-jsonb | JSONB: documents inside Postgres | 60
+Postgres can store **JSON documents** in a `jsonb` column (binary, indexable), so you get relational tables *and* flexible documents in one database.
+
+```sql
+CREATE TABLE events (id serial PRIMARY KEY, user_id int, kind text, payload jsonb);
+INSERT INTO events (user_id, kind, payload)
+VALUES (1, 'purchase', '{"device": "mobile", "amount": 30, "items": ["book"]}');
+```
+
+| Operator | Meaning | Example |
+|---|---|---|
+| `->` | get a field as jsonb | `payload -> 'items'` |
+| `->>` | get a field as **text** | `payload ->> 'device'` |
+| `#>>` | path as text | `payload #>> '{address,city}'` |
+| `@>` | **contains** | `payload @> '{"device": "mobile"}'` |
+| `?` | has key | `payload ? 'coupon'` |
+
+Text needs a cast for maths: `(payload ->> 'amount')::numeric`. Useful functions: `jsonb_array_length`, `jsonb_array_elements`, `jsonb_build_object`, `jsonb_agg` (rows → JSON array) and `jsonb_set`.
+
+A **GIN index** makes `@>` and `?` fast: `CREATE INDEX ON events USING gin (payload);`
+
+**Rule of thumb:** put fields you filter, join or constrain often in real columns, and keep truly variable attributes in `jsonb`.
+--- exercise code postgres
+::prompt
+From `events(id, user_id, kind, payload)`, list **purchases made on mobile** (use `@>`), with columns `user_id`, `amount` (the payload's `amount` as an **integer**) and `item_count` (the number of elements in the payload's `items` array). Order by amount, highest first.
+::starter
+SELECT user_id, payload
+FROM events;
+::solution
+SELECT user_id,
+       (payload ->> 'amount')::int AS amount,
+       jsonb_array_length(payload -> 'items') AS item_count
+FROM events
+WHERE kind = 'purchase'
+  AND payload @> '{"device": "mobile"}'
+ORDER BY amount DESC;
+::reference
+SELECT user_id, (payload ->> 'amount')::int AS amount, jsonb_array_length(payload -> 'items') AS item_count
+FROM events WHERE kind = 'purchase' AND payload @> '{"device": "mobile"}' ORDER BY amount DESC;
+::ordered
+true
+::setup
+CREATE TABLE events (id serial PRIMARY KEY, user_id int, kind text, payload jsonb);
+INSERT INTO events (user_id, kind, payload) VALUES
+  (1, 'login', '{"device": "mobile", "country": "UK"}'),
+  (1, 'purchase', '{"device": "mobile", "amount": 30, "items": ["book"]}'),
+  (2, 'login', '{"device": "desktop", "country": "FI"}'),
+  (2, 'purchase', '{"device": "desktop", "amount": 120, "items": ["laptop", "bag"]}'),
+  (3, 'purchase', '{"device": "mobile", "amount": 15, "items": ["pen"]}'),
+  (1, 'purchase', '{"device": "mobile", "amount": 45, "items": ["lamp", "bulb"]}'),
+  (3, 'login', '{"device": "mobile", "country": "US"}');
+::hints
+- `WHERE kind = 'purchase' AND payload @> '{"device": "mobile"}'`
+- `(payload ->> 'amount')::int AS amount`
+- `jsonb_array_length(payload -> 'items') AS item_count`
+--- cards
+-> vs ->> :: -> returns jsonb (keep navigating); ->> returns text (compare or cast it).
+@> :: JSONB containment: payload @> '{"device": "mobile"}' is true when payload contains that key/value; GIN indexes speed it up.
+
+=== lesson pg-integrity | Constraints, upserts & transactions | 65
+Let the database protect your data: rules in the schema hold for **every** app and script that writes to it.
+
+```sql
+CREATE TABLE accounts (
+  id      int PRIMARY KEY,
+  owner   int NOT NULL REFERENCES users(id) ON DELETE CASCADE,   -- foreign key
+  balance numeric(12,2) NOT NULL CHECK (balance >= 0),            -- business rule
+  iban    text UNIQUE
+);
+```
+
+**Upsert:** insert, or update if the key already exists, in one atomic statement:
+
+```sql
+INSERT INTO inventory (sku, qty) VALUES ('KB-1', 2)
+ON CONFLICT (sku) DO UPDATE SET qty = inventory.qty + EXCLUDED.qty;   -- EXCLUDED = the row you tried to insert
+```
+
+**Transactions** make several statements all-or-nothing (**ACID**: Atomicity, Consistency, Isolation, Durability):
+
+```sql
+BEGIN;
+UPDATE accounts SET balance = balance - 50 WHERE id = 1;
+UPDATE accounts SET balance = balance + 50 WHERE id = 2;
+COMMIT;      -- or ROLLBACK; to undo both
+```
+
+If any statement fails (for example the CHECK rejects a negative balance), the transaction is aborted and nothing is applied. **Isolation levels** (`READ COMMITTED` by default, `REPEATABLE READ`, `SERIALIZABLE`) decide what concurrent transactions can see of each other.
+--- exercise code postgres
+::prompt
+1. Create **`inventory`** with `sku` (text, primary key) and `qty` (integer, required, with a **CHECK** that it's never negative).
+2. Insert `('KB-1', 5)` and `('MS-2', 3)`.
+3. In **one** statement, upsert `('KB-1', 2)` and `('MN-4', 1)`: new skus are inserted, and existing skus get the quantity **added** to their current qty.
+
+The checker inspects the rows and the CHECK constraint.
+::starter
+-- 1. table
+
+-- 2. first stock
+
+-- 3. upsert (ON CONFLICT … DO UPDATE)
+::solution
+CREATE TABLE inventory (
+  sku text PRIMARY KEY,
+  qty integer NOT NULL CHECK (qty >= 0)
+);
+
+INSERT INTO inventory VALUES ('KB-1', 5), ('MS-2', 3);
+
+INSERT INTO inventory VALUES ('KB-1', 2), ('MN-4', 1)
+ON CONFLICT (sku) DO UPDATE SET qty = inventory.qty + EXCLUDED.qty;
+::reference
+CREATE TABLE inventory (sku text PRIMARY KEY, qty integer NOT NULL CHECK (qty >= 0));
+INSERT INTO inventory VALUES ('KB-1', 5), ('MS-2', 3);
+INSERT INTO inventory VALUES ('KB-1', 2), ('MN-4', 1) ON CONFLICT (sku) DO UPDATE SET qty = inventory.qty + EXCLUDED.qty;
+::verify
+SELECT sku, qty,
+       (SELECT count(*) FROM pg_constraint WHERE conrelid = 'inventory'::regclass AND contype = 'c') AS check_constraints,
+       (SELECT count(*) FROM pg_constraint WHERE conrelid = 'inventory'::regclass AND contype = 'p') AS primary_keys
+FROM inventory
+ORDER BY sku;
+::ordered
+true
+::hints
+- `qty integer NOT NULL CHECK (qty >= 0)`
+- `INSERT ... ON CONFLICT (sku) DO UPDATE SET qty = inventory.qty + EXCLUDED.qty`
+- `EXCLUDED` refers to the row you tried to insert.
+--- cards
+ON CONFLICT :: Postgres upsert: INSERT … ON CONFLICT (key) DO UPDATE SET … or DO NOTHING.
+ACID :: Atomicity, Consistency, Isolation, Durability: the guarantees of database transactions.
+
+=== lesson pg-indexes | Indexes & EXPLAIN | 65
+An **index** lets Postgres find rows without reading the whole table. The default is a **B-tree**, which is good for `=`, ranges, `ORDER BY` and prefix `LIKE 'abc%'`.
+
+```sql
+CREATE INDEX orders_customer_idx ON orders (customer_id);                 -- foreign keys are NOT indexed automatically
+CREATE INDEX users_email_lower_idx ON users (lower(email));               -- expression index for WHERE lower(email) = …
+CREATE INDEX orders_pending_idx ON orders (ordered_on) WHERE status = 'pending';   -- partial index: small and fast
+CREATE UNIQUE INDEX ON users (lower(email));                              -- case-insensitive uniqueness
+```
+
+Other index types: **GIN** (jsonb, arrays, full-text search), **GiST** (geometry, ranges), **BRIN** (huge, naturally ordered tables such as logs).
+
+**Reading plans.** `EXPLAIN` shows the plan; `EXPLAIN ANALYZE` also runs the query and reports real timings:
+
+```
+Index Scan using orders_customer_idx on orders  (cost=0.15..8.17 rows=1 width=44)
+  Index Cond: (customer_id = 42)
+```
+
+Look for **Seq Scan** on big tables in hot queries, row estimates far from reality (run `ANALYZE`), and nested loops over many rows.
+
+Indexes cost disk space and slow down writes, so add them for real query patterns, and drop unused ones (`pg_stat_user_indexes` shows usage).
+--- exercise code postgres
+::prompt
+Create two indexes:
+1. **`users_email_lower_idx`**: an expression index on `lower(email)` of `users`, so case-insensitive login lookups are fast.
+2. **`orders_pending_idx`**: a **partial** index on `orders (ordered_on)` that only covers rows where `status = 'pending'`.
+
+The checker reads your index definitions from `pg_indexes`.
+::starter
+-- 1. expression index
+
+-- 2. partial index
+::solution
+CREATE INDEX users_email_lower_idx ON users (lower(email));
+CREATE INDEX orders_pending_idx ON orders (ordered_on) WHERE status = 'pending';
+::reference
+CREATE INDEX users_email_lower_idx ON users (lower(email));
+CREATE INDEX orders_pending_idx ON orders (ordered_on) WHERE status = 'pending';
+::verify
+SELECT indexname, indexdef FROM pg_indexes
+WHERE schemaname = 'public' AND indexname LIKE '%\_idx'
+ORDER BY indexname;
+::ordered
+true
+::setup
+CREATE TABLE users (id int PRIMARY KEY, email text NOT NULL);
+INSERT INTO users SELECT g, 'User' || g || '@Example.com' FROM generate_series(1, 200) AS g;
+CREATE TABLE orders (id int PRIMARY KEY, user_id int REFERENCES users(id), ordered_on date, status text);
+INSERT INTO orders SELECT g, 1 + g % 200, date '2026-01-01' + g % 90, CASE WHEN g % 10 = 0 THEN 'pending' ELSE 'shipped' END FROM generate_series(1, 1000) AS g;
+::hints
+- `CREATE INDEX users_email_lower_idx ON users (lower(email));`
+- A partial index ends with a WHERE clause: `... ON orders (ordered_on) WHERE status = 'pending';`
+--- cards
+Partial index :: An index over only the rows matching a WHERE clause; smaller and faster for that query pattern.
+EXPLAIN ANALYZE :: Runs the query and shows the chosen plan with real row counts and timings.
+
+=== lesson pg-internals | How PostgreSQL works inside | 55
+Knowing the engine helps you design and debug.
+
+**MVCC (multi-version concurrency control).** An UPDATE doesn't overwrite a row: it writes a *new version* and marks the old one dead. Each transaction sees a consistent **snapshot**, so readers never block writers and writers never block readers.
+
+**VACUUM** later reclaims dead row versions. **Autovacuum** does it in the background. A table updated very heavily without vacuuming **bloats**, and very long-running transactions keep old versions alive.
+
+**WAL (write-ahead log).** Every change is first appended to the WAL and flushed to disk at COMMIT, so after a crash Postgres replays the WAL. The same log drives **replication** (streaming WAL to standby servers) and **point-in-time recovery**.
+
+**Connections are processes.** Each connection is a separate OS process using real memory, so apps use a **connection pool** (in the app, or PgBouncer) instead of opening hundreds of connections.
+
+**Isolation levels:**
+- `READ COMMITTED` (default): each statement sees data committed before it started.
+- `REPEATABLE READ`: the whole transaction sees one snapshot.
+- `SERIALIZABLE`: transactions behave as if run one at a time, and conflicts make one of them retry.
+
+**Production checklist:** backups you have *test-restored*, monitoring of slow queries (`pg_stat_statements`), migrations in version control, least-privilege roles, and connection pooling.
+--- quiz
+? Why don't readers block writers in PostgreSQL?
+- Reads are cached in the client
++ MVCC: writers create new row versions while readers keep their snapshot
+- Postgres locks the whole table for every read
+- Writes are queued until all reads finish
+? What is VACUUM for?
+- Making backups
++ Reclaiming space from dead row versions left by updates and deletes
+- Deleting old tables
+- Compressing indexes into JSON
+? An app opens a new database connection per HTTP request and the server runs out of memory. Best fix?
+- Raise max_connections to 10,000
++ Use a connection pool (e.g. PgBouncer or the driver's pool)
+- Switch every column to text
+- Disable the WAL
+> Each Postgres connection is a process with its own memory.
+? Under SERIALIZABLE isolation, two conflicting transactions…
+- Both commit and the data may be inconsistent
++ One may fail with a serialization error and must be retried
+- Run in parallel without any checks
+- Are merged automatically
+? The WAL is what makes possible…
+- Window functions
++ Crash recovery, replication and point-in-time recovery
+- JSONB indexing
+- Case-insensitive search
+--- cards
+MVCC :: Multi-version concurrency control: updates create new row versions; each transaction reads a consistent snapshot.
+WAL :: Write-ahead log: changes are logged and flushed before commit, enabling crash recovery and replication.
+Connection pool :: Reuses a small set of database connections across many requests (PgBouncer, or the driver's pool).

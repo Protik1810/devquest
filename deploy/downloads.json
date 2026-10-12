@@ -1,0 +1,50 @@
+{
+  "version": "0.6.1",
+  "generated": "2026-10-12T19:21:56.552Z",
+  "files": [
+    {
+      "platform": "windows",
+      "kind": "installer",
+      "label": "Windows installer",
+      "note": "Installs DevQuest with Start-menu and desktop shortcuts.",
+      "name": "DevQuest-Setup-0.6.1.exe",
+      "size": 160562143,
+      "sha256": "5e495c810c6f4dbd948936ac99737c703bab5d6f7af22840dcd179e2b90d2836",
+      "updated": "2026-10-12T16:28:50.137Z",
+      "url": "https://github.com/Protik1810/devquest/releases/download/v0.6.1/DevQuest-Setup-0.6.1.exe"
+    },
+    {
+      "platform": "windows",
+      "kind": "portable",
+      "label": "Windows portable",
+      "note": "Runs without installing; keep it in any folder.",
+      "name": "DevQuest-0.6.1.exe",
+      "size": 160282378,
+      "sha256": "72d26fb3b801d4bf0a0ccda6ec4be741b516540ba4e22b06ff7cc7456ba0751e",
+      "updated": "2026-10-12T16:28:55.093Z",
+      "url": "https://github.com/Protik1810/devquest/releases/download/v0.6.1/DevQuest-0.6.1.exe"
+    },
+    {
+      "platform": "linux",
+      "kind": "archive",
+      "label": "Linux (x64, tar.gz)",
+      "note": "Extract and run ./devquest.",
+      "name": "devquest-0.6.1.tar.gz",
+      "size": 178144915,
+      "sha256": "fd8539342a4d3fbd23fa9c97eb584b39d9676a37106b52713f3ce18e853ac901",
+      "updated": "2026-10-12T16:32:36.898Z",
+      "url": "https://github.com/Protik1810/devquest/releases/download/v0.6.1/devquest-0.6.1.tar.gz"
+    },
+    {
+      "platform": "android",
+      "kind": "apk",
+      "label": "Android APK",
+      "note": "Signed release build for Android 7+.",
+      "name": "DevQuest-0.6.1-android.apk",
+      "size": 30587499,
+      "sha256": "ab0be6957966d02ffe8a44298ac4ee89a6c7f7eab7e12daf7b2140ef0558b3ea",
+      "updated": "2026-10-12T16:32:47.632Z",
+      "url": "https://github.com/Protik1810/devquest/releases/download/v0.6.1/DevQuest-0.6.1-android.apk"
+    }
+  ]
+}
