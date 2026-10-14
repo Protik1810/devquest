@@ -48,6 +48,20 @@ describe('curriculum integrity', () => {
     }
   });
 
+  it('puzzles are well-formed and module tests have a quiz', () => {
+    for (const { lesson } of lessons) {
+      for (const ex of exercisesOf(lesson)) {
+        if (ex.kind === 'parsons') {
+          expect(ex.lines.length, lesson.id).toBeGreaterThanOrEqual(3);
+          for (const d of ex.distractors) expect(ex.lines, `${lesson.id}: distractor is also a real line`).not.toContain(d);
+        }
+        if (ex.kind === 'fill') expect(ex.template.split('____').length - 1, lesson.id).toBe(ex.answers.length);
+      }
+      if (lesson.exam) expect(exercisesOf(lesson).some((e) => e.kind === 'quiz'), `${lesson.id}: a module test needs a quiz`).toBe(true);
+      for (const g of lesson.goals ?? []) expect(g.trim(), lesson.id).not.toBe('');
+    }
+  });
+
   it('every markdown table row has as many cells as its header', () => {
     // An unescaped | inside `code` in a table cell silently splits the cell (write \| instead)
     const cells = (row: string) => row.trim().replace(/^\||\|$/g, '').split(/(?<!\\)\|/).length;

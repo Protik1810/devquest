@@ -1111,7 +1111,7 @@ Edge cases :: Empty, zero, one item, negatives, huge values, exact boundaries. B
 TDD :: Red (failing test), green (simplest passing code), refactor.
 Mutation testing :: Deliberately insert bugs; good tests fail for each one.
 
-=== lesson py-m7-test | Module 7 test | 200
+=== lesson py-m7-test | Module 7 test | 200 | exam
 This test covers handling and raising exceptions, debugging, logging and writing tests: the skills that turn code that *works on your machine* into code you can trust.
 
 Make sure you can:

@@ -1599,7 +1599,7 @@ NotImplemented :: Return it from comparison/arithmetic methods for unsupported t
 @total_ordering :: From __eq__ and __lt__, fills in <=, >, >=.
 __rmul__ / __radd__ :: Reflected operators, used when your object is on the right: 3 * v calls v.__rmul__(3).
 
-=== lesson py-m8-test | Module 8 test | 210
+=== lesson py-m8-test | Module 8 test | 210 | exam
 This test checks the foundations of object-oriented programming: classes and instances, `self` and attributes, object identity, class versus instance attributes, class and static methods, encapsulation with properties, and special methods.
 
 Make sure you can:

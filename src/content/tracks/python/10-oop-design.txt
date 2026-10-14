@@ -1350,7 +1350,7 @@ Round-trip test :: Save then load (to_dict → from_dict) and check you get an e
 Serialisation :: Converting objects to plain data (dicts, lists, strings, numbers) that can be saved or sent, e.g. as JSON.
 Incremental development :: Build in small, tested steps; refactor with the tests as a safety net.
 
-=== lesson py-m10-test | Module 10 test | 230
+=== lesson py-m10-test | Module 10 test | 230 | exam
 This test is about **design**: SOLID principles, cohesion and coupling, design patterns in their Pythonic form, exception hierarchies, context managers and building a program step by step.
 
 Make sure you can:

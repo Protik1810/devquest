@@ -10,6 +10,8 @@ import { Terminal } from '../components/Terminal';
 import { Editor, WebPreview } from '../components/Editor';
 import { ResultView } from '../components/ResultView';
 import { AIReview } from '../components/AIReview';
+import { TraceViewer } from '../components/TraceViewer';
+import { tracePython, type TraceResult } from '../engine/runners';
 
 const SAMPLES: Record<CodeLang, string> = {
   python: 'def fib(n):\n    a, b = 0, 1\n    for _ in range(n):\n        a, b = b, a + b\n    return a\n\nprint([fib(i) for i in range(10)])\n',
@@ -53,7 +55,21 @@ export function Playground() {
   useTools((s) => s.langs);
   useAIReady();
 
+  const [trace, setTrace] = useState<TraceResult | null>(null);
+  const stepThrough = async () => {
+    setRunning(true);
+    setResult(null);
+    try {
+      const t = await tracePython(code.python, stdin);
+      if ('failed' in t) setResult({ ok: false, output: '', error: t.failed, mode: 'app' });
+      else setTrace(t);
+    } finally {
+      setRunning(false);
+    }
+  };
+
   const run = async () => {
+    setTrace(null);
     if (lang === 'shell') return;
     setRunning(true);
     bump('runs');
@@ -102,9 +118,13 @@ export function Playground() {
                 {running ? '⏳ Running…' : mode === 'ai' ? '🤖 Predict output with AI' : '▶ Run (Ctrl+Enter)'}
               </button>
             )}
+            {lang === 'python' && (
+              <button className="ghost" onClick={stepThrough} disabled={running} title="Watch it run one line at a time">👣 Step through</button>
+            )}
             <button className="ghost" onClick={() => setCode({ ...code, [lang]: SAMPLES[lang] })}>↺ Reset sample</button>
           </div>
           {result && <ResultView result={result} lang={lang} code={code[lang]} />}
+          {trace && lang === 'python' && <TraceViewer code={code.python} trace={trace} onClose={() => setTrace(null)} />}
           <AIReview key={lang} title="Playground experiment" prompt="Free-form code written in the playground; review it for correctness and style." lang={lang} code={code[lang]} output={result?.error ?? result?.output} />
         </div>
       )}

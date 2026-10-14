@@ -9,7 +9,8 @@ import { RedisEngine } from './redis';
 import { PY_TEST_HELPER } from './pyTestHelper';
 import { sameOutput } from './integrity';
 
-export type RunResult = { ok: boolean; output: string; error?: string; passed?: boolean; message?: string; table?: { columns: string[]; values: unknown[][] } };
+/** `expected`: for a failed output check, the output that was expected (shown as a line-by-line comparison). */
+export type RunResult = { ok: boolean; output: string; error?: string; passed?: boolean; message?: string; expected?: string; table?: { columns: string[]; values: unknown[][] } };
 
 // Pyodide and the React-lesson libraries ship inside the app (public/pyodide, public/vendor; see
 // scripts/fetch-runtimes.mjs), so Python works offline and no script is loaded from another site.
@@ -78,6 +79,13 @@ onmessage = async (e) => {
   ns.set('__name__', '__main__');   // run like a script, so  if __name__ == "__main__":  blocks run
   py.globals.get('__dq_prepare')(e.data.stdin ?? null);
   try {
+    if (e.data.prelude) py.globals.get('__dq_prelude')(e.data.prelude, ns);
+    if (e.data.trace) {
+      // Step-through: record every line instead of just running
+      const trace = py.globals.get('__dq_trace')(e.data.code, ns);
+      postMessage({ ok: true, output: '', trace });
+      return;
+    }
     try { await py.runPythonAsync(py.globals.get('__dq_async_source')(e.data.code), { globals: ns }); } finally { flush(); }
     if (e.data.tests) {
       const before = out.length;
@@ -155,7 +163,8 @@ class Runner {
     return this.readyPromise!;
   }
 
-  async run(code: string, tests?: string, timeoutMs = 8000, stdin?: string): Promise<{ ok: boolean; output: string; error?: string; testError?: string }> {
+  /** `extra` (Python only): `prelude` snippets to run quietly first; `trace` to record a step-through instead. */
+  async run(code: string, tests?: string, timeoutMs = 8000, stdin?: string, extra: { prelude?: string[]; trace?: boolean } = {}): Promise<{ ok: boolean; output: string; error?: string; testError?: string; trace?: string }> {
     await this.warm();
     const w = this.worker!;
     return new Promise((resolve) => {
@@ -171,7 +180,7 @@ class Runner {
         resolve(e.data);
       };
       w.addEventListener('message', onMsg);
-      w.postMessage({ code, tests, stdin });
+      w.postMessage({ code, tests, stdin, ...extra });
     });
   }
 }
@@ -378,7 +387,8 @@ function runRedis(code: string, check?: CodeCheck): RunResult {
         : 'Output matches!'
       : check.verify
         ? `The checker inspected Redis after your commands and expected:\n${check.expected}\n\nbut got:\n${got}`
-        : `Expected output:\n${check.expected}`,
+        : 'Your output differs from the expected output.',
+    ...(passed || check.verify ? {} : { expected: check.expected }),
   };
 }
 
@@ -453,6 +463,24 @@ const mongoProgram = (code: string, setup = '') => `${mongoShell}
 ;${setup}
 ;${code}`;
 
+export type TraceFrame = { name: string; line: number; vars: [string, string][] };
+export type TraceStep = { line: number; event: 'line' | 'return' | 'exception'; frames: TraceFrame[]; out: string; ret?: string; exc?: string };
+export type TraceResult = { steps: TraceStep[]; error: string | null; truncated: boolean; out: string };
+
+/** Records a Python program's execution line by line for the step-through viewer. */
+export async function tracePython(code: string, stdin?: string, prelude?: string[]): Promise<TraceResult | { failed: string }> {
+  const r = await python.run(code, undefined, 20000, stdin, { trace: true, prelude });
+  if (!r.trace) return { failed: r.error ?? 'Could not record this program.' };
+  return JSON.parse(r.trace) as TraceResult;
+}
+
+/** Runs an example from a lesson page; for Python, `prelude` (the page's earlier examples) runs quietly first. */
+export async function runExample(lang: CodeLang, code: string, prelude?: string[], stdin?: string): Promise<RunResult> {
+  if (lang !== 'python') return runCode(lang, code);
+  const r = await python.run(code, undefined, 15000, stdin, { prelude });
+  return r.ok ? { ok: true, output: r.output } : { ok: false, output: r.output, error: r.error };
+}
+
 /** `stdin` is what the learner "types" into input() (Python); by default the check's own. */
 export async function runCode(lang: CodeLang, code: string, check?: CodeCheck, stdin = check && 'stdin' in check ? check.stdin : undefined): Promise<RunResult> {
   if (lang === 'sql') return runSql(code, check);
@@ -464,8 +492,7 @@ export async function runCode(lang: CodeLang, code: string, check?: CodeCheck, s
     if (!r.ok) return { ok: false, output: r.output, error: r.error, passed: check ? false : undefined };
     if (check?.type !== 'stdout') return { ok: true, output: r.output };
     const passed = r.output.replace(/\s+$/, '') === check.expected.replace(/\s+$/, '');
-    return { ok: true, output: r.output, passed, message: passed ? 'Output matches!' : `Expected output:
-${check.expected}` };
+    return { ok: true, output: r.output, passed, message: passed ? 'Output matches!' : 'Your output differs from the expected output.', ...(passed ? {} : { expected: check.expected }) };
   }
   if (lang === 'web') return runWeb(code, check?.type === 'web' ? check.tests : check?.type === 'tests' ? check.code : undefined);
   if (lang !== 'python' && lang !== 'javascript' && lang !== 'typescript' && lang !== 'lua') return { ok: false, output: '', error: `${lang} needs a local toolchain or AI checking.` };
@@ -485,12 +512,13 @@ ${check.expected}` };
     if (!check) return { ok: true, output: r.output };
     if (check.type === 'stdout') {
       const passed = sameOutput(r.output, check.expected);
-      if (!passed) return { ok: true, output: r.output, passed, message: `Expected output:\n${check.expected}` };
+      if (!passed) return { ok: true, output: r.output, passed, message: 'Your output differs from the expected output.', expected: check.expected };
       // The example passed: run the other inputs too, so every branch of the program gets checked
       for (const c of check.cases ?? []) {
         const o = await runner.run(code, undefined, 15000, c.stdin);
         if (o.ok && sameOutput(o.output, c.expected)) continue;
-        return { ok: true, output: r.output, passed: false, message: `Right for the example, but not for another input.\n\nTyped in:\n${c.stdin}\n\nExpected output:\n${c.expected}\n\nYour program printed:\n${o.ok ? o.output.trim() : o.error}` };
+        if (!o.ok) return { ok: false, output: o.output, error: o.error, passed: false, message: `Right for the example, but it crashed with another input. Typed in:\n${c.stdin}` };
+        return { ok: true, output: o.output, passed: false, message: `Right for the example, but not for another input. Typed in:\n${c.stdin}`, expected: c.expected };
       }
       const n = check.cases?.length ?? 0;
       return { ok: true, output: r.output, passed, message: n ? `Output matches, for the example and ${n} other input${n > 1 ? 's' : ''}!` : 'Output matches!' };

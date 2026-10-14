@@ -1507,7 +1507,7 @@ __post_init__ :: Called by a dataclass's generated __init__ after the fields are
 frozen=True / order=True :: frozen: immutable and hashable instances; order: <, > etc. comparing fields in order. dataclasses.replace makes modified copies.
 Enum :: A fixed set of named constants: Status.PAID, .name, .value, Status("paid"), Status["PAID"], list(Status).
 
-=== lesson py-m9-test | Module 9 test | 220
+=== lesson py-m9-test | Module 9 test | 220 | exam
 This test covers inheritance and `super()`, polymorphism, duck typing and abstract base classes, multiple inheritance and the MRO, mixins, composition and dependency injection, dataclasses and enums.
 
 Make sure you can:

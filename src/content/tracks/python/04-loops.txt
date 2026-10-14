@@ -927,7 +927,7 @@ Finding a maximum :: Start with the first item (not 0), then replace it whenever
 list.append(x) :: Adds x to the end of a list. Used to collect results in a loop.
 Nested loops :: The inner loop runs completely for every iteration of the outer one; the total work multiplies.
 
-=== lesson py-m4-test | Module 4 test | 170
+=== lesson py-m4-test | Module 4 test | 170 | exam
 This test is all about repetition: `while` and `for`, `range`, `enumerate` and `zip`, `break`/`continue`/`else`, the loop patterns and nested loops.
 
 Check that you can:

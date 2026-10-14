@@ -55,7 +55,35 @@ export type TerminalExercise = {
 
 export type QuizExercise = { kind: 'quiz'; questions: QuizQuestion[] };
 
-export type Exercise = CodeExercise | TerminalExercise | QuizExercise;
+/**
+ * "Put the lines in order" (a Parsons problem): the learner arranges the given lines (indentation included)
+ * into a working program, leaving out any distractor lines. Checked by running the result, so any valid order passes.
+ */
+export type ParsonsExercise = {
+  kind: 'parsons';
+  lang: CodeLang;
+  prompt: string;
+  /** The lines of a correct program, in order. */
+  lines: string[];
+  /** Lines that don't belong in the program. */
+  distractors: string[];
+  hints: string[];
+  check: CodeCheck;
+};
+
+/** Fill in the blanks: `template` contains `____` gaps; checked by running the completed program. */
+export type FillExercise = {
+  kind: 'fill';
+  lang: CodeLang;
+  prompt: string;
+  template: string;
+  /** Reference answers, one per gap, in order. */
+  answers: string[];
+  hints: string[];
+  check: CodeCheck;
+};
+
+export type Exercise = CodeExercise | TerminalExercise | QuizExercise | ParsonsExercise | FillExercise;
 
 export type Flashcard = { front: string; back: string };
 
@@ -71,6 +99,10 @@ export type Lesson = {
   exercise?: Exercise;
   cards?: Flashcard[];
   xp?: number;
+  /** What the learner will be able to do after the lesson (shown at the top). */
+  goals?: string[];
+  /** A module test: its quiz is scored on the first attempt, needs a pass mark, and mixes in questions from earlier lessons. */
+  exam?: boolean;
 };
 
 export type Track = {

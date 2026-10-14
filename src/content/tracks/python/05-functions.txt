@@ -1088,7 +1088,7 @@ Base case :: The simple case a recursive function answers directly, without recu
 Leap of faith :: Assume the recursive call is correct for the smaller input; just combine its answer with the current step.
 When to use recursion :: For nested, self-similar data (trees, folders, nested lists) and divide-and-conquer. Otherwise a loop is often simpler in Python.
 
-=== lesson py-m5-test | Module 5 test | 180
+=== lesson py-m5-test | Module 5 test | 180 | exam
 Functions are the building blocks of every real program. This test checks defining and calling them, returning values, parameters of every kind, scope, and recursion.
 
 Make sure you can:

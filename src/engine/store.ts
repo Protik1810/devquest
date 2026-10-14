@@ -14,6 +14,8 @@ const langsStarted = (s: State) => LANGUAGE_TRACKS.filter((t) => t.lessons.some(
 const trackDone = (s: State, ids: string[]) => ids.length > 0 && ids.every((id) => s.completed[id]);
 
 export type SrsCard = { due: string; interval: number; ease: number; reps: number };
+/** Schedule of a coding drill: an exercise from a finished lesson, practised again at growing intervals. */
+export type DrillState = { due: string; interval: number; reps: number };
 
 type Daily = {
   date: string;
@@ -69,6 +71,8 @@ export type State = {
   customProjects: Project[];
   /** Failed attempts per lesson/challenge, to suggest weak spots to practise. */
   struggles?: Record<string, number>;
+  /** Coding drills by "<lessonId>#<step>". */
+  drills?: Record<string, DrillState>;
   /** Chosen learning focus: a career path id, "lang:<trackId>" for a single language, or null = explore freely. undefined = not chosen yet. */
   path?: { id: string; choices: Record<string, string> } | null;
 };
@@ -81,6 +85,8 @@ type Actions = {
   noteStruggle: (id: string) => void;
   buy: (item: ShopItemId) => boolean;
   reviewCard: (id: string, grade: 0 | 1 | 2 | 3) => void;
+  /** Record a coding drill: solved cleanly pushes it further out, otherwise it comes back tomorrow. */
+  reviewDrill: (key: string, solvedCleanly: boolean) => void;
   claimQuest: (id: string) => void;
   updateSettings: (s: Partial<Settings>) => void;
   updateProvider: (id: ProviderId, cfg: Partial<ProviderCfg>) => void;
@@ -330,6 +336,18 @@ export const useGame = create<State & Actions>()(
           set({ srs: { ...s.srs, [id]: { due: today(due), interval, ease, reps } } });
           get().bump('reviews');
           grant(grade === 0 ? 1 : 3);
+        },
+
+        reviewDrill: (key, ok) => {
+          const s = get();
+          const c = s.drills?.[key] ?? { due: today(), interval: 0, reps: 0 };
+          const reps = ok ? c.reps + 1 : 0;
+          const interval = !ok ? 1 : reps === 1 ? 4 : Math.round(Math.max(4, c.interval) * 2.5);
+          const due = new Date();
+          due.setDate(due.getDate() + interval);
+          set({ drills: { ...(s.drills ?? {}), [key]: { due: today(due), interval, reps } } });
+          grant(ok ? 10 : 3);
+          toast({ kind: 'xp', title: ok ? '🧠 Drill done: +10 XP' : '🧠 Drill done', body: ok ? `Next review in ${interval} days` : 'It will come back tomorrow for another try' });
         },
 
         claimQuest: (id) => {

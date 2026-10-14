@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { hasLabs, lessonXp, trackArt, trackById } from '../content';
 import { isUnlocked, trackProgress } from '../content/progress';
 import type { QuizQuestion, Track } from '../content/types';
-import { exercisesOf } from '../content/exercises';
+import { exercisesOf, lessonMinutes } from '../content/exercises';
 import { useGame } from '../engine/store';
 import { toast } from '../engine/toast';
 import { Ring } from '../components/Ring';
@@ -135,6 +135,7 @@ export function TrackPage() {
             count('quiz') && `❓ ${count('quiz') > 1 ? `${count('quiz')} quizzes` : 'quiz'}`,
             count('code') && `💻 ${count('code') > 1 ? `${count('code')} coding exercises` : 'coding exercise'}`,
             count('terminal') && '🐚 terminal missions',
+            count('parsons') + count('fill') && `🧩 ${count('parsons') + count('fill')} puzzle${count('parsons') + count('fill') > 1 ? 's' : ''}`,
           ].filter(Boolean);
           // A module heading whenever the module changes
           const heading = l.module && l.module !== track.lessons[i - 1]?.module ? l.module : null;
@@ -144,7 +145,7 @@ export function TrackPage() {
               <div className="grow">
                 <b>{l.title}</b>
                 <div className="muted small">
-                  {parts.length ? parts.join(' · ') : '📖 reading'} · {lessonXp(l)} XP
+                  {l.exam ? '📝 module test · ' : ''}{parts.length ? parts.join(' · ') : '📖 reading'} · ⏱ ~{lessonMinutes(l)} min · {lessonXp(l)} XP
                   {done && ` · earned ${completed[l.id].xp} XP`}
                 </div>
               </div>

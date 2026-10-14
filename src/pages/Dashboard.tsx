@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { questsFor, useDaily, useGame } from '../engine/store';
 import { levelFromXp, rankFor, today } from '../engine/levels';
 import { useState } from 'react';
+import { dueDrillCount } from '../engine/drills';
 import { ALL_CARDS, ALL_LESSONS, TRACKS, trackArt } from '../content';
 import { cfgFor, isConfigured } from '../engine/providers';
 import { nextLesson, trackProgress, tracksProgress } from '../content/progress';
@@ -123,6 +124,7 @@ export function Dashboard() {
   const quests = questsFor(today());
   const t = today();
   const dueCards = ALL_CARDS.filter((c) => s.completed[c.lesson.id] && (!s.srs[c.id] || s.srs[c.id].due <= t)).length;
+  const dueCode = dueDrillCount(s);
   const totalLessons = TRACKS.reduce((a, tr) => a + tr.lessons.length, 0);
   const doneLessons = ALL_LESSONS.filter(({ lesson }) => s.completed[lesson.id]).length;
   const activeToday = s.streak.last === t;
@@ -220,11 +222,11 @@ export function Dashboard() {
         ) : (
           <div className="card continue">🎓 You've completed every lesson. Legendary!</div>
         )}
-        <Link to="/review" className="card continue">
+        <Link to={dueCode && !dueCards ? '/review?tab=drills' : '/review'} className="card continue">
           <div className="muted small">Spaced repetition</div>
-          <div className="big">🃏 {dueCards} card{dueCards === 1 ? '' : 's'} to review</div>
-          <div className="muted small">Short daily reviews lock knowledge into long-term memory.</div>
-          <span className="primary-btn">{dueCards ? 'Review now →' : 'All caught up ✓'}</span>
+          <div className="big">🃏 {dueCards} card{dueCards === 1 ? '' : 's'} · 💻 {dueCode} drill{dueCode === 1 ? '' : 's'} to review</div>
+          <div className="muted small">Short daily reviews of ideas (flashcards) and skills (coding drills) lock them into long-term memory.</div>
+          <span className="primary-btn">{dueCards || dueCode ? 'Review now →' : 'All caught up ✓'}</span>
         </Link>
       </div>
 

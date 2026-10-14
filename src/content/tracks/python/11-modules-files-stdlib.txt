@@ -1238,7 +1238,7 @@ strptime / strftime :: Parse text into a datetime with a format (%d/%m/%Y %H:%M)
 ISO 8601 :: 2026-10-14T18:05:00: unambiguous and sortable. isoformat() and fromisoformat().
 Naive vs aware :: Naive datetimes have no time zone. Store UTC (timezone.utc); convert for display.
 
-=== lesson py-m11-test | Module 11 test | 230
+=== lesson py-m11-test | Module 11 test | 230 | exam
 This test combines the tools of Module 11 the way real programs do: modules and the standard library, files and paths, JSON and CSV, regular expressions, and dates.
 
 Make sure you can:

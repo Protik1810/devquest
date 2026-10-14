@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { CodeExercise as CodeEx } from '../content/types';
-import { warmPython } from '../engine/runners';
+import { tracePython, warmPython, type TraceResult } from '../engine/runners';
 import { execMode, execute, modeLabel, type ExecResult } from '../engine/execute';
 import { useTools } from '../engine/localRun';
 import { useAIReady } from '../engine/ai';
@@ -11,6 +11,11 @@ import { Markdown } from './Markdown';
 import { Editor, LANG_LABEL, WebPreview } from './Editor';
 import { ResultView } from './ResultView';
 import { AIReview } from './AIReview';
+import { TraceViewer } from './TraceViewer';
+
+/** The solution stays locked until a real attempt: two failed submissions, or every hint seen. */
+export const solutionUnlocked = (o: { done: boolean; failed: number; hintsShown: number; hints: number }) => o.done || o.failed >= 2 || o.hintsShown >= o.hints;
+export const SOLUTION_LOCKED = 'Unlocks after 2 submitted attempts, or once you have seen every hint';
 
 export function CodeExercise({ ex, lessonId, step, title, onComplete, done, xp }: { ex: CodeEx; lessonId: string; /** Position in a multi-exercise lesson (drafts are kept per step) */ step?: number; title?: string; onComplete: (o: { hints: number; solution: boolean; scale?: number }) => void; done: boolean; /** Full reward, to show the current (hint-reduced) amount. */ xp?: number }) {
   const storageKey = step ? `code:${lessonId}#${step}` : `code:${lessonId}`;
@@ -27,6 +32,8 @@ export function CodeExercise({ ex, lessonId, step, title, onComplete, done, xp }
   const [sawSolution, setSawSolution] = useState(false);
   const [passed, setPassed] = useState(false);
   const [selfCheck, setSelfCheck] = useState(false);
+  const [failed, setFailed] = useState(0);
+  const [trace, setTrace] = useState<TraceResult | null>(null);
   const bump = useGame((s) => s.bump);
   const setCtx = useLessonCtx((s) => s.set);
   // Re-render when toolchain detection or AI setup changes the execution mode
@@ -58,13 +65,17 @@ export function CodeExercise({ ex, lessonId, step, title, onComplete, done, xp }
     // AI mode can't "just run": every check is a judgement against the task
     const grade = submit || ex.lang === 'sql' || mode === 'ai';
     setRunning(true);
+    setTrace(null);
     bump('runs');
     try {
       const r = await execute(ex.lang, code, grade ? ex.check : undefined, ex.prompt, { solution: ex.solution, starter: ex.starter }, stdin);
       if (!submit && ex.lang !== 'sql' && mode !== 'ai') r.passed = undefined;
       setResult(r);
       // Remember failed submissions so the dashboard can suggest weak spots to practise
-      if (submit && r.passed === false) useGame.getState().noteStruggle(lessonId);
+      if (submit && r.passed === false) {
+        useGame.getState().noteStruggle(lessonId);
+        setFailed((n) => n + 1);
+      }
       if (submit && r.passed && !passed) {
         setPassed(true);
         onComplete({ hints: hintsShown, solution: sawSolution });
@@ -75,6 +86,19 @@ export function CodeExercise({ ex, lessonId, step, title, onComplete, done, xp }
       setRunning(false);
     }
   };
+
+  const stepThrough = async () => {
+    setRunning(true);
+    setResult(null);
+    try {
+      const t = await tracePython(code, stdin);
+      if ('failed' in t) setResult({ ok: false, output: '', error: t.failed, mode });
+      else setTrace(t);
+    } finally {
+      setRunning(false);
+    }
+  };
+  const solutionOpen = mode === 'self' || solutionUnlocked({ done, failed, hintsShown, hints: ex.hints.length });
 
   const showSolution = () => {
     if (!done && !confirm('Viewing the solution means you earn no XP for this exercise. Show it anyway?')) return;
@@ -133,7 +157,10 @@ export function CodeExercise({ ex, lessonId, step, title, onComplete, done, xp }
         <button className="ghost" onClick={() => { setHintsShown((h) => Math.min(h + 1, ex.hints.length)); bump('hints'); }} disabled={hintsShown >= ex.hints.length}>
           💡 Hint {ex.hints.length ? `(${hintsShown}/${ex.hints.length})` : ''}
         </button>
-        <button className="ghost" onClick={showSolution}>👁 Solution</button>
+        {ex.lang === 'python' && mode === 'app' && (
+          <button className="ghost" onClick={stepThrough} disabled={running} title="Watch your program run one line at a time">👣 Step through</button>
+        )}
+        <button className="ghost" onClick={showSolution} disabled={!solutionOpen} title={solutionOpen ? 'Show the reference solution' : SOLUTION_LOCKED}>{solutionOpen ? '👁 Solution' : '🔒 Solution'}</button>
         <button className="ghost" onClick={() => { if (confirm('Reset your code to the starter?')) setCode(ex.starter); }} title="Reset">↺</button>
       </div>
       {hintsShown > 0 && (
@@ -162,6 +189,7 @@ export function CodeExercise({ ex, lessonId, step, title, onComplete, done, xp }
         </div>
       )}
       {result && <ResultView result={result} lang={ex.lang} code={code} />}
+      {trace && <TraceViewer code={code} trace={trace} onClose={() => setTrace(null)} />}
       {(result || passed || done) && <AIReview title={title ?? lessonId} prompt={ex.prompt} lang={ex.lang} code={code} passed={result?.passed} output={result?.error ?? result?.output} />}
     </div>
   );

@@ -126,6 +126,110 @@ def __dq_patch_asyncio():
 
 __dq_patch_asyncio()
 
+def __dq_prelude(snippets, ns):
+    # Run earlier examples from the same page first (quietly; their errors don't matter), so names they define exist
+    import contextlib, io
+    for snippet in snippets:
+        try:
+            with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                exec(compile(snippet, '<prelude>', 'exec'), ns)
+        except BaseException:
+            pass
+
+def __dq_trace(src, ns, limit=1000):
+    # Run src under sys.settrace and record every executed line of the learner's code: the call stack with each
+    # frame's variables, return values, exceptions and the output so far. Returns JSON for the step-through viewer.
+    import sys, io, json, types, contextlib
+    out = io.StringIO()
+    steps = []
+    labels = {}
+    keep_alive = []
+
+    class _Stop(Exception):
+        pass
+
+    def tag(v):
+        key = id(v)
+        if key not in labels:
+            labels[key] = len(labels) + 1
+            keep_alive.append(v)
+        return '  #' + str(labels[key])
+
+    def short(text, n=70):
+        return text if len(text) <= n else text[: n - 1] + '…'
+
+    def show(v):
+        if isinstance(v, (types.FunctionType, types.BuiltinFunctionType, types.MethodType)):
+            return 'function ' + getattr(v, '__name__', '?') + '()'
+        if isinstance(v, type):
+            return 'class ' + v.__name__
+        if isinstance(v, types.GeneratorType):
+            return 'generator ' + v.__name__ + tag(v)
+        if v is None or isinstance(v, (bool, int, float, complex, str, bytes, range)):
+            return short(repr(v))
+        if isinstance(v, (tuple, frozenset)):
+            return short(repr(v))
+        if isinstance(v, (list, dict, set)) or type(v).__module__ == 'collections':
+            return short(repr(v)) + tag(v)
+        if type(v).__repr__ is object.__repr__ and hasattr(v, '__dict__'):
+            fields = ', '.join(k + '=' + short(repr(x), 20) for k, x in vars(v).items())
+            return short(type(v).__name__ + '(' + fields + ')') + tag(v)
+        return short(repr(v)) + tag(v)
+
+    def visible(name, value):
+        return not name.startswith('__') and not isinstance(value, types.ModuleType)
+
+    def record(frame, event, arg):
+        chain = []
+        f = frame
+        while f is not None:
+            if f.f_code.co_filename == '<exec>':
+                chain.append(f)
+            f = f.f_back
+        chain.reverse()
+        frames = []
+        for fr in chain:
+            name = fr.f_code.co_name
+            scope = fr.f_globals if name == '<module>' else fr.f_locals
+            frames.append({
+                'name': 'main program' if name == '<module>' else name + '()',
+                'line': fr.f_lineno,
+                'vars': [[k, show(v)] for k, v in list(scope.items()) if visible(k, v)],
+            })
+        step = {'line': frame.f_lineno, 'event': event, 'frames': frames, 'out': out.getvalue()}
+        if event == 'return':
+            step['ret'] = show(arg)
+        elif event == 'exception':
+            step['exc'] = arg[0].__name__ + ': ' + str(arg[1])
+        steps.append(step)
+        if len(steps) >= limit:
+            raise _Stop()
+
+    def tracer(frame, event, arg):
+        if frame.f_code.co_filename != '<exec>':
+            return None
+        if event in ('line', 'return', 'exception'):
+            record(frame, event, arg)
+        return tracer
+
+    error = None
+    truncated = False
+    try:
+        code = compile(src, '<exec>', 'exec')
+    except SyntaxError as e:
+        return json.dumps({'steps': [], 'error': 'SyntaxError: ' + str(e.msg) + ' (line ' + str(e.lineno) + ')', 'truncated': False, 'out': ''})
+    sys.settrace(tracer)
+    try:
+        with contextlib.redirect_stdout(out):
+            exec(code, ns)
+    except _Stop:
+        truncated = True
+    except BaseException as e:
+        error = type(e).__name__ + ': ' + str(e)
+    finally:
+        sys.settrace(None)
+    return json.dumps({'steps': steps, 'error': error, 'truncated': truncated, 'out': out.getvalue()})
+
 def __dq_prepare(stdin):
     __dq_reset()
     __dq_set_stdin(stdin)

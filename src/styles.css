@@ -442,3 +442,78 @@ p a:not(.primary-btn):not(.chip), li a:not(.primary-btn), .md a, .small > a, .ag
 .stdin-note pre { margin: 4px 0 0; padding: 6px 10px; background: var(--card2); border-radius: 6px; }
 .stdin-box { display: block; margin: 8px 0; }
 .stdin-box textarea { width: 100%; margin-top: 6px; font-family: var(--mono, monospace); background: var(--card2); color: inherit; border: 1px solid var(--border, #333); border-radius: 6px; padding: 6px 8px; resize: vertical; }
+
+/* ---------- interactive lesson text ---------- */
+.runnable { margin: 12px 0 16px; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--bg); }
+.runnable .runnable-code { margin: 0; border: 0; border-radius: 0; padding: 12px 14px; overflow-x: auto; line-height: 1.5; }
+.runnable-bar { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; padding: 6px 10px; border-top: 1px solid var(--border); background: var(--card2); }
+.runnable-bar button.small { padding: 4px 10px; font-size: 0.82rem; }
+.runnable .console, .runnable .trace, .runnable .stdin-box, .runnable-hint { margin: 8px 10px 10px; }
+.runnable-hint { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.inline-check { margin: 16px 0; padding: 12px 14px; border: 1px dashed var(--accent); border-radius: 12px; background: color-mix(in srgb, var(--accent) 7%, transparent); }
+.ic-title { font-weight: 700; margin-bottom: 6px; }
+.ic-q + .ic-q { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); }
+.ic-question { margin-bottom: 6px; }
+.ic-opts { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.ic-opts .opt { padding: 6px 12px; }
+.goals { margin: 12px 0 4px; padding: 10px 14px; border-radius: 10px; background: var(--card2); border-left: 3px solid var(--accent); }
+.goals ul { margin: 6px 0 0; padding-left: 20px; }
+
+/* ---------- step-through ---------- */
+.trace { margin-top: 12px; border: 1px solid var(--accent); border-radius: 12px; padding: 10px 12px; background: var(--bg); outline: none; }
+.trace-head { display: flex; gap: 10px; align-items: center; }
+.trace-controls { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin: 8px 0; }
+.trace-controls input[type='range'] { flex: 1; min-width: 120px; }
+.trace-body { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 12px; }
+.trace-code { margin: 0; font-family: var(--mono); font-size: 0.84rem; background: #0b0c18; color: #e8e9f5; border-radius: 8px; padding: 8px 0; overflow-x: auto; max-height: 420px; }
+.trace-code .tl { padding: 0 10px; white-space: pre; }
+.trace-code .tl.cur { background: #7c5cff44; }
+.trace-code .tl.prev { background: #ffffff10; }
+.trace-code .ln { display: inline-block; width: 2.4em; color: #6b6f99; user-select: none; }
+.trace-code .arrow { display: inline-block; width: 1.4em; color: #fbbf24; }
+.trace-side { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.trace-frame { border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; }
+.trace-frame.top { border-color: var(--accent); }
+.trace-frame-name { font-weight: 700; font-size: 0.86rem; margin-bottom: 4px; }
+.trace-frame table { border-collapse: collapse; width: 100%; font-size: 0.82rem; }
+.trace-frame td { padding: 2px 6px; vertical-align: top; border-top: 1px solid var(--border); }
+.trace-frame td:first-child { font-family: var(--mono); color: var(--accent2); width: 30%; }
+.trace-frame td code { white-space: pre-wrap; word-break: break-word; }
+.trace-frame tr.changed td { background: #fbbf2426; }
+.trace-note { padding: 6px 10px; border-radius: 8px; background: var(--card2); font-size: 0.86rem; }
+.trace-note.bad { background: #ef44441f; border: 1px solid #ef444466; }
+.trace-out pre { margin: 2px 0 0; padding: 6px 8px; background: #0b0c18; color: #e8e9f5; border-radius: 6px; max-height: 140px; overflow: auto; white-space: pre-wrap; }
+.trace-help { margin: 8px 0 0; }
+@media (max-width: 900px) { .trace-body { grid-template-columns: minmax(0, 1fr); } }
+
+/* ---------- puzzles ---------- */
+.parsons-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; margin: 8px 0 10px; }
+.parsons-col { display: flex; flex-direction: column; gap: 6px; padding: 8px; border: 1px dashed var(--border); border-radius: 10px; min-height: 120px; }
+.parsons-col.program { border-style: solid; border-color: var(--accent); }
+.pline { display: flex; align-items: center; justify-content: space-between; gap: 6px; text-align: left; padding: 6px 8px; border-radius: 8px; background: var(--card2); border: 1px solid var(--border); cursor: grab; }
+.pline code { white-space: pre; font-family: var(--mono); font-size: 0.85rem; background: none; overflow-x: auto; }
+.pline-tools { display: flex; gap: 2px; flex-shrink: 0; }
+.pline-tools button { padding: 2px 6px; }
+.parsons-empty { margin: auto; text-align: center; }
+@media (max-width: 700px) { .parsons-cols { grid-template-columns: minmax(0, 1fr); } }
+.fill-code { font-family: var(--mono); font-size: 0.88rem; background: #0b0c18; color: #e8e9f5; border-radius: 10px; padding: 12px 14px; overflow-x: auto; line-height: 1.9; white-space: pre; }
+.fill-code .blank { font: inherit; color: #fde68a; background: #ffffff14; border: 0; border-bottom: 2px solid #fbbf24; border-radius: 4px 4px 0 0; padding: 0 4px; margin: 0 1px; }
+.fill-code .blank:focus { outline: 2px solid var(--accent); }
+
+/* ---------- output diff ---------- */
+.diff-why { margin: 6px 0; padding: 6px 10px; border-radius: 8px; background: #fbbf241f; border: 1px solid #fbbf2466; }
+.diff-table { width: 100%; }
+.diff-table td { vertical-align: top; }
+.diff-table td pre { margin: 0; white-space: pre-wrap; word-break: break-word; }
+.diff-table tr.diff-bad td { background: #ef44441f; }
+.diff-table td:first-child { color: #6b6f99; width: 2.5em; }
+
+/* ---------- tests and drills ---------- */
+.exam-note { margin-bottom: 6px; }
+.review-pill { margin-bottom: 6px; display: inline-block; }
+.missed { text-align: left; margin: 10px 0; display: flex; flex-direction: column; gap: 10px; }
+.missed-q { padding: 8px 12px; border-radius: 10px; background: var(--card2); }
+.small-tabs button { font-size: 0.85rem; padding: 4px 10px; }
+.drill { margin-top: 8px; }
+/* Beginners must see exactly what to type: no ligatures (<= shown as ≤, != as ≠) in code */
+code, pre, .cm-editor, .cm-content, .trace-code, .fill-code, .pline code { font-variant-ligatures: none; font-feature-settings: 'liga' 0, 'calt' 0; }

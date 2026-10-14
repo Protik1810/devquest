@@ -99,7 +99,7 @@ export const ALL_CARDS = ALL_LESSONS.flatMap(({ track, lesson }) =>
 );
 
 /** Tracks that mix illustrated lessons with some hands-on labs. */
-export const hasLabs = (t: Track) => t.lessons.some((l) => exercisesOf(l).some((e) => e.kind === 'code' || e.kind === 'terminal'));
+export const hasLabs = (t: Track) => t.lessons.some((l) => exercisesOf(l).some((e) => e.kind !== 'quiz'));
 
 export const trackArt = (id: string) => `./art/track-${id}.webp`;
 

@@ -1429,7 +1429,7 @@ defaultdict :: A dict that creates missing values with a factory: defaultdict(li
 namedtuple :: A tuple whose fields have names: Point = namedtuple("Point", ["x", "y"]); p.x.
 deque :: Double-ended queue with fast append/pop at both ends (popleft, appendleft). maxlen keeps the last N.
 
-=== lesson py-m6-test | Module 6 test | 190
+=== lesson py-m6-test | Module 6 test | 190 | exam
 Collections are where programs keep their data. This test covers lists, references and copies, comprehensions, sorting, tuples, sets, dictionaries and the `collections` module.
 
 Make sure you can:

@@ -703,7 +703,7 @@ Format specifier :: After a colon in the braces: {x:.2f} two decimals, {n:,} sep
 {x=} :: Prints the expression and its value, e.g. total=42. Handy for debugging.
 str() vs repr() :: str is the friendly form print shows; repr is the developer form (strings get quotes). f"{s!r}" uses repr.
 
-=== lesson py-m2-test | Module 2 test | 150
+=== lesson py-m2-test | Module 2 test | 150 | exam
 This test covers everything about text: writing strings and escapes, indexing and slicing, immutability, string methods, splitting and joining, and formatting with f-strings.
 
 Check that you can:

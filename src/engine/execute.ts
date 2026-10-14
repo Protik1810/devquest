@@ -94,7 +94,7 @@ export async function execute(lang: CodeLang, code: string, check: CodeCheck | u
       const problem = await integrity(lang, mode, code, check, ref);
       if (problem) return { ok: true, output: r.output, passed: false, message: problem, mode, tool: tool.tool };
     }
-    return { ok: true, output: r.output, passed, message: passed ? 'Output matches!' : `Expected output:\n${expected}`, mode, tool: tool.tool };
+    return { ok: true, output: r.output, passed, message: passed ? 'Output matches!' : 'Your output differs from the expected output.', ...(passed ? {} : { expected }), mode, tool: tool.tool };
   }
 
   if (mode === 'ai') {

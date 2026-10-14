@@ -1,23 +1,38 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { findLesson, lessonXp } from '../content';
-import { exercisesOf } from '../content/exercises';
+import { exercisesOf, isHandsOn, KIND_ICON, KIND_NAME, lessonMinutes } from '../content/exercises';
 import { isUnlocked } from '../content/progress';
-import type { Exercise } from '../content/types';
+import type { Exercise, Lesson, QuizQuestion, Track } from '../content/types';
 import { useGame } from '../engine/store';
 import { useLessonCtx } from '../engine/lessonCtx';
+import { shuffled } from '../engine/shuffle';
+import { marked } from 'marked';
 import { Markdown } from '../components/Markdown';
-import { Quiz } from '../components/Quiz';
+import { Quiz, type ExamMode } from '../components/Quiz';
 import { CodeExercise } from '../components/CodeExercise';
+import { FillExercise, ParsonsExercise } from '../components/PuzzleExercises';
 import { Terminal } from '../components/Terminal';
 
 type Outcome = { hints?: number; solution?: boolean; perfect?: boolean; scale?: number };
 
-const exPrompt = (ex?: Exercise) =>
-  ex?.kind === 'code' || ex?.kind === 'terminal' ? ex.prompt : ex?.kind === 'quiz' ? ex.questions.map((q) => q.q).join(' | ') : '';
+const exPrompt = (ex?: Exercise) => (!ex ? '' : ex.kind === 'quiz' ? ex.questions.map((q) => q.q).join(' | ') : ex.prompt);
 
-const KIND_ICON = { quiz: '❓', code: '💻', terminal: '🐚' } as const;
-const KIND_NAME = { quiz: 'Quiz', code: 'Exercise', terminal: 'Terminal' } as const;
+/** Share of the step's XP kept: hints cost 15% each, a viewed solution all of it, self-check half. */
+const stepMultiplier = (o: Outcome) => (o.solution ? 0 : (o.scale ?? 1) * Math.max(0.25, 1 - 0.15 * (o.hints ?? 0)));
+
+/** Pass mark for module tests, and how many review questions from earlier lessons they mix in. */
+const PASS_MARK = 0.7;
+const REVIEW_QUESTIONS = 3;
+
+/** A few quiz questions from the track's earlier lessons, so module tests also revisit older topics. */
+function reviewQuestions(track: Track, index: number): QuizQuestion[] {
+  const pool = track.lessons
+    .slice(0, index)
+    .filter((l) => !l.exam)
+    .flatMap((l) => exercisesOf(l).flatMap((e) => (e.kind === 'quiz' ? e.questions : [])));
+  return shuffled(pool).slice(0, REVIEW_QUESTIONS);
+}
 
 /** Per-step results of a multi-exercise lesson, kept on the device so a learner can stop halfway. */
 const stepsKey = (id: string) => `dq-steps:${id}`;
@@ -31,17 +46,21 @@ function loadSteps(id: string, n: number): (Outcome | null)[] {
   return Array(n).fill(null);
 }
 
-/** One exercise of a lesson: quiz, coding exercise or terminal missions. */
-function Step({ ex, lessonId, step, title, xp, done, onComplete }: { ex: Exercise; lessonId: string; step: number; title: string; xp: number; done: boolean; onComplete: (o: Outcome) => void }) {
+/** One exercise of a lesson. */
+function Step({ ex, lesson, step, xp, done, exam, onComplete }: { ex: Exercise; lesson: Lesson; step: number; xp: number; done: boolean; exam?: ExamMode; onComplete: (o: Outcome) => void }) {
+  const key = `${lesson.id}#${step}`;
+  const common = { lessonId: lesson.id, step, done, xp, onComplete };
   if (ex.kind === 'quiz')
-    return <Quiz key={`${lessonId}#${step}`} questions={ex.questions} done={done} onComplete={(perfect) => onComplete({ perfect })} onMistake={() => useGame.getState().noteStruggle(lessonId)} />;
-  if (ex.kind === 'code') return <CodeExercise key={`${lessonId}#${step}`} ex={ex} lessonId={lessonId} step={step} title={title} xp={xp} done={done} onComplete={onComplete} />;
-  return <Terminal key={`${lessonId}#${step}`} ex={ex} done={done} onComplete={(o) => onComplete({ hints: o.hints })} />;
+    return <Quiz key={key} questions={ex.questions} done={done} exam={exam} onComplete={(perfect) => onComplete({ perfect })} onMistake={() => useGame.getState().noteStruggle(lesson.id)} />;
+  if (ex.kind === 'code') return <CodeExercise key={key} ex={ex} title={lesson.title} {...common} />;
+  if (ex.kind === 'parsons') return <ParsonsExercise key={key} ex={ex} {...common} />;
+  if (ex.kind === 'fill') return <FillExercise key={key} ex={ex} {...common} />;
+  return <Terminal key={key} ex={ex} done={done} onComplete={(o) => onComplete({ hints: o.hints })} />;
 }
 
 /** Several exercises done in order; the lesson completes when the last one does. */
-function Steps({ exs, lessonId, title, xp, done, onFinish }: { exs: Exercise[]; lessonId: string; title: string; xp: number; done: boolean; onFinish: (o: Outcome) => void }) {
-  const [results, setResults] = useState(() => loadSteps(lessonId, exs.length));
+function Steps({ exs, lesson, xp, done, exam, onFinish }: { exs: Exercise[]; lesson: Lesson; xp: number; done: boolean; exam?: ExamMode; onFinish: (o: Outcome) => void }) {
+  const [results, setResults] = useState(() => loadSteps(lesson.id, exs.length));
   const firstOpen = results.findIndex((r) => !r);
   const [cur, setCur] = useState(done || firstOpen < 0 ? 0 : firstOpen);
   const setCtx = useLessonCtx((s) => s.set);
@@ -54,19 +73,24 @@ function Steps({ exs, lessonId, title, xp, done, onFinish }: { exs: Exercise[]; 
     const next = results.map((r, j) => (j === i ? r ?? o : r));
     setResults(next);
     try {
-      localStorage.setItem(stepsKey(lessonId), JSON.stringify(next));
+      localStorage.setItem(stepsKey(lesson.id), JSON.stringify(next));
     } catch {
       /* progress through steps just won't survive a reload */
     }
     if (next.every(Boolean)) {
       const all = next as Outcome[];
+      // Each step is worth an equal share; hints and solutions only cost the step they were used in
       onFinish({
-        hints: all.reduce((n, r) => n + (r.hints ?? 0), 0),
-        solution: all.some((r) => r.solution),
+        scale: all.reduce((sum, r) => sum + stepMultiplier(r), 0) / all.length,
+        hints: 0,
+        solution: all.every((r) => r.solution),
         perfect: all.every((r) => r.perfect ?? (!r.solution && !r.hints && !r.scale)),
-        scale: Math.min(...all.map((r) => r.scale ?? 1)) < 1 ? Math.min(...all.map((r) => r.scale ?? 1)) : undefined,
       });
-    } else if (i + 1 < exs.length) setCur(next.findIndex((r) => !r));
+    } else if (!done && exs[i].kind !== 'quiz') {
+      // Move on to the next unfinished step (after a quiz, stay on its result screen, which reviews any mistakes)
+      const ahead = next.findIndex((r, j) => j > i && !r);
+      setCur(ahead >= 0 ? ahead : next.findIndex((r) => !r));
+    }
   };
 
   const ex = exs[cur];
@@ -77,13 +101,13 @@ function Steps({ exs, lessonId, title, xp, done, onFinish }: { exs: Exercise[]; 
           const open = done || i === 0 || !!results[i - 1] || !!results[i];
           return (
             <button key={i} role="tab" aria-selected={i === cur} className={`step-tab ${i === cur ? 'cur' : ''} ${results[i] || done ? 'done' : ''}`} disabled={!open} onClick={() => setCur(i)} title={open ? undefined : 'Finish the previous step first'}>
-              {results[i] || done ? '✓' : KIND_ICON[e.kind]} {i + 1}. {KIND_NAME[e.kind]}
+              {results[i] || done ? '✓' : KIND_ICON[e.kind]} {i + 1}. {e.kind === 'quiz' && exam ? 'Test' : KIND_NAME[e.kind]}
             </button>
           );
         })}
       </div>
       <div className="muted small step-count">Step {cur + 1} of {exs.length}</div>
-      <Step ex={ex} lessonId={lessonId} step={cur} title={title} xp={xp} done={done || !!results[cur]} onComplete={(o) => complete(cur, o)} />
+      <Step ex={ex} lesson={lesson} step={cur} xp={Math.round(xp / exs.length)} done={done || !!results[cur]} exam={exam} onComplete={(o) => complete(cur, o)} />
       {!done && results[cur] && cur + 1 < exs.length && (
         <button className="primary" onClick={() => setCur(cur + 1)}>Next step →</button>
       )}
@@ -135,12 +159,13 @@ export function LessonPage() {
   const ex = exs[0];
   const multi = exs.length > 1;
   // Hands-on work sits beside the reading; a lesson that only has quizzes keeps them under it.
-  const split = exs.some((e) => e.kind !== 'quiz');
+  const split = exs.some(isHandsOn);
+  const exam: ExamMode | undefined = lesson.exam ? { passMark: PASS_MARK, extra: () => reviewQuestions(track, index) } : undefined;
 
   const practice = multi ? (
-    <Steps key={lesson.id} exs={exs} lessonId={lesson.id} title={lesson.title} xp={xp} done={done} onFinish={finish} />
+    <Steps key={lesson.id} exs={exs} lesson={lesson} xp={xp} done={done} exam={exam} onFinish={finish} />
   ) : ex ? (
-    <Step ex={ex} lessonId={lesson.id} step={0} title={lesson.title} xp={xp} done={done} onComplete={finish} />
+    <Step ex={ex} lesson={lesson} step={0} xp={xp} done={done} exam={exam} onComplete={finish} />
   ) : null;
 
   return (
@@ -156,14 +181,25 @@ export function LessonPage() {
         <article className="lesson-body card">
           <h1>{lesson.title}</h1>
           <div className="muted small">
-            ⭐ {xp} XP
+            ⭐ {xp} XP · ⏱ about {lessonMinutes(lesson)} min
             {multi ? ` · ${exs.length} steps` : ''}
             {lesson.cards?.length ? ` · 🃏 ${lesson.cards.length} flashcard${lesson.cards.length === 1 ? '' : 's'} unlock${lesson.cards.length === 1 ? 's' : ''} on completion` : ''}
           </div>
-          <Markdown source={lesson.body} />
+          {lesson.goals?.length ? (
+            <div className="goals">
+              <b>🎯 {lesson.exam ? 'This test checks that you can:' : "By the end of this lesson you'll be able to:"}</b>
+              <ul>
+                {lesson.goals.map((g) => (
+                  // Trusted lesson text: inline markdown such as `code` and *emphasis*
+                  <li key={g} dangerouslySetInnerHTML={{ __html: marked.parseInline(g) as string }} />
+                ))}
+              </ul>
+            </div>
+          ) : null}
+          <Markdown source={lesson.body} interactive />
           {practice && !split && (
             <div className="card inset">
-              <h2>❓ Check your understanding</h2>
+              <h2>{lesson.exam ? '📝 Module test' : '❓ Check your understanding'}</h2>
               {practice}
             </div>
           )}

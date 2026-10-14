@@ -1735,7 +1735,7 @@ Formatter / linter / type checker :: Black or ruff format (style), Ruff (likely 
 pre-commit and CI :: Run checks automatically on each commit (pre-commit) and each push/PR (e.g. GitHub Actions).
 Secrets :: Keep keys in environment variables or an uncommitted .env, never in the code or Git.
 
-=== lesson py-m12-test | Module 12 test | 240
+=== lesson py-m12-test | Module 12 test | 240 | exam
 The final module test covers the professional toolkit: functional tools and itertools, closures and decorators, generators and lazy pipelines, type hints, async programming and the tools around a real project.
 
 Make sure you can:

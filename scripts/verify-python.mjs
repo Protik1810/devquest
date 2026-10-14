@@ -16,6 +16,16 @@ if (!fs.existsSync(path.join(pyDir, 'pyodide.mjs'))) {
 }
 const filter = process.argv[2] ?? '';
 
+/** Puzzles as programs: a Parsons problem's solution is its lines in order (an empty program must fail); a fill-in's is the template with the answers (with the gaps left in, it must fail). */
+function asProgram(e) {
+  if (e.kind === 'parsons') return { ...e, starter: '', solution: e.lines.join('\n') + '\n' };
+  if (e.kind === 'fill') {
+    const parts = e.template.split('____');
+    return { ...e, starter: e.template, solution: parts.map((p, i) => p + (e.answers[i] ?? '')).join('') };
+  }
+  return e;
+}
+
 const server = await createServer({ root, configFile: path.join(root, 'vite.config.ts'), server: { middlewareMode: true }, appType: 'custom', logLevel: 'error' });
 let exercises, PY_TEST_HELPER, integrity;
 try {
@@ -29,7 +39,8 @@ try {
   for (const t of TRACKS)
     for (const l of t.lessons)
       exercisesOf(l)
-        .filter((e) => e.kind === 'code' && e.lang === 'python')
+        .filter((e) => e.kind !== 'quiz' && e.kind !== 'terminal' && e.lang === 'python')
+        .map(asProgram)
         .forEach((e, i, all) => exercises.push({ id: all.length > 1 ? `${l.id}#${i + 1}` : l.id, ex: e }));
   for (const c of CHALLENGES) if (c.exercise.lang === 'python') exercises.push({ id: c.id, ex: c.exercise });
   for (const p of PROJECTS) if (p.lang === 'python' && p.tests) exercises.push({ id: p.id, ex: { lang: 'python', starter: p.starter, solution: p.solution ?? '', check: { type: 'tests', code: p.tests } } });
@@ -56,6 +67,18 @@ for (const f of fs.readdirSync(pyDir)) {
 const { loadPyodide } = await import(pathToFileURL(path.join(nodeDir, 'pyodide.mjs')).href);
 const py = await loadPyodide({ indexURL: nodeDir + path.sep });
 py.runPython(PY_TEST_HELPER, { filename: '<devquest>' });
+
+// The step-through recorder must work: trace a small recursive program
+{
+  const ns = py.globals.get('dict')();
+  const t = JSON.parse(py.globals.get('__dq_trace')('def f(n):\n    return 1 if n < 2 else n * f(n - 1)\nx = f(3)\nprint(x)\n', ns));
+  const deepest = Math.max(...t.steps.map((s) => s.frames.length));
+  if (t.error || t.out !== '6\n' || deepest !== 4 || !t.steps.some((s) => s.event === 'return' && s.ret === '6')) {
+    console.error('✗ step-through recorder is broken', JSON.stringify(t).slice(0, 400));
+    process.exit(1);
+  }
+  ns.destroy();
+}
 
 let fullHashlib = false;
 /** Mirrors the app's Python worker (src/engine/runners.ts). */

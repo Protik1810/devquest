@@ -644,7 +644,7 @@ Short-circuit evaluation :: and stops at the first falsy value, or at the first 
 Conditional expression :: a if condition else b, e.g. "even" if n % 2 == 0 else "odd".
 match / case :: Compares a value against patterns; the first matching case runs. "a" | "b" means either; case _ matches anything.
 
-=== lesson py-m3-test | Module 3 test | 160
+=== lesson py-m3-test | Module 3 test | 160 | exam
 This test checks that you can make programs decide. You'll need comparisons, `if`/`elif`/`else`, `and`/`or`/`not`, truthiness and `match`.
 
 Before you start, make sure you can:
