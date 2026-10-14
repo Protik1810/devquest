@@ -79,11 +79,12 @@ async function run(code, tests, stdin) {
     fullHashlib = true;
   }
   const ns = py.globals.get('dict')();
+  ns.set('__name__', '__main__');
   py.globals.get('__dq_prepare')(stdin ?? null);
   const flush = () => py.runPython('import sys\nsys.stdout.flush()\nsys.stderr.flush()');
   try {
     try {
-      await py.runPythonAsync(code, { globals: ns });
+      await py.runPythonAsync(py.globals.get('__dq_async_source')(code), { globals: ns });
     } finally {
       flush();
     }
@@ -127,6 +128,7 @@ const fail = (id, msg) => {
   console.log(`✗ ${id}: ${msg}`);
 };
 for (const { id, ex } of exercises) {
+  if (process.env.VERBOSE) console.error(`… ${id}`);
   const sol = await passes(ex.solution, ex.check);
   if (!sol.pass) {
     fail(id, `solution fails\n${sol.why}`);

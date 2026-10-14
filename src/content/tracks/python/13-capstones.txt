@@ -1,0 +1,829 @@
+=== module Capstone projects
+
+=== lesson py-boss | Capstone 1: a budget tracker | 400
+Time to build something real from start to finish, the way professional developers do: **plan, build in small tested steps, then polish**. You'll write a budget tracker that records transactions, imports a bank's CSV export, produces a monthly report with budget alerts, and saves its data as JSON.
+
+## How a task like this is approached
+
+1. **Clarify the requirements.** Write them as user stories: *"As a user, I can import my bank's CSV export, so I don't type transactions by hand."* *"As a user, I see where my money went each month."* *"As a user, I'm warned when a category goes over budget."*
+2. **Sketch the design.** Nouns and verbs give the classes: a `Transaction` (date, description, amount, category) and a `Ledger` that holds them and answers questions. Importing, reporting and saving are separate **functions** around the model, each with one responsibility, so the model never depends on file formats or screen layout.
+3. **Decide the hard rules up front.** Money is stored as **integer cents**, never floats (Module 1!). Dates are real `date` objects, written as ISO 8601 text in files. Invalid data raises one domain exception, `LedgerError`.
+4. **Build in vertical slices**, each fully working and tested before the next:
+   - Step 1: the model (`Transaction`, `Ledger`);
+   - Step 2: importing CSV, collecting errors instead of crashing on the first bad line;
+   - Step 3: the monthly report and budget alerts;
+   - Step 4: saving and loading JSON, with a round-trip test.
+5. **Refactor as you go**, and keep each function small enough to test directly.
+
+## A note on Decimal
+
+Bank exports write amounts like `-12.50`. Converting with `float` risks errors like `0.1 + 0.2`. The standard `decimal` module represents decimal numbers **exactly**: `Decimal("-12.50") * 100` is exactly `-1250`. Step 2 uses it to turn text into whole cents safely.
+
+Each step's starter contains a working solution to the previous steps, so you can always continue. When you're done, you'll have written about 150 lines of clean, tested, object-oriented Python, the size of a real small tool.
+
+📚 **Go deeper:** Python Library Reference, `decimal`; *Python Crash Course* (3rd ed.), part II projects; Martin Fowler's "Money" pattern (*Patterns of Enterprise Application Architecture*).
+--- exercise code python
+::prompt
+**Step 1: the model.**
+
+- `LedgerError(Exception)`;
+- a frozen dataclass `Transaction` with `when` (a `date`), `description` (str), `amount_cents` (int: positive for income, negative for spending) and `category` (str, default `"uncategorised"`). In `__post_init__`, raise `LedgerError` for a blank description or a zero amount;
+- `Ledger` with `add(transaction)`, `len(ledger)`, `balance()` (the sum of all amounts), `in_month(year, month)` (that month's transactions sorted by date, keeping insertion order for equal dates), and `spending_by_category(year, month)`: a dict of category → money **spent** that month as **positive** cents (income ignored), ordered from the biggest spending down (ties alphabetical).
+::starter
+from dataclasses import dataclass
+from datetime import date
+
+
+class LedgerError(Exception):
+    pass
+::solution
+from dataclasses import dataclass
+from datetime import date
+
+
+class LedgerError(Exception):
+    pass
+
+
+@dataclass(frozen=True)
+class Transaction:
+    when: date
+    description: str
+    amount_cents: int
+    category: str = "uncategorised"
+
+    def __post_init__(self):
+        if not self.description.strip():
+            raise LedgerError("a transaction needs a description")
+        if self.amount_cents == 0:
+            raise LedgerError("a transaction can't be zero")
+
+
+class Ledger:
+    def __init__(self):
+        self._transactions = []
+
+    def add(self, transaction):
+        self._transactions.append(transaction)
+
+    def __len__(self):
+        return len(self._transactions)
+
+    def balance(self):
+        return sum(t.amount_cents for t in self._transactions)
+
+    def in_month(self, year, month):
+        found = [t for t in self._transactions if t.when.year == year and t.when.month == month]
+        return sorted(found, key=lambda t: t.when)
+
+    def spending_by_category(self, year, month):
+        totals = {}
+        for t in self.in_month(year, month):
+            if t.amount_cents < 0:
+                totals[t.category] = totals.get(t.category, 0) - t.amount_cents
+        return dict(sorted(totals.items(), key=lambda kv: (-kv[1], kv[0])))
+::tests
+from datetime import date as _d
+led = Ledger()
+led.add(Transaction(_d(2026, 10, 3), "Salary", 250000, "income"))
+led.add(Transaction(_d(2026, 10, 1), "Rent", -90000, "rent"))
+led.add(Transaction(_d(2026, 10, 5), "Groceries", -6250, "food"))
+led.add(Transaction(_d(2026, 10, 5), "Cafe", -450, "food"))
+led.add(Transaction(_d(2026, 9, 28), "Books", -3000, "fun"))
+led.add(Transaction(_d(2026, 10, 9), "Cinema", -1200))
+assert len(led) == 6 and led.balance() == 149100
+assert [t.description for t in led.in_month(2026, 10)] == ["Rent", "Salary", "Groceries", "Cafe", "Cinema"]
+assert led.spending_by_category(2026, 10) == {"rent": 90000, "food": 6700, "uncategorised": 1200}
+assert list(led.spending_by_category(2026, 10)) == ["rent", "food", "uncategorised"]
+assert led.spending_by_category(2026, 8) == {}
+for bad in [lambda: Transaction(_d(2026, 1, 1), "  ", 100), lambda: Transaction(_d(2026, 1, 1), "Gift", 0)]:
+    try:
+        bad()
+    except LedgerError:
+        pass
+    else:
+        raise AssertionError("invalid transactions should raise LedgerError")
+::hints
+- `@dataclass(frozen=True)` with the four fields; validate in `__post_init__`.
+- `in_month` filters on `t.when.year` and `t.when.month`, then sorts by `t.when` (sorting is stable).
+- In `spending_by_category`, only negative amounts count; add `-t.amount_cents` so the totals are positive. Sort the items with a key of `(-amount, name)`.
+--- exercise code python
+::prompt
+**Step 2: importing a bank's CSV export.** Write `parse_transactions(csv_text)` that reads CSV text with the header `date,description,amount,category` and returns a tuple `(transactions, errors)`:
+
+- dates are ISO (`2026-10-14`); amounts are decimal text like `-12.50` or `2500`; convert them to cents **exactly** with `Decimal` (an amount with more than 2 decimal places is an error); an empty category means the default;
+- a bad row doesn't stop the import: add an error string to `errors` like `line 3: bad date '2026-13-01'`, `line 4: bad amount 'abc'` or `line 5: <the LedgerError message>`, where line 1 is the header.
+::starter
+import csv
+import io
+from dataclasses import dataclass
+from datetime import date
+from decimal import Decimal, InvalidOperation
+
+
+class LedgerError(Exception):
+    pass
+
+
+@dataclass(frozen=True)
+class Transaction:
+    when: date
+    description: str
+    amount_cents: int
+    category: str = "uncategorised"
+
+    def __post_init__(self):
+        if not self.description.strip():
+            raise LedgerError("a transaction needs a description")
+        if self.amount_cents == 0:
+            raise LedgerError("a transaction can't be zero")
+
+
+def parse_transactions(csv_text):
+    transactions = []
+    errors = []
+    return transactions, errors
+::solution
+import csv
+import io
+from dataclasses import dataclass
+from datetime import date
+from decimal import Decimal, InvalidOperation
+
+
+class LedgerError(Exception):
+    pass
+
+
+@dataclass(frozen=True)
+class Transaction:
+    when: date
+    description: str
+    amount_cents: int
+    category: str = "uncategorised"
+
+    def __post_init__(self):
+        if not self.description.strip():
+            raise LedgerError("a transaction needs a description")
+        if self.amount_cents == 0:
+            raise LedgerError("a transaction can't be zero")
+
+
+def to_cents(text):
+    value = Decimal(text.strip()) * 100
+    if value != value.to_integral_value():
+        raise InvalidOperation(text)
+    return int(value)
+
+
+def parse_transactions(csv_text):
+    transactions = []
+    errors = []
+    for line_no, row in enumerate(csv.DictReader(io.StringIO(csv_text)), start=2):
+        try:
+            when = date.fromisoformat(row["date"].strip())
+        except ValueError:
+            errors.append(f"line {line_no}: bad date {row['date']!r}")
+            continue
+        try:
+            cents = to_cents(row["amount"])
+        except InvalidOperation:
+            errors.append(f"line {line_no}: bad amount {row['amount']!r}")
+            continue
+        category = row["category"].strip() or "uncategorised"
+        try:
+            transactions.append(Transaction(when, row["description"], cents, category))
+        except LedgerError as e:
+            errors.append(f"line {line_no}: {e}")
+    return transactions, errors
+::tests
+from datetime import date as _d
+data = """date,description,amount,category
+2026-10-01,Rent,-900.00,rent
+2026-13-01,Mystery,-5.00,
+2026-10-03,Salary,2500,income
+2026-10-05,Groceries,abc,food
+2026-10-06,  ,-3.00,food
+2026-10-07,Cafe,-4.5,
+2026-10-08,Odd cents,-1.005,food
+"""
+ts, errs = parse_transactions(data)
+assert [(t.description, t.amount_cents, t.category) for t in ts] == [("Rent", -90000, "rent"), ("Salary", 250000, "income"), ("Cafe", -450, "uncategorised")]
+assert ts[0].when == _d(2026, 10, 1)
+assert errs == ["line 3: bad date '2026-13-01'", "line 5: bad amount 'abc'", "line 6: a transaction needs a description", "line 8: bad amount '-1.005'"]
+assert parse_transactions("date,description,amount,category\n") == ([], [])
+::hints
+- `enumerate(csv.DictReader(...), start=2)` gives the file line number of each data row.
+- `date.fromisoformat` raises `ValueError` for bad dates; `Decimal("abc")` raises `decimal.InvalidOperation`.
+- Multiply the `Decimal` by 100 and check it's a whole number (`value == value.to_integral_value()`).
+- Use `continue` after recording an error, so the rest of the row is skipped.
+--- exercise code python
+::prompt
+**Step 3: the monthly report and budget alerts.** Using the step 1 model (included), write:
+
+- `money(cents)`: formats cents as `1,234.56` (with a minus sign for negatives);
+- `monthly_report(ledger, year, month)`: a multi-line string like the expected example in the tests: the month name and year, then `Income`, `Spending` and `Net` lines (label left-aligned in 10 characters, amount right-aligned in 12), then `Top spending:` and up to 3 categories (indented 2 spaces, name in 14 characters, amount right-aligned in 10);
+- `check_budgets(ledger, year, month, budgets, notify)`: for every category in `budgets` (category → cents) where that month's spending is **over** budget, call `notify` with a message like `food: 112% of budget`, in alphabetical order of category (percent rounded down).
+::starter
+from dataclasses import dataclass
+from datetime import date
+
+
+class LedgerError(Exception):
+    pass
+
+
+@dataclass(frozen=True)
+class Transaction:
+    when: date
+    description: str
+    amount_cents: int
+    category: str = "uncategorised"
+
+    def __post_init__(self):
+        if not self.description.strip():
+            raise LedgerError("a transaction needs a description")
+        if self.amount_cents == 0:
+            raise LedgerError("a transaction can't be zero")
+
+
+class Ledger:
+    def __init__(self):
+        self._transactions = []
+
+    def add(self, transaction):
+        self._transactions.append(transaction)
+
+    def __len__(self):
+        return len(self._transactions)
+
+    def balance(self):
+        return sum(t.amount_cents for t in self._transactions)
+
+    def in_month(self, year, month):
+        found = [t for t in self._transactions if t.when.year == year and t.when.month == month]
+        return sorted(found, key=lambda t: t.when)
+
+    def spending_by_category(self, year, month):
+        totals = {}
+        for t in self.in_month(year, month):
+            if t.amount_cents < 0:
+                totals[t.category] = totals.get(t.category, 0) - t.amount_cents
+        return dict(sorted(totals.items(), key=lambda kv: (-kv[1], kv[0])))
+::solution
+from dataclasses import dataclass
+from datetime import date
+
+
+class LedgerError(Exception):
+    pass
+
+
+@dataclass(frozen=True)
+class Transaction:
+    when: date
+    description: str
+    amount_cents: int
+    category: str = "uncategorised"
+
+    def __post_init__(self):
+        if not self.description.strip():
+            raise LedgerError("a transaction needs a description")
+        if self.amount_cents == 0:
+            raise LedgerError("a transaction can't be zero")
+
+
+class Ledger:
+    def __init__(self):
+        self._transactions = []
+
+    def add(self, transaction):
+        self._transactions.append(transaction)
+
+    def __len__(self):
+        return len(self._transactions)
+
+    def balance(self):
+        return sum(t.amount_cents for t in self._transactions)
+
+    def in_month(self, year, month):
+        found = [t for t in self._transactions if t.when.year == year and t.when.month == month]
+        return sorted(found, key=lambda t: t.when)
+
+    def spending_by_category(self, year, month):
+        totals = {}
+        for t in self.in_month(year, month):
+            if t.amount_cents < 0:
+                totals[t.category] = totals.get(t.category, 0) - t.amount_cents
+        return dict(sorted(totals.items(), key=lambda kv: (-kv[1], kv[0])))
+
+
+def money(cents):
+    sign = "-" if cents < 0 else ""
+    return f"{sign}{abs(cents) / 100:,.2f}"
+
+
+def monthly_report(ledger, year, month):
+    items = ledger.in_month(year, month)
+    income = sum(t.amount_cents for t in items if t.amount_cents > 0)
+    spending = sum(t.amount_cents for t in items if t.amount_cents < 0)
+    lines = [date(year, month, 1).strftime("%B %Y")]
+    for label, value in [("Income", income), ("Spending", spending), ("Net", income + spending)]:
+        lines.append(f"{label:<10}{money(value):>12}")
+    lines.append("Top spending:")
+    for category, cents in list(ledger.spending_by_category(year, month).items())[:3]:
+        lines.append(f"  {category:<14}{money(cents):>10}")
+    return "\n".join(lines)
+
+
+def check_budgets(ledger, year, month, budgets, notify):
+    spent = ledger.spending_by_category(year, month)
+    for category in sorted(budgets):
+        used = spent.get(category, 0)
+        if used > budgets[category]:
+            notify(f"{category}: {used * 100 // budgets[category]}% of budget")
+::tests
+from datetime import date as _d
+led = Ledger()
+for t in [(_d(2026, 10, 3), "Salary", 250000, "income"), (_d(2026, 10, 1), "Rent", -90000, "rent"), (_d(2026, 10, 5), "Groceries", -21250, "food"), (_d(2026, 10, 9), "Cafe", -6750, "food"), (_d(2026, 10, 12), "Gym", -3500, "health"), (_d(2026, 10, 20), "Cinema", -1206, "fun"), (_d(2026, 9, 2), "Old", -999, "food")]:
+    led.add(Transaction(*t))
+assert money(123456) == "1,234.56" and money(-5) == "-0.05" and money(0) == "0.00"
+expected = """October 2026
+Income        2,500.00
+Spending     -1,227.06
+Net           1,272.94
+Top spending:
+  rent              900.00
+  food              280.00
+  health             35.00"""
+assert monthly_report(led, 2026, 10) == expected, monthly_report(led, 2026, 10)
+assert monthly_report(Ledger(), 2026, 2) == "February 2026\nIncome            0.00\nSpending          0.00\nNet               0.00\nTop spending:"
+alerts = []
+check_budgets(led, 2026, 10, {"food": 25000, "rent": 90000, "fun": 1000, "travel": 5000}, alerts.append)
+assert alerts == ["food: 112% of budget", "fun: 120% of budget"]
+::hints
+- `money`: format `abs(cents) / 100` with `:,.2f` and put a `-` in front for negatives.
+- The month heading is `date(year, month, 1).strftime("%B %Y")`.
+- Reuse `spending_by_category` for both the top-3 list and the budget check; `list(d.items())[:3]` takes the first three.
+- `notify` is just a function you call: dependency injection makes the alerts easy to test.
+--- exercise code python
+::prompt
+**Step 4: saving and loading.** Add JSON persistence (the model is included):
+
+- `save_ledger(ledger, path)` writes `{"version": 1, "transactions": [...]}` with each transaction as a dict (`when` as ISO text, the other fields as they are), UTF-8, `indent=2`;
+- `load_ledger(path)` reads it back into a new `Ledger`. A missing file gives an **empty** ledger; a file whose JSON is invalid, or whose `version` isn't 1, raises `LedgerError`.
+
+Round trip: `load_ledger` after `save_ledger` must give back equal transactions in the same order.
+::starter
+import json
+from dataclasses import asdict, dataclass
+from datetime import date
+
+
+class LedgerError(Exception):
+    pass
+
+
+@dataclass(frozen=True)
+class Transaction:
+    when: date
+    description: str
+    amount_cents: int
+    category: str = "uncategorised"
+
+    def __post_init__(self):
+        if not self.description.strip():
+            raise LedgerError("a transaction needs a description")
+        if self.amount_cents == 0:
+            raise LedgerError("a transaction can't be zero")
+
+
+class Ledger:
+    def __init__(self):
+        self._transactions = []
+
+    def add(self, transaction):
+        self._transactions.append(transaction)
+
+    def __iter__(self):
+        return iter(self._transactions)
+
+    def __len__(self):
+        return len(self._transactions)
+::solution
+import json
+from dataclasses import asdict, dataclass
+from datetime import date
+
+
+class LedgerError(Exception):
+    pass
+
+
+@dataclass(frozen=True)
+class Transaction:
+    when: date
+    description: str
+    amount_cents: int
+    category: str = "uncategorised"
+
+    def __post_init__(self):
+        if not self.description.strip():
+            raise LedgerError("a transaction needs a description")
+        if self.amount_cents == 0:
+            raise LedgerError("a transaction can't be zero")
+
+
+class Ledger:
+    def __init__(self):
+        self._transactions = []
+
+    def add(self, transaction):
+        self._transactions.append(transaction)
+
+    def __iter__(self):
+        return iter(self._transactions)
+
+    def __len__(self):
+        return len(self._transactions)
+
+
+def save_ledger(ledger, path):
+    rows = []
+    for t in ledger:
+        row = asdict(t)
+        row["when"] = t.when.isoformat()
+        rows.append(row)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump({"version": 1, "transactions": rows}, f, indent=2)
+
+
+def load_ledger(path):
+    ledger = Ledger()
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+    except FileNotFoundError:
+        return ledger
+    except json.JSONDecodeError as e:
+        raise LedgerError(f"corrupt ledger file: {e}") from e
+    if data.get("version") != 1:
+        raise LedgerError(f"unsupported ledger version: {data.get('version')!r}")
+    for row in data["transactions"]:
+        ledger.add(Transaction(date.fromisoformat(row["when"]), row["description"], row["amount_cents"], row["category"]))
+    return ledger
+::tests
+import os as _os, tempfile as _tf, json as _j
+from datetime import date as _d
+_dir = _tf.mkdtemp()
+_p = _os.path.join(_dir, "ledger.json")
+led = Ledger()
+led.add(Transaction(_d(2026, 10, 3), "Salary", 250000, "income"))
+led.add(Transaction(_d(2026, 10, 1), "Café ☕", -450))
+save_ledger(led, _p)
+raw = _j.load(open(_p, encoding="utf-8"))
+assert raw["version"] == 1 and raw["transactions"][1] == {"when": "2026-10-01", "description": "Café ☕", "amount_cents": -450, "category": "uncategorised"}
+again = load_ledger(_p)
+assert list(again) == list(led), "the round trip must give back equal transactions in order"
+assert len(load_ledger(_os.path.join(_dir, "missing.json"))) == 0
+for content in ["{not json", '{"version": 2, "transactions": []}']:
+    with open(_p, "w", encoding="utf-8") as _f:
+        _f.write(content)
+    try:
+        load_ledger(_p)
+    except LedgerError:
+        pass
+    else:
+        raise AssertionError(f"loading {content!r} should raise LedgerError")
+::hints
+- `dataclasses.asdict(t)` gives a dict of the fields; replace `when` with `t.when.isoformat()`.
+- In `load_ledger`, catch `FileNotFoundError` (empty ledger) and `json.JSONDecodeError` (raise `LedgerError ... from e`) separately.
+- Rebuild each `Transaction` with `date.fromisoformat(row["when"])`.
+--- cards
+User story :: "As a <user>, I can <action>, so that <benefit>": a requirement from the user's point of view.
+Vertical slice :: A small piece of functionality built end to end and tested before starting the next.
+Money in code :: Store integer cents (or Decimal), never floats; format only for display.
+Decimal :: Exact decimal arithmetic: Decimal("0.1") + Decimal("0.2") == Decimal("0.3"). Create it from strings.
+
+=== lesson py-capstone-cli | Capstone 2: a command-line text analyser | 400
+Your second project is a **command-line tool**, the kind developers write every week to automate a job. `textstats` will read a text file and report its word count, vocabulary, longest words and most common words, with options, proper exit codes and JSON output for other programs.
+
+## The plan
+
+- **Step 1: tokenising.** Turn raw text into words with a regular expression, as a **generator** so huge files stream through without filling memory.
+- **Step 2: analysing.** Compute the statistics with `Counter` and return them as a plain dictionary, with no printing, so the logic is easy to test and reuse.
+- **Step 3: the command-line interface.** Parse arguments with `argparse`, read the file, print a readable report or JSON, write errors to **standard error**, and return an **exit code** (0 for success, non-zero for failure), as every well-behaved command-line program does.
+
+This split is the classic **functional core, imperative shell** design: pure, testable functions in the middle (steps 1 and 2), and a thin layer that deals with the messy outside world (step 3).
+
+## Command-line programs in Python
+
+`sys.argv` holds the words typed after the program name. The standard `argparse` module turns them into a tidy object, generates `--help` automatically, and reports mistakes:
+
+```python
+import argparse
+
+parser = argparse.ArgumentParser(prog="textstats", description="Word statistics for a text file")
+parser.add_argument("path", help="the file to analyse")
+parser.add_argument("--top", type=int, default=5, help="how many common words to show")
+parser.add_argument("--json", action="store_true", help="print JSON instead of text")
+args = parser.parse_args(["notes.txt", "--top", "3"])     # normally parse_args() reads sys.argv
+args.path, args.top, args.json                            # 'notes.txt' 3 False
+```
+
+Passing the argument list explicitly (`main(argv)`) makes the whole program testable: tests call `main(["file.txt", "--json"])` and check what it prints and returns. To check printed output, tests capture it with `contextlib.redirect_stdout(io.StringIO())`.
+
+Conventions worth following: normal output goes to **stdout**, errors and warnings to **stderr** (`print(..., file=sys.stderr)`), and the program ends with `sys.exit(main(sys.argv[1:]))` so the shell sees the exit code.
+
+📚 **Go deeper:** Python "Argparse Tutorial" (docs.python.org/3/howto/argparse.html); Gary Bernhardt, "Functional Core, Imperative Shell"; *The Art of Unix Programming* (rules of modularity and silence).
+--- exercise code python
+::prompt
+**Step 1: tokenising.** Write two functions:
+
+- `words(text)`: a **generator** yielding each word in lowercase, in order. A word is a run of letters, possibly with apostrophes **inside** it (`don't`, `o'clock`): use the regex `[a-z]+(?:'[a-z]+)*` on the lowercased text with `re.finditer`;
+- `sentence_count(text)`: the number of sentences, counted as runs of `.`, `!` or `?` that follow some text (so `"Wait... what?!"` is 2 sentences, and text without an ending mark that still has words counts as 1).
+::starter
+import re
+
+
+def words(text):
+    pass
+
+
+def sentence_count(text):
+    pass
+::solution
+import re
+
+WORD = re.compile(r"[a-z]+(?:'[a-z]+)*")
+
+
+def words(text):
+    for match in WORD.finditer(text.lower()):
+        yield match.group()
+
+
+def sentence_count(text):
+    parts = [p for p in re.split(r"[.!?]+", text) if p.strip()]
+    return len(parts)
+::tests
+import types as _t
+assert isinstance(words("x"), _t.GeneratorType), "words must be a generator"
+assert list(words("Don't panic! It's 4 o'clock, Ada.")) == ["don't", "panic", "it's", "o'clock", "ada"]
+assert list(words("'quoted' words--and dashes")) == ["quoted", "words", "and", "dashes"]
+assert list(words("123 !!!")) == []
+assert sentence_count("Wait... what?! Really.") == 3
+assert sentence_count("No ending mark") == 1
+assert sentence_count("") == 0
+assert sentence_count("One. Two! Three?") == 3
+::hints
+- Compile the pattern once; `finditer` yields match objects; yield `match.group()`.
+- For sentences, split on runs of `[.!?]+` and count the pieces that aren't blank.
+--- exercise code python
+::prompt
+**Step 2: analysing.** Write `analyse(text, top=5, stopwords=())` (the step 1 functions are included) returning a dict:
+
+- `"words"`: total number of words; `"unique"`: number of different words; `"sentences"`;
+- `"average_length"`: the average word length, rounded to 1 decimal (0 for no words);
+- `"longest"`: the 3 longest **distinct** words, longest first, ties alphabetical;
+- `"common"`: the `top` most common words that are **not** in `stopwords`, as `[word, count]` lists, most common first, ties alphabetical.
+::starter
+import re
+from collections import Counter
+
+WORD = re.compile(r"[a-z]+(?:'[a-z]+)*")
+
+
+def words(text):
+    for match in WORD.finditer(text.lower()):
+        yield match.group()
+
+
+def sentence_count(text):
+    parts = [p for p in re.split(r"[.!?]+", text) if p.strip()]
+    return len(parts)
+
+
+def analyse(text, top=5, stopwords=()):
+    pass
+::solution
+import re
+from collections import Counter
+
+WORD = re.compile(r"[a-z]+(?:'[a-z]+)*")
+
+
+def words(text):
+    for match in WORD.finditer(text.lower()):
+        yield match.group()
+
+
+def sentence_count(text):
+    parts = [p for p in re.split(r"[.!?]+", text) if p.strip()]
+    return len(parts)
+
+
+def analyse(text, top=5, stopwords=()):
+    counts = Counter(words(text))
+    total = sum(counts.values())
+    letters = sum(len(w) * n for w, n in counts.items())
+    ignored = set(stopwords)
+    common = sorted(((w, n) for w, n in counts.items() if w not in ignored), key=lambda wn: (-wn[1], wn[0]))
+    return {
+        "words": total,
+        "unique": len(counts),
+        "sentences": sentence_count(text),
+        "average_length": round(letters / total, 1) if total else 0,
+        "longest": sorted(counts, key=lambda w: (-len(w), w))[:3],
+        "common": [[w, n] for w, n in common[:top]],
+    }
+::tests
+text = "The cat sat on the mat. The cat is fat! Is the mat flat?"
+r = analyse(text, top=3)
+assert r["words"] == 14 and r["unique"] == 8 and r["sentences"] == 3
+assert r["average_length"] == 2.9
+assert r["longest"] == ["flat", "cat", "fat"]
+assert r["common"] == [["the", 4], ["cat", 2], ["is", 2]]
+assert analyse(text, top=2, stopwords={"the", "is"})["common"] == [["cat", 2], ["mat", 2]]
+assert analyse("") == {"words": 0, "unique": 0, "sentences": 0, "average_length": 0, "longest": [], "common": []}
+::hints
+- Count once: `Counter(words(text))`; the total is the sum of the counts.
+- The average length weighs each word's length by its count.
+- Sort with tuple keys: `(-len(w), w)` for longest, `(-count, word)` for common.
+--- exercise code python
+::prompt
+**Step 3: the command-line interface.** Write `main(argv)` (the analyser is included) that behaves like `textstats <path> [--top N] [--json] [--stopwords]`:
+
+- parse the arguments with `argparse` (`--top` defaults to 5; `--stopwords` ignores the words in `STOPWORDS`);
+- read the file as UTF-8; if it doesn't exist, print `textstats: no such file: <path>` to **stderr** and return **1**;
+- with `--json`, print `json.dumps(result)`; otherwise print the report shown in the tests;
+- return **0** on success.
+::starter
+import argparse
+import json
+import re
+import sys
+from collections import Counter
+
+STOPWORDS = {"the", "a", "an", "and", "or", "of", "to", "in", "is", "it"}
+WORD = re.compile(r"[a-z]+(?:'[a-z]+)*")
+
+
+def words(text):
+    for match in WORD.finditer(text.lower()):
+        yield match.group()
+
+
+def sentence_count(text):
+    parts = [p for p in re.split(r"[.!?]+", text) if p.strip()]
+    return len(parts)
+
+
+def analyse(text, top=5, stopwords=()):
+    counts = Counter(words(text))
+    total = sum(counts.values())
+    letters = sum(len(w) * n for w, n in counts.items())
+    ignored = set(stopwords)
+    common = sorted(((w, n) for w, n in counts.items() if w not in ignored), key=lambda wn: (-wn[1], wn[0]))
+    return {
+        "words": total,
+        "unique": len(counts),
+        "sentences": sentence_count(text),
+        "average_length": round(letters / total, 1) if total else 0,
+        "longest": sorted(counts, key=lambda w: (-len(w), w))[:3],
+        "common": [[w, n] for w, n in common[:top]],
+    }
+
+
+def main(argv):
+    pass
+::solution
+import argparse
+import json
+import re
+import sys
+from collections import Counter
+
+STOPWORDS = {"the", "a", "an", "and", "or", "of", "to", "in", "is", "it"}
+WORD = re.compile(r"[a-z]+(?:'[a-z]+)*")
+
+
+def words(text):
+    for match in WORD.finditer(text.lower()):
+        yield match.group()
+
+
+def sentence_count(text):
+    parts = [p for p in re.split(r"[.!?]+", text) if p.strip()]
+    return len(parts)
+
+
+def analyse(text, top=5, stopwords=()):
+    counts = Counter(words(text))
+    total = sum(counts.values())
+    letters = sum(len(w) * n for w, n in counts.items())
+    ignored = set(stopwords)
+    common = sorted(((w, n) for w, n in counts.items() if w not in ignored), key=lambda wn: (-wn[1], wn[0]))
+    return {
+        "words": total,
+        "unique": len(counts),
+        "sentences": sentence_count(text),
+        "average_length": round(letters / total, 1) if total else 0,
+        "longest": sorted(counts, key=lambda w: (-len(w), w))[:3],
+        "common": [[w, n] for w, n in common[:top]],
+    }
+
+
+def build_parser():
+    parser = argparse.ArgumentParser(prog="textstats", description="Word statistics for a text file")
+    parser.add_argument("path")
+    parser.add_argument("--top", type=int, default=5)
+    parser.add_argument("--json", action="store_true")
+    parser.add_argument("--stopwords", action="store_true")
+    return parser
+
+
+def main(argv):
+    args = build_parser().parse_args(argv)
+    try:
+        with open(args.path, encoding="utf-8") as f:
+            text = f.read()
+    except FileNotFoundError:
+        print(f"textstats: no such file: {args.path}", file=sys.stderr)
+        return 1
+    result = analyse(text, top=args.top, stopwords=STOPWORDS if args.stopwords else ())
+    if args.json:
+        print(json.dumps(result))
+        return 0
+    print(f"{result['words']} words, {result['unique']} unique, {result['sentences']} sentences")
+    print(f"Average word length: {result['average_length']}")
+    print("Longest: " + ", ".join(result["longest"]))
+    print("Most common:")
+    for word, count in result["common"]:
+        print(f"  {word:<12}{count:>4}")
+    return 0
+::tests
+import contextlib as _cl, io as _io, json as _j, os as _os, tempfile as _tf
+_p = _os.path.join(_tf.mkdtemp(), "story.txt")
+with open(_p, "w", encoding="utf-8") as _f:
+    _f.write("The cat sat on the mat. The cat is fat! Is the mat flat?")
+def _run(argv):
+    out, err = _io.StringIO(), _io.StringIO()
+    with _cl.redirect_stdout(out), _cl.redirect_stderr(err):
+        code = main(argv)
+    return code, out.getvalue(), err.getvalue()
+code, out, err = _run([_p, "--top", "3"])
+assert code == 0 and err == ""
+assert out == "14 words, 8 unique, 3 sentences\nAverage word length: 2.9\nLongest: flat, cat, fat\nMost common:\n  the            4\n  cat            2\n  is             2\n", out
+code, out, _ = _run([_p, "--json", "--stopwords", "--top", "2"])
+assert code == 0 and _j.loads(out)["common"] == [["cat", 2], ["mat", 2]]
+code, out, err = _run([_os.path.join(_tf.mkdtemp(), "nope.txt")])
+assert code == 1 and out == "" and err.startswith("textstats: no such file: "), "errors go to stderr with exit code 1"
+::hints
+- Build the parser with `add_argument("path")`, `add_argument("--top", type=int, default=5)` and two `action="store_true"` flags; call `parse_args(argv)`.
+- On `FileNotFoundError`, print to `sys.stderr` and `return 1`.
+- The report's last lines use `f"  {word:<12}{count:>4}"`.
+--- cards
+Functional core, imperative shell :: Keep logic in pure, testable functions; keep I/O (files, printing, arguments) in a thin outer layer.
+argparse :: Parses command-line arguments: positional args, --options with types/defaults, store_true flags, automatic --help.
+stdout vs stderr :: Normal output to stdout; errors and diagnostics to stderr (print(..., file=sys.stderr)).
+Exit codes :: 0 means success, non-zero means failure: sys.exit(main(sys.argv[1:])).
+
+=== lesson py-whats-next | What's next after Python | 50
+You've completed a full Python course: from your first `print` to classes, design principles, generators, type hints, async code and two real projects. That's the foundation professional Python developers build on.
+
+## Keep the skills sharp
+
+- **Build things you care about.** A habit tracker, a script that renames your photos, a bot for your group chat, a dashboard of your running times. Projects you choose teach the most.
+- **Read other people's code.** Browse the source of the standard library (`collections`, `json`, `pathlib`), or small open-source projects on GitHub. You'll pick up idioms faster than from any course.
+- **Practise problem solving.** DevQuest's Code Dojo, and sites like Exercism and Advent of Code, keep your fundamentals fast.
+- **Use the professional tools** from Module 12 on your own machine: a virtual environment, Ruff, pytest and Git, from day one of every project.
+
+## Where Python can take you
+
+| Direction | Learn next |
+|---|---|
+| Web backends and APIs | HTTP and REST, **FastAPI** or **Django**, SQL databases, authentication |
+| Data analysis and science | **pandas**, NumPy, Matplotlib, Jupyter notebooks, statistics |
+| Machine learning and AI | scikit-learn, PyTorch, working with LLM APIs, evaluation |
+| Automation and DevOps | the shell, APIs of cloud services, Docker, CI/CD pipelines |
+| Security | networking, Linux, web vulnerabilities (OWASP), scripting tools |
+
+DevQuest's **career paths** turn each of these into a sequence of tracks and projects, and the **SQL**, **Git**, **Linux shell** and **Data structures & algorithms** tracks are valuable whichever direction you choose. When you're ready for a second language, **JavaScript** (for the web) or a compiled language like **Go** or **Java** will feel familiar: variables, loops, functions and classes work much the same way, and your understanding of how programs are designed transfers completely.
+
+📚 **Go deeper:** *Fluent Python* (2nd ed.) by Luciano Ramalho, for idiomatic, advanced Python; *Effective Python* (3rd ed.) by Brett Slatkin; *Architecture Patterns with Python* by Percival & Gregory; the Python documentation's "What's New" pages, to keep up with each release.
+--- quiz
+? You want to keep improving after this course. What's the most effective next step?
++ Build projects you care about, using the professional tools from Module 12
+- Re-read the lessons without writing code
+- Memorise the standard library
+- Wait until you feel ready
+> Building real things teaches what reading can't.
+? Which skills are useful whichever Python career direction you choose?
++ SQL, Git, the command line, and data structures & algorithms
+- Only machine learning
+- Only web design
+- None; each direction is completely separate
+> They're part of every developer's toolkit.
+--- cards
+Next steps :: Build projects, read good code, practise problems, and use professional tools (venv, Ruff, pytest, Git) from day one.

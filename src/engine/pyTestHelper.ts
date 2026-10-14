@@ -59,9 +59,23 @@ def __dq_set_stdin(text):
         return line
     _dq_builtins.input = _dq_input
 
+import os as _dq_os
+__dq_home = _dq_os.getcwd()
+
 def __dq_reset():
     # Runs share one interpreter: undo global state an earlier run may have left behind
     import sys
+    import importlib
+    try:
+        _dq_os.chdir(__dq_home)
+    except OSError:
+        pass
+    # Forget modules the learner wrote (helpers.py etc.), so a new run imports the new version
+    for name, module in list(sys.modules.items()):
+        path = getattr(module, '__file__', None) or ''
+        if path.startswith(__dq_home):
+            del sys.modules[name]
+    importlib.invalidate_caches()
     lg = sys.modules.get('logging')
     if lg is not None:
         root = lg.getLogger()
@@ -74,6 +88,43 @@ def __dq_reset():
                 logger.setLevel(lg.NOTSET)
                 logger.disabled = False
                 logger.propagate = True
+
+def __dq_async_source(src):
+    # asyncio.run() can't block inside a browser, but top-level await works here: so outside
+    # functions, run asyncio.run(x) as await (x). Line numbers stay the same.
+    if 'asyncio' not in src or 'run(' not in src:
+        return src
+    try:
+        tree = _dq_ast.parse(src)
+    except SyntaxError:
+        return src
+    spots = []
+    def visit(node, nested):
+        for child in _dq_ast.iter_child_nodes(node):
+            if (not nested and isinstance(child, _dq_ast.Call) and isinstance(child.func, _dq_ast.Attribute)
+                    and child.func.attr == 'run' and isinstance(child.func.value, _dq_ast.Name)
+                    and child.func.value.id == 'asyncio' and len(child.args) == 1 and not child.keywords):
+                spots.append((child.lineno, child.col_offset, child.func.end_col_offset))
+            visit(child, nested or isinstance(child, (_dq_ast.FunctionDef, _dq_ast.AsyncFunctionDef, _dq_ast.Lambda, _dq_ast.ClassDef)))
+    visit(tree, False)
+    lines = src.splitlines(keepends=True)
+    for lineno, start, end in sorted(spots, reverse=True):
+        raw = lines[lineno - 1].encode('utf-8')    # AST columns count UTF-8 bytes
+        lines[lineno - 1] = (raw[:start] + b'await ' + raw[end:]).decode('utf-8')
+    return ''.join(lines)
+
+def __dq_patch_asyncio():
+    import asyncio
+    if getattr(asyncio.run, '_dq', False):
+        return
+    def run(main, *, debug=None):
+        if hasattr(main, 'close'):
+            main.close()
+        raise RuntimeError('In DevQuest, asyncio.run() works at the top level of your program, like asyncio.run(main()), but not inside a function.')
+    run._dq = True
+    asyncio.run = run
+
+__dq_patch_asyncio()
 
 def __dq_prepare(stdin):
     __dq_reset()

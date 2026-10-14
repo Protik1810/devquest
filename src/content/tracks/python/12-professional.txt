@@ -1,0 +1,1929 @@
+=== module Module 12 · Professional Python
+
+=== lesson py-functional | Functional tools: lambda, map, itertools | 100
+Python isn't a purely functional language, but it borrows the best functional ideas: functions as values, small pure functions, and building results by **transforming** data rather than mutating it.
+
+## lambda: tiny anonymous functions
+
+`lambda` makes a function in a single expression, with no name and no `return` keyword:
+
+```python
+square = lambda x: x * x          # same as: def square(x): return x * x
+square(5)                         # 25
+```
+
+Its main use is a short function passed straight to another function:
+
+```python
+people = [{"name": "Ada", "age": 36}, {"name": "Alan", "age": 41}, {"name": "Grace", "age": 36}]
+sorted(people, key=lambda p: p["age"])                     # by age
+sorted(people, key=lambda p: (-p["age"], p["name"]))       # age descending, then name ascending
+max(people, key=lambda p: p["age"])["name"]                 # 'Alan'
+```
+
+The tuple key is a neat trick: tuples compare item by item, and negating a number reverses its order. If a lambda needs more than one simple expression, write a normal `def` with a good name.
+
+## map and filter
+
+```python
+list(map(str.upper, ["a", "b"]))              # ['A', 'B']: apply a function to every item
+list(filter(lambda n: n % 2, range(6)))       # [1, 3, 5]: keep items that pass a test
+```
+
+Both return **lazy iterators** (hence the `list(...)`). In Python, a comprehension is usually clearer: `[s.upper() for s in items]`, `[n for n in nums if n % 2]`. Use `map` when you already have a named function.
+
+## The operator module
+
+`operator` provides ready-made functions for operators and lookups, often clearer than a lambda:
+
+```python
+from operator import itemgetter, attrgetter, mul
+sorted(people, key=itemgetter("age"))          # like lambda p: p["age"]
+sorted(pairs, key=itemgetter(1))               # sort tuples by their second item
+sorted(dogs, key=attrgetter("age", "name"))    # by attributes
+```
+
+## functools: reduce and partial
+
+```python
+from functools import reduce, partial
+
+reduce(mul, [1, 2, 3, 4])           # ((1*2)*3)*4 = 24: combine items pairwise into one value
+
+def power(base, exp):
+    return base ** exp
+square = partial(power, exp=2)      # a new function with some arguments fixed
+square(9)                           # 81
+```
+
+`sum`, `max`, `any` and `"".join` cover most uses of `reduce`; reach for it only when no built-in fits.
+
+## itertools: power tools for iteration
+
+| Tool | Does | Example |
+|---|---|---|
+| `count(start)` | 10, 11, 12, ... forever | ids |
+| `islice(it, n)` | the first n items of any iterable | `islice(count(), 3)` → 0, 1, 2 |
+| `chain(a, b)` | one sequence after another | `chain([1], [2, 3])` → 1, 2, 3 |
+| `accumulate(xs)` | running totals | `accumulate([1, 2, 3])` → 1, 3, 6 |
+| `groupby(xs, key)` | runs of **consecutive** items with the same key | needs the data sorted by that key |
+| `product(a, b)` | every pair | nested loops in one call |
+| `combinations(xs, 2)` | every pair, order ignored | `('a','b'), ('a','c'), ('b','c')` |
+| `permutations(xs, 2)` | every ordered pair | |
+| `pairwise(xs)` | neighbours: (x0, x1), (x1, x2), ... | Python 3.10+ |
+
+```python
+from itertools import groupby
+words = sorted(["apple", "bob", "avocado", "banana"])
+for letter, group in groupby(words, key=lambda w: w[0]):
+    print(letter, list(group))       # a ['apple', 'avocado'], then b ['banana', 'bob']
+```
+
+## Why functional style?
+
+Small **pure** functions and data transformations are easy to test, easy to combine, and safe to run in parallel. The goal isn't to avoid loops and classes, but to reach for a transformation when it says clearly what you mean.
+
+📚 **Go deeper:** Python "Functional Programming HOWTO" and "Sorting Techniques"; Python Library Reference, `itertools`, `functools`, `operator`; *Fluent Python* (2nd ed.), chapter 7 "Functions as First-Class Objects".
+--- quiz
+? What is `(lambda a, b: a * b)(3, 4)`?
++ `12`
+- `7`
+- a function
+- An error
+> The lambda is defined and called immediately.
+? What does `sorted(["bb", "a", "ccc"], key=lambda s: -len(s))` return?
++ `['ccc', 'bb', 'a']`
+- `['a', 'bb', 'ccc']`
+- `[-3, -2, -1]`
+- An error
+> Negating the length sorts longest first.
+? What is `list(accumulate([2, 3, 4]))` (from itertools)?
+- `[2, 3, 4]`
++ `[2, 5, 9]`
+- `[9]`
+- `[2, 6, 24]`
+> Running totals.
+? Why might `groupby` give the group `a` twice?
++ The data wasn't sorted, and `groupby` only groups consecutive items
+- `groupby` always does that
+- The key function was wrong
+- Letters can't be keys
+> Sort by the same key first.
+? What does `partial(int, base=2)("101")` return?
++ `5`
+- `101`
+- `"101"`
+- An error
+> `partial` fixed `base=2`, so it parses binary.
+--- exercise code python
+::prompt
+Use `sorted`/`max`/`min` with **key functions** (lambdas or `operator.itemgetter`). `people` are dicts with `"name"` and `"age"`:
+
+- `by_age_then_name(people)`: oldest first, and equal ages in alphabetical order;
+- `youngest(people)`: the name of the youngest person (the first in the list on a tie), or `None` for an empty list;
+- `names_in_range(people, low, high)`: the names of people aged `low` to `high` inclusive, alphabetically.
+::starter
+def by_age_then_name(people):
+    pass
+
+
+def youngest(people):
+    pass
+
+
+def names_in_range(people, low, high):
+    pass
+::solution
+def by_age_then_name(people):
+    return sorted(people, key=lambda p: (-p["age"], p["name"]))
+
+
+def youngest(people):
+    if not people:
+        return None
+    return min(people, key=lambda p: p["age"])["name"]
+
+
+def names_in_range(people, low, high):
+    return sorted(p["name"] for p in people if low <= p["age"] <= high)
+::tests
+crew = [{"name": "Grace", "age": 36}, {"name": "Alan", "age": 41}, {"name": "Ada", "age": 36}, {"name": "Tim", "age": 29}, {"name": "Bo", "age": 29}]
+assert [p["name"] for p in by_age_then_name(crew)] == ["Alan", "Ada", "Grace", "Bo", "Tim"]
+assert youngest(crew) == "Tim"
+assert youngest([]) is None
+assert names_in_range(crew, 30, 40) == ["Ada", "Grace"]
+assert names_in_range(crew, 50, 60) == []
+assert crew[0]["name"] == "Grace", "don't reorder the original list"
+::hints
+- A tuple key `(-p["age"], p["name"])` sorts by age descending, then name ascending.
+- `min(people, key=lambda p: p["age"])` finds the youngest; ties keep the first.
+--- exercise code python
+::prompt
+Use `itertools`:
+
+- `running_balance(start, transactions)`: a list of the balance after each transaction (use `accumulate` with `initial=start`, then drop the first value);
+- `pairs_summing_to(numbers, target)`: every pair `(a, b)` from `combinations` whose sum is `target`, in the order `combinations` produces them;
+- `group_by_first_letter(words)`: a dict from first letter (lowercase) to the list of words, using `sorted` + `groupby`.
+::starter
+from itertools import accumulate, combinations, groupby
+
+
+def running_balance(start, transactions):
+    pass
+
+
+def pairs_summing_to(numbers, target):
+    pass
+
+
+def group_by_first_letter(words):
+    pass
+::solution
+from itertools import accumulate, combinations, groupby
+
+
+def running_balance(start, transactions):
+    return list(accumulate(transactions, initial=start))[1:]
+
+
+def pairs_summing_to(numbers, target):
+    return [pair for pair in combinations(numbers, 2) if sum(pair) == target]
+
+
+def group_by_first_letter(words):
+    key = lambda w: w[0].lower()
+    return {letter: list(group) for letter, group in groupby(sorted(words, key=key), key=key)}
+::tests
+assert running_balance(100, [20, -50, 10]) == [120, 70, 80]
+assert running_balance(5, []) == []
+assert pairs_summing_to([1, 4, 3, 2, 5], 6) == [(1, 5), (4, 2)]
+assert pairs_summing_to([1, 2], 10) == []
+assert group_by_first_letter(["banana", "Apple", "avocado", "blueberry", "cherry"]) == {"a": ["Apple", "avocado"], "b": ["banana", "blueberry"], "c": ["cherry"]}
+::hints
+- `accumulate(transactions, initial=start)` begins with `start`; slice it off with `[1:]`.
+- Filter `combinations(numbers, 2)` with a comprehension.
+- Sort by the same key you group by, or `groupby` will split groups.
+--- exercise code python
+::prompt
+Use `functools`:
+
+- `product(numbers)`: multiply all numbers together with `reduce` and `operator.mul` (the product of no numbers is 1, so pass `1` as the initial value);
+- `compose(*funcs)`: return a **new function** that applies the functions **right to left**, so `compose(f, g)(x) == f(g(x))`; with no functions it returns its input unchanged;
+- `celsius_to_fahrenheit` made with `partial` from the given `convert(value, scale, offset)` (F = C × 1.8 + 32).
+::starter
+from functools import reduce, partial
+from operator import mul
+
+
+def convert(value, scale, offset):
+    return value * scale + offset
+::solution
+from functools import reduce, partial
+from operator import mul
+
+
+def convert(value, scale, offset):
+    return value * scale + offset
+
+
+def product(numbers):
+    return reduce(mul, numbers, 1)
+
+
+def compose(*funcs):
+    def composed(x):
+        return reduce(lambda acc, f: f(acc), reversed(funcs), x)
+    return composed
+
+
+celsius_to_fahrenheit = partial(convert, scale=1.8, offset=32)
+::tests
+assert product([2, 3, 4]) == 24
+assert product([]) == 1
+inc = lambda x: x + 1
+double = lambda x: x * 2
+assert compose(inc, double)(5) == 11
+assert compose(double, inc)(5) == 12
+assert compose()(7) == 7
+assert celsius_to_fahrenheit(100) == 212
+assert celsius_to_fahrenheit(-40) == -40
+import functools as _ft
+assert isinstance(celsius_to_fahrenheit, _ft.partial), "make it with functools.partial"
+::hints
+- `reduce(mul, numbers, 1)`: the third argument is the starting value.
+- `compose` returns an inner function that feeds `x` through `reversed(funcs)` one at a time.
+- `partial(convert, scale=1.8, offset=32)` fixes two of the three arguments.
+--- cards
+lambda :: An anonymous one-expression function: lambda x: x * 2. Best as a short key or callback.
+Tuple sort keys :: key=lambda p: (-p.age, p.name) sorts by age descending, then name ascending.
+map / filter :: Lazy: apply a function to every item / keep items passing a test. Comprehensions are often clearer.
+itemgetter / attrgetter :: Key functions from operator: itemgetter("age"), attrgetter("name").
+reduce / partial :: reduce combines items pairwise into one value; partial fixes some arguments of a function.
+itertools highlights :: count, islice, chain, accumulate, groupby (sort first!), product, combinations, permutations, pairwise.
+
+=== lesson py-closures-decorators | Closures and decorators | 105
+Two of Python's most elegant features grow from one fact: **functions are objects** that can be created inside other functions and returned.
+
+## Closures
+
+A function defined inside another can use the outer function's variables, and it **keeps them** even after the outer function has finished:
+
+```python
+def make_multiplier(n):
+    def multiply(x):
+        return x * n             # n comes from the enclosing function
+    return multiply
+
+double = make_multiplier(2)
+triple = make_multiplier(3)
+double(10), triple(10)           # 20 30
+```
+
+`multiply` "closes over" `n`; the combination of a function and the variables it remembers is a **closure**. Each call to `make_multiplier` creates a new closure with its own `n`. This is the **E** (enclosing) in the LEGB rule from Module 5.
+
+## nonlocal: changing an enclosing variable
+
+Reading an enclosing variable is automatic, but **assigning** to it would create a new local. `nonlocal` says "I mean the enclosing one":
+
+```python
+def make_counter():
+    count = 0
+    def counter():
+        nonlocal count
+        count += 1
+        return count
+    return counter
+
+c = make_counter()
+c(), c(), c()          # 1 2 3
+```
+
+A closure is like a tiny object with one method and private state.
+
+## Decorators: wrapping functions
+
+A **decorator** is a function that takes a function and returns a new function, usually a wrapper that adds behaviour before or after calling the original:
+
+```python
+import functools
+import time
+
+def timed(func):
+    @functools.wraps(func)                 # keep func's name and docstring
+    def wrapper(*args, **kwargs):          # accept any arguments...
+        start = time.perf_counter()
+        result = func(*args, **kwargs)     # ...and pass them on
+        print(f"{func.__name__} took {time.perf_counter() - start:.3f}s")
+        return result
+    return wrapper
+
+@timed
+def slow_sum(n):
+    return sum(range(n))
+```
+
+The `@timed` line is just shorthand for `slow_sum = timed(slow_sum)`. Every call to `slow_sum` now goes through `wrapper`.
+
+Three details make decorators correct and reusable:
+
+1. `*args, **kwargs` let the wrapper accept and forward **any** arguments.
+2. The wrapper must **return** the original's result, or the decorated function returns `None`.
+3. `@functools.wraps(func)` copies the name and docstring, so `slow_sum.__name__` is still `"slow_sum"` (and help, debuggers and logs stay sensible).
+
+## Decorators with arguments
+
+`@retry(times=3)` needs one more layer: a function that takes the arguments and **returns a decorator**:
+
+```python
+def retry(times):
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            for attempt in range(1, times + 1):
+                try:
+                    return func(*args, **kwargs)
+                except ConnectionError:
+                    if attempt == times:
+                        raise
+        return wrapper
+    return decorator
+
+@retry(times=3)
+def download(url): ...
+```
+
+## Caching: lru_cache
+
+The standard library's most useful decorator remembers results (**memoization**):
+
+```python
+from functools import lru_cache
+
+@lru_cache(maxsize=None)
+def fib(n):
+    return n if n < 2 else fib(n - 1) + fib(n - 2)
+
+fib(100)            # instant: each value is computed once
+fib.cache_info()    # hits, misses, size
+```
+
+Remember Module 5's exponentially slow `fib`? One line fixes it. Only cache **pure** functions whose arguments are hashable. (`functools.cache` is the unlimited shortcut.)
+
+## Decorators you'll meet everywhere
+
+`@property`, `@classmethod`, `@staticmethod`, `@dataclass` and `@abstractmethod` are all decorators. Web frameworks register URL handlers with them (`@app.get("/users")` in FastAPI, `@app.route` in Flask), and pytest uses `@pytest.fixture` and `@pytest.mark.parametrize`. Decorators can stack; the one nearest the function is applied first.
+
+📚 **Go deeper:** Python Glossary, "decorator" and "closure"; PEP 318 (decorators) and PEP 3104 (nonlocal); Real Python, "Primer on Python Decorators"; Python Library Reference, `functools.wraps`, `lru_cache`.
+--- quiz
+? What does this print?
+```python
+def outer():
+    x = "hi"
+    def inner():
+        return x * 2
+    return inner
+
+f = outer()
+print(f())
+```
++ `hihi`
+- `hi`
+- An error: x no longer exists
+- `None`
+> The closure keeps `x` alive after `outer` returns.
+? What is `@my_decorator` above `def f(): ...` equivalent to?
++ `f = my_decorator(f)`
+- `my_decorator = f(my_decorator)`
+- `f = my_decorator`
+- `my_decorator(f())`
+> The decorator receives the function and its return value replaces it.
+? Why does a decorator's wrapper use `*args, **kwargs`?
+- To make it faster
++ So it can accept and forward any arguments the decorated function takes
+- It's required syntax
+- To ignore the arguments
+> One decorator then works for every function.
+? What happens if a wrapper calls `func(*args, **kwargs)` but forgets to `return` the result?
+- Nothing changes
++ The decorated function now always returns `None`
+- An error is raised
+- The function runs twice
+> Always `return func(...)` (or the result).
+? What does `@functools.wraps(func)` do?
++ Copies the original function's name, docstring and other metadata onto the wrapper
+- Makes the function run faster
+- Prevents the function from being decorated twice
+- Catches exceptions
+> Without it, every decorated function would be called "wrapper".
+? Which functions are safe to `@lru_cache`?
++ Pure functions with hashable arguments
+- Functions that print or read input
+- Functions taking lists
+- Any function
+> Caching side effects or unhashable arguments doesn't work.
+--- exercise code python
+::prompt
+Write three **closures**:
+
+- `make_counter(start=0)` returns a function that increases the count by one and returns it each time it's called;
+- `make_multiplier(n)` returns a function that multiplies its argument by `n`;
+- `make_averager()` returns a function `add(value)` that records the value and returns the running average of all values so far.
+
+Each call to a `make_...` function must create independent state.
+::starter
+def make_counter(start=0):
+    pass
+
+
+def make_multiplier(n):
+    pass
+
+
+def make_averager():
+    pass
+::solution
+def make_counter(start=0):
+    count = start
+    def counter():
+        nonlocal count
+        count += 1
+        return count
+    return counter
+
+
+def make_multiplier(n):
+    def multiply(x):
+        return x * n
+    return multiply
+
+
+def make_averager():
+    values = []
+    def add(value):
+        values.append(value)
+        return sum(values) / len(values)
+    return add
+::tests
+c1, c2 = make_counter(), make_counter(10)
+assert (c1(), c1(), c1()) == (1, 2, 3)
+assert c2() == 11, "each counter has its own count"
+assert c1() == 4
+assert make_multiplier(3)(7) == 21 and make_multiplier(-1)(5) == -5
+avg = make_averager()
+assert avg(10) == 10 and avg(20) == 15 and avg(0) == 10
+other = make_averager()
+assert other(4) == 4
+assert c1.__closure__ is not None, "use a closure (an inner function), not a global"
+::hints
+- Define an inner function and `return` it (without calling it).
+- To change an enclosing variable inside the inner function, declare it `nonlocal`.
+- Appending to an enclosing list doesn't need `nonlocal` (it's not an assignment).
+--- exercise code python
+::prompt
+Write a decorator `count_calls` that counts how many times the decorated function is called, storing the number in an attribute `calls` on the wrapper (starting at 0). The decorated function must still return its normal result, accept any arguments, and keep its `__name__` and docstring (use `functools.wraps`).
+::starter
+import functools
+
+
+def count_calls(func):
+    pass
+::solution
+import functools
+
+
+def count_calls(func):
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        wrapper.calls += 1
+        return func(*args, **kwargs)
+    wrapper.calls = 0
+    return wrapper
+::tests
+@count_calls
+def greet(name, punctuation="!"):
+    """Return a greeting."""
+    return f"Hello, {name}{punctuation}"
+assert greet.calls == 0
+assert greet("Ada") == "Hello, Ada!"
+assert greet("Alan", punctuation="?") == "Hello, Alan?"
+assert greet.calls == 2
+assert greet.__name__ == "greet" and greet.__doc__ == "Return a greeting.", "use functools.wraps"
+@count_calls
+def other():
+    return 1
+other()
+assert other.calls == 1 and greet.calls == 2, "each decorated function has its own count"
+::hints
+- Inside `count_calls`, define `wrapper(*args, **kwargs)` decorated with `@functools.wraps(func)`.
+- Functions are objects, so you can set an attribute: `wrapper.calls = 0` before returning it, and `wrapper.calls += 1` inside.
+- Don't forget `return func(*args, **kwargs)`.
+--- exercise code python
+::prompt
+Write a decorator **with arguments**, `retry(times, exceptions=(Exception,))`: the decorated function is called up to `times` times; if it raises one of `exceptions`, it's called again, and after the last failed attempt the exception is re-raised. Other exceptions are raised immediately, without retrying.
+::starter
+import functools
+
+
+def retry(times, exceptions=(Exception,)):
+    pass
+::solution
+import functools
+
+
+def retry(times, exceptions=(Exception,)):
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            for attempt in range(1, times + 1):
+                try:
+                    return func(*args, **kwargs)
+                except exceptions:
+                    if attempt == times:
+                        raise
+        return wrapper
+    return decorator
+::tests
+attempts = []
+@retry(times=3, exceptions=(ConnectionError,))
+def flaky(succeed_on):
+    attempts.append(1)
+    if len(attempts) < succeed_on:
+        raise ConnectionError("network blip")
+    return "data"
+assert flaky(3) == "data" and len(attempts) == 3
+attempts.clear()
+try:
+    flaky(5)
+except ConnectionError:
+    assert len(attempts) == 3, "stop after 3 attempts"
+else:
+    raise AssertionError("after the last attempt, re-raise the exception")
+calls = []
+@retry(times=5, exceptions=(ConnectionError,))
+def broken():
+    calls.append(1)
+    raise ValueError("a bug, not a network problem")
+try:
+    broken()
+except ValueError:
+    assert len(calls) == 1, "don't retry exceptions that aren't listed"
+else:
+    raise AssertionError("ValueError should propagate")
+assert flaky.__name__ == "flaky"
+::hints
+- Three layers: `retry(...)` returns `decorator(func)`, which returns `wrapper(*args, **kwargs)`.
+- In the wrapper, loop over the attempts; `return` on success; in `except exceptions:`, re-raise only on the last attempt.
+--- exercise code python
+::prompt
+Use `functools.lru_cache` to make recursive counting fast:
+
+- `fib(n)`: the n-th Fibonacci number (`fib(0) == 0`, `fib(1) == 1`);
+- `ways_to_climb(n)`: the number of ways to climb `n` stairs taking 1 or 2 steps at a time (`ways_to_climb(0) == 1`, `ways_to_climb(1) == 1`).
+
+Both must be **recursive** and handle `n = 200` instantly.
+::starter
+def fib(n):
+    if n < 2:
+        return n
+    return fib(n - 1) + fib(n - 2)
+
+
+def ways_to_climb(n):
+    pass
+::solution
+from functools import lru_cache
+
+
+@lru_cache(maxsize=None)
+def fib(n):
+    if n < 2:
+        return n
+    return fib(n - 1) + fib(n - 2)
+
+
+@lru_cache(maxsize=None)
+def ways_to_climb(n):
+    if n <= 1:
+        return 1
+    return ways_to_climb(n - 1) + ways_to_climb(n - 2)
+::tests
+assert hasattr(fib, "cache_info") and hasattr(ways_to_climb, "cache_info"), "decorate both fib and ways_to_climb with @lru_cache"
+assert [fib(i) for i in range(10)] == [0, 1, 1, 2, 3, 5, 8, 13, 21, 34]
+assert fib(200) == 280571172992510140037611932413038677189525
+assert [ways_to_climb(i) for i in range(6)] == [1, 1, 2, 3, 5, 8]
+assert ways_to_climb(200) == fib(201)
+::hints
+- Put `@lru_cache(maxsize=None)` on the line above each `def`.
+- To climb n stairs, the last move was 1 step (from n - 1) or 2 steps (from n - 2).
+--- cards
+Closure :: An inner function plus the enclosing variables it remembers, even after the outer function returns.
+nonlocal :: Lets an inner function assign to a variable of the enclosing function.
+Decorator :: A function taking a function and returning a replacement (usually a wrapper). @dec above def f means f = dec(f).
+functools.wraps :: Copies the wrapped function's name and docstring onto the wrapper.
+Decorator with arguments :: Three layers: dec(args) returns decorator(func), which returns wrapper(*args, **kwargs).
+lru_cache :: Memoizes a pure function's results by argument; turns exponential recursion like fib into linear.
+
+=== lesson py-iterators-generators | Generators and lazy evaluation | 105
+In Module 10 you wrote iterators as classes with `__iter__` and `__next__`. **Generators** do the same with a fraction of the code, and they unlock a powerful style: **lazy** processing, where values are produced only when needed.
+
+## yield
+
+A function containing `yield` is a **generator function**. Calling it doesn't run its body; it returns a **generator** object, which is an iterator:
+
+```python
+def countdown(n):
+    while n > 0:
+        yield n          # hand out a value and PAUSE here
+        n -= 1
+
+gen = countdown(3)
+next(gen)        # 3   runs until the first yield
+next(gen)        # 2   resumes after the yield, runs to the next one
+list(gen)        # [1] the rest
+for n in countdown(2):
+    print(n)     # 2, 1
+```
+
+Each `yield` hands out a value and **freezes** the function, local variables and all, until the next value is requested. When the function ends, the generator raises `StopIteration` for you. Compare that with the `Countdown` class from Module 10: same behaviour, a third of the code.
+
+## Lazy means memory-friendly
+
+```python
+squares_list = [n * n for n in range(10_000_000)]    # builds 10 million values in memory first
+squares_gen = (n * n for n in range(10_000_000))     # a generator expression: computes on demand
+sum(squares_gen)                                     # uses almost no memory
+```
+
+Laziness also makes **infinite** sequences possible:
+
+```python
+def naturals():
+    n = 1
+    while True:
+        yield n
+        n += 1
+
+from itertools import islice
+list(islice(naturals(), 5))     # [1, 2, 3, 4, 5]: take only what you need
+```
+
+## Pipelines
+
+Generators chain into **pipelines**, where each stage pulls items from the previous one, one at a time. This is how you process a 50 GB log file on a laptop:
+
+```python
+def read_lines(path):
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            yield line.rstrip("\n")
+
+def errors(lines):
+    for line in lines:
+        if "[ERROR]" in line:
+            yield line
+
+def messages(lines):
+    for line in lines:
+        yield line.split("] ", 1)[1]
+
+for msg in messages(errors(read_lines("server.log"))):
+    print(msg)
+```
+
+Only one line is in memory at a time, and each stage is a small, testable function.
+
+## yield from
+
+`yield from iterable` yields every item of another iterable, which is perfect for recursion:
+
+```python
+def flatten(items):
+    for x in items:
+        if isinstance(x, list):
+            yield from flatten(x)     # hand out everything the inner call produces
+        else:
+            yield x
+
+list(flatten([1, [2, [3, 4]], 5]))    # [1, 2, 3, 4, 5]
+```
+
+## Generators are one-shot
+
+A generator, like any iterator, is **used up** after one pass: looping over it again yields nothing. If you need the values twice, store them in a list, or call the generator function again.
+
+## Context managers from generators
+
+`contextlib.contextmanager` turns a generator into a context manager: code before the `yield` is the setup, code after it the cleanup, and `try`/`finally` makes the cleanup run even on errors:
+
+```python
+from contextlib import contextmanager
+
+@contextmanager
+def changed_directory(path):
+    import os
+    old = os.getcwd()
+    os.chdir(path)
+    try:
+        yield path               # the value for "as"
+    finally:
+        os.chdir(old)            # always restore
+
+with changed_directory("/tmp"):
+    ...
+```
+
+That's usually much shorter than writing a class with `__enter__` and `__exit__`.
+
+📚 **Go deeper:** Python Tutorial, sections 9.9–9.10 "Generators" and "Generator Expressions"; David Beazley, "Generator Tricks for Systems Programmers"; PEP 255 (simple generators) and PEP 380 (yield from); Python Library Reference, `contextlib`.
+--- quiz
+? What does calling a generator function, `countdown(3)`, do?
+- Runs the whole function and returns a list
++ Returns a generator object without running the body yet
+- Returns the first value, 3
+- Raises `StopIteration`
+> The body runs only as values are requested.
+? What does this print?
+```python
+def gen():
+    yield 1
+    yield 2
+
+g = gen()
+print(list(g), list(g))
+```
++ `[1, 2] []`
+- `[1, 2] [1, 2]`
+- `[1] [2]`
+- An error
+> The generator is used up after the first pass.
+? What's the difference between `[x * x for x in data]` and `(x * x for x in data)`?
++ The first builds a whole list now; the second produces values lazily, one at a time
+- None
+- The second is a tuple
+- The first is lazy
+> Parentheses make a generator expression.
+? What does `yield from inner()` do?
+- Returns the generator `inner()` as one value
++ Yields every value that `inner()` produces
+- Calls `inner` once and stops
+- Raises an error inside generators
+> It delegates to another iterable.
+? Why can generator pipelines process files bigger than your computer's memory?
++ Each stage pulls one item at a time, so only a little data is in memory at once
+- Generators compress data
+- Python stores the file in the cloud
+- They can't
+> Laziness is the key.
+--- exercise code python
+::prompt
+Write generator functions:
+
+- `countdown(n)` yields `n, n-1, ..., 1`;
+- `fibonacci()` yields the Fibonacci numbers `0, 1, 1, 2, 3, 5, ...` **forever**;
+- `take(n, iterable)` returns a **list** of the first `n` items of any iterable (use `itertools.islice`), so `take(5, fibonacci())` works.
+::starter
+from itertools import islice
+
+
+def countdown(n):
+    pass
+
+
+def fibonacci():
+    pass
+
+
+def take(n, iterable):
+    pass
+::solution
+from itertools import islice
+
+
+def countdown(n):
+    while n > 0:
+        yield n
+        n -= 1
+
+
+def fibonacci():
+    a, b = 0, 1
+    while True:
+        yield a
+        a, b = b, a + b
+
+
+def take(n, iterable):
+    return list(islice(iterable, n))
+::tests
+import types as _t
+assert isinstance(countdown(3), _t.GeneratorType), "countdown should be a generator function (use yield)"
+assert list(countdown(3)) == [3, 2, 1]
+assert list(countdown(0)) == []
+assert take(10, fibonacci()) == [0, 1, 1, 2, 3, 5, 8, 13, 21, 34]
+assert take(3, "abcdef") == ["a", "b", "c"]
+g = fibonacci()
+assert take(3, g) == [0, 1, 1] and take(3, g) == [2, 3, 5], "a generator continues where it stopped"
+::hints
+- Use `yield` inside a loop; the generator pauses at each `yield`.
+- `fibonacci` loops `while True:`, which is fine for a generator because callers take only what they need.
+- `list(islice(iterable, n))` takes the first `n` items.
+--- exercise code python
+::prompt
+Build a lazy log-processing **pipeline** from three generator functions:
+
+- `parse(lines)` yields `(level, message)` for lines like `"[ERROR] Disk full"` (skip lines that don't start with `[`);
+- `only(level, records)` yields the records with that level;
+- `messages(records)` yields just the messages.
+
+Each stage must pull items **one at a time** from the previous one (no lists in between), so the pipeline stops reading early when only the first results are needed.
+::starter
+def parse(lines):
+    pass
+
+
+def only(level, records):
+    pass
+
+
+def messages(records):
+    pass
+::solution
+def parse(lines):
+    for line in lines:
+        if line.startswith("["):
+            level, message = line[1:].split("] ", 1)
+            yield level, message
+
+
+def only(level, records):
+    for rec in records:
+        if rec[0] == level:
+            yield rec
+
+
+def messages(records):
+    for _, message in records:
+        yield message
+::tests
+log = ["[INFO] Started", "garbage", "[ERROR] Disk full", "[WARN] Slow", "[ERROR] Disk still full", "[ERROR] Giving up"]
+assert list(messages(only("ERROR", parse(log)))) == ["Disk full", "Disk still full", "Giving up"]
+assert list(parse(["[INFO] a] b"])) == [("INFO", "a] b")]
+_read = []
+def _source():
+    for line in log:
+        _read.append(line)
+        yield line
+first = next(messages(only("ERROR", parse(_source()))))
+assert first == "Disk full"
+assert len(_read) == 3, f"the pipeline should read only as far as needed, but it read {len(_read)} lines"
+::hints
+- Each stage is a `for` loop over its input that `yield`s output items; no lists.
+- In `parse`, `line[1:].split("] ", 1)` separates the level from the message.
+--- exercise code python
+::prompt
+Write:
+
+- `chunked(iterable, size)`, a generator yielding **lists** of up to `size` items (the last chunk may be shorter);
+- `flatten(items)`, a **recursive** generator that yields every non-list value from arbitrarily nested lists, using `yield from`;
+- `temporary_attr(obj, name, value)`, a context manager built with `@contextmanager` that sets `obj.name = value` and **restores** the old value afterwards, even if the `with` block raises.
+::starter
+from contextlib import contextmanager
+
+
+def chunked(iterable, size):
+    pass
+
+
+def flatten(items):
+    pass
+::solution
+from contextlib import contextmanager
+
+
+def chunked(iterable, size):
+    chunk = []
+    for item in iterable:
+        chunk.append(item)
+        if len(chunk) == size:
+            yield chunk
+            chunk = []
+    if chunk:
+        yield chunk
+
+
+def flatten(items):
+    for x in items:
+        if isinstance(x, list):
+            yield from flatten(x)
+        else:
+            yield x
+
+
+@contextmanager
+def temporary_attr(obj, name, value):
+    old = getattr(obj, name)
+    setattr(obj, name, value)
+    try:
+        yield obj
+    finally:
+        setattr(obj, name, old)
+::tests
+assert list(chunked(range(7), 3)) == [[0, 1, 2], [3, 4, 5], [6]]
+assert list(chunked([], 2)) == []
+assert list(chunked("abcd", 2)) == [["a", "b"], ["c", "d"]]
+assert list(flatten([1, [2, [3, [4]]], [], 5])) == [1, 2, 3, 4, 5]
+class _Cfg:
+    debug = False
+cfg = _Cfg()
+with temporary_attr(cfg, "debug", True):
+    assert cfg.debug is True
+assert cfg.debug is False
+try:
+    with temporary_attr(cfg, "debug", True):
+        raise RuntimeError("boom")
+except RuntimeError:
+    pass
+assert cfg.debug is False, "restore the value even when the block raises"
+::hints
+- `chunked`: collect items into a list; yield it when it's full, and yield what's left at the end.
+- `flatten`: for nested lists, `yield from flatten(x)`.
+- In the context manager, put `yield` inside `try:` and the restore in `finally:`.
+--- cards
+Generator function :: A function with yield; calling it returns a generator that runs lazily, pausing at each yield.
+Generator expression :: (x * x for x in data): like a list comprehension, but lazy.
+Lazy evaluation :: Values are computed only when requested; enables infinite sequences and processing huge files.
+yield from :: Yields every item of another iterable; handy in recursive generators.
+One-shot iterators :: Generators are used up after one pass; store results or create a new generator to iterate again.
+@contextmanager :: Turns a generator into a context manager: setup before yield, cleanup after (in finally).
+
+=== lesson py-typing | Type hints | 100
+Python is dynamically typed: variables don't have fixed types. But since Python 3.5 you can **annotate** the types you intend, and tools check them for you before your code even runs. Most professional Python code today uses type hints.
+
+```python
+def greet(name: str, times: int = 1) -> str:
+    return ", ".join([f"Hello {name}"] * times)
+
+count: int = 0
+```
+
+- `name: str` annotates a parameter; `-> str` annotates the return value; `count: int` annotates a variable.
+- Python itself **does not enforce** hints at runtime: `greet(42)` still runs. Hints are for people and tools.
+
+## Why bother?
+
+- **Catch bugs early.** A type checker like **mypy** or **pyright** reads your code and reports mistakes, such as passing a string where a number is expected or forgetting that a function can return `None`, without running anything.
+- **Better editors.** Autocomplete and inline documentation become precise.
+- **Documentation that can't go stale.** The signature tells readers what goes in and comes out.
+
+## The vocabulary
+
+```python
+def total(prices: list[float]) -> float: ...
+def lookup(ages: dict[str, int], name: str) -> int | None: ...     # may return None
+def first(pair: tuple[str, int]) -> str: ...
+def unique(items: set[str]) -> int: ...
+def maybe(x: int | str) -> str: ...                                # either type
+```
+
+| Hint | Meaning |
+|---|---|
+| `list[int]`, `dict[str, float]`, `set[str]` | containers and what they hold |
+| `tuple[int, str]` / `tuple[int, ...]` | a fixed pair / any length of ints |
+| `X \| None` (or `Optional[X]`) | an X or `None` |
+| `X \| Y` (or `Union[X, Y]`) | either type |
+| `Any` | anything: switches checking off |
+| `Callable[[int, int], int]` | a function taking two ints and returning an int |
+| `Iterable[str]`, `Sequence[str]` | anything you can loop over / index |
+| `Literal["r", "w"]` | only these exact values |
+
+The older `List[int]`, `Optional[int]` and `Union[...]` from the `typing` module mean the same things; you'll see them in code written before Python 3.9/3.10.
+
+## Accept general, return specific
+
+For parameters, prefer **abstract** types that describe only what you need: `Iterable[str]` if you just loop, `Sequence[str]` if you index. Then callers can pass lists, tuples, sets or generators. For return values, be **specific** (`list[str]`) so callers know exactly what they get.
+
+## Typed dictionaries and protocols
+
+```python
+from typing import TypedDict, Protocol
+
+class Movie(TypedDict):            # the shape of a dict, e.g. from JSON
+    title: str
+    year: int
+
+class SupportsArea(Protocol):      # duck typing, made checkable
+    def area(self) -> float: ...
+
+def total_area(shapes: Iterable[SupportsArea]) -> float:
+    return sum(s.area() for s in shapes)
+```
+
+Any class with an `area()` method satisfies `SupportsArea`, without inheriting from it. That's static duck typing.
+
+## Generics: functions that work for any type
+
+```python
+def first[T](items: Sequence[T], default: T) -> T:     # Python 3.12 syntax
+    return items[0] if items else default
+```
+
+`T` is a **type variable**: if you pass a list of `str`, the checker knows the result is a `str`. Before 3.12 you'd write `T = TypeVar("T")` first.
+
+## Hints at runtime
+
+Annotations are stored on the function (`func.__annotations__`), and `typing.get_type_hints(func)` returns them. Libraries like **dataclasses**, **pydantic** and **FastAPI** read them to generate code, validate data and build APIs, which is a big reason hints became standard.
+
+## Adopting hints gradually
+
+Typing is **gradual**: annotate the important functions first (public APIs, tricky data), run `mypy yourfile.py` or let your editor's pyright check as you type, and add more over time. Unannotated code is simply not checked.
+
+📚 **Go deeper:** Python Library Reference, `typing`; mypy documentation, "Type hints cheat sheet"; PEP 484 (type hints), PEP 604 (`X | Y`), PEP 695 (generic syntax); *Fluent Python* (2nd ed.), chapter 8.
+--- quiz
+? What happens when you call `def f(x: int) -> int: return x * 2` as `f("ab")`?
++ It returns `"abab"`: Python doesn't enforce hints at runtime
+- `TypeError` at runtime
+- `SyntaxError`
+- It returns `None`
+> A type checker like mypy would flag the call, but Python runs it.
+? Which annotation says a function may return an int or nothing?
+- `-> int`
++ `-> int | None`
+- `-> None`
+- `-> Any`
+> `int | None` (or `Optional[int]`).
+? What does `Callable[[str], bool]` describe?
++ A function taking one `str` and returning a `bool`
+- A list of strings and booleans
+- A string that can be called
+- A class
+> The first part lists argument types, the second the return type.
+? Why annotate a parameter as `Iterable[str]` instead of `list[str]`?
++ So callers can pass any iterable of strings: lists, tuples, sets, generators
+- It's faster
+- Lists aren't allowed in hints
+- It enforces the type at runtime
+> Accept general types, return specific ones.
+? What makes a class satisfy a `Protocol`?
+- Inheriting from the protocol
++ Having the methods (with compatible signatures) the protocol describes
+- Being registered with the protocol
+- Being a dataclass
+> Protocols are structural: duck typing for type checkers.
+--- exercise code python
+::prompt
+These functions work but have **no type hints**. Add precise hints using modern syntax (`list[float]`, `X | None`, `Callable`):
+
+- `average(numbers)`: takes a list of floats, returns a float;
+- `find_user(users, user_id)`: `users` maps int ids to str names, returns the name or `None`;
+- `apply_twice(func, value)`: `func` takes an int and returns an int; returns an int.
+::starter
+from typing import Callable
+
+
+def average(numbers):
+    return sum(numbers) / len(numbers)
+
+
+def find_user(users, user_id):
+    return users.get(user_id)
+
+
+def apply_twice(func, value):
+    return func(func(value))
+::solution
+from typing import Callable
+
+
+def average(numbers: list[float]) -> float:
+    return sum(numbers) / len(numbers)
+
+
+def find_user(users: dict[int, str], user_id: int) -> str | None:
+    return users.get(user_id)
+
+
+def apply_twice(func: Callable[[int], int], value: int) -> int:
+    return func(func(value))
+::tests
+from typing import get_type_hints, Callable as _C
+assert get_type_hints(average) == {"numbers": list[float], "return": float}
+assert get_type_hints(find_user) == {"users": dict[int, str], "user_id": int, "return": str | None}
+assert get_type_hints(apply_twice) == {"func": _C[[int], int], "value": int, "return": int}
+assert average([1.0, 2.0]) == 1.5 and find_user({1: "Ada"}, 2) is None and apply_twice(lambda x: x + 3, 1) == 7
+::hints
+- Parameters: `name: type`. Return value: `-> type` before the colon.
+- "Or None" is written `str | None`.
+- A function taking an int and returning an int is `Callable[[int], int]`.
+--- exercise code python
+::prompt
+Use a `TypedDict` and annotate fully:
+
+- `class Movie(TypedDict)` with `title: str` and `year: int`;
+- `newest(movies: list[Movie]) -> Movie | None` returns the most recent movie (the first one on a tie), or `None` for an empty list;
+- `titles_by_decade(movies: Iterable[Movie]) -> dict[int, list[str]]` groups titles by decade (1994 → 1990), keeping input order within each decade.
+::starter
+from typing import Iterable, TypedDict
+::solution
+from typing import Iterable, TypedDict
+
+
+class Movie(TypedDict):
+    title: str
+    year: int
+
+
+def newest(movies: list[Movie]) -> Movie | None:
+    best: Movie | None = None
+    for m in movies:
+        if best is None or m["year"] > best["year"]:
+            best = m
+    return best
+
+
+def titles_by_decade(movies: Iterable[Movie]) -> dict[int, list[str]]:
+    groups: dict[int, list[str]] = {}
+    for m in movies:
+        groups.setdefault(m["year"] // 10 * 10, []).append(m["title"])
+    return groups
+::tests
+from typing import get_type_hints, Iterable as _It
+films: list = [{"title": "Alien", "year": 1979}, {"title": "Heat", "year": 1995}, {"title": "Fargo", "year": 1996}, {"title": "Casino", "year": 1995}]
+assert newest(films) == {"title": "Fargo", "year": 1996}
+assert newest([]) is None
+assert titles_by_decade(films) == {1970: ["Alien"], 1990: ["Heat", "Fargo", "Casino"]}
+assert titles_by_decade(iter(films[:1])) == {1970: ["Alien"]}, "accept any iterable"
+assert get_type_hints(Movie) == {"title": str, "year": int}
+assert get_type_hints(newest) == {"movies": list[Movie], "return": Movie | None}
+assert get_type_hints(titles_by_decade) == {"movies": _It[Movie], "return": dict[int, list[str]]}
+::hints
+- `class Movie(TypedDict):` with two annotated fields; a `Movie` is still an ordinary dict at runtime.
+- The decade of a year is `year // 10 * 10`.
+- Annotate exactly as the prompt shows.
+--- exercise code python
+::prompt
+Write a `Protocol` and a generic function:
+
+- `class SupportsArea(Protocol)` with a method `area(self) -> float`, decorated with `@runtime_checkable` so `isinstance(obj, SupportsArea)` works;
+- `total_area(shapes: Iterable[SupportsArea]) -> float`;
+- a generic `first(items: Sequence[T], default: T) -> T` that returns the first item or the default, using a `TypeVar` named `T`.
+
+Classes don't inherit from `SupportsArea`; anything with an `area()` method fits.
+::starter
+from typing import Iterable, Protocol, Sequence, TypeVar, runtime_checkable
+::solution
+from typing import Iterable, Protocol, Sequence, TypeVar, runtime_checkable
+
+T = TypeVar("T")
+
+
+@runtime_checkable
+class SupportsArea(Protocol):
+    def area(self) -> float: ...
+
+
+def total_area(shapes: Iterable[SupportsArea]) -> float:
+    return sum(s.area() for s in shapes)
+
+
+def first(items: Sequence[T], default: T) -> T:
+    return items[0] if items else default
+::tests
+class _Sq:
+    def __init__(self, s):
+        self.s = s
+    def area(self):
+        return self.s * self.s
+class _NotAShape:
+    pass
+assert isinstance(_Sq(2), SupportsArea) and not isinstance(_NotAShape(), SupportsArea)
+assert total_area([_Sq(2), _Sq(3)]) == 13 and total_area([]) == 0
+assert first([5, 6], 0) == 5 and first([], "none") == "none" and first("xy", "z") == "x"
+from typing import get_type_hints, TypeVar as _TV
+h = get_type_hints(first)
+assert isinstance(h["items"].__args__[0], _TV) and h["return"] is h["default"], "annotate first with a TypeVar T"
+::hints
+- `@runtime_checkable` goes above `class SupportsArea(Protocol):`; the method body can be `...`.
+- `T = TypeVar("T")` at module level, then use `T` in the annotations of `first`.
+--- cards
+Type hints :: def f(x: int) -> str: annotations for people and tools; Python doesn't enforce them at runtime.
+Common hints :: list[int], dict[str, float], tuple[int, str], X | None, X | Y, Any, Callable[[int], int], Iterable[T].
+Type checkers :: mypy and pyright analyse annotated code without running it and report type errors.
+TypedDict :: Describes the keys and value types of a dict (e.g. JSON data).
+Protocol :: Structural typing: any class with the right methods matches, no inheritance needed.
+TypeVar / generics :: A placeholder type linking parameters and results: def first(items: Sequence[T]) -> T.
+
+=== lesson py-async | Asynchronous programming with asyncio | 110
+## Waiting efficiently
+
+Imagine making breakfast: the kettle takes 3 minutes, the toast 2, the eggs 4. Doing them one after another takes 9 minutes. But you don't stand watching the kettle: you start it, start the toast, start the eggs, and handle each one when it's ready. About 4 minutes.
+
+Programs wait a lot too: for web servers to answer, databases to respond, files to download. While waiting, the CPU does nothing. **Asynchronous** programming lets one program start many waits and handle each result when it arrives. This is **concurrency**: making progress on several tasks by switching between them while they wait. (It's different from **parallelism**, doing several computations at literally the same time on several CPU cores.)
+
+## Coroutines: async def and await
+
+```python
+import asyncio
+
+async def make_tea():
+    print("kettle on")
+    await asyncio.sleep(3)        # wait WITHOUT blocking: other tasks may run meanwhile
+    print("tea ready")
+    return "tea"
+```
+
+- `async def` defines a **coroutine function**. Calling it doesn't run it; it creates a **coroutine** object, a task waiting to be run.
+- `await` runs another coroutine (or waits for some I/O) and **pauses this one** until the result is ready, letting the **event loop** run other tasks in the meantime.
+- `await` can only be used inside `async def`.
+
+## Running coroutines: the event loop
+
+```python
+async def main():
+    drink = await make_tea()
+    print("breakfast with", drink)
+
+asyncio.run(main())          # start the event loop, run main() to completion
+```
+
+`asyncio.run()` is the entry point: it starts the **event loop**, the scheduler that switches between coroutines whenever one is waiting. Call it once, at the top level of your program.
+
+> In DevQuest your code runs inside the browser's own event loop. `asyncio.run(main())` works as usual at the top level of your program (not inside another function).
+
+## Doing things at the same time: gather
+
+`await`ing coroutines one by one runs them **sequentially**. To run them **concurrently**, use `asyncio.gather`:
+
+```python
+async def cook(item, minutes):
+    print("start", item)
+    await asyncio.sleep(minutes)
+    print("done", item)
+    return item
+
+async def main():
+    results = await asyncio.gather(cook("kettle", 3), cook("toast", 2), cook("eggs", 4))
+    print(results)            # ['kettle', 'toast', 'eggs']: in the order given, not the order finished
+
+asyncio.run(main())           # takes about 4 seconds, not 9
+```
+
+All three start immediately; each finishes when its wait is over. `gather` returns the results **in the order you passed** the coroutines.
+
+## Tasks
+
+`asyncio.create_task(coro)` schedules a coroutine to start running **now**, in the background, and gives you a `Task` to `await` later:
+
+```python
+async def main():
+    task = asyncio.create_task(cook("eggs", 4))     # starts right away
+    await cook("toast", 2)                          # meanwhile, do something else
+    eggs = await task                               # then collect the eggs
+```
+
+## Timeouts
+
+```python
+try:
+    page = await asyncio.wait_for(fetch(url), timeout=5)
+except TimeoutError:
+    print("the server is too slow")
+```
+
+(Python 3.11+ also has `async with asyncio.timeout(5):`.)
+
+## The golden rule: never block the loop
+
+The event loop can only switch tasks at an `await`. A **blocking** call like `time.sleep(3)`, a slow calculation, or a non-async network library freezes **every** task. Inside async code, use async versions: `asyncio.sleep`, and libraries like `httpx` or `aiohttp` for HTTP and `asyncpg` for PostgreSQL.
+
+## When to use what
+
+| Kind of work | Tool |
+|---|---|
+| lots of waiting on network/disk (web servers, scrapers, chat bots) | `asyncio` |
+| some waiting, with ordinary blocking libraries | threads (`concurrent.futures.ThreadPoolExecutor`) |
+| heavy CPU calculation on several cores | processes (`multiprocessing`, `ProcessPoolExecutor`) |
+
+Async web frameworks like **FastAPI** are built on exactly these ideas.
+
+📚 **Go deeper:** Python Library Reference, `asyncio` ("Coroutines and Tasks"); Real Python, "Async IO in Python: A Complete Walkthrough"; PEP 492 (async/await syntax).
+--- quiz
+? What does calling `make_tea()` (an `async def` function) return?
+- `"tea"`
++ A coroutine object that hasn't run yet
+- `None`
+- A thread
+> Coroutines run when awaited or scheduled on the event loop.
+? Why does `await asyncio.sleep(3)` not freeze other tasks, while `time.sleep(3)` does?
++ `await` pauses only this coroutine and lets the event loop run others; `time.sleep` blocks the whole loop
+- `asyncio.sleep` is shorter
+- `time.sleep` doesn't work in Python 3
+- They behave the same
+> Never block the event loop.
+? Three coroutines each sleep 1 second. Roughly how long does `await asyncio.gather(a(), b(), c())` take?
++ About 1 second
+- About 3 seconds
+- About 0 seconds
+- It depends on the CPU speed
+> They wait concurrently.
+? In what order does `gather` return results?
+- The order the coroutines finish
++ The order the coroutines were passed in
+- Random order
+- Alphabetical
+> Even if the last one finishes first.
+? Which kind of work benefits most from asyncio?
++ Many network requests that spend most of their time waiting
+- Calculating prime numbers on all CPU cores
+- A single short calculation
+- Sorting a list
+> CPU-heavy work needs processes, not async.
+--- exercise code python
+::prompt
+Make breakfast **concurrently**. `cook(item, seconds)` prints `start <item>`, waits with `asyncio.sleep(seconds)`, prints `done <item>`, and returns the item. In `main()`, run the three dishes with **one** `asyncio.gather` call, then print the list it returns. The expected output shows all three starting before any finishes.
+::starter
+import asyncio
+
+
+async def cook(item, seconds):
+    print("start", item)
+    await asyncio.sleep(seconds)
+    print("done", item)
+    return item
+
+
+async def main():
+    # this cooks one dish after another: make it concurrent
+    kettle = await cook("kettle", 0.03)
+    toast = await cook("toast", 0.02)
+    eggs = await cook("eggs", 0.01)
+    print([kettle, toast, eggs])
+
+
+asyncio.run(main())
+::solution
+import asyncio
+
+
+async def cook(item, seconds):
+    print("start", item)
+    await asyncio.sleep(seconds)
+    print("done", item)
+    return item
+
+
+async def main():
+    results = await asyncio.gather(cook("kettle", 0.03), cook("toast", 0.02), cook("eggs", 0.01))
+    print(results)
+
+
+asyncio.run(main())
+::expected
+start kettle
+start toast
+start eggs
+done eggs
+done toast
+done kettle
+['kettle', 'toast', 'eggs']
+::hints
+- `await asyncio.gather(cook(...), cook(...), cook(...))` starts all three at once.
+- `gather` returns the results in the order you passed them, whatever order they finish in.
+--- exercise code python
+::prompt
+Simulate downloading pages. `fetch(url, delay)` waits `delay` seconds and returns `f"<{len(url)} bytes from {url}>"`. Write `fetch_all(pages)` that takes a dict url → delay, starts **every** download as a task with `asyncio.create_task`, and returns the results as a dict url → result. Then `main()` prints the results in alphabetical order of URL, and how many pages were fetched.
+::starter
+import asyncio
+
+
+async def fetch(url, delay):
+    await asyncio.sleep(delay)
+    return f"<{len(url)} bytes from {url}>"
+
+
+async def fetch_all(pages):
+    pass
+
+
+async def main():
+    pages = {"site.io/b": 0.02, "site.io/a": 0.03, "site.io/contact": 0.01}
+    results = await fetch_all(pages)
+    for url in sorted(results):
+        print(url, results[url])
+    print(len(results), "pages fetched")
+
+
+asyncio.run(main())
+::solution
+import asyncio
+
+
+async def fetch(url, delay):
+    await asyncio.sleep(delay)
+    return f"<{len(url)} bytes from {url}>"
+
+
+async def fetch_all(pages):
+    tasks = {url: asyncio.create_task(fetch(url, delay)) for url, delay in pages.items()}
+    return {url: await task for url, task in tasks.items()}
+
+
+async def main():
+    pages = {"site.io/b": 0.02, "site.io/a": 0.03, "site.io/contact": 0.01}
+    results = await fetch_all(pages)
+    for url in sorted(results):
+        print(url, results[url])
+    print(len(results), "pages fetched")
+
+
+asyncio.run(main())
+::expected
+site.io/a <9 bytes from site.io/a>
+site.io/b <9 bytes from site.io/b>
+site.io/contact <15 bytes from site.io/contact>
+3 pages fetched
+::hints
+- Create all the tasks first, e.g. in a dict comprehension: `{url: asyncio.create_task(fetch(url, delay)) for ...}`.
+- Then `await` each task to collect its result; they're already running concurrently.
+--- exercise code python
+::prompt
+Add a **timeout**. `slow_service(seconds)` waits and returns `"ok"`. Write `call_with_timeout(seconds, limit)` that returns the service's result, or the string `"timed out"` if it takes longer than `limit` seconds (use `asyncio.wait_for` and catch `TimeoutError`). `main()` already prints two calls.
+::starter
+import asyncio
+
+
+async def slow_service(seconds):
+    await asyncio.sleep(seconds)
+    return "ok"
+
+
+async def call_with_timeout(seconds, limit):
+    return await slow_service(seconds)
+
+
+async def main():
+    print("fast:", await call_with_timeout(0.01, 0.2))
+    print("slow:", await call_with_timeout(0.5, 0.05))
+
+
+asyncio.run(main())
+::solution
+import asyncio
+
+
+async def slow_service(seconds):
+    await asyncio.sleep(seconds)
+    return "ok"
+
+
+async def call_with_timeout(seconds, limit):
+    try:
+        return await asyncio.wait_for(slow_service(seconds), timeout=limit)
+    except TimeoutError:
+        return "timed out"
+
+
+async def main():
+    print("fast:", await call_with_timeout(0.01, 0.2))
+    print("slow:", await call_with_timeout(0.5, 0.05))
+
+
+asyncio.run(main())
+::expected
+fast: ok
+slow: timed out
+::hints
+- `await asyncio.wait_for(slow_service(seconds), timeout=limit)`.
+- Since Python 3.11, a timeout raises the built-in `TimeoutError`.
+--- cards
+Concurrency vs parallelism :: Concurrency: progress on many tasks by switching while they wait. Parallelism: computing at the same time on several cores.
+async def / await :: async def creates a coroutine function; await pauses the coroutine until a result is ready, letting others run.
+asyncio.run(main()) :: Starts the event loop and runs main() to completion; call it once at the top level.
+asyncio.gather :: Runs coroutines concurrently; results come back in the order given.
+create_task :: Schedules a coroutine to start running now; await the Task later for its result.
+Don't block the loop :: Use asyncio.sleep and async libraries; time.sleep or heavy CPU work freezes every task.
+
+=== lesson py-tooling | Tools of a professional Python developer | 100
+Writing code is only part of the job. Professional projects use a standard set of tools to manage dependencies, keep code consistent, catch mistakes automatically, and share their work. You'll use all of these the moment you start a real project on your own computer.
+
+## Virtual environments
+
+Different projects need different versions of packages. A **virtual environment** is an isolated folder with its own Python and packages, one per project:
+
+```bash
+python -m venv .venv                 # create it (once per project)
+source .venv/bin/activate            # activate it: macOS/Linux
+.venv\Scripts\activate               # activate it: Windows
+pip install requests pytest          # installs into .venv only
+deactivate
+```
+
+Never install project packages into your system Python, and don't commit `.venv` to Git (add it to `.gitignore`).
+
+## Declaring dependencies
+
+- `pip freeze > requirements.txt` lists the exact versions you use; `pip install -r requirements.txt` recreates the environment on another machine.
+- Modern projects describe themselves in **`pyproject.toml`**: name, version, Python version, dependencies, and tool settings, in one standard file.
+- Newer tools such as **uv** and **Poetry** manage environments, dependencies and lock files in one place (`uv add requests`); `uv` in particular is very fast and increasingly popular.
+
+## Project layout
+
+```
+my_project/
+    pyproject.toml
+    README.md
+    src/my_project/
+        __init__.py
+        core.py
+    tests/
+        test_core.py
+```
+
+Code lives in a package, tests in `tests/`, and the `README` explains how to install and run it.
+
+## Style: PEP 8 and formatters
+
+**PEP 8** is Python's style guide: 4-space indentation, `snake_case` for functions and variables, `CapWords` for classes, `UPPER_CASE` for constants, lines of reasonable length, two blank lines between top-level definitions. Nobody formats by hand anymore: a **formatter** rewrites your code consistently in a second. **Black** and **`ruff format`** are the standards. Then nobody argues about style in code reviews.
+
+## Linters and type checkers
+
+- A **linter** finds likely bugs and bad practices: unused imports and variables, undefined names, bare `except:`, mutable default arguments. **Ruff** is the modern, very fast choice (it replaces flake8, isort and many plugins).
+- A **type checker** (**mypy** or **pyright**) verifies your type hints.
+
+## Tests and coverage
+
+`pytest` runs your tests; `pytest --cov` (with the pytest-cov plugin) shows which lines your tests never execute. **Coverage** shows what's untested, but 100% coverage doesn't prove the tests are good (remember mutation testing in Module 7).
+
+## Automating the checks
+
+- **pre-commit** runs the formatter, linter and other checks automatically every time you make a Git commit.
+- **Continuous integration** (CI), such as GitHub Actions, runs the tests and checks on every push and pull request, so broken code is caught before it's merged.
+
+## Documentation
+
+Write **docstrings** for modules, classes and public functions. Common formats are Google style and NumPy style:
+
+```python
+def area(width: float, height: float) -> float:
+    """Return the area of a rectangle.
+
+    Args:
+        width: The width, in metres.
+        height: The height, in metres.
+
+    Raises:
+        ValueError: If either side is negative.
+    """
+```
+
+Tools such as **Sphinx** and **MkDocs** turn docstrings into documentation websites.
+
+## Configuration and secrets
+
+Settings that differ between environments (database addresses, API keys) come from **environment variables** (`os.environ["API_KEY"]`) or a `.env` file loaded at startup. **Never commit secrets to Git**, and keep `.env` out of version control.
+
+## Sharing your code
+
+Packages are built from `pyproject.toml` (`python -m build`) and published to PyPI (with `twine` or `uv publish`), after which anyone can `pip install` them.
+
+📚 **Go deeper:** Python Packaging User Guide (packaging.python.org); PEP 8; the documentation of Ruff, Black, mypy, pytest, pre-commit and uv; *Hypermodern Python* (Claudio Jolowicz's article series).
+--- quiz
+? Why use a virtual environment for each project?
++ To keep each project's packages and versions isolated from other projects and the system
+- To make Python run faster
+- Because pip only works inside one
+- To encrypt the code
+> Different projects can need different versions of the same package.
+? What does a code formatter like Black or `ruff format` do?
++ Rewrites code into one consistent style automatically
+- Finds logic bugs
+- Runs the tests
+- Checks type hints
+> Linters find likely bugs; type checkers check types.
+? Which file is the modern standard for describing a Python project and its dependencies?
+- `setup.cfg`
++ `pyproject.toml`
+- `config.ini`
+- `package.json`
+> It also holds settings for many tools.
+? Where should an API key for your app live?
+- In the source code, as a constant
++ In an environment variable or an uncommitted `.env` file
+- In the README
+- In `requirements.txt`
+> Secrets must never be committed to Git.
+? What does 100% test coverage guarantee?
+- That the code has no bugs
++ Only that every line ran during the tests, not that the tests check the right things
+- That the tests are fast
+- That the code is formatted
+> Coverage measures execution, not assertion quality.
+--- exercise code python
+::prompt
+Write `parse_requirements(text)` that reads the contents of a `requirements.txt` file and returns a dict mapping each package name (lowercased) to its version specifier, or `""` if there is none. Ignore blank lines and comments (whole-line `#` comments and anything after ` #` on a line). Specifiers start at the first of `=`, `<`, `>`, `!` or `~`.
+```
+requests==2.32.3
+Flask >= 3.0    # web framework
+pytest
+```
+gives `{"requests": "==2.32.3", "flask": ">=3.0", "pytest": ""}` (spaces removed).
+::starter
+import re
+
+
+def parse_requirements(text):
+    pass
+::solution
+import re
+
+
+def parse_requirements(text):
+    result = {}
+    for line in text.splitlines():
+        line = line.split("#", 1)[0].strip()
+        if not line:
+            continue
+        m = re.match(r"([A-Za-z0-9._-]+)\s*(.*)", line)
+        name, spec = m.group(1), m.group(2).replace(" ", "")
+        result[name.lower()] = spec
+    return result
+::tests
+reqs = """
+# core
+requests==2.32.3
+Flask >= 3.0    # web framework
+
+pytest
+numpy>=1.26,<2.0
+typing_extensions ~= 4.12
+"""
+assert parse_requirements(reqs) == {"requests": "==2.32.3", "flask": ">=3.0", "pytest": "", "numpy": ">=1.26,<2.0", "typing_extensions": "~=4.12"}
+assert parse_requirements("") == {}
+assert parse_requirements("# only comments\n   \n") == {}
+::hints
+- For each line, cut off a comment with `line.split("#", 1)[0]`, then `strip()`; skip empty lines.
+- A regex like `([A-Za-z0-9._-]+)\s*(.*)` separates the name from the rest.
+- Remove spaces from the specifier with `replace(" ", "")`.
+--- exercise code python
+::prompt
+This code runs, but it breaks many PEP 8 conventions and has two problems a linter would flag. Rewrite it so that:
+
+- the function is named `calculate_total` (snake_case) and the class `ShoppingBasket` (CapWords);
+- the constant is named `TAX_RATE`;
+- the mutable default argument is fixed;
+- the bare `except:` catches only `ValueError`.
+
+The behaviour stays the same: `ShoppingBasket.add(price_text)` converts the text to a float and stores it (ignoring text that isn't a number), and `calculate_total(prices, discount=0)` returns the taxed total minus the discount, rounded to 2 decimals.
+::starter
+taxRate = 0.2
+
+def CalculateTotal(Prices, Discount = 0):
+    Total = sum(Prices) * (1 + taxRate)
+    return round(Total - Discount, 2)
+
+class shopping_basket:
+    def __init__(self, items = []):
+        self.items = items
+    def add(self, price_text):
+        try:
+            self.items.append(float(price_text))
+        except:
+            pass
+::solution
+TAX_RATE = 0.2
+
+
+def calculate_total(prices, discount=0):
+    total = sum(prices) * (1 + TAX_RATE)
+    return round(total - discount, 2)
+
+
+class ShoppingBasket:
+    def __init__(self, items=None):
+        self.items = items if items is not None else []
+
+    def add(self, price_text):
+        try:
+            self.items.append(float(price_text))
+        except ValueError:
+            pass
+::tests
+assert calculate_total([10, 20]) == 36
+assert calculate_total([10], discount=2) == 10
+assert TAX_RATE == 0.2
+a, b = ShoppingBasket(), ShoppingBasket()
+a.add("2.50")
+a.add("oops")
+assert a.items == [2.5] and b.items == [], "each basket needs its own list"
+try:
+    a.add(None)
+except TypeError:
+    pass
+else:
+    raise AssertionError("catch only ValueError: a TypeError from a real bug must not be hidden")
+for old in ["taxRate", "CalculateTotal", "shopping_basket"]:
+    assert old not in globals(), f"rename {old}"
+import inspect as _inspect
+assert list(_inspect.signature(calculate_total).parameters) == ["prices", "discount"], "parameters are snake_case too"
+::hints
+- Rename everything as listed; parameters and local variables are snake_case too (`prices`, `discount`, `total`).
+- Use `items=None` and create a new list inside `__init__`.
+- Change `except:` to `except ValueError:`.
+--- cards
+Virtual environment :: python -m venv .venv: an isolated Python + packages per project. Activate it before pip install.
+pyproject.toml :: The standard file describing a project: metadata, dependencies and tool configuration.
+Formatter / linter / type checker :: Black or ruff format (style), Ruff (likely bugs, bad practice), mypy or pyright (type hints).
+pre-commit and CI :: Run checks automatically on each commit (pre-commit) and each push/PR (e.g. GitHub Actions).
+Secrets :: Keep keys in environment variables or an uncommitted .env, never in the code or Git.
+
+=== lesson py-m12-test | Module 12 test | 240
+The final module test covers the professional toolkit: functional tools and itertools, closures and decorators, generators and lazy pipelines, type hints, async programming and the tools around a real project.
+
+Make sure you can:
+
+- use lambdas and key functions, and pick the right `itertools` tool;
+- write closures, decorators (with and without arguments) and use `lru_cache`;
+- write generators and generator pipelines, and explain laziness;
+- annotate functions with modern type hints;
+- run coroutines concurrently with `gather` and tasks, without blocking the loop;
+- describe virtual environments, formatters, linters, type checkers and CI.
+--- quiz
+? What does `sorted(["b2", "a10", "a2"], key=lambda s: (s[0], int(s[1:])))` return?
++ `['a2', 'a10', 'b2']`
+- `['a10', 'a2', 'b2']`
+- `['b2', 'a10', 'a2']`
+- An error
+> Sort by letter, then numerically by the rest.
+? What does this print?
+```python
+def deco(f):
+    def wrapper():
+        return f() + 1
+    return wrapper
+
+@deco
+@deco
+def five():
+    return 5
+
+print(five())
+```
++ `7`
+- `6`
+- `5`
+- An error
+> Two layers each add 1.
+? What is `next(x for x in range(10) if x > 6)`?
++ `7`
+- `[7, 8, 9]`
+- `True`
+- `StopIteration`
+> A generator expression yields lazily; `next` takes its first item.
+? Which hint means "a list of strings, or None"?
++ `list[str] | None`
+- `list[str | None]`
+- `Optional[str]`
+- `None[list[str]]`
+> `list[str | None]` would be a list whose items may be None.
+? Inside an async function, which call freezes every other task?
+- `await asyncio.sleep(1)`
++ `time.sleep(1)`
+- `await asyncio.gather(...)`
+- `asyncio.create_task(...)`
+> Blocking calls stop the event loop.
+? What does `lru_cache` require of the decorated function's arguments?
++ They must be hashable
+- They must be integers
+- There must be exactly one
+- Nothing
+> Results are stored in a dict keyed by the arguments.
+? A teammate commits code with unused imports and a bare `except:`. Which tool would have flagged both automatically?
+- A formatter
++ A linter such as Ruff
+- `pip`
+- A virtual environment
+> Formatters fix layout; linters find likely bugs and bad practices.
+? Why use `functools.wraps` in a decorator?
+- To cache results
++ To keep the decorated function's name and docstring
+- To make the wrapper async
+- To add type hints
+> Otherwise every decorated function looks like "wrapper".
+--- exercise code python
+::prompt
+Write a decorator `log_calls(log)` **with an argument**: `log` is a list. Every call of the decorated function appends a string like `"add(2, 3) -> 5"` (positional arguments with `repr`, then keyword arguments as `name=value` with `repr`), and returns the normal result. If the function raises, append `"add(2, 'x') raised TypeError"` and re-raise. Keep the function's name with `functools.wraps`.
+::starter
+import functools
+
+
+def log_calls(log):
+    pass
+::solution
+import functools
+
+
+def log_calls(log):
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            parts = [repr(a) for a in args] + [f"{k}={v!r}" for k, v in kwargs.items()]
+            call = f"{func.__name__}({', '.join(parts)})"
+            try:
+                result = func(*args, **kwargs)
+            except Exception as e:
+                log.append(f"{call} raised {type(e).__name__}")
+                raise
+            log.append(f"{call} -> {result!r}")
+            return result
+        return wrapper
+    return decorator
+::tests
+history = []
+@log_calls(history)
+def add(a, b):
+    return a + b
+@log_calls(history)
+def greet(name, punctuation="!"):
+    return f"Hi {name}{punctuation}"
+assert add(2, 3) == 5
+assert greet("Ada", punctuation="?") == "Hi Ada?"
+try:
+    add(2, "x")
+except TypeError:
+    pass
+else:
+    raise AssertionError("the exception must be re-raised")
+assert history == ["add(2, 3) -> 5", "greet('Ada', punctuation='?') -> 'Hi Ada?'", "add(2, 'x') raised TypeError"]
+assert add.__name__ == "add"
+::hints
+- Three layers: `log_calls(log)` → `decorator(func)` → `wrapper(*args, **kwargs)`.
+- Build the call text from `repr(a)` for each positional argument and `f"{k}={v!r}"` for each keyword argument.
+- Call the function in `try`; on an exception, log it and `raise`.
+--- exercise code python
+::prompt
+Process orders lazily and asynchronously. Write:
+
+- a generator `batches(items, size)` yielding lists of up to `size` items;
+- `async def process(batch)` that waits `0.01` seconds and returns the sum of the batch;
+- `async def process_all(items, size)` that processes **all** batches **concurrently** (one task per batch, via `gather`) and returns the list of batch sums in batch order.
+
+`main()` is given and prints the results.
+::starter
+import asyncio
+
+
+def batches(items, size):
+    pass
+
+
+async def process(batch):
+    pass
+
+
+async def process_all(items, size):
+    pass
+
+
+async def main():
+    sums = await process_all(list(range(1, 11)), 4)
+    print("batch sums:", sums)
+    print("total:", sum(sums))
+
+
+asyncio.run(main())
+::solution
+import asyncio
+
+
+def batches(items, size):
+    batch = []
+    for item in items:
+        batch.append(item)
+        if len(batch) == size:
+            yield batch
+            batch = []
+    if batch:
+        yield batch
+
+
+async def process(batch):
+    await asyncio.sleep(0.01)
+    return sum(batch)
+
+
+async def process_all(items, size):
+    return list(await asyncio.gather(*(process(b) for b in batches(items, size))))
+
+
+async def main():
+    sums = await process_all(list(range(1, 11)), 4)
+    print("batch sums:", sums)
+    print("total:", sum(sums))
+
+
+asyncio.run(main())
+::expected
+batch sums: [10, 26, 19]
+total: 55
+::hints
+- `batches` collects items and yields each full list, then the leftover.
+- `asyncio.gather(*(process(b) for b in batches(items, size)))` runs one coroutine per batch concurrently; the star unpacks them as separate arguments.

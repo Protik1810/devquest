@@ -1,0 +1,1402 @@
+=== module Module 11 · Modules, files and the standard library
+
+=== lesson py-modules | Modules, packages and the standard library | 100
+## Why split code into modules?
+
+A real program can have thousands of lines. Keeping them all in one file would be like writing a book as one endless paragraph. A **module** is simply a `.py` file whose functions, classes and variables other files can **import**. Modules let you organise code by topic, reuse it across projects, and work on one part without wading through the rest.
+
+Python also comes with a huge **standard library**, hundreds of modules for maths, files, dates, JSON, web requests, compression, testing and more. That's what people mean by Python having "batteries included".
+
+## Importing
+
+```python
+import math                       # the whole module; use its contents with a dot
+print(math.sqrt(16))
+
+from math import sqrt, pi         # specific names, used without the prefix
+print(sqrt(16), pi)
+
+import statistics as stats        # a shorter alias
+print(stats.mean([2, 4, 9]))
+
+from collections import Counter as Tally   # an alias for one name
+```
+
+Prefer `import module` or importing specific names. Avoid `from module import *`: it dumps every name into your file, so readers can't tell where anything came from, and names can silently clash.
+
+## A quick tour of useful standard modules
+
+| Module | Highlights |
+|---|---|
+| `math` | `sqrt`, `floor`, `ceil`, `pi`, `isclose`, `gcd`, `factorial` |
+| `random` | `random()`, `randint(a, b)`, `choice(seq)`, `shuffle(list)`, `sample(seq, k)`, `seed(n)` |
+| `statistics` | `mean`, `median`, `mode`, `stdev` |
+| `string` | constants like `ascii_letters`, `digits`, `punctuation` |
+| `os`, `pathlib`, `shutil` | files, folders and paths (next lesson) |
+| `sys` | `sys.argv` (command-line arguments), `sys.path`, `sys.exit()` |
+| `datetime` | dates, times and durations |
+| `json`, `csv` | reading and writing data formats |
+| `re` | regular expressions |
+| `collections`, `itertools`, `functools` | containers and tools for iteration and functions |
+
+## Randomness you can test
+
+Random numbers make programs unpredictable, and tests need predictability. Two techniques:
+
+- `random.seed(42)` makes the sequence repeat exactly on every run (on the same Python version).
+- Better: use your own generator object, `rng = random.Random(42)`, and **pass it in** to the functions that need randomness (dependency injection again). Tests pass a seeded generator; the real program passes an unseeded one.
+
+```python
+import random
+
+def roll(n, rng):
+    return [rng.randint(1, 6) for _ in range(n)]
+
+roll(3, random.Random(1)) == roll(3, random.Random(1))    # True: same seed, same rolls
+```
+
+## Writing your own module
+
+Any `.py` file is a module. If `geometry.py` contains
+
+```python
+PI = 3.14159
+
+def circle_area(r):
+    return PI * r * r
+```
+
+then another file in the same folder can do `import geometry` and call `geometry.circle_area(2)`. The first `import` runs the module's code once and caches the module in `sys.modules`; later imports reuse it.
+
+## if __name__ == "__main__":
+
+Every module has a `__name__` variable. When a file is **run directly** (`python geometry.py`), its `__name__` is `"__main__"`; when it's **imported**, `__name__` is the module's name (`"geometry"`). So this idiom runs code only when the file is the main program:
+
+```python
+def main():
+    print(circle_area(2))
+
+if __name__ == "__main__":
+    main()          # runs for  python geometry.py,  but not on  import geometry
+```
+
+It lets one file be both a reusable module and a runnable script, and it stops imports from accidentally running a program's main code. DevQuest runs your code as `__main__`, just like `python file.py`.
+
+## Packages: folders of modules
+
+A **package** is a folder of modules, usually with an `__init__.py` file:
+
+```
+shop/
+    __init__.py
+    cart.py
+    payments/
+        __init__.py
+        card.py
+```
+
+You import with dots: `from shop.cart import Cart`, `import shop.payments.card`. `__init__.py` runs when the package is first imported and can expose the package's main names.
+
+## Where does Python find modules?
+
+`import x` searches the folders listed in `sys.path`: the folder of the script you're running first, then the standard library, then **site-packages**, where installed third-party packages live. One consequence catches many beginners: **don't name your own file after a module you use**. A file called `random.py` in your folder hides the real `random` module, and `random.randint` suddenly "doesn't exist".
+
+## Third-party packages
+
+Beyond the standard library, the **Python Package Index** (PyPI, pypi.org) hosts over half a million packages: `requests` for HTTP, `pandas` for data, `pytest` for testing, `fastapi` and `django` for web apps. You install them with `pip`, ideally inside a **virtual environment**; Module 12 shows the professional setup.
+
+📚 **Go deeper:** Python Tutorial, chapter 6 "Modules" and chapter 10 "Brief Tour of the Standard Library"; Python Module of the Week (pymotw.com); *Automate the Boring Stuff with Python*, chapter 3.
+--- quiz
+? After `from math import sqrt`, how do you call the square root function?
++ `sqrt(16)`
+- `math.sqrt(16)`
+- `math(16).sqrt`
+- `import sqrt(16)`
+> The name was imported directly, without the module prefix. (`math` itself isn't defined.)
+? What is `__name__` inside `helpers.py` when another file does `import helpers`?
+- `"__main__"`
++ `"helpers"`
+- `"__init__"`
+- `None`
+> Only the file that's run directly gets `"__main__"`.
+? Why is `from module import *` discouraged?
++ Readers can't tell where names come from, and names can silently clash
+- It's slower
+- It only imports functions
+- It's a syntax error
+> Explicit imports keep code readable.
+? You created `random.py` in your project and now `random.randint` fails. Why?
+- `randint` was removed from Python
++ Your file is found first on `sys.path` and hides the standard `random` module
+- Files can't be named after modules
+- You need to reinstall Python
+> Rename your file.
+? How can a test make code that uses randomness predictable?
+- It can't
++ Pass in a `random.Random(seed)` generator (or call `random.seed`) so the sequence repeats
+- Use `time.time()` as the result
+- Catch the randomness with `try`
+> Same seed, same sequence.
+--- exercise code python
+::prompt
+Use the standard library: write `describe(data)` that returns a dictionary with the `mean`, `median` and population standard deviation `stdev` (use `statistics.pstdev`) of a non-empty list of numbers, each rounded to 2 decimals, plus `range`, the largest minus the smallest value.
+::starter
+import statistics
+
+
+def describe(data):
+    pass
+::solution
+import statistics
+
+
+def describe(data):
+    return {
+        "mean": round(statistics.mean(data), 2),
+        "median": round(statistics.median(data), 2),
+        "stdev": round(statistics.pstdev(data), 2),
+        "range": max(data) - min(data),
+    }
+::tests
+assert describe([2, 4, 4, 4, 5, 5, 7, 9]) == {"mean": 5, "median": 4.5, "stdev": 2, "range": 7}
+assert describe([1, 2, 3]) == {"mean": 2, "median": 2, "stdev": 0.82, "range": 2}
+assert describe([10]) == {"mean": 10, "median": 10, "stdev": 0, "range": 0}
+::hints
+- `statistics.mean`, `statistics.median` and `statistics.pstdev` each take the list.
+- Round each with `round(value, 2)`.
+--- exercise code python
+::prompt
+Write testable randomness, with the random generator **passed in**:
+
+- `roll_dice(n, rng)` returns a list of `n` rolls of a six-sided die, using `rng.randint`;
+- `deal(rng, hand_size=5)` builds a deck of 52 cards as strings like `"A♠"`, `"10♥"` (ranks `A 2 3 4 5 6 7 8 9 10 J Q K`, suits `♠ ♥ ♦ ♣`), shuffles it with `rng.shuffle`, and returns the first `hand_size` cards.
+::starter
+import random
+
+RANKS = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"]
+SUITS = ["♠", "♥", "♦", "♣"]
+::solution
+import random
+
+RANKS = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"]
+SUITS = ["♠", "♥", "♦", "♣"]
+
+
+def roll_dice(n, rng):
+    return [rng.randint(1, 6) for _ in range(n)]
+
+
+def deal(rng, hand_size=5):
+    deck = [rank + suit for suit in SUITS for rank in RANKS]
+    rng.shuffle(deck)
+    return deck[:hand_size]
+::tests
+import random as _r
+rolls = roll_dice(1000, _r.Random(7))
+assert len(rolls) == 1000 and set(rolls) == {1, 2, 3, 4, 5, 6}
+assert roll_dice(10, _r.Random(3)) == roll_dice(10, _r.Random(3)), "the same seed must give the same rolls"
+hand = deal(_r.Random(1))
+assert len(hand) == 5 and len(set(hand)) == 5
+assert deal(_r.Random(5), 52).__len__() == 52 and len(set(deal(_r.Random(5), 52))) == 52, "a full deck has 52 different cards"
+assert "10♥" in deal(_r.Random(2), 52) and "A♠" in deal(_r.Random(2), 52)
+assert deal(_r.Random(9)) == deal(_r.Random(9))
+assert deal(_r.Random(9)) != deal(_r.Random(10)) or deal(_r.Random(9), 52) != deal(_r.Random(10), 52)
+::hints
+- `rng.randint(1, 6)` inside a list comprehension gives the rolls.
+- Build the deck with a nested comprehension: `[rank + suit for suit in SUITS for rank in RANKS]`.
+- `rng.shuffle(deck)` shuffles in place; then slice the hand.
+--- exercise code python
+::prompt
+Your program can create a module and import it. The starter writes `textutils.py` and imports it, but the module is missing two functions and its demo code runs on import. Edit the module's source text so that:
+
+- `word_count(text)` returns the number of words;
+- `shout(text)` returns the text in capitals with `!` added;
+- the demo `print` runs **only** when the module is run directly (use `if __name__ == "__main__":`).
+
+The expected output shows what the main program prints.
+::starter
+import importlib
+
+MODULE = '''
+def word_count(text):
+    pass
+
+def shout(text):
+    pass
+
+print("textutils demo:", shout("hi"))
+'''
+
+with open("textutils.py", "w", encoding="utf-8") as f:
+    f.write(MODULE)
+importlib.invalidate_caches()
+
+import textutils
+
+print(textutils.__name__)
+print(textutils.word_count("modules keep code organised"))
+print(textutils.shout("it works"))
+::solution
+import importlib
+
+MODULE = '''
+def word_count(text):
+    return len(text.split())
+
+def shout(text):
+    return text.upper() + "!"
+
+if __name__ == "__main__":
+    print("textutils demo:", shout("hi"))
+'''
+
+with open("textutils.py", "w", encoding="utf-8") as f:
+    f.write(MODULE)
+importlib.invalidate_caches()
+
+import textutils
+
+print(textutils.__name__)
+print(textutils.word_count("modules keep code organised"))
+print(textutils.shout("it works"))
+::expected
+textutils
+4
+IT WORKS!
+::hints
+- Inside the module text, replace each `pass` with a `return`.
+- Indent the demo `print` under `if __name__ == "__main__":`; when imported, the module's name is `"textutils"`, not `"__main__"`.
+--- cards
+import forms :: import math (use math.sqrt); from math import sqrt (use sqrt); import numpy as np (alias). Avoid from x import *.
+Module :: Any .py file; importing runs it once and caches it in sys.modules.
+if __name__ == "__main__": :: Runs code only when the file is executed directly, not when it's imported.
+Package :: A folder of modules (usually with __init__.py), imported with dots: from shop.cart import Cart.
+sys.path :: Where import looks for modules: the script's folder first, then the standard library, then site-packages. Don't shadow standard modules with your file names.
+
+=== lesson py-files | Files and paths | 100
+Programs need to **persist** data beyond a single run: settings, notes, reports, logs. The simplest way is files.
+
+> 💾 In DevQuest, your programs have a private, temporary disk: files you create exist only while the app is open. The code is exactly what you'd write on your own computer.
+
+## Opening, reading and writing
+
+```python
+with open("notes.txt", "w", encoding="utf-8") as f:
+    f.write("first line\n")
+    f.write("second line\n")
+
+with open("notes.txt", encoding="utf-8") as f:     # "r" (read) is the default mode
+    text = f.read()
+print(text)
+```
+
+- `open()` returns a **file object**; `with` closes it automatically when the block ends, even if an exception happens (it's a context manager, Module 10). Always use `with`.
+- `write()` doesn't add a newline; include `"\n"` yourself. `print(..., file=f)` is an alternative that adds it.
+- **Always pass `encoding="utf-8"`.** Without it, Python uses the operating system's default, which differs between Windows and other systems, and text with accents or emoji can break.
+
+## File modes
+
+| Mode | Meaning |
+|---|---|
+| `"r"` | read (the default); `FileNotFoundError` if it doesn't exist |
+| `"w"` | write: creates the file, or **erases** an existing one |
+| `"a"` | append: add to the end, creating it if needed |
+| `"x"` | create: fails with `FileExistsError` if it already exists |
+| `"b"` | added to the others for **binary** data: `"rb"`, `"wb"` |
+
+Beware: opening with `"w"` instantly empties the file, before you've written anything.
+
+## Reading in different ways
+
+```python
+with open("notes.txt", encoding="utf-8") as f:
+    for line in f:                    # best for big files: one line at a time
+        print(line.rstrip("\n"))      # each line still ends with "\n"
+
+with open("notes.txt", encoding="utf-8") as f:
+    lines = f.read().splitlines()     # all lines, newlines removed
+```
+
+`f.readline()` reads a single line and `f.readlines()` a list of lines (with their `\n`). Looping over the file is memory-friendly: a 10 GB log file can be processed line by line.
+
+## pathlib: paths as objects
+
+The modern way to work with paths is `pathlib.Path`:
+
+```python
+from pathlib import Path
+
+folder = Path("reports")
+folder.mkdir(exist_ok=True)                   # create the folder (no error if it exists)
+path = folder / "2026" / "october.txt"        # the / operator joins path parts
+path.parent.mkdir(parents=True, exist_ok=True)
+path.write_text("Sales: 42\n", encoding="utf-8")
+print(path.read_text(encoding="utf-8"))
+print(path.name, path.stem, path.suffix)      # october.txt october .txt
+print(path.exists(), path.is_file())          # True True
+for p in folder.rglob("*.txt"):               # every .txt file in all subfolders
+    print(p)
+```
+
+`Path` objects work on Windows, macOS and Linux alike, handling `\` versus `/` for you. `open(path)` accepts them too.
+
+## Errors you should expect
+
+Files fail in the real world: the file doesn't exist (`FileNotFoundError`), you're not allowed to read it (`PermissionError`), the disk is full. These are all `OSError`s. Handle the ones you can do something about:
+
+```python
+try:
+    text = Path("config.txt").read_text(encoding="utf-8")
+except FileNotFoundError:
+    text = ""            # no config yet: use defaults
+```
+
+## Text and bytes
+
+Files on disk hold **bytes**. Text mode decodes them to `str` using an encoding (UTF-8); binary mode (`"rb"`) gives raw `bytes`, for images, zip files and other non-text data. You can convert yourself:
+
+```python
+data = "héllo".encode("utf-8")     # b'h\xc3\xa9llo'  (é takes two bytes in UTF-8)
+text = data.decode("utf-8")        # 'héllo'
+```
+
+A `UnicodeDecodeError` means the bytes weren't in the encoding you claimed.
+
+## Other useful tools
+
+- `os.listdir(folder)`, `os.remove(path)`, `os.rename(a, b)`, or the `Path` methods `iterdir()`, `unlink()`, `rename()`.
+- `shutil.copy(src, dst)` copies a file; `shutil.rmtree(folder)` deletes a folder tree (carefully!).
+- `tempfile.TemporaryDirectory()` gives a scratch folder that's deleted afterwards, perfect for tests.
+
+📚 **Go deeper:** Python Tutorial, section 7.2 "Reading and Writing Files"; Python Library Reference, `pathlib`; *Automate the Boring Stuff with Python*, chapters 9–10 "Reading and Writing Files", "Organizing Files".
+--- quiz
+? What happens when you `open("data.txt", "w")` on an existing file?
+- New text is added at the end
++ The file is emptied immediately
+- `FileExistsError`
+- Nothing until you call `read()`
+> `"w"` truncates; use `"a"` to append or `"x"` to refuse overwriting.
+? Why use `with open(...) as f:`?
++ The file is closed automatically, even if an error happens
+- It's the only way to read files
+- It makes reading faster
+- It encrypts the file
+> `with` uses the file object's context manager.
+? What does each line contain when you loop `for line in f:`?
+- The text without its newline
++ The text including its trailing `"\n"` (except possibly the last line)
+- One character
+- One word
+> Use `line.rstrip("\n")` or `read().splitlines()` to drop newlines.
+? What is `Path("docs") / "guide.md"`?
++ A `Path` for `docs/guide.md` (with the right separator for the system)
+- The string `"docs/guide.md"`
+- A division error
+- The contents of the file
+> `/` joins path parts.
+? Why pass `encoding="utf-8"` when opening text files?
+- It's required by Python
++ Otherwise the system default is used, which differs between computers and can garble non-English text
+- It compresses the file
+- It makes the file binary
+> Being explicit makes your program behave the same everywhere.
+--- exercise code python
+::prompt
+Write two functions for a simple notes file:
+
+- `save_notes(path, notes)` writes each note (a string) on its own line, using UTF-8, replacing any existing file;
+- `load_notes(path)` returns the notes as a list without newlines, skipping blank lines, and returns an **empty list** if the file doesn't exist.
+::starter
+def save_notes(path, notes):
+    pass
+
+
+def load_notes(path):
+    pass
+::solution
+def save_notes(path, notes):
+    with open(path, "w", encoding="utf-8") as f:
+        for note in notes:
+            f.write(note + "\n")
+
+
+def load_notes(path):
+    try:
+        with open(path, encoding="utf-8") as f:
+            return [line.rstrip("\n") for line in f if line.strip()]
+    except FileNotFoundError:
+        return []
+::tests
+import os as _os, tempfile as _tf
+_d = _tf.mkdtemp()
+_p = _os.path.join(_d, "notes.txt")
+save_notes(_p, ["buy milk", "call Ada", "café ☕"])
+assert open(_p, encoding="utf-8").read() == "buy milk\ncall Ada\ncafé ☕\n"
+assert load_notes(_p) == ["buy milk", "call Ada", "café ☕"]
+save_notes(_p, ["only this"])
+assert load_notes(_p) == ["only this"], "saving must replace the old file"
+with open(_p, "a", encoding="utf-8") as _f:
+    _f.write("\n\nafter blanks\n")
+assert load_notes(_p) == ["only this", "after blanks"]
+assert load_notes(_os.path.join(_d, "missing.txt")) == []
+::hints
+- Write with `open(path, "w", encoding="utf-8")` inside `with`, adding `"\n"` to each note.
+- Read line by line, keep `line.rstrip("\n")` for lines where `line.strip()` isn't empty.
+- Catch `FileNotFoundError` and return `[]`.
+--- exercise code python
+::prompt
+Write `file_stats(path)` that reads a UTF-8 text file **line by line** and returns a dictionary: `lines` (number of lines), `words` (total words), and `longest` (the longest line without its newline; the first one if there's a tie; `""` for an empty file). A missing file should raise `FileNotFoundError` as usual.
+::starter
+def file_stats(path):
+    pass
+::solution
+def file_stats(path):
+    lines = 0
+    words = 0
+    longest = ""
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            line = line.rstrip("\n")
+            lines += 1
+            words += len(line.split())
+            if len(line) > len(longest):
+                longest = line
+    return {"lines": lines, "words": words, "longest": longest}
+::tests
+import os as _os, tempfile as _tf
+_d = _tf.mkdtemp()
+_p = _os.path.join(_d, "poem.txt")
+with open(_p, "w", encoding="utf-8") as _f:
+    _f.write("The rain in Spain\nfalls mainly\non the plain of Spain today\n")
+assert file_stats(_p) == {"lines": 3, "words": 12, "longest": "on the plain of Spain today"}
+_e = _os.path.join(_d, "empty.txt")
+open(_e, "w").close()
+assert file_stats(_e) == {"lines": 0, "words": 0, "longest": ""}
+try:
+    file_stats(_os.path.join(_d, "nope.txt"))
+except FileNotFoundError:
+    pass
+else:
+    raise AssertionError("a missing file should raise FileNotFoundError")
+::hints
+- Loop `for line in f:` and strip the newline from each line first.
+- Count lines, add `len(line.split())` to the words, and keep the longest line seen so far.
+--- exercise code python
+::prompt
+Write `files_by_extension(folder)` using `pathlib`: return a dictionary mapping each file extension (lowercase, without the dot, `""` for files with none) to a **sorted** list of the file names with that extension. Look only at files directly inside `folder` (not subfolders, and skip folders themselves).
+::starter
+from pathlib import Path
+
+
+def files_by_extension(folder):
+    pass
+::solution
+from pathlib import Path
+
+
+def files_by_extension(folder):
+    groups = {}
+    for p in Path(folder).iterdir():
+        if p.is_file():
+            ext = p.suffix.lower().lstrip(".")
+            groups.setdefault(ext, []).append(p.name)
+    return {ext: sorted(names) for ext, names in groups.items()}
+::tests
+import tempfile as _tf
+from pathlib import Path as _P
+_root = _P(_tf.mkdtemp())
+for _name in ["b.txt", "a.TXT", "photo.jpg", "README", "notes.md"]:
+    (_root / _name).write_text("x", encoding="utf-8")
+(_root / "sub").mkdir()
+(_root / "sub" / "deep.txt").write_text("x", encoding="utf-8")
+assert files_by_extension(_root) == {"txt": ["a.TXT", "b.txt"], "jpg": ["photo.jpg"], "": ["README"], "md": ["notes.md"]}
+assert files_by_extension(str(_root / "sub")) == {"txt": ["deep.txt"]}
+::hints
+- `Path(folder).iterdir()` lists what's directly inside; `p.is_file()` skips folders.
+- `p.suffix` is like `".TXT"` (or `""`); lowercase it and strip the dot.
+- Group with `setdefault`, then sort each list.
+--- cards
+with open(path, mode, encoding="utf-8") :: The safe way to open files; the file closes automatically. Modes: r, w (truncates!), a, x, plus b for binary.
+Reading files :: for line in f (memory-friendly, keeps "\n"); f.read(); f.read().splitlines().
+pathlib.Path :: Path objects: folder / "file.txt", .read_text(), .write_text(), .exists(), .name, .stem, .suffix, .iterdir(), .rglob().
+Text vs bytes :: Files store bytes; text mode decodes with an encoding (use UTF-8). str.encode() / bytes.decode() convert.
+
+=== lesson py-json-csv | JSON and CSV | 100
+Two text formats carry most of the world's everyday data: **JSON**, used by almost every web API and many config files, and **CSV**, the universal format of spreadsheets. Python's standard library handles both.
+
+## JSON: data as text
+
+JSON (JavaScript Object Notation) looks almost exactly like Python dictionaries and lists:
+
+```json
+{"name": "Ada", "languages": ["Python", "C"], "active": true, "manager": null}
+```
+
+The `json` module converts between JSON text and Python objects:
+
+```python
+import json
+
+user = {"name": "Ada", "languages": ["Python", "C"], "active": True, "manager": None}
+text = json.dumps(user)                  # Python → JSON text ("dump to string")
+back = json.loads(text)                  # JSON text → Python ("load from string")
+pretty = json.dumps(user, indent=2, sort_keys=True)   # human-friendly
+
+with open("user.json", "w", encoding="utf-8") as f:
+    json.dump(user, f, indent=2)         # straight to a file
+with open("user.json", encoding="utf-8") as f:
+    user = json.load(f)
+```
+
+How types map:
+
+| JSON | Python |
+|---|---|
+| object `{}` | `dict` (keys are always strings) |
+| array `[]` | `list` (tuples become lists) |
+| string | `str` |
+| number | `int` or `float` |
+| `true` / `false` | `True` / `False` |
+| `null` | `None` |
+
+Two surprises: JSON object keys are **always strings** (`{1: "a"}` comes back as `{"1": "a"}`), and sets, dates and your own objects **can't** be converted automatically (`TypeError: Object of type ... is not JSON serializable`). Convert them to plain data first, for example with a `to_dict()` method or `dataclasses.asdict()`.
+
+Invalid JSON raises `json.JSONDecodeError`, a subclass of `ValueError`, which tells you the line and column of the problem.
+
+## CSV: rows and columns
+
+A CSV (comma-separated values) file is a table in plain text:
+
+```
+name,department,salary
+Ada,Engineering,72000
+"Hopper, Grace",Navy,65000
+```
+
+Values containing commas are wrapped in quotes, which is why you should **never** parse CSV with `line.split(",")`: use the `csv` module, which handles quoting, escaping and line endings correctly.
+
+```python
+import csv
+
+with open("staff.csv", newline="", encoding="utf-8") as f:
+    for row in csv.DictReader(f):          # each row is a dict keyed by the header
+        print(row["name"], int(row["salary"]))
+```
+
+- Open CSV files with `newline=""` so the module controls line endings.
+- Everything comes back as **strings**: convert numbers yourself.
+- `csv.reader` gives lists instead of dicts; `csv.writer` / `csv.DictWriter` write files:
+
+```python
+rows = [{"name": "Ada", "score": 95}, {"name": "Alan", "score": 88}]
+with open("scores.csv", "w", newline="", encoding="utf-8") as f:
+    writer = csv.DictWriter(f, fieldnames=["name", "score"])
+    writer.writeheader()
+    writer.writerows(rows)
+```
+
+## Files in memory: io.StringIO
+
+`io.StringIO` is a file-like object that lives in memory. Anything that reads or writes files works with it, which is handy for tests and for CSV/JSON text you already have as a string:
+
+```python
+import csv, io
+
+text = "name,score\nAda,95\nAlan,88\n"
+rows = list(csv.DictReader(io.StringIO(text)))
+```
+
+That's duck typing at work: `csv` only needs something with the methods of a file.
+
+📚 **Go deeper:** Python Library Reference, `json` and `csv`; json.org (the whole JSON format on one page); *Automate the Boring Stuff with Python*, chapter 18 "CSV Files and JSON Data".
+--- quiz
+? What does `json.loads('{"a": [1, true, null]}')` return?
++ `{'a': [1, True, None]}`
+- `{"a": [1, true, null]}` as a string
+- `{'a': (1, True, None)}`
+- An error
+> `true` becomes `True` and `null` becomes `None`.
+? What is `json.loads(json.dumps({1: "x"}))`?
+- `{1: 'x'}`
++ `{'1': 'x'}`
+- An error
+- `['1', 'x']`
+> JSON object keys are always strings.
+? Why not parse CSV lines with `line.split(",")`?
+- It's too slow
++ Quoted values can contain commas, which `split` would cut apart
+- `split` doesn't work on strings from files
+- CSV files don't use commas
+> The `csv` module handles quoting correctly.
+? What type is `row["salary"]` from `csv.DictReader`?
+- `int`
++ `str`
+- `float`
+- It depends on the value
+> CSV is text; convert numbers yourself.
+? What does `json.dumps({"tags": {"a", "b"}})` do?
+- Writes the set as a list
++ Raises `TypeError`: a set isn't JSON serializable
+- Writes it as a JSON object
+- Ignores the set
+> Convert it to a list (e.g. sorted) first.
+--- exercise code python
+::prompt
+Write settings persistence with JSON:
+
+- `save_settings(path, settings)` writes the dict as JSON with `indent=2` and `sort_keys=True` (UTF-8);
+- `load_settings(path, defaults)` returns a **new** dict: the defaults updated with the saved settings. If the file doesn't exist, return a copy of the defaults. If the file isn't valid JSON, raise `ValueError("corrupt settings file")`.
+::starter
+import json
+
+
+def save_settings(path, settings):
+    pass
+
+
+def load_settings(path, defaults):
+    pass
+::solution
+import json
+
+
+def save_settings(path, settings):
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(settings, f, indent=2, sort_keys=True)
+
+
+def load_settings(path, defaults):
+    result = dict(defaults)
+    try:
+        with open(path, encoding="utf-8") as f:
+            saved = json.load(f)
+    except FileNotFoundError:
+        return result
+    except json.JSONDecodeError:
+        raise ValueError("corrupt settings file") from None
+    result.update(saved)
+    return result
+::tests
+import os as _os, tempfile as _tf
+_d = _tf.mkdtemp()
+_p = _os.path.join(_d, "settings.json")
+defaults = {"theme": "light", "font_size": 14, "autosave": True}
+assert load_settings(_p, defaults) == defaults
+assert load_settings(_p, defaults) is not defaults, "return a copy, not the defaults themselves"
+save_settings(_p, {"theme": "dark", "font_size": 16})
+assert open(_p, encoding="utf-8").read() == '{\n  "font_size": 16,\n  "theme": "dark"\n}'
+assert load_settings(_p, defaults) == {"theme": "dark", "font_size": 16, "autosave": True}
+assert defaults == {"theme": "light", "font_size": 14, "autosave": True}, "don't change the defaults"
+with open(_p, "w", encoding="utf-8") as _f:
+    _f.write("{oops")
+try:
+    load_settings(_p, defaults)
+except ValueError as e:
+    assert str(e) == "corrupt settings file"
+else:
+    raise AssertionError("invalid JSON should raise ValueError")
+::hints
+- `json.dump(settings, f, indent=2, sort_keys=True)` inside `with open(path, "w", encoding="utf-8")`.
+- Start from `dict(defaults)` (a copy) and `update` it with what you load.
+- Catch `FileNotFoundError` and `json.JSONDecodeError` separately.
+--- exercise code python
+::prompt
+Work with CSV text using `csv.DictReader` and `io.StringIO`:
+
+- `read_scores(csv_text)` returns a list of dicts `{"name": ..., "score": int}` from text with a `name,score` header (names may contain commas, in quotes);
+- `top_scorer(rows)` returns the name with the highest score (the first one on a tie), or `None` for no rows.
+::starter
+import csv
+import io
+
+
+def read_scores(csv_text):
+    pass
+
+
+def top_scorer(rows):
+    pass
+::solution
+import csv
+import io
+
+
+def read_scores(csv_text):
+    return [{"name": row["name"], "score": int(row["score"])} for row in csv.DictReader(io.StringIO(csv_text))]
+
+
+def top_scorer(rows):
+    best = None
+    for row in rows:
+        if best is None or row["score"] > best["score"]:
+            best = row
+    return best["name"] if best else None
+::tests
+data = 'name,score\nAda,95\n"Hopper, Grace",97\nAlan,97\n'
+rows = read_scores(data)
+assert rows == [{"name": "Ada", "score": 95}, {"name": "Hopper, Grace", "score": 97}, {"name": "Alan", "score": 97}]
+assert top_scorer(rows) == "Hopper, Grace"
+assert read_scores("name,score\n") == []
+assert top_scorer([]) is None
+::hints
+- `csv.DictReader(io.StringIO(csv_text))` yields one dict per row, keyed by the header.
+- Convert `row["score"]` with `int(...)`.
+- For the top scorer, keep the best row so far and replace it only on a strictly higher score.
+--- exercise code python
+::prompt
+Write `to_csv(records, fields)` that returns CSV **text** (with a header row) for a list of dicts, writing only the given `fields` in that order. Use `csv.DictWriter` on an `io.StringIO`, with `lineterminator="\n"` and `extrasaction="ignore"` (so extra keys are skipped). Values with commas must come out quoted.
+::starter
+import csv
+import io
+
+
+def to_csv(records, fields):
+    pass
+::solution
+import csv
+import io
+
+
+def to_csv(records, fields):
+    buffer = io.StringIO()
+    writer = csv.DictWriter(buffer, fieldnames=fields, lineterminator="\n", extrasaction="ignore")
+    writer.writeheader()
+    writer.writerows(records)
+    return buffer.getvalue()
+::tests
+people = [{"name": "Ada", "city": "London", "age": 36}, {"name": "Hopper, Grace", "city": "New York", "age": 85}]
+assert to_csv(people, ["name", "age"]) == 'name,age\nAda,36\n"Hopper, Grace",85\n'
+assert to_csv([], ["a", "b"]) == "a,b\n"
+import csv as _csv, io as _io
+assert list(_csv.DictReader(_io.StringIO(to_csv(people, ["city", "name"])))) == [{"city": "London", "name": "Ada"}, {"city": "New York", "name": "Hopper, Grace"}]
+::hints
+- Create `buffer = io.StringIO()` and a `csv.DictWriter(buffer, fieldnames=fields, lineterminator="\n", extrasaction="ignore")`.
+- `writeheader()`, then `writerows(records)`, then `return buffer.getvalue()`.
+--- cards
+json.dumps / json.loads :: Python object to JSON text, and back. dump/load work with files. indent=2, sort_keys=True for readable output.
+JSON ↔ Python types :: object↔dict, array↔list, string↔str, number↔int/float, true/false↔True/False, null↔None. Keys become strings.
+csv.DictReader / DictWriter :: Read rows as dicts keyed by the header; write dicts with writeheader()/writerows(). Open files with newline="".
+io.StringIO :: An in-memory text file; anything that reads/writes files accepts it.
+
+=== lesson py-regex | Regular expressions | 105
+A **regular expression** (regex) is a tiny language for describing **patterns** in text: "three digits, a dash, four digits", "a word starting with #", "a date like 2026-10-14". Python's `re` module searches, extracts, validates and replaces text using them.
+
+```python
+import re
+
+text = "Call 555-1234 or 555-9876 today"
+re.findall(r"\d{3}-\d{4}", text)       # ['555-1234', '555-9876']
+```
+
+Always write patterns as **raw strings** (`r"..."`): regexes use lots of backslashes, and raw strings stop Python from interpreting them first.
+
+## The building blocks
+
+| Pattern | Matches |
+|---|---|
+| `abc` | the literal text abc |
+| `.` | any character except a newline |
+| `\d` / `\D` | a digit / a non-digit |
+| `\w` / `\W` | a "word" character (letter, digit, underscore) / anything else |
+| `\s` / `\S` | whitespace / non-whitespace |
+| `[aeiou]` | one of these characters |
+| `[a-z0-9]` | a range of characters |
+| `[^0-9]` | anything **except** these |
+| `^` / `$` | start / end of the text (or of each line with `re.MULTILINE`) |
+| `\b` | a word boundary |
+| `\.` | a literal dot (backslash escapes special characters) |
+
+**Quantifiers** say how many times:
+
+| Quantifier | Means |
+|---|---|
+| `*` | 0 or more |
+| `+` | 1 or more |
+| `?` | 0 or 1 (optional) |
+| `{3}` | exactly 3 |
+| `{2,4}` | 2 to 4 |
+
+So `\d{3}-\d{4}` means three digits, a dash, four digits. `colou?r` matches `color` and `colour`. `#\w+` matches a hashtag.
+
+## The main functions
+
+```python
+re.search(r"\d+", "order 66 shipped")      # first match anywhere, or None
+re.fullmatch(r"\d{4}", "2026")             # the WHOLE text must match: for validation
+re.findall(r"#(\w+)", "#python #regex")    # all matches → ['python', 'regex']
+re.sub(r"\s+", " ", "too    many   spaces")   # replace → 'too many spaces'
+re.split(r"[,;]\s*", "a, b;c")             # split on a pattern → ['a', 'b', 'c']
+```
+
+`search` and `fullmatch` return a **match object** (or `None`), so check before using it:
+
+```python
+m = re.search(r"(\d{4})-(\d{2})-(\d{2})", "Due: 2026-10-14!")
+if m:
+    print(m.group())       # '2026-10-14'   the whole match
+    print(m.group(1))      # '2026'         the first group
+    print(m.groups())      # ('2026', '10', '14')
+```
+
+`re.match` checks only at the **start** of the text, a common source of confusion; prefer `search` or `fullmatch`.
+
+## Groups
+
+Parentheses create **groups**: they capture parts of a match, and let quantifiers apply to several characters. When a pattern has groups, `findall` returns the groups instead of whole matches. **Named groups** make complex patterns readable:
+
+```python
+line = "2026-10-14 09:30:12 [ERROR] Disk full"
+m = re.fullmatch(r"(?P<date>\S+) (?P<time>\S+) \[(?P<level>\w+)\] (?P<message>.*)", line)
+m.group("level")         # 'ERROR'
+m.groupdict()            # {'date': '2026-10-14', 'time': '09:30:12', 'level': 'ERROR', 'message': 'Disk full'}
+```
+
+`(?:...)` groups **without** capturing, when you only need the grouping.
+
+## Greedy and lazy
+
+Quantifiers are **greedy**: they match as much as possible. `<.+>` on `<b>bold</b>` matches the **whole** string. Adding `?` makes them **lazy** (as little as possible): `<.+?>` matches `<b>` and then `</b>`.
+
+## Flags and compiling
+
+```python
+re.search(r"python", "I love PYTHON", re.IGNORECASE)    # case-insensitive
+re.findall(r"^\w+", text, re.MULTILINE)               # ^ matches at every line start
+pattern = re.compile(r"\d{3}-\d{4}")                  # reuse a pattern many times
+pattern.findall(text)
+```
+
+## When not to use a regex
+
+Regexes are powerful but hard to read. For simple jobs, string methods are clearer (`text.startswith("#")`, `"@" in email`). For structured formats like HTML, JSON or CSV, use a real parser. Fully validating email addresses with a regex is famously impractical; check for something reasonable and send a confirmation email instead.
+
+Tools like regex101.com explain a pattern piece by piece and let you test it, which is very useful while learning.
+
+📚 **Go deeper:** Python "Regular Expression HOWTO" (docs.python.org/3/howto/regex.html); Python Library Reference, `re`; *Automate the Boring Stuff with Python*, chapter 8 (pattern matching); regex101.com.
+--- quiz
+? What does `re.findall(r"\d+", "a1b22c333")` return?
++ `['1', '22', '333']`
+- `['1', '2', '2', '3', '3', '3']`
+- `[1, 22, 333]`
+- `'122333'`
+> `\d+` matches runs of one or more digits, as strings.
+? Which pattern checks that a whole string is exactly 5 digits?
+- `re.search(r"\d{5}", s)`
++ `re.fullmatch(r"\d{5}", s)`
+- `re.match(r"\d", s)`
+- `re.findall(r"\d{5}", s)`
+> `search` would also accept `"abc12345xyz"`; `fullmatch` requires the entire string to match.
+? What does `re.sub(r"[aeiou]", "*", "regex")` return?
+- `'r*g*x'` only if case matches
++ `'r*g*x'`
+- `'*e*e*'`
+- `['e', 'e']`
+> Each vowel is replaced.
+? On the text `"<a><b>"`, what does the greedy `<.+>` match?
++ `<a><b>` (as much as possible)
+- `<a>`
+- `<b>`
+- Nothing
+> The lazy `<.+?>` would match `<a>` first.
+? Why write regex patterns as raw strings like `r"\d+"`?
+- They run faster
++ So Python doesn't interpret the backslashes before `re` sees them
+- Raw strings are required by the `re` module
+- To make them case-insensitive
+> Without `r`, sequences like `\b` mean something else to Python (a backspace).
+--- exercise code python
+::prompt
+Write two extractors with `re`:
+
+- `hashtags(text)` returns the hashtags (without `#`), lowercased, in order of appearance, each only once; a hashtag is `#` followed by one or more word characters;
+- `find_dates(text)` returns all dates written like `2026-10-14` as tuples of ints `(2026, 10, 14)`, using groups.
+::starter
+import re
+
+
+def hashtags(text):
+    pass
+
+
+def find_dates(text):
+    pass
+::solution
+import re
+
+
+def hashtags(text):
+    result = []
+    for tag in re.findall(r"#(\w+)", text):
+        tag = tag.lower()
+        if tag not in result:
+            result.append(tag)
+    return result
+
+
+def find_dates(text):
+    return [(int(y), int(m), int(d)) for y, m, d in re.findall(r"\b(\d{4})-(\d{2})-(\d{2})\b", text)]
+::tests
+assert hashtags("Learning #Python and #regex! #python rocks #100DaysOfCode") == ["python", "regex", "100daysofcode"]
+assert hashtags("no tags # here") == []
+assert find_dates("Released 2026-10-14, patched 2026-11-02.") == [(2026, 10, 14), (2026, 11, 2)]
+assert find_dates("Call 555-1234 on 20261014") == []
+::hints
+- `re.findall(r"#(\w+)", text)` returns just the group: the tag without `#`.
+- Keep a list and add each lowercased tag only if it isn't there yet.
+- For dates, three groups give tuples of strings; convert each with `int`.
+--- exercise code python
+::prompt
+Clean up sensitive and messy text with `re.sub`:
+
+- `digits_only(phone)` keeps only the digits of a phone number;
+- `mask_cards(text)` replaces every 16-digit card number (digits optionally separated into groups of 4 by spaces or dashes) with `**** **** **** 1234`, keeping the **last four digits** (use a group and a backreference or a function).
+::starter
+import re
+
+
+def digits_only(phone):
+    pass
+
+
+def mask_cards(text):
+    pass
+::solution
+import re
+
+
+def digits_only(phone):
+    return re.sub(r"\D", "", phone)
+
+
+def mask_cards(text):
+    return re.sub(r"\b(?:\d{4}[ -]?){3}(\d{4})\b", r"**** **** **** \1", text)
+::tests
+assert digits_only("+1 (555) 123-4567") == "15551234567"
+assert digits_only("no digits") == ""
+assert mask_cards("Card 4111 1111 1111 1234 was charged") == "Card **** **** **** 1234 was charged"
+assert mask_cards("4111-1111-1111-9876 and 5500000000000004") == "**** **** **** 9876 and **** **** **** 0004"
+assert mask_cards("Order 12345 shipped") == "Order 12345 shipped"
+::hints
+- `\D` matches any non-digit; replace those with `""`.
+- A card is three groups of 4 digits, each optionally followed by a space or dash, then 4 final digits: `(?:\d{4}[ -]?){3}(\d{4})`.
+- In the replacement, `\1` inserts the first captured group (use a raw string).
+--- exercise code python
+::prompt
+Write `parse_log_line(line)` using a regex with **named groups**. Lines look like `2026-10-14 09:30:12 [ERROR] Disk full`. Return a dict with `date`, `time`, `level` and `message`, or `None` if the line doesn't have that shape. Levels are one or more capital letters.
+::starter
+import re
+
+
+def parse_log_line(line):
+    pass
+::solution
+import re
+
+LOG_LINE = re.compile(r"(?P<date>\d{4}-\d{2}-\d{2}) (?P<time>\d{2}:\d{2}:\d{2}) \[(?P<level>[A-Z]+)\] (?P<message>.*)")
+
+
+def parse_log_line(line):
+    m = LOG_LINE.fullmatch(line.strip())
+    return m.groupdict() if m else None
+::tests
+assert parse_log_line("2026-10-14 09:30:12 [ERROR] Disk full") == {"date": "2026-10-14", "time": "09:30:12", "level": "ERROR", "message": "Disk full"}
+assert parse_log_line("2026-10-14 23:59:59 [INFO] User ada logged in [web]") == {"date": "2026-10-14", "time": "23:59:59", "level": "INFO", "message": "User ada logged in [web]"}
+assert parse_log_line("garbage") is None
+assert parse_log_line("2026-10-14 09:30 [ERROR] short time") is None
+assert parse_log_line("2026-10-14 09:30:12 [error] lowercase level") is None
+::hints
+- Named groups look like `(?P<level>[A-Z]+)`.
+- Square brackets are special in regexes, so a literal `[` is written `\[`.
+- `fullmatch` and `groupdict()` do the rest.
+--- cards
+Regular expression :: A pattern language for text. \d digit, \w word char, \s space, . any char, [abc] set, ^ $ anchors.
+Quantifiers :: * (0+), + (1+), ? (0 or 1), {n}, {m,n}. Greedy by default; add ? for lazy.
+re.search / fullmatch / findall / sub :: First match anywhere / whole-string match / all matches / replace.
+Groups :: (...) captures, (?P<name>...) named capture, (?:...) groups without capturing. m.group(1), m.groupdict().
+Raw strings for patterns :: Write r"\d+" so Python leaves the backslashes for the regex engine.
+
+=== lesson py-datetime | Dates and times | 100
+Dates look simple until you calculate with them: months have different lengths, leap years exist, and clocks change. The `datetime` module does the hard parts correctly.
+
+## The main types
+
+```python
+from datetime import date, time, datetime, timedelta
+
+d = date(2026, 10, 14)                 # a calendar date
+t = time(18, 5)                        # a time of day
+dt = datetime(2026, 10, 14, 18, 5)     # both together
+date.today()                           # today's date
+datetime.now()                         # now, to the microsecond
+d.year, d.month, d.day                 # 2026 10 14
+d.weekday()                            # 2: Monday is 0, Sunday is 6
+```
+
+## Durations: timedelta
+
+Subtracting dates gives a `timedelta`; adding a `timedelta` to a date gives a new date:
+
+```python
+launch = date(2026, 12, 25)
+until = launch - date(2026, 10, 14)
+until.days                              # 72
+date(2026, 1, 31) + timedelta(days=1)   # date(2026, 2, 1): month lengths handled for you
+datetime(2026, 10, 14, 23, 0) + timedelta(hours=3)    # 2026-10-15 02:00
+timedelta(hours=1, minutes=30).total_seconds()        # 5400.0
+```
+
+Dates and datetimes compare with `<`, `>` and `==`, so they sort correctly too.
+
+## Text to dates and back: strptime and strftime
+
+```python
+dt = datetime.strptime("14/10/2026 18:05", "%d/%m/%Y %H:%M")    # parse ("string parse time")
+dt.strftime("%A %d %B %Y, %H:%M")                               # format: 'Wednesday 14 October 2026, 18:05'
+```
+
+| Code | Meaning | Example |
+|---|---|---|
+| `%Y` | 4-digit year | 2026 |
+| `%m` / `%d` | month / day, zero-padded | 10 / 04 |
+| `%H` / `%M` / `%S` | hour (24h) / minute / second | 18 / 05 / 00 |
+| `%A` / `%a` | weekday name / short | Wednesday / Wed |
+| `%B` / `%b` | month name / short | October / Oct |
+
+## ISO 8601: the format to use for data
+
+For files, APIs and databases, use the international standard **ISO 8601**: `2026-10-14` and `2026-10-14T18:05:00`. It's unambiguous (is `04/05` April 5th or May 4th?) and sorts correctly even as text.
+
+```python
+d.isoformat()                          # '2026-10-14'
+datetime.fromisoformat("2026-10-14T18:05:00")
+```
+
+## Time zones
+
+A `datetime` without time-zone information is **naive**; one with it is **aware**. Store and compute in **UTC**, and convert to local time only for display:
+
+```python
+from datetime import timezone
+now_utc = datetime.now(timezone.utc)
+paris = timezone(timedelta(hours=2))       # a fixed offset
+now_utc.astimezone(paris)
+```
+
+Real time zones (with daylight-saving rules) come from `zoneinfo.ZoneInfo("Europe/Paris")`, which needs the time-zone database installed. Mixing naive and aware datetimes in calculations raises a `TypeError`, which is Python protecting you from a subtle bug.
+
+## Measuring how long code takes
+
+```python
+import time
+start = time.perf_counter()
+...                                       # the work to measure
+elapsed = time.perf_counter() - start     # seconds, very precise
+```
+
+Use `perf_counter` (not the wall clock) for timing, since the system clock can jump.
+
+## Testing code that uses "today"
+
+Code that calls `date.today()` inside gives different results every day, which makes it hard to test. Pass the date in as a parameter, with "today" as the default only at the edge of the program; it's the dependency-injection idea again.
+
+📚 **Go deeper:** Python Library Reference, `datetime` (including "strftime() and strptime() Format Codes") and `zoneinfo`; *Automate the Boring Stuff with Python*, chapter 19 "Keeping Time"; xkcd 1179 on ISO 8601.
+--- quiz
+? What is `(date(2026, 3, 1) - date(2026, 2, 1)).days`?
++ `28`
+- `30`
+- `29`
+- `1`
+> February 2026 has 28 days (2026 isn't a leap year).
+? What does `date(2026, 10, 14).weekday()` return for a Wednesday?
+- `3`
++ `2`
+- `"Wednesday"`
+- `4`
+> Monday is 0, so Wednesday is 2. (`isoweekday()` would give 3.)
+? Which converts the text `"03/11/2026"` (day/month/year) into a date?
++ `datetime.strptime("03/11/2026", "%d/%m/%Y")`
+- `datetime.strftime("03/11/2026", "%d/%m/%Y")`
+- `date("03/11/2026")`
+- `int("03/11/2026")`
+> strptime parses text; strftime formats a datetime as text.
+? Why is ISO 8601 (`2026-10-14`) the best format for stored data?
+- It's the shortest
++ It's unambiguous and sorts correctly as text
+- It includes the time zone
+- Python can't read other formats
+> 04/05 is ambiguous; 2026-04-05 isn't.
+? What's the best way to make a function that uses today's date testable?
+- Mock the computer's clock
++ Take the date as a parameter instead of calling `date.today()` inside
+- Only run tests on the same day
+- Use `time.sleep`
+> Pass "today" in; tests can then use any date.
+--- exercise code python
+::prompt
+Write date calculations that take "today" as a parameter, so they're testable:
+
+- `days_until(today, event)` returns the number of days from `today` until `event` (negative if it's past);
+- `age_on(birth, on_date)` returns a person's age in whole years on `on_date`, counting a birthday only once it has been reached that year.
+::starter
+from datetime import date
+
+
+def days_until(today, event):
+    pass
+
+
+def age_on(birth, on_date):
+    pass
+::solution
+from datetime import date
+
+
+def days_until(today, event):
+    return (event - today).days
+
+
+def age_on(birth, on_date):
+    age = on_date.year - birth.year
+    if (on_date.month, on_date.day) < (birth.month, birth.day):
+        age -= 1
+    return age
+::tests
+assert days_until(date(2026, 10, 14), date(2026, 12, 25)) == 72
+assert days_until(date(2026, 10, 14), date(2026, 10, 14)) == 0
+assert days_until(date(2026, 10, 14), date(2026, 10, 1)) == -13
+assert age_on(date(2000, 10, 14), date(2026, 10, 14)) == 26
+assert age_on(date(2000, 10, 15), date(2026, 10, 14)) == 25
+assert age_on(date(2000, 2, 29), date(2026, 2, 28)) == 25
+assert age_on(date(2000, 2, 29), date(2026, 3, 1)) == 26
+::hints
+- Subtracting two dates gives a `timedelta`; use its `.days`.
+- Start with the difference in years, then subtract 1 if `(month, day)` of the later date is before the birthday's `(month, day)`. Tuples compare item by item.
+--- exercise code python
+::prompt
+Write `reformat(text)` that parses a date-time like `"14/10/2026 18:05"` (day/month/year, 24-hour time) and returns it formatted as `"Wednesday 14 October 2026, 18:05"`. Invalid input should raise `ValueError` (which `strptime` already does).
+::starter
+from datetime import datetime
+
+
+def reformat(text):
+    pass
+::solution
+from datetime import datetime
+
+
+def reformat(text):
+    dt = datetime.strptime(text.strip(), "%d/%m/%Y %H:%M")
+    return dt.strftime("%A %d %B %Y, %H:%M")
+::tests
+assert reformat("14/10/2026 18:05") == "Wednesday 14 October 2026, 18:05"
+assert reformat(" 01/01/2027 00:00 ") == "Friday 01 January 2027, 00:00"
+assert reformat("29/02/2028 12:30") == "Tuesday 29 February 2028, 12:30"
+for bad in ["2026-10-14 18:05", "31/02/2026 10:00", "14/10/2026"]:
+    try:
+        reformat(bad)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError(f"reformat({bad!r}) should raise ValueError")
+::hints
+- Parse with `datetime.strptime(text, "%d/%m/%Y %H:%M")`.
+- Format with `strftime("%A %d %B %Y, %H:%M")`.
+--- exercise code python
+::prompt
+Write `add_business_days(start, n)` that returns the date `n` **working days** (Monday–Friday) after the date `start`, skipping weekends. If `start` is a weekend day, counting still begins from the next working day. `n` is 0 or more; with `n = 0`, return `start` unchanged.
+::starter
+from datetime import date, timedelta
+
+
+def add_business_days(start, n):
+    pass
+::solution
+from datetime import date, timedelta
+
+
+def add_business_days(start, n):
+    current = start
+    while n > 0:
+        current += timedelta(days=1)
+        if current.weekday() < 5:
+            n -= 1
+    return current
+::tests
+assert add_business_days(date(2026, 10, 14), 1) == date(2026, 10, 15)
+assert add_business_days(date(2026, 10, 16), 1) == date(2026, 10, 19), "Friday + 1 working day is Monday"
+assert add_business_days(date(2026, 10, 14), 5) == date(2026, 10, 21)
+assert add_business_days(date(2026, 10, 17), 1) == date(2026, 10, 19), "from Saturday, the next working day is Monday"
+assert add_business_days(date(2026, 10, 14), 0) == date(2026, 10, 14)
+assert add_business_days(date(2026, 12, 31), 2) == date(2027, 1, 4)
+::hints
+- Step forward one day at a time with `timedelta(days=1)`.
+- Count a step only when `weekday()` is below 5 (Monday to Friday).
+--- cards
+date, time, datetime :: date(2026, 10, 14), time(18, 5), datetime(2026, 10, 14, 18, 5). weekday(): Monday is 0.
+timedelta :: A duration. date - date gives a timedelta (.days); date + timedelta(days=1) gives a date.
+strptime / strftime :: Parse text into a datetime with a format (%d/%m/%Y %H:%M); format a datetime as text.
+ISO 8601 :: 2026-10-14T18:05:00: unambiguous and sortable. isoformat() and fromisoformat().
+Naive vs aware :: Naive datetimes have no time zone. Store UTC (timezone.utc); convert for display.
+
+=== lesson py-m11-test | Module 11 test | 230
+This test combines the tools of Module 11 the way real programs do: modules and the standard library, files and paths, JSON and CSV, regular expressions, and dates.
+
+Make sure you can:
+
+- import in the right form and use `if __name__ == "__main__":`;
+- read and write text files safely with `with`, UTF-8 and `pathlib`;
+- convert between Python data and JSON/CSV, including what can't be converted directly;
+- write regexes with character classes, quantifiers and groups;
+- calculate with dates and convert them to and from text.
+--- quiz
+? Which line appends to a log file without erasing it?
+- `open("app.log", "w")`
++ `open("app.log", "a", encoding="utf-8")`
+- `open("app.log", "x")`
+- `open("app.log")`
+> `"a"` appends; `"w"` erases first.
+? What does `Path("data/2026/report.csv").suffix` return?
++ `".csv"`
+- `"csv"`
+- `"report"`
+- `"report.csv"`
+> `.stem` is `"report"`, `.name` is `"report.csv"`.
+? What does `json.dumps([("a", 1)])` produce?
++ `'[["a", 1]]'`
+- `'[("a", 1)]'`
+- An error
+- `'{"a": 1}'`
+> Tuples become JSON arrays.
+? What does `re.findall(r"(\w+)@(\w+)\.com", "ada@site.com, bo@mail.com")` return?
++ `[('ada', 'site'), ('bo', 'mail')]`
+- `['ada@site.com', 'bo@mail.com']`
+- `['ada', 'site', 'bo', 'mail']`
+- `[]`
+> With several groups, `findall` returns tuples of the groups.
+? What is `date(2026, 12, 31) + timedelta(days=1)`?
++ `date(2027, 1, 1)`
+- `date(2026, 12, 32)`
+- An error
+- `date(2026, 1, 1)`
+> `datetime` handles month and year changes.
+? Why use `newline=""` when opening CSV files?
++ So the `csv` module controls line endings and quoted newlines correctly
+- To remove all newlines
+- It's required for JSON
+- To make the file binary
+> Without it, extra blank lines can appear on Windows.
+? Which statement about `if __name__ == "__main__":` is true?
+- It's required in every file
++ Its block runs when the file is executed directly, not when imported
+- It makes a file importable
+- It runs the block twice
+> It separates "script" behaviour from "module" behaviour.
+? What does `"é".encode("utf-8")` give?
+- `'é'`
++ `b'\xc3\xa9'` (two bytes)
+- `233`
+- An error
+> UTF-8 uses more than one byte for characters beyond ASCII.
+--- exercise code python
+::prompt
+Analyse a server log. Write `summarise(log_text)` that takes the whole log as a string (lines like `2026-10-14 09:30:12 [ERROR] Disk full`; ignore lines that don't match) and returns a dictionary:
+
+- `"levels"`: a dict of level → count;
+- `"first_error"`: the time (`"09:30:12"`) of the first `ERROR` line, or `None`;
+- `"busiest_hour"`: the hour (`"09"`) with the most log lines (the earliest hour on a tie), or `None` for no valid lines.
+::starter
+import re
+from collections import Counter
+
+LINE = re.compile(r"(?P<date>\d{4}-\d{2}-\d{2}) (?P<time>\d{2}:\d{2}:\d{2}) \[(?P<level>[A-Z]+)\] (?P<message>.*)")
+
+
+def summarise(log_text):
+    pass
+::solution
+import re
+from collections import Counter
+
+LINE = re.compile(r"(?P<date>\d{4}-\d{2}-\d{2}) (?P<time>\d{2}:\d{2}:\d{2}) \[(?P<level>[A-Z]+)\] (?P<message>.*)")
+
+
+def summarise(log_text):
+    levels = Counter()
+    hours = Counter()
+    first_error = None
+    for line in log_text.splitlines():
+        m = LINE.fullmatch(line.strip())
+        if not m:
+            continue
+        levels[m["level"]] += 1
+        hours[m["time"][:2]] += 1
+        if m["level"] == "ERROR" and first_error is None:
+            first_error = m["time"]
+    busiest = None
+    if hours:
+        top = max(hours.values())
+        busiest = min(h for h, n in hours.items() if n == top)
+    return {"levels": dict(levels), "first_error": first_error, "busiest_hour": busiest}
+::tests
+log = """2026-10-14 08:59:01 [INFO] Server started
+2026-10-14 09:30:12 [ERROR] Disk full
+garbage line
+2026-10-14 09:31:00 [WARNING] Retrying
+2026-10-14 10:02:44 [ERROR] Disk still full
+2026-10-14 10:15:00 [INFO] Cleanup done
+"""
+assert summarise(log) == {"levels": {"INFO": 2, "ERROR": 2, "WARNING": 1}, "first_error": "09:30:12", "busiest_hour": "09"}
+assert summarise("") == {"levels": {}, "first_error": None, "busiest_hour": None}
+assert summarise("2026-10-14 23:00:00 [INFO] late")["busiest_hour"] == "23"
+::hints
+- Loop over `log_text.splitlines()`; skip lines where `fullmatch` gives `None`. `m["level"]` reads a named group.
+- Two `Counter`s: one for levels, one for the hour (`m["time"][:2]`).
+- For the busiest hour, find the highest count, then the smallest hour with that count.
+--- exercise code python
+::prompt
+Turn CSV sales data into a JSON report. Write `sales_report(csv_text)`: the CSV has a header `date,category,amount` (amount has decimals). Return a JSON **string** (with `indent=2`) of a dict with:
+
+- `"total"`: the sum of all amounts, rounded to 2 decimals;
+- `"by_category"`: a dict category → total (rounded to 2), with categories in alphabetical order;
+- `"first_date"` and `"last_date"`: the earliest and latest dates (ISO `YYYY-MM-DD` text), or `null` if there are no rows.
+::starter
+import csv
+import io
+import json
+
+
+def sales_report(csv_text):
+    pass
+::solution
+import csv
+import io
+import json
+
+
+def sales_report(csv_text):
+    rows = list(csv.DictReader(io.StringIO(csv_text)))
+    by_category = {}
+    for row in rows:
+        by_category[row["category"]] = by_category.get(row["category"], 0) + float(row["amount"])
+    dates = sorted(row["date"] for row in rows)
+    report = {
+        "total": round(sum(float(r["amount"]) for r in rows), 2),
+        "by_category": {c: round(by_category[c], 2) for c in sorted(by_category)},
+        "first_date": dates[0] if dates else None,
+        "last_date": dates[-1] if dates else None,
+    }
+    return json.dumps(report, indent=2)
+::tests
+import json as _json
+data = "date,category,amount\n2026-10-14,books,12.50\n2026-10-02,games,59.99\n2026-10-20,books,7.25\n"
+out = sales_report(data)
+assert isinstance(out, str)
+parsed = _json.loads(out)
+assert parsed == {"total": 79.74, "by_category": {"books": 19.75, "games": 59.99}, "first_date": "2026-10-02", "last_date": "2026-10-20"}
+assert list(parsed["by_category"]) == ["books", "games"]
+assert '\n  "total": 79.74' in out, "use indent=2"
+assert _json.loads(sales_report("date,category,amount\n")) == {"total": 0, "by_category": {}, "first_date": None, "last_date": None}
+::hints
+- Read all rows with `csv.DictReader(io.StringIO(csv_text))` and convert amounts with `float`.
+- ISO dates sort correctly as text, so `sorted(...)` gives the first and last.
+- Build the dict, then `json.dumps(report, indent=2)`.

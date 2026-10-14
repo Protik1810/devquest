@@ -75,9 +75,10 @@ onmessage = async (e) => {
   py.setStderr(write);
   const flush = () => { try { py.runPython('import sys\\nsys.stdout.flush()\\nsys.stderr.flush()'); } catch (err) { /* nothing to flush */ } };
   const ns = py.globals.get('dict')();
+  ns.set('__name__', '__main__');   // run like a script, so  if __name__ == "__main__":  blocks run
   py.globals.get('__dq_prepare')(e.data.stdin ?? null);
   try {
-    try { await py.runPythonAsync(e.data.code, { globals: ns }); } finally { flush(); }
+    try { await py.runPythonAsync(py.globals.get('__dq_async_source')(e.data.code), { globals: ns }); } finally { flush(); }
     if (e.data.tests) {
       const before = out.length;
       // Run the tests statement by statement, so a bare failing assert can be explained (line + expected/got)

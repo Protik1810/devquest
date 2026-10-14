@@ -46,11 +46,14 @@ export default defineConfig({
   plugins: [react(), downloads()],
   server: { port: 5173, allowedHosts: NGROK_HOSTS, ...(tunnel ? { strictPort: true, hmr: { clientPort: 443 } } : {}) },
   build: {
-    chunkSizeWarningLimit: 1200,
+    // The lesson-content chunk is mostly text (about a third of its size once gzipped)
+    chunkSizeWarningLimit: 1600,
     rollupOptions: {
       output: {
         // Big libraries in their own long-cacheable chunks, loaded only by the pages that need them
         manualChunks(id) {
+          // Lesson text changes on a different schedule from the app code, so cache it separately
+          if (/[\/]src[\/]content[\/]/.test(id)) return 'content';
           if (!id.includes('node_modules')) return undefined;
           if (/@codemirror|@lezer|@uiw|codemirror/.test(id)) return 'editor';
           if (id.includes('@anthropic-ai')) return 'anthropic';
