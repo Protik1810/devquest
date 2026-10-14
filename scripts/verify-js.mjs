@@ -24,7 +24,7 @@ function asProgram(e) {
 }
 
 const server = await createServer({ root, configFile: path.join(root, 'vite.config.ts'), server: { middlewareMode: true }, appType: 'custom', logLevel: 'error' });
-let exercises, JS_RUNTIME, integrity;
+let exercises, JS_RUNTIME, integrity, jsModules;
 try {
   const { TRACKS } = await server.ssrLoadModule('/src/content/index.ts');
   const { CHALLENGES } = await server.ssrLoadModule('/src/content/dojo.ts');
@@ -32,6 +32,7 @@ try {
   const { exercisesOf } = await server.ssrLoadModule('/src/content/exercises.ts');
   ({ JS_RUNTIME } = await server.ssrLoadModule('/src/engine/jsRuntime.ts'));
   integrity = await server.ssrLoadModule('/src/engine/integrity.ts');
+  jsModules = await server.ssrLoadModule('/src/engine/jsModules.ts');
   exercises = [];
   for (const t of TRACKS)
     for (const l of t.lessons)
@@ -63,6 +64,17 @@ async function run(code, tests, stdin, lang = 'javascript') {
       return { ok: false, output: '', error: `SyntaxError: ${e.message}` };
     }
   }
+  // Module code (import/export, "// file:" sections, Node built-ins) is bundled exactly as runners.ts does
+  let files;
+  if (jsModules.usesModules(code)) {
+    try {
+      const bundle = jsModules.bundleModules(code, (src) => transform(src, { transforms: ['imports'], disableESTransforms: true }).code);
+      code = bundle.code;
+      files = bundle.files;
+    } catch (e) {
+      return { ok: false, output: '', error: `SyntaxError: ${e.message}` };
+    }
+  }
   const ctx = vm.createContext({
     setTimeout, clearTimeout, setInterval, clearInterval, queueMicrotask, structuredClone,
     URL, URLSearchParams, TextEncoder, TextDecoder, AbortController, AbortSignal, performance, crypto,
@@ -72,7 +84,7 @@ async function run(code, tests, stdin, lang = 'javascript') {
   vm.runInContext(JS_RUNTIME, ctx, { filename: 'devquest-runtime.js' });
   current = ctx;
   const result = await Promise.race([
-    ctx.__dqRun({ code, tests, stdin, strict: true }),
+    ctx.__dqRun({ code, tests, stdin, strict: true, files }),
     new Promise((resolve) => setTimeout(() => resolve({ ok: false, output: '', error: 'timed out' }), 10000)),
   ]);
   return result;

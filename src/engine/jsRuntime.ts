@@ -767,15 +767,326 @@ function devquestJsRuntime(g: any) {
     });
   };
 
+  // ---------------- a small Node.js: built-in modules for module-style code (see jsModules.ts) ----------------
+  /** Wraps a module's exports so both `import x from`, `import { y } from` and `require()` work (sucrase interop). */
+  const esm = (main: any, named: Record<string, any> = {}) => {
+    const mod = typeof main === 'function' ? (...args: any[]) => main(...args) : {};
+    Object.assign(mod, main, named, { __esModule: true, default: main });
+    return mod;
+  };
+
+  // (no class fields or #private members here: see the note on AssertionError)
+  const evs = (emitter: any): Map<any, ((...a: any[]) => any)[]> => emitter._events;
+  class EventEmitter {
+    constructor() {
+      Object.defineProperty(this, '_events', { value: new Map() });
+    }
+    on(event: any, fn: (...a: any[]) => any) {
+      if (!evs(this).has(event)) evs(this).set(event, []);
+      evs(this).get(event)!.push(fn);
+      return this;
+    }
+    addListener(event: any, fn: (...a: any[]) => any) {
+      return this.on(event, fn);
+    }
+    once(event: any, fn: (...a: any[]) => any) {
+      const wrapper = (...args: any[]) => {
+        this.off(event, wrapper);
+        fn.apply(this, args);
+      };
+      return this.on(event, wrapper);
+    }
+    off(event: any, fn: (...a: any[]) => any) {
+      const list = evs(this).get(event) ?? [];
+      const i = list.indexOf(fn);
+      if (i >= 0) list.splice(i, 1);
+      return this;
+    }
+    removeListener(event: any, fn: (...a: any[]) => any) {
+      return this.off(event, fn);
+    }
+    removeAllListeners(event?: any) {
+      if (event === undefined) evs(this).clear();
+      else evs(this).delete(event);
+      return this;
+    }
+    emit(event: any, ...args: any[]) {
+      const list = [...(evs(this).get(event) ?? [])];
+      if (event === 'error' && !list.length) throw args[0] instanceof Error ? args[0] : new Error(`Unhandled error. (${inspect(args[0])})`);
+      for (const fn of list) fn.apply(this, args);
+      return list.length > 0;
+    }
+    listenerCount(event: any) {
+      return (evs(this).get(event) ?? []).length;
+    }
+    eventNames() {
+      return [...evs(this).keys()].filter((k) => evs(this).get(k)!.length);
+    }
+  }
+
+  // path (POSIX style, with /app as the working directory)
+  const normalizePath = (p: string) => {
+    const absolute = p.startsWith('/');
+    const parts: string[] = [];
+    for (const part of p.split('/')) {
+      if (part === '' || part === '.') continue;
+      if (part === '..') {
+        if (parts.length && parts[parts.length - 1] !== '..') parts.pop();
+        else if (!absolute) parts.push('..');
+      } else parts.push(part);
+    }
+    const joined = (absolute ? '/' : '') + parts.join('/');
+    return joined || (absolute ? '/' : '.');
+  };
+  const pathModule = {
+    sep: '/',
+    delimiter: ':',
+    normalize: normalizePath,
+    join: (...parts: string[]) => normalizePath(parts.filter((p) => p !== '').join('/')),
+    resolve: (...parts: string[]) => {
+      let result = '/app';
+      for (const p of parts) result = p.startsWith('/') ? p : `${result}/${p}`;
+      return normalizePath(result);
+    },
+    isAbsolute: (p: string) => p.startsWith('/'),
+    dirname: (p: string) => {
+      const i = p.replace(/\/+$/, '').lastIndexOf('/');
+      return i < 0 ? '.' : i === 0 ? '/' : p.slice(0, i);
+    },
+    basename: (p: string, ext?: string) => {
+      const base = p.replace(/\/+$/, '').split('/').pop() ?? '';
+      return ext && base.endsWith(ext) && base !== ext ? base.slice(0, -ext.length) : base;
+    },
+    extname: (p: string) => {
+      const base = p.split('/').pop() ?? '';
+      const i = base.lastIndexOf('.');
+      return i <= 0 ? '' : base.slice(i);
+    },
+    parse: (p: string) => {
+      const base = pathModule.basename(p);
+      const ext = pathModule.extname(p);
+      return { root: p.startsWith('/') ? '/' : '', dir: pathModule.dirname(p) === '.' ? '' : pathModule.dirname(p), base, ext, name: ext ? base.slice(0, -ext.length) : base };
+    },
+  };
+
+  // fs: an in-memory file system rooted at /, with the program's folder at /app
+  const disk = new Map<string, string>();
+  const dirs = new Set<string>();
+  const resetDisk = (files: Record<string, string> = {}) => {
+    disk.clear();
+    dirs.clear();
+    dirs.add('/');
+    dirs.add('/app');
+    for (const [name, content] of Object.entries(files)) {
+      const p = pathModule.resolve(name);
+      for (let d = pathModule.dirname(p); d !== '/' && !dirs.has(d); d = pathModule.dirname(d)) dirs.add(d);
+      disk.set(p, content);
+    }
+  };
+  resetDisk();
+  const FS_ERRORS: Record<string, [number, string]> = {
+    ENOENT: [-2, 'no such file or directory'],
+    EEXIST: [-17, 'file already exists'],
+    EISDIR: [-21, 'illegal operation on a directory'],
+    ENOTDIR: [-20, 'not a directory'],
+    ENOTEMPTY: [-39, 'directory not empty'],
+  };
+  const fsError = (code: string, syscall: string, path: string) =>
+    Object.assign(new Error(`${code}: ${FS_ERRORS[code][1]}, ${syscall} '${path}'`), { errno: FS_ERRORS[code][0], code, syscall, path });
+  const text = (data: any) => (typeof data === 'string' ? data : data instanceof Uint8Array && typeof g.TextDecoder === 'function' ? new g.TextDecoder().decode(data) : String(data));
+  const encodingOf = (opts: any) => (typeof opts === 'string' ? opts : opts && opts.encoding);
+  const fsSync = {
+    existsSync: (p: string) => disk.has(pathModule.resolve(p)) || dirs.has(pathModule.resolve(p)),
+    readFileSync(p: string, opts?: any) {
+      const abs = pathModule.resolve(p);
+      if (dirs.has(abs)) throw fsError('EISDIR', 'read', p);
+      if (!disk.has(abs)) throw fsError('ENOENT', 'open', p);
+      const content = disk.get(abs)!;
+      return encodingOf(opts) || typeof g.TextEncoder !== 'function' ? content : new g.TextEncoder().encode(content);
+    },
+    writeFileSync(p: string, data: any) {
+      const abs = pathModule.resolve(p);
+      if (dirs.has(abs)) throw fsError('EISDIR', 'open', p);
+      if (!dirs.has(pathModule.dirname(abs))) throw fsError('ENOENT', 'open', p);
+      disk.set(abs, text(data));
+    },
+    appendFileSync(p: string, data: any) {
+      const abs = pathModule.resolve(p);
+      if (!dirs.has(pathModule.dirname(abs))) throw fsError('ENOENT', 'open', p);
+      disk.set(abs, (disk.get(abs) ?? '') + text(data));
+    },
+    mkdirSync(p: string, opts: any = {}) {
+      const abs = pathModule.resolve(p);
+      if (dirs.has(abs) || disk.has(abs)) {
+        if (opts.recursive && dirs.has(abs)) return undefined;
+        throw fsError('EEXIST', 'mkdir', p);
+      }
+      if (!dirs.has(pathModule.dirname(abs))) {
+        if (!opts.recursive) throw fsError('ENOENT', 'mkdir', p);
+        fsSync.mkdirSync(pathModule.dirname(abs), opts);
+      }
+      dirs.add(abs);
+      return opts.recursive ? abs : undefined;
+    },
+    readdirSync(p: string) {
+      const abs = pathModule.resolve(p);
+      if (disk.has(abs)) throw fsError('ENOTDIR', 'scandir', p);
+      if (!dirs.has(abs)) throw fsError('ENOENT', 'scandir', p);
+      const names = new Set<string>();
+      for (const item of [...disk.keys(), ...dirs]) if (item !== abs && pathModule.dirname(item) === abs) names.add(pathModule.basename(item));
+      return [...names].sort();
+    },
+    statSync(p: string) {
+      const abs = pathModule.resolve(p);
+      if (!disk.has(abs) && !dirs.has(abs)) throw fsError('ENOENT', 'stat', p);
+      const isDir = dirs.has(abs);
+      return { size: isDir ? 0 : (disk.get(abs) ?? '').length, isFile: () => !isDir, isDirectory: () => isDir };
+    },
+    unlinkSync(p: string) {
+      const abs = pathModule.resolve(p);
+      if (dirs.has(abs)) throw fsError('EISDIR', 'unlink', p);
+      if (!disk.delete(abs)) throw fsError('ENOENT', 'unlink', p);
+    },
+    rmSync(p: string, opts: any = {}) {
+      const abs = pathModule.resolve(p);
+      if (disk.delete(abs)) return;
+      if (!dirs.has(abs)) {
+        if (opts.force) return;
+        throw fsError('ENOENT', 'rm', p);
+      }
+      const inside = [...disk.keys(), ...dirs].filter((x) => x.startsWith(abs + '/'));
+      if (inside.length && !opts.recursive) throw fsError('ENOTEMPTY', 'rm', p);
+      for (const x of inside) {
+        disk.delete(x);
+        dirs.delete(x);
+      }
+      dirs.delete(abs);
+    },
+    renameSync(from: string, to: string) {
+      const a = pathModule.resolve(from);
+      if (!disk.has(a)) throw fsError('ENOENT', 'rename', from);
+      fsSync.writeFileSync(to, disk.get(a));
+      disk.delete(a);
+    },
+  };
+  // The promise versions wait a moment, like real disk access
+  const later = <T,>(fn: () => T) => new Promise<T>((resolve, reject) => g.setTimeout(() => {
+    try {
+      resolve(fn());
+    } catch (err) {
+      reject(err);
+    }
+  }, 1));
+  const fsPromises = {
+    readFile: (p: string, opts?: any) => later(() => fsSync.readFileSync(p, opts)),
+    writeFile: (p: string, data: any) => later(() => fsSync.writeFileSync(p, data)),
+    appendFile: (p: string, data: any) => later(() => fsSync.appendFileSync(p, data)),
+    mkdir: (p: string, opts?: any) => later(() => fsSync.mkdirSync(p, opts)),
+    readdir: (p: string) => later(() => fsSync.readdirSync(p)),
+    stat: (p: string) => later(() => fsSync.statSync(p)),
+    unlink: (p: string) => later(() => fsSync.unlinkSync(p)),
+    rm: (p: string, opts?: any) => later(() => fsSync.rmSync(p, opts)),
+    rename: (a: string, b: string) => later(() => fsSync.renameSync(a, b)),
+    access: (p: string) => later(() => {
+      if (!fsSync.existsSync(p)) throw fsError('ENOENT', 'access', p);
+    }),
+  };
+
+  // readline: questions answered from the typed input, like prompt()
+  const useAfterClose = () => Object.assign(new Error('readline was closed'), { code: 'ERR_USE_AFTER_CLOSE' });
+  const createInterface = (callbacks: boolean) => () => {
+    let closed = false;
+    const ask = (question: any) => {
+      if (closed || !feed || !feed.length) {
+        closed = true;
+        if (question) write(String(question).replace(/\s+$/, ''));
+        return null;
+      }
+      return g.prompt(String(question ?? '').replace(/\s+$/, ''));
+    };
+    const rl: any = new EventEmitter();
+    rl.close = () => {
+      if (!closed) {
+        closed = true;
+        rl.emit('close');
+      }
+    };
+    rl.question = callbacks
+      ? (q: any, cb: (answer: string) => void) => {
+          const answer = ask(q);
+          if (answer !== null) g.setTimeout(() => cb(answer), 0);
+        }
+      : (q: any) => {
+          const answer = ask(q);
+          return answer === null ? Promise.reject(useAfterClose()) : Promise.resolve(answer);
+        };
+    rl[Symbol.asyncIterator] = async function* () {
+      while (feed && feed.length && !closed) yield feed.shift();
+      closed = true;
+    };
+    return rl;
+  };
+
+  // process: what Node.js programs read about themselves
+  // process.exit() throws this marker, which run() treats as the end of the program
+  const EXIT = Symbol('process.exit');
+  const processObj: any = Object.assign(new EventEmitter(), {
+    argv: ['/usr/local/bin/node', '/app/main.js'],
+    env: {} as Record<string, string>,
+    platform: 'linux',
+    version: 'v22.12.0',
+    versions: { node: '22.12.0' },
+    exitCode: undefined as number | undefined,
+    cwd: () => '/app',
+    exit: (code?: number) => {
+      throw { [EXIT]: code ?? processObj.exitCode ?? 0 };
+    },
+    nextTick: (fn: (...a: any[]) => void, ...args: any[]) => g.queueMicrotask(() => fn(...args)),
+    stdout: { write: (s: any) => ((out += String(s)), true) },
+    stderr: { write: (s: any) => ((out += String(s)), true) },
+    memoryUsage: () => ({ heapUsed: 0, rss: 0 }),
+    hrtime: { bigint: () => BigInt(Math.round((g.performance ? g.performance.now() : Date.now()) * 1e6)) },
+  });
+
+  const util = {
+    format: (...args: any[]) => format(args),
+    inspect: (v: any) => inspect(v),
+    isDeepStrictEqual: (a: any, b: any) => deepEqual(a, b),
+    promisify: (fn: (...a: any[]) => void) => (...args: any[]) =>
+      new Promise((resolve, reject) => fn(...args, (err: any, value: any) => (err ? reject(err) : resolve(value)))),
+  };
+
+  const BUILTINS: Record<string, () => any> = {
+    assert: () => esm(assert, { strict: assert }),
+    'assert/strict': () => esm(assert, { strict: assert }),
+    test: () => esm(testFn, { test: testFn, it: testFn, describe: describeFn, beforeEach: g.beforeEach, afterEach: g.afterEach }),
+    events: () => {
+      const E: any = EventEmitter;
+      return Object.assign(E, { EventEmitter: E, default: E, __esModule: true });
+    },
+    path: () => esm(pathModule),
+    'path/posix': () => esm(pathModule),
+    fs: () => esm({ ...fsSync, promises: fsPromises }),
+    'fs/promises': () => esm(fsPromises),
+    readline: () => esm({ createInterface: createInterface(true) }),
+    'readline/promises': () => esm({ createInterface: createInterface(false) }),
+    util: () => esm(util),
+    'timers/promises': () => esm({ setTimeout: (ms: number, value?: any) => new Promise((r) => g.setTimeout(() => r(value), ms)) }),
+    process: () => esm(processObj),
+  };
+  g.__dqProcess = processObj;
+  g.__dqBuiltin = (spec: string) => {
+    const name = spec.replace(/^node:/, '');
+    if (BUILTINS[name]) return BUILTINS[name]();
+    throw Object.assign(new Error(`Cannot find module '${spec}'`), { code: 'MODULE_NOT_FOUND' });
+  };
+
   // ---------------- running learner code ----------------
   /** The line (in the given source) where an error was raised, from its stack. */
   function errorLine(err: any): number | null {
-    const stack = String((err && err.stack) || '');
-    for (const l of stack.split('\n')) {
-      const m = l.match(/<anonymous>:(\d+):\d+\)?\s*$/) || l.match(/> (?:Async)?Function:(\d+):\d+\s*$/);
-      if (m) return Number(m[1]) - 2; // new AsyncFunction(body) puts the body on line 3
-    }
-    return null;
+    // new AsyncFunction(body) puts the body on line 3; frames(err) already allows for that
+    const frame = frames(err)[0];
+    return frame ? frame.line : null;
   }
 
   /** The stack frames that point into the run's source (name and line), innermost first: V8 and Firefox formats. */
@@ -785,6 +1096,8 @@ function devquestJsRuntime(g: any) {
       const m = l.match(/^\s*at (?:async )?(?:(.+?) \()?.*<anonymous>:(\d+):\d+\)?\s*$/) || l.match(/^(.*?)@.*> (?:Async)?Function:(\d+):\d+\s*$/);
       if (!m) continue;
       const name = (m[1] || '').replace(/^async\*/, '');
+      // Helpers of the module bundler (jsModules.ts) are named __dq...: they're not the learner's code
+      if (/__dq/.test(name)) continue;
       found.push({ name: /^(eval|anonymous|)$/.test(name) ? '' : name, line: Number(m[2]) - 2 });
     }
     return found;
@@ -797,7 +1110,7 @@ function devquestJsRuntime(g: any) {
 
   const codeLines = (src: string) => src.split('\n').length;
 
-  async function run(o: { code: string; tests?: string; stdin?: string | null; strict?: boolean }) {
+  async function run(o: { code: string; tests?: string; stdin?: string | null; strict?: boolean; files?: Record<string, string> }) {
     out = '';
     indent = '';
     for (const k of Object.keys(counts)) delete counts[k];
@@ -835,6 +1148,11 @@ function devquestJsRuntime(g: any) {
     rootSuite = newSuite('');
     currentSuite = rootSuite;
     resetDemo();
+    resetDisk(o.files);
+    processObj.exitCode = undefined;
+    processObj.argv = ['/usr/local/bin/node', '/app/main.js'];
+    processObj.env = {};
+    evs(processObj).clear();
     try {
       await fn();
       const end = out.length;
@@ -852,6 +1170,10 @@ function devquestJsRuntime(g: any) {
       return { ok: true, output };
     } catch (err: any) {
       clearAll();
+      if (err && typeof err === 'object' && EXIT in err) {
+        // process.exit(): the program ends here, whatever was still pending
+        return { ok: true, output: o.tests ? out.slice(0, testStart) : out, exitCode: err[EXIT] };
+      }
       const line = errorLine(err);
       const stack = frames(err);
       const inCode = stack.filter((f) => f.line >= 1 && f.line <= C);

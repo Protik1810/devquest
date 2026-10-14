@@ -9,6 +9,7 @@ import { RedisEngine } from './redis';
 import { PY_TEST_HELPER } from './pyTestHelper';
 import { sameOutput } from './integrity';
 import { JS_RUNTIME, jsRuntimeOn } from './jsRuntime';
+import { bundleModules, usesModules } from './jsModules';
 
 /** `expected`: for a failed output check, the output that was expected (shown as a line-by-line comparison). */
 export type RunResult = { ok: boolean; output: string; error?: string; passed?: boolean; message?: string; expected?: string; table?: { columns: string[]; values: unknown[][] } };
@@ -147,8 +148,8 @@ class Runner {
     return this.readyPromise!;
   }
 
-  /** `extra` (Python only): `prelude` snippets to run quietly first; `trace` to record a step-through instead. */
-  async run(code: string, tests?: string, timeoutMs = 8000, stdin?: string, extra: { prelude?: string[]; trace?: boolean; strict?: boolean } = {}): Promise<{ ok: boolean; output: string; error?: string; testError?: string; trace?: string; syntax?: boolean }> {
+  /** `extra`: Python's `prelude` snippets to run quietly first and `trace` to record a step-through; JavaScript's `strict` mode and `files` for its in-memory node:fs. */
+  async run(code: string, tests?: string, timeoutMs = 8000, stdin?: string, extra: { prelude?: string[]; trace?: boolean; strict?: boolean; files?: Record<string, string> } = {}): Promise<{ ok: boolean; output: string; error?: string; testError?: string; trace?: string; syntax?: boolean }> {
     await this.warm();
     const w = this.worker!;
     return new Promise((resolve) => {
@@ -508,8 +509,21 @@ export async function runCode(lang: CodeLang, code: string, check?: CodeCheck, s
       }
     }
     // JavaScript lessons run in strict mode, like modern modules
-    const r = await runner.run(code, tests, lang === 'python' ? 15000 : 5000, stdin, lang === 'javascript' || lang === 'typescript' ? { strict: true } : {});
-    if (r.syntax && (lang === 'javascript' || lang === 'typescript')) r.error = await withSyntaxLocation(r.error ?? 'SyntaxError', code, lang);
+    const extra: { strict?: boolean; files?: Record<string, string> } = lang === 'javascript' || lang === 'typescript' ? { strict: true } : {};
+    const written = code;
+    if ((lang === 'javascript' || lang === 'typescript') && usesModules(code)) {
+      // import/export, several "// file:" sections or Node built-ins: bundle the files into one program
+      const { transform } = await import('sucrase');
+      try {
+        const bundle = bundleModules(code, (src) => transform(src, { transforms: ['imports'], disableESTransforms: true }).code);
+        code = bundle.code;
+        extra.files = bundle.files;
+      } catch (e) {
+        return { ok: false, output: '', error: `SyntaxError: ${(e as Error).message}`, passed: check ? false : undefined };
+      }
+    }
+    const r = await runner.run(code, tests, lang === 'python' ? 15000 : 5000, stdin, extra);
+    if (r.syntax && (lang === 'javascript' || lang === 'typescript')) r.error = await withSyntaxLocation(r.error ?? 'SyntaxError', written, lang);
     if (!r.ok) return { ok: false, output: r.output, error: r.error, passed: check ? false : undefined };
     if (!check) return { ok: true, output: r.output };
     if (check.type === 'stdout') {
@@ -517,7 +531,7 @@ export async function runCode(lang: CodeLang, code: string, check?: CodeCheck, s
       if (!passed) return { ok: true, output: r.output, passed, message: 'Your output differs from the expected output.', expected: check.expected };
       // The example passed: run the other inputs too, so every branch of the program gets checked
       for (const c of check.cases ?? []) {
-        const o = await runner.run(code, undefined, 15000, c.stdin);
+        const o = await runner.run(code, undefined, 15000, c.stdin, extra);
         if (o.ok && sameOutput(o.output, c.expected)) continue;
         if (!o.ok) return { ok: false, output: o.output, error: o.error, passed: false, message: `Right for the example, but it crashed with another input. Typed in:\n${c.stdin}` };
         return { ok: true, output: o.output, passed: false, message: `Right for the example, but not for another input. Typed in:\n${c.stdin}`, expected: c.expected };
