@@ -3,6 +3,12 @@
 /** The exercise's reference code, used to tell real solutions from printed answers. */
 export type Reference = { solution?: string; starter?: string };
 
+/** Compare program outputs line by line, ignoring line endings, trailing spaces and blank lines around them. */
+export function sameOutput(a: string, b: string) {
+  const norm = (s: string) => s.replace(/\r\n/g, '\n').split('\n').map((l) => l.trimEnd()).join('\n').trim();
+  return norm(a) === norm(b);
+}
+
 export const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 /** Apply find → replace swaps in one pass (no chained replacements); whole-word for alphanumeric edges. */

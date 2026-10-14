@@ -58,4 +58,24 @@ def __dq_set_stdin(text):
         print(prompt + line)
         return line
     _dq_builtins.input = _dq_input
+
+def __dq_reset():
+    # Runs share one interpreter: undo global state an earlier run may have left behind
+    import sys
+    lg = sys.modules.get('logging')
+    if lg is not None:
+        root = lg.getLogger()
+        for h in root.handlers[:]:
+            root.removeHandler(h)
+        root.setLevel(lg.WARNING)
+        for logger in list(lg.Logger.manager.loggerDict.values()):
+            if isinstance(logger, lg.Logger):
+                logger.handlers.clear()
+                logger.setLevel(lg.NOTSET)
+                logger.disabled = False
+                logger.propagate = True
+
+def __dq_prepare(stdin):
+    __dq_reset()
+    __dq_set_stdin(stdin)
 `;

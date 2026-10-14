@@ -21,6 +21,8 @@ jobs:
       - name: Build (downloads the offline Python/React runtimes)
         run: npm run build
       - name: Verify Python exercises in the bundled Pyodide
+        # A starter or solution that loops forever would hang the run, so cap it
+        timeout-minutes: 10
         run: npm run verify:python
       - name: Verify native-language exercises with real compilers
         # Exercises for toolchains that aren't installed on the runner are skipped

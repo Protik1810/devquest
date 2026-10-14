@@ -79,7 +79,7 @@ async function run(code, tests, stdin) {
     fullHashlib = true;
   }
   const ns = py.globals.get('dict')();
-  py.globals.get('__dq_set_stdin')(stdin ?? null);
+  py.globals.get('__dq_prepare')(stdin ?? null);
   const flush = () => py.runPython('import sys\nsys.stdout.flush()\nsys.stderr.flush()');
   try {
     try {
@@ -113,7 +113,7 @@ async function passes(code, check) {
     // The example run, then every extra input case, like the app's runner
     for (const c of [{ stdin: check.stdin, expected: check.expected }, ...(check.cases ?? [])]) {
       const r = await run(code, undefined, c.stdin);
-      const pass = r.ok && r.output.trim() === c.expected.trim();
+      const pass = r.ok && integrity.sameOutput(r.output, c.expected);
       if (!pass) return { pass, why: r.error ?? `output differs${c.stdin !== check.stdin ? ` for input ${JSON.stringify(c.stdin)}` : ''}:\n--- got\n${r.output.trim()}\n--- expected\n${c.expected.trim()}` };
     }
     return { pass: true, why: '' };
@@ -139,7 +139,7 @@ for (const { id, ex } of exercises) {
     if (ex.check.variants?.length) {
       const v = await run(integrity.applyVariants(ex.solution, ex.check.variants), undefined, ex.check.stdin);
       if (!v.ok) fail(id, `a variant breaks the solution\n${v.error}`);
-      else if (v.output.trim() === ex.check.expected.trim()) fail(id, 'variants do not change the output (they catch nothing)');
+      else if (integrity.sameOutput(v.output, ex.check.expected)) fail(id, 'variants do not change the output (they catch nothing)');
     }
   }
 }

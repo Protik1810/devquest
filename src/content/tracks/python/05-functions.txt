@@ -1,0 +1,1281 @@
+=== module Module 5 · Functions
+
+=== lesson py-functions | Defining functions | 90
+You've been **calling** functions since your first lesson: `print`, `len`, `input`, `int`, `round`. Now you'll write your own. A **function** is a named, reusable block of code. Functions are how programmers tame complexity:
+
+- **Don't repeat yourself.** Write the logic once, use it everywhere. Fix a bug once, and it's fixed everywhere.
+- **Names explain code.** `total = add_tax(price)` says what happens without showing how.
+- **Decomposition.** Big problems become small functions you can understand one at a time.
+- **Testing.** A small function can be checked on its own, with many inputs.
+
+## Defining and calling
+
+```python
+def greet(name):
+    """Print a friendly greeting."""
+    print(f"Hello, {name}!")
+
+greet("Ada")      # Hello, Ada!
+greet("Alan")     # Hello, Alan!
+```
+
+- `def` starts a **function definition**, followed by the function's name (snake_case, usually a verb), its **parameters** in parentheses, and a colon.
+- The indented **body** runs each time the function is called.
+- The string on the first line is a **docstring**: documentation that `help(greet)` shows.
+
+**Defining a function doesn't run it.** It only creates it, like writing down a recipe without cooking. The body runs when you **call** it: `greet("Ada")`. Python reads top to bottom, so define a function *before* the line that calls it, or you get a `NameError`.
+
+## Parameters and arguments
+
+A **parameter** is the variable named in the definition (`name`). An **argument** is the value you pass in the call (`"Ada"`). When the function is called, each parameter is set to its argument. Pass the wrong number and Python complains:
+
+```
+TypeError: greet() missing 1 required positional argument: 'name'
+```
+
+## return: handing a value back
+
+Most useful functions **compute** something and give it back with `return`:
+
+```python
+def square(n):
+    return n * n
+
+area = square(4) + square(3)    # 16 + 9
+print(area)                     # 25
+```
+
+`return` ends the function **immediately** and sends the value back to where it was called. The call `square(4)` then *becomes* that value, so it can be used in any expression.
+
+## print versus return
+
+This is the most common confusion for new programmers, so slow down here:
+
+- `print` **shows** a value to a human on the screen.
+- `return` **gives** a value back to the program.
+
+A function that prints its result instead of returning it can't be used in further calculations:
+
+```python
+def bad_square(n):
+    print(n * n)
+
+x = bad_square(4)    # prints 16 on the screen...
+print(x)             # None
+print(x + 1)         # TypeError: unsupported operand type(s) for +: 'NoneType' and 'int'
+```
+
+A function without a `return` (or with a bare `return`) returns **`None`**. The rule of thumb: functions that **compute** should **return**; let the code that calls them decide what to print.
+
+## Several exits
+
+`return` can appear in several places, and the first one reached wins. Returning early often makes code simpler:
+
+```python
+def sign(n):
+    if n > 0:
+        return "positive"
+    if n < 0:
+        return "negative"
+    return "zero"
+```
+
+No `elif` is needed: once a `return` runs, the rest of the function is skipped.
+
+## Returning several values
+
+Separate them with commas. Python packs them into a **tuple** (an unchangeable list, covered in Module 6), which you can unpack:
+
+```python
+def min_max(numbers):
+    return min(numbers), max(numbers)
+
+low, high = min_max([4, 9, 1, 7])
+print(low, high)    # 1 9
+```
+
+## How a call runs
+
+When Python reaches a call, it **jumps** into the function, sets up the parameters, runs the body until a `return` (or the end), and then **jumps back** to exactly where it was, carrying the returned value. Functions can call other functions, and each call remembers where to come back to.
+
+Building big functions out of small ones is called **composition**:
+
+```python
+def average(numbers):
+    return sum(numbers) / len(numbers)
+
+def describe(numbers):
+    return f"{len(numbers)} numbers with an average of {average(numbers):.1f}"
+
+print(describe([3, 4, 8]))    # 3 numbers with an average of 5.0
+```
+
+## Checking a function with assert
+
+`assert` checks that something is true, and stops the program with an `AssertionError` if it isn't:
+
+```python
+assert square(3) == 9       # passes silently
+assert square(-2) == 4      # passes
+assert square(2) == 5       # AssertionError
+```
+
+From now on, many DevQuest exercises ask for a **function** and check it with hidden `assert` lines like these, calling it with many different inputs. When one fails, you'll see the check, what was expected and what your function returned. You'll write full test suites yourself in Module 7.
+
+## What makes a good function
+
+- It does **one thing**, and its name says what (`calculate_tax`, `is_valid_email`).
+- It's short enough to read at a glance.
+- It gets its inputs from **parameters** and gives its result with **return**, rather than reading `input()` or printing in the middle of a calculation.
+
+📚 **Go deeper:** Python Tutorial, section 4.8 "Defining Functions"; *Think Python* (3rd ed.), chapters 3 and 6 "Functions" and "Return Values"; CS50P lecture 0.
+--- quiz
+? What does this print?
+```python
+def double(x):
+    return x * 2
+
+print(double(3) + 1)
+```
+- `6`
++ `7`
+- `8`
+- `None`
+> `double(3)` becomes 6, then 6 + 1 is 7.
+? What does this print?
+```python
+def hello():
+    print("hi")
+
+result = hello()
+print(result)
+```
+- `hi` only
++ `hi`, then `None`
+- `None` only
+- `hi` twice
+> Calling `hello()` prints hi. It has no `return`, so it returns `None`, which the second print shows.
+? What does this print?
+```python
+def check(n):
+    if n > 10:
+        return "big"
+    return "small"
+    print("done")
+
+print(check(50))
+```
++ `big`
+- `big` and `done`
+- `small`
+- `done`
+> `return` ends the function immediately. The `print("done")` line can never run.
+? In `def area(width, height):` and the call `area(3, 4)`, what are `3` and `4`?
+- Parameters
++ Arguments
+- Return values
+- Docstrings
+> Parameters are the names in the definition; arguments are the values in the call.
+? What happens here?
+```python
+say_hi()
+
+def say_hi():
+    print("hi")
+```
+- It prints hi
++ A `NameError`, because the function doesn't exist yet when it's called
+- A `SyntaxError`
+- Nothing
+> Python runs top to bottom; the `def` hasn't run yet when `say_hi()` is called.
+--- exercise code python
+::prompt
+Write two functions that **return** (not print) their results:
+
+- `rectangle_area(width, height)`: the area of a rectangle;
+- `rectangle_perimeter(width, height)`: the distance all the way around it.
+::starter
+def rectangle_area(width, height):
+    pass
+
+
+def rectangle_perimeter(width, height):
+    pass
+::solution
+def rectangle_area(width, height):
+    return width * height
+
+
+def rectangle_perimeter(width, height):
+    return 2 * (width + height)
+::tests
+assert rectangle_area(3, 4) == 12
+assert rectangle_area(10, 2.5) == 25
+assert rectangle_area(0, 5) == 0
+assert rectangle_perimeter(3, 4) == 14
+assert rectangle_perimeter(1, 1) == 4
+assert rectangle_perimeter(10, 2.5) == 25
+::hints
+- Replace `pass` with a `return` statement.
+- The perimeter is twice the width plus twice the height.
+--- exercise code python
+::prompt
+These functions **print** instead of returning, so `describe_temperature` can't use the result and crashes. Fix both so that:
+
+- `to_fahrenheit(c)` returns the temperature in Fahrenheit (`c * 9 / 5 + 32`);
+- `describe_temperature(c)` returns a string like `20°C is 68.0°F`.
+::starter
+def to_fahrenheit(c):
+    print(c * 9 / 5 + 32)
+
+
+def describe_temperature(c):
+    f = to_fahrenheit(c)
+    print(f"{c}°C is {f:.1f}°F")
+::solution
+def to_fahrenheit(c):
+    return c * 9 / 5 + 32
+
+
+def describe_temperature(c):
+    f = to_fahrenheit(c)
+    return f"{c}°C is {f:.1f}°F"
+::tests
+assert to_fahrenheit(100) == 212
+assert to_fahrenheit(0) == 32
+assert to_fahrenheit(-40) == -40
+assert describe_temperature(20) == "20°C is 68.0°F"
+assert describe_temperature(37.5) == "37.5°C is 99.5°F"
+::hints
+- Change each `print(...)` into `return ...`.
+- A function that only prints returns `None`, and `None` can't be formatted with `:.1f`.
+--- exercise code python
+::prompt
+Write `format_price(cents)` that takes a whole number of cents and **returns** it as a dollar string with a thousands separator and exactly two decimals: `1234` becomes `$12.34`, `5` becomes `$0.05`, and `123456789` becomes `$1,234,567.89`.
+::starter
+def format_price(cents):
+    pass
+::solution
+def format_price(cents):
+    return f"${cents / 100:,.2f}"
+::tests
+assert format_price(1234) == "$12.34"
+assert format_price(5) == "$0.05"
+assert format_price(100) == "$1.00"
+assert format_price(0) == "$0.00"
+assert format_price(123456789) == "$1,234,567.89"
+::hints
+- Convert to dollars by dividing by 100.
+- The format specifier `,.2f` adds separators and two decimals.
+--- exercise code python
+::prompt
+Turn the grading logic into a reusable function: `letter_grade(score)` returns `"A"` for 90 and above, `"B"` for 80–89, `"C"` for 70–79, `"D"` for 60–69 and `"F"` below 60. Use **early returns** instead of `elif`.
+::starter
+def letter_grade(score):
+    pass
+::solution
+def letter_grade(score):
+    if score >= 90:
+        return "A"
+    if score >= 80:
+        return "B"
+    if score >= 70:
+        return "C"
+    if score >= 60:
+        return "D"
+    return "F"
+::tests
+assert letter_grade(95) == "A"
+assert letter_grade(90) == "A"
+assert letter_grade(89) == "B"
+assert letter_grade(80) == "B"
+assert letter_grade(79.5) == "C"
+assert letter_grade(70) == "C"
+assert letter_grade(60) == "D"
+assert letter_grade(59) == "F"
+assert letter_grade(0) == "F"
+::hints
+- Check the highest grade first; each `if` can `return` straight away.
+- The last line, reached only when nothing else matched, returns `"F"`.
+--- cards
+def :: Defines a function: def name(parameters): followed by an indented body. Defining doesn't run it; calling does.
+return :: Ends the function and hands a value back to the caller. Without return, a function returns None.
+print vs return :: print shows a value to a human; return gives it to the program. Computing functions should return.
+Parameter vs argument :: Parameters are the names in the definition; arguments are the values passed in a call.
+Docstring :: A string on the first line of a function body that documents it; help(func) shows it.
+
+=== lesson py-params | Parameters in depth | 90
+Functions become far more flexible once you know all the ways to pass information into them.
+
+## Positional and keyword arguments
+
+```python
+def describe_pet(animal, name):
+    return f"{name} is a {animal}"
+
+describe_pet("dog", "Rex")                 # positional: matched by order
+describe_pet(name="Rex", animal="dog")     # keyword: matched by name, any order
+describe_pet("dog", name="Rex")            # mixed: positional ones first
+```
+
+Keyword arguments make calls easier to read, especially when there are several numbers or booleans: `resize(img, width=800, keep_ratio=True)` is clearer than `resize(img, 800, True)`. A positional argument can't come after a keyword one: `describe_pet(name="Rex", "dog")` is a `SyntaxError`.
+
+## Default values
+
+A parameter can have a **default**, used when the caller leaves it out:
+
+```python
+def greet(name, greeting="Hello"):
+    return f"{greeting}, {name}!"
+
+greet("Ada")                  # 'Hello, Ada!'
+greet("Ada", "Welcome back")  # 'Welcome back, Ada!'
+greet("Ada", greeting="Hi")   # 'Hi, Ada!'
+```
+
+You've been using defaults all along: `print` has `sep=" "` and `end="\n"`, and `round(x)` has `ndigits=None`. Parameters with defaults must come after the ones without.
+
+## The mutable default trap
+
+Default values are created **once**, when the `def` line runs, not on every call. With a list as a default, that one list is shared by every call:
+
+```python
+def add_item(item, items=[]):
+    items.append(item)
+    return items
+
+print(add_item("a"))    # ['a']
+print(add_item("b"))    # ['a', 'b']   ← surprise! the same list again
+```
+
+The standard fix is to use `None` as the default and create a fresh list inside:
+
+```python
+def add_item(item, items=None):
+    if items is None:
+        items = []
+    items.append(item)
+    return items
+```
+
+This is one of Python's most famous gotchas, and a favourite interview question.
+
+## *args: any number of positional arguments
+
+A parameter with one star collects all the extra positional arguments into a **tuple**:
+
+```python
+def total(*numbers):
+    result = 0
+    for n in numbers:
+        result += n
+    return result
+
+total(1, 2, 3)     # 6
+total()            # 0
+```
+
+`print` works this way, which is why it takes any number of values.
+
+## **kwargs: any number of keyword arguments
+
+Two stars collect extra keyword arguments into a **dictionary** of name/value pairs (Module 6 covers dictionaries; for now, `.items()` loops over the pairs):
+
+```python
+def make_profile(name, **details):
+    lines = [name]
+    for key, value in details.items():
+        lines.append(f"  {key}: {value}")
+    return "\n".join(lines)
+
+print(make_profile("Ada", born=1815, field="mathematics"))
+```
+
+The names `args` and `kwargs` are only conventions; the stars are what matter.
+
+## Keyword-only and positional-only parameters
+
+A bare `*` in the parameter list means "everything after this must be passed by name":
+
+```python
+def connect(host, *, timeout=10, retries=3):
+    ...
+
+connect("example.com", timeout=5)     # fine
+connect("example.com", 5)             # TypeError: takes 1 positional argument but 2 were given
+```
+
+This forces readable calls for options. The opposite, a `/`, makes the parameters before it **positional-only**; you'll see it in the documentation of built-ins such as `len(obj, /)`.
+
+The full order is: normal parameters, `*args`, keyword-only parameters, `**kwargs`.
+
+## Unpacking arguments in a call
+
+Stars also work in the other direction, spreading a sequence or dictionary into separate arguments:
+
+```python
+point = [3, 4]
+print(*point)                  # same as print(3, 4)
+options = {"sep": " | ", "end": "!\n"}
+print("a", "b", **options)     # a | b!
+```
+
+## A peek at type hints
+
+You can note the expected types of parameters and the return value:
+
+```python
+def area(width: float, height: float) -> float:
+    return width * height
+```
+
+Python doesn't enforce them, but editors and tools use them to catch mistakes. Module 12 covers them.
+
+📚 **Go deeper:** Python Tutorial, section 4.9 "More on Defining Functions" (defaults, keyword arguments, special parameters, arbitrary argument lists, unpacking); *Python Crash Course* (3rd ed.), chapter 8.
+--- quiz
+? What do these calls return?
+```python
+def add(a, b=2):
+    return a + b
+
+print(add(5), add(5, b=10))
+```
++ `7 15`
+- `7 7`
+- `5 15`
+- An error
+> The first call uses the default b=2; the second overrides it.
+? What happens with `describe_pet(name="Rex", "dog")`?
+- It works like `describe_pet("dog", "Rex")`
++ A `SyntaxError`: a positional argument can't follow a keyword argument
+- `name` is ignored
+- It returns `None`
+> Positional arguments always come first in a call.
+? What does the second print show?
+```python
+def add_item(item, items=[]):
+    items.append(item)
+    return items
+
+print(add_item(1))
+print(add_item(2))
+```
+- `[2]`
++ `[1, 2]`
+- `[1]`
+- An error
+> The default list is created once and shared by every call that doesn't pass its own list.
+? Inside `def f(*args):`, what is `args` when you call `f(1, 2, 3)`?
+- a list `[1, 2, 3]`
++ a tuple `(1, 2, 3)`
+- the number 3
+- the number 1
+> `*args` collects the extra positional arguments into a tuple.
+? Given `def send(msg, *, urgent=False):`, which call is an error?
+- `send("hi")`
+- `send("hi", urgent=True)`
++ `send("hi", True)`
+- `send(msg="hi")`
+> Everything after the bare `*` is keyword-only, so `urgent` can't be passed by position.
+? What does `print(*[1, 2, 3], sep="-")` print?
++ `1-2-3`
+- `[1, 2, 3]`
+- `*[1, 2, 3]`
+- `1 2 3`
+> The star unpacks the list into three separate arguments.
+--- exercise code python
+::prompt
+Write `make_greeting(name, greeting="Hello", punctuation="!")` that returns strings like `Hello, Ada!`. Callers may change the greeting and the punctuation, by position or by name.
+::starter
+def make_greeting(name):
+    pass
+::solution
+def make_greeting(name, greeting="Hello", punctuation="!"):
+    return f"{greeting}, {name}{punctuation}"
+::tests
+assert make_greeting("Ada") == "Hello, Ada!"
+assert make_greeting("Alan", "Welcome back") == "Welcome back, Alan!"
+assert make_greeting("Grace", punctuation=".") == "Hello, Grace."
+assert make_greeting(greeting="Hi", name="Linus", punctuation="?") == "Hi, Linus?"
+::hints
+- Add the two extra parameters with their defaults: `greeting="Hello", punctuation="!"`.
+- Build the result with an f-string: `f"{greeting}, {name}{punctuation}"`.
+--- exercise code python
+::prompt
+Write `average(*numbers)` that accepts **any number** of numbers and returns their average. With no numbers at all it returns `0`.
+::starter
+def average(numbers):
+    return sum(numbers) / len(numbers)
+::solution
+def average(*numbers):
+    if not numbers:
+        return 0
+    return sum(numbers) / len(numbers)
+::tests
+assert average(2, 4, 6) == 4
+assert average(10) == 10
+assert average(1, 2) == 1.5
+assert average() == 0
+::hints
+- A star before the parameter name collects all the arguments into a tuple: `def average(*numbers):`.
+- `sum()` and `len()` work on tuples.
+- An empty tuple is falsy, so `if not numbers: return 0` handles the empty case.
+--- exercise code python
+::prompt
+`add_tag` has the mutable default bug: tags from earlier calls leak into later ones. Fix it so every call without a list gets a **fresh** list, while passing an existing list still adds to it.
+::starter
+def add_tag(tag, tags=[]):
+    tags.append(tag)
+    return tags
+::solution
+def add_tag(tag, tags=None):
+    if tags is None:
+        tags = []
+    tags.append(tag)
+    return tags
+::tests
+assert add_tag("python") == ["python"]
+assert add_tag("beginner") == ["beginner"], "a call without a list must start from an empty list"
+existing = ["news"]
+assert add_tag("tech", existing) == ["news", "tech"]
+assert existing == ["news", "tech"], "an existing list should be added to"
+assert add_tag("again") == ["again"]
+::hints
+- Use `None` as the default value.
+- At the start of the function: `if tags is None: tags = []`.
+--- exercise code python
+::prompt
+Write `build_url(host, *parts, secure=True)` that joins a host and any number of path parts into a web address. It uses `https://` normally and `http://` when `secure=False` is passed. `secure` must be **keyword-only** (it comes after `*parts`, so it already is).
+::starter
+def build_url(host):
+    pass
+::solution
+def build_url(host, *parts, secure=True):
+    scheme = "https" if secure else "http"
+    url = f"{scheme}://{host}"
+    for part in parts:
+        url += "/" + part
+    return url
+::tests
+assert build_url("example.com") == "https://example.com"
+assert build_url("example.com", "docs", "python") == "https://example.com/docs/python"
+assert build_url("localhost:8000", "api", secure=False) == "http://localhost:8000/api"
+assert build_url("devquest.app", "lessons", "py-params", secure=True) == "https://devquest.app/lessons/py-params"
+::hints
+- The signature is `def build_url(host, *parts, secure=True):`.
+- Choose the scheme with a conditional expression: `"https" if secure else "http"`.
+- Add `"/" + part` for each part, or use `"/".join(...)`.
+--- cards
+Keyword arguments :: Arguments passed by name, f(x=1). Order doesn't matter, but positional arguments must come first.
+Default parameter values :: def f(a, b=2): b is optional. Defaults are evaluated once, when def runs.
+Mutable default trap :: def f(items=[]) shares one list across calls. Use items=None, then create a new list inside.
+*args and **kwargs :: *args collects extra positional arguments into a tuple; **kwargs collects extra keyword arguments into a dict.
+Keyword-only parameters :: Parameters after * (or after *args) can only be passed by name: def f(a, *, flag=False).
+
+=== lesson py-scope | Scope and the call stack | 90
+## Local variables
+
+Variables created inside a function, including its parameters, are **local**: they exist only while that call is running, and only that function can see them.
+
+```python
+def make_total(prices):
+    total = 0                # a local variable
+    for p in prices:
+        total += p
+    return total
+
+make_total([3, 4])
+print(total)                 # NameError: name 'total' is not defined
+```
+
+Every call gets a **fresh** set of local variables, so calls can't interfere with each other. This is what makes functions safe to reuse.
+
+## Global variables
+
+A variable assigned at the top level of the file (outside any function) is **global**. Functions can **read** globals:
+
+```python
+TAX_RATE = 0.2
+
+def with_tax(price):
+    return price * (1 + TAX_RATE)    # reading a global is fine
+```
+
+But **assigning** to a name inside a function makes it local to that function, even if a global has the same name:
+
+```python
+count = 0
+
+def increment():
+    count += 1        # UnboundLocalError: cannot access local variable 'count' where it is not associated with a value
+```
+
+Python sees the assignment, decides `count` is local, and then finds it has no value yet. The `global count` statement would make it refer to the global, but **avoid this**: when any function can change a global, bugs can come from anywhere, and the function is hard to test. Instead, pass values in as parameters and send results back with `return`:
+
+```python
+def increment(count):
+    return count + 1
+
+count = increment(count)
+```
+
+Global *constants* (in CAPITALS, never reassigned) like `TAX_RATE` are fine.
+
+## The LEGB rule
+
+When Python meets a name, it looks for it in four places, in order:
+
+1. **L**ocal: the current function;
+2. **E**nclosing: any function this one is nested inside (Module 12 uses this for closures);
+3. **G**lobal: the top level of the file;
+4. **B**uilt-in: Python's own names like `print`, `len` and `sum`.
+
+The first match wins.
+
+## Don't shadow built-ins
+
+Because your names are found before the built-ins, reusing a built-in's name **hides** it:
+
+```python
+sum = 0                  # now "sum" means this number...
+for n in [1, 2, 3]:
+    sum += n
+print(sum([4, 5]))       # TypeError: 'int' object is not callable
+```
+
+Avoid naming variables `list`, `dict`, `str`, `sum`, `max`, `min`, `input`, `id` or `type`. Use `total`, `items`, `largest` and so on.
+
+## The call stack
+
+Each function call gets a **frame** holding its local variables. Frames pile up on the **call stack**: when `main` calls `report` and `report` calls `average`, there are three frames. When `average` returns, its frame is removed and `report` continues.
+
+That's exactly what a **traceback** shows when something goes wrong deep inside:
+
+```
+Traceback (most recent call last):
+  File "<exec>", line 9, in <module>
+  File "<exec>", line 6, in report
+  File "<exec>", line 2, in average
+ZeroDivisionError: division by zero
+```
+
+Read it as a story from top to bottom: the main program called `report`, which called `average`, where the division failed. The **bottom** frame is where the error happened; the frames above tell you how the program got there. Often the real bug is in a caller that passed bad data (here, perhaps an empty list).
+
+## Pure functions and side effects
+
+A **pure** function only uses its parameters and only communicates through its return value: the same input always gives the same output, and nothing else changes. `square(n)` is pure. Anything else a function does (printing, reading input, changing a global or a list it was given, writing a file) is a **side effect**.
+
+Pure functions are easy to test and reason about. A good design keeps the calculations pure and does input/output in a few places at the edges of the program.
+
+## Functions are values
+
+A function's name without parentheses refers to the function itself, which you can store or pass to another function:
+
+```python
+def shout(text):
+    return text.upper() + "!"
+
+def whisper(text):
+    return text.lower() + "..."
+
+def speak(style, text):
+    return style(text)       # call whichever function was passed in
+
+speak(shout, "Hello")      # 'HELLO!'
+speak(whisper, "Hello")    # 'hello...'
+```
+
+`shout` is the function; `shout("hi")` *calls* it. Passing functions around is a powerful idea that you'll use with `sorted(key=...)` and more in Module 12.
+
+## A tidy program layout
+
+Larger programs usually put everything in functions and start with a `main` function:
+
+```python
+def main():
+    name = input("Name: ")
+    print(make_greeting(name))
+
+main()
+```
+
+📚 **Go deeper:** Python Tutorial, section 9.2 "Python Scopes and Namespaces"; *Think Python* (3rd ed.), chapter 3 (stack diagrams); Real Python, "Python Scope & the LEGB Rule".
+--- quiz
+? What does this print?
+```python
+x = 5
+
+def change():
+    x = 10
+
+change()
+print(x)
+```
++ `5`
+- `10`
+- An error
+- `None`
+> The `x = 10` inside the function creates a local variable; the global `x` is untouched.
+? What happens here?
+```python
+def setup():
+    secret = 42
+
+setup()
+print(secret)
+```
+- It prints 42
++ A `NameError`
+- It prints `None`
+- An `UnboundLocalError`
+> `secret` was local to `setup` and disappeared when the call ended.
+? Why does this raise `TypeError: 'int' object is not callable`?
+```python
+max = 0
+for n in [3, 8, 2]:
+    if n > max:
+        max = n
+print(max([1, 2]))
+```
+- `max` only works on tuples
++ The variable named `max` hides the built-in `max` function
+- You can't compare in a loop
+- `print` can't call functions
+> The name `max` now refers to the number 8, and you can't call a number. Use a different variable name.
+? Which function is pure?
+- `def log(msg): print(msg)`
++ `def area(r): return 3.14159 * r * r`
+- `def ask(): return input("?")`
+- `def add_to(items, x): items.append(x)`
+> Only `area` depends on nothing but its parameters and changes nothing outside.
+? What does `speak(shout, "hi")` return, given the lesson's `speak` and `shout`?
++ `'HI!'`
+- `'hi'`
+- `shout`
+- An error, because `shout` needs parentheses
+> `speak` receives the function itself and calls it with `"hi"`.
+? In a traceback, where did the error actually happen?
+- In the first `File` line
++ In the last `File` line, just above the error message
+- Always in the main program
+- It can't be told
+> Tracebacks list calls from the outermost to the innermost, "most recent call last".
+--- exercise code python
+::prompt
+This program keeps its state in a global variable, which makes it hard to test. Rewrite it as **pure functions** that use only their parameters and `return` their results:
+
+- `apply_discount(price, percent)` returns the discounted price, rounded to 2 decimals;
+- `basket_total(prices, percent)` returns the total of all the discounted prices, rounded to 2 decimals.
+::starter
+price = 0
+
+def apply_discount(percent):
+    global price
+    price = price - price * percent / 100
+::solution
+def apply_discount(price, percent):
+    return round(price - price * percent / 100, 2)
+
+
+def basket_total(prices, percent):
+    total = 0
+    for p in prices:
+        total += apply_discount(p, percent)
+    return round(total, 2)
+::tests
+assert apply_discount(100, 20) == 80
+assert apply_discount(19.99, 10) == 17.99
+assert apply_discount(50, 0) == 50
+assert basket_total([100, 50], 10) == 135
+assert basket_total([19.99, 5.5], 20) == 20.39
+assert basket_total([], 30) == 0
+::hints
+- Both functions take everything they need as parameters; there's no `global` at all.
+- `basket_total` can call `apply_discount` for each price and add up the results.
+- `round(value, 2)` rounds to two decimals.
+--- exercise code python
+::prompt
+Write `apply_to_all(func, items)` that calls `func` on every item and **returns a new list** of the results. It should work with any function: a built-in like `len`, a method like `str.upper`, or one you define.
+::starter
+def apply_to_all(func, items):
+    pass
+::solution
+def apply_to_all(func, items):
+    results = []
+    for item in items:
+        results.append(func(item))
+    return results
+::tests
+def double(n):
+    return n * 2
+assert apply_to_all(double, [1, 2, 3]) == [2, 4, 6]
+assert apply_to_all(len, ["hi", "hello", ""]) == [2, 5, 0]
+assert apply_to_all(str.upper, ["a", "b"]) == ["A", "B"]
+assert apply_to_all(double, []) == []
+::hints
+- Start with an empty list, loop over the items, and `append` the result of `func(item)`.
+- `func` is just a variable that holds a function; call it like any other function.
+--- exercise code python
+::prompt
+`largest_gap(numbers)` should return the biggest difference between two **neighbouring** numbers in the list (0 for fewer than two numbers), but it crashes with `TypeError: 'int' object is not callable`. Find the shadowed built-in and fix it.
+::starter
+def largest_gap(numbers):
+    max = 0
+    for i in range(1, len(numbers)):
+        gap = abs(numbers[i] - numbers[i - 1])
+        max = max(max, gap)
+    return max
+::solution
+def largest_gap(numbers):
+    biggest = 0
+    for i in range(1, len(numbers)):
+        gap = abs(numbers[i] - numbers[i - 1])
+        biggest = max(biggest, gap)
+    return biggest
+::tests
+assert largest_gap([1, 4, 2, 10]) == 8
+assert largest_gap([5, 5, 5]) == 0
+assert largest_gap([10, 1]) == 9
+assert largest_gap([7]) == 0
+assert largest_gap([]) == 0
+::hints
+- The variable called `max` hides Python's built-in `max` function.
+- Rename the variable (for example to `biggest`) everywhere it's used as a number.
+--- cards
+Local variable :: Created inside a function (including parameters); exists only during that call and is invisible outside.
+UnboundLocalError :: Assigning to a name anywhere in a function makes it local there; reading it before the assignment fails.
+LEGB :: Name lookup order: Local, Enclosing, Global, Built-in. The first match wins.
+Shadowing a built-in :: Naming a variable list, sum, max, input... hides the built-in. Choose another name.
+Pure function :: Uses only its parameters and returns a result, with no side effects. Same input, same output.
+Call stack :: Each call gets a frame for its locals. Tracebacks list the frames, most recent call last.
+
+=== lesson py-recursion | Recursion | 90
+A function can call **itself**. That's called **recursion**, and it's a beautifully simple way to solve problems that contain smaller copies of themselves.
+
+```python
+def countdown(n):
+    if n == 0:
+        print("Liftoff!")
+    else:
+        print(n)
+        countdown(n - 1)
+
+countdown(3)    # 3, 2, 1, Liftoff!
+```
+
+Every recursive function has two parts:
+
+1. a **base case**: a situation simple enough to answer directly, without recursion (`n == 0`);
+2. a **recursive case**: the function calls itself on a **smaller** version of the problem (`n - 1`), so it moves towards the base case.
+
+## Thinking recursively: factorial
+
+The factorial of n (written n!) is 1 × 2 × ... × n. Notice that 5! = 5 × 4!, and 4! = 4 × 3!, and so on, down to 1! = 1. That self-similar definition turns straight into code:
+
+```python
+def factorial(n):
+    if n <= 1:                       # base case
+        return 1
+    return n * factorial(n - 1)      # recursive case
+```
+
+How does `factorial(4)` run? Each call waits for the one it made, building up the call stack, and then the answers come back down:
+
+```
+factorial(4) = 4 * factorial(3)
+                   factorial(3) = 3 * factorial(2)
+                                      factorial(2) = 2 * factorial(1)
+                                                         factorial(1) = 1
+                                      factorial(2) = 2 * 1 = 2
+                   factorial(3) = 3 * 2 = 6
+factorial(4) = 4 * 6 = 24
+```
+
+## The leap of faith
+
+Tracing every call quickly gets confusing. Instead, experienced programmers take a **leap of faith**: assume the recursive call already works for the smaller problem, and only ask "how do I use that answer to solve the bigger one?" If `total(rest)` correctly adds up the rest of a list, then the total of the whole list is the first item plus `total(rest)`:
+
+```python
+def total(numbers):
+    if not numbers:                          # an empty list adds up to 0
+        return 0
+    return numbers[0] + total(numbers[1:])
+```
+
+Check the base case, check that each call gets closer to it, and trust the rest.
+
+## More examples
+
+```python
+def reverse(text):
+    if len(text) <= 1:
+        return text
+    return reverse(text[1:]) + text[0]
+
+def power(base, exp):
+    if exp == 0:
+        return 1
+    return base * power(base, exp - 1)
+```
+
+## When the base case is missing
+
+Without a base case (or if the problem never gets smaller), the function calls itself until Python gives up:
+
+```
+RecursionError: maximum recursion depth exceeded
+```
+
+Python allows about 1,000 nested calls by default, so very deep recursion fails even when it's correct.
+
+## Recursion or loops?
+
+Anything written recursively can also be written with a loop, and in Python a loop is usually faster and has no depth limit. Recursion shines when the **data itself is nested**: folders inside folders, comments with replies to replies, family trees, the structure of a web page. It's also the natural way to express "divide and conquer" algorithms such as merge sort and quicksort (see the algorithms track).
+
+Nested lists are a good example. A loop handles the top level, and recursion handles each inner list:
+
+```python
+def deep_sum(items):
+    total = 0
+    for x in items:
+        if isinstance(x, list):      # isinstance checks a value's type
+            total += deep_sum(x)     # a list inside: add up its contents recursively
+        else:
+            total += x
+    return total
+
+deep_sum([1, [2, 3], [4, [5, 6]]])   # 21
+```
+
+## A warning about repeated work
+
+The Fibonacci numbers (0, 1, 1, 2, 3, 5, 8, ...) are each the sum of the two before. The direct recursive version is elegant but **very slow**:
+
+```python
+def fib(n):
+    if n < 2:
+        return n
+    return fib(n - 1) + fib(n - 2)
+```
+
+`fib(35)` makes about 30 million calls, because it recomputes the same values again and again. Remembering results you've already computed (**memoization**) makes it instant; you'll do that with `functools.lru_cache` in Module 12.
+
+📚 **Go deeper:** *Think Python* (3rd ed.), chapters 5–6 (recursion and "leap of faith"); CS50P / CS50x lectures on recursion; Python for Everybody has a good visual of the stack.
+--- quiz
+? What is the base case in `factorial`?
++ `if n <= 1: return 1`
+- `return n * factorial(n - 1)`
+- `def factorial(n):`
+- There isn't one
+> The base case answers directly, without another recursive call.
+? What does `reverse("abc")` return, using the lesson's function?
+- `'abc'`
++ `'cba'`
+- `'bca'`
+- `'c'`
+> reverse("abc") is reverse("bc") + "a", which is (reverse("c") + "b") + "a" = "cba".
+? What happens when a recursive function has no base case?
+- It returns `None`
+- It loops forever silently
++ It eventually fails with `RecursionError`
+- Python adds a base case automatically
+> Each call adds a frame to the stack until the depth limit (about 1000) is reached.
+? Why is the simple recursive `fib(n)` slow for large n?
+- Recursion is always slow
++ It recomputes the same Fibonacci numbers many times over
+- Python can't add big numbers
+- It has no base case
+> The number of calls roughly doubles with each step of n. Memoization fixes it.
+? What does this return?
+```python
+def mystery(n):
+    if n == 0:
+        return 0
+    return n % 10 + mystery(n // 10)
+
+mystery(345)
+```
+- 345
++ 12
+- 543
+- 3
+> It adds the last digit to the digit sum of the rest: 5 + 4 + 3.
+--- exercise code python
+::prompt
+Write two recursive functions (no loops):
+
+- `power(base, exp)` returns `base` to the power `exp` for a whole number `exp >= 0`;
+- `sum_digits(n)` returns the sum of the digits of a whole number `n >= 0`.
+::starter
+def power(base, exp):
+    pass
+
+
+def sum_digits(n):
+    pass
+::solution
+def power(base, exp):
+    if exp == 0:
+        return 1
+    return base * power(base, exp - 1)
+
+
+def sum_digits(n):
+    if n < 10:
+        return n
+    return n % 10 + sum_digits(n // 10)
+::tests
+assert power(2, 10) == 1024
+assert power(5, 0) == 1
+assert power(3, 1) == 3
+assert power(-2, 3) == -8
+assert sum_digits(0) == 0
+assert sum_digits(7) == 7
+assert sum_digits(4728) == 21
+assert sum_digits(1000001) == 2
+::hints
+- `power`: anything to the power 0 is 1; otherwise `base * power(base, exp - 1)`.
+- `sum_digits`: a single digit is its own sum; otherwise the last digit (`n % 10`) plus the digit sum of the rest (`n // 10`).
+--- exercise code python
+::prompt
+Write a recursive `is_palindrome(text)` that returns `True` if `text` reads the same forwards and backwards. Compare the first and last characters, then recurse on what's between them. (Exact characters: `"Abba"` is not a palindrome.)
+::starter
+def is_palindrome(text):
+    pass
+::solution
+def is_palindrome(text):
+    if len(text) <= 1:
+        return True
+    if text[0] != text[-1]:
+        return False
+    return is_palindrome(text[1:-1])
+::tests
+assert is_palindrome("racecar") is True
+assert is_palindrome("abba") is True
+assert is_palindrome("abca") is False
+assert is_palindrome("a") is True
+assert is_palindrome("") is True
+assert is_palindrome("Abba") is False
+assert is_palindrome("ab") is False
+::hints
+- Base case: a string of length 0 or 1 is a palindrome.
+- If the first and last characters differ, return `False` straight away.
+- Otherwise the answer is whether the middle, `text[1:-1]`, is a palindrome.
+--- exercise code python
+::prompt
+Write a recursive `to_binary(n)` that returns the binary digits of a whole number `n >= 0` as a string: `to_binary(5)` is `"101"`. The last binary digit is `n % 2`, and the digits before it are the binary form of `n // 2`.
+::starter
+def to_binary(n):
+    pass
+::solution
+def to_binary(n):
+    if n < 2:
+        return str(n)
+    return to_binary(n // 2) + str(n % 2)
+::tests
+assert to_binary(0) == "0"
+assert to_binary(1) == "1"
+assert to_binary(5) == "101"
+assert to_binary(8) == "1000"
+assert to_binary(255) == "11111111"
+assert to_binary(10) == bin(10)[2:]
+::hints
+- Base case: 0 and 1 are their own binary digit; return `str(n)`.
+- Recursive case: `to_binary(n // 2) + str(n % 2)`.
+--- cards
+Recursion :: A function that calls itself on a smaller version of the problem.
+Base case :: The simple case a recursive function answers directly, without recursing. Without it: RecursionError.
+Leap of faith :: Assume the recursive call is correct for the smaller input; just combine its answer with the current step.
+When to use recursion :: For nested, self-similar data (trees, folders, nested lists) and divide-and-conquer. Otherwise a loop is often simpler in Python.
+
+=== lesson py-m5-test | Module 5 test | 180
+Functions are the building blocks of every real program. This test checks defining and calling them, returning values, parameters of every kind, scope, and recursion.
+
+Make sure you can:
+
+- explain the difference between `print` and `return`, and what a function without `return` gives back;
+- use default values, keyword arguments, `*args` and keyword-only parameters, and avoid the mutable default trap;
+- predict which variable a name refers to (LEGB), and why assigning inside a function creates a local;
+- read a traceback with several frames;
+- write a recursive function with a correct base case.
+
+The coding problems are checked with hidden tests that call your functions with many inputs, including edge cases.
+--- quiz
+? What does this print?
+```python
+def f(x, y=3):
+    return x * y
+
+print(f(2), f(2, 5))
+```
++ `6 10`
+- `6 6`
+- `5 7`
+- `2 10`
+> The first call uses y=3, the second y=5.
+? What does this print?
+```python
+def f():
+    return
+print(f())
+```
+- Nothing
+- `0`
++ `None`
+- An error
+> A bare `return` returns `None`.
+? What does this print?
+```python
+total = 100
+
+def spend(total, amount):
+    total = total - amount
+    return total
+
+spend(total, 30)
+print(total)
+```
++ `100`
+- `70`
+- `30`
+- An error
+> The parameter `total` is a local copy of the name; the global is unchanged, and the returned 70 was thrown away.
+? What is `args` in `def f(*args)` when called as `f()`?
+- `None`
++ an empty tuple `()`
+- an empty list `[]`
+- It raises a `TypeError`
+> With no extra arguments, `*args` is an empty tuple.
+? Which definition is correct?
+- `def f(a=1, b):`
++ `def f(a, b=1):`
+- `def f(*, ):`
+- `def f(a, a):`
+> Parameters with defaults must come after those without.
+? What does this return?
+```python
+def count(n):
+    if n == 0:
+        return 0
+    return 1 + count(n - 1)
+
+count(4)
+```
+- 0
++ 4
+- 10
+- `RecursionError`
+> Each call adds 1 until n reaches 0.
+? Which change fixes `def add(x, items=[])` sharing one list between calls?
++ `def add(x, items=None)`, then create `[]` inside when `items is None`
+- `def add(x, items=list)`
+- `def add(x, *items)`
+- Use `global items`
+> A fresh list per call must be created inside the function body.
+? A traceback lists `<module>`, then `checkout`, then `total`, then `ValueError`. Where was the error raised?
+- In `<module>`
+- In `checkout`
++ In `total`
+- It can't be told
+> The last frame is where the error happened; the others show the calls that led there.
+--- exercise code python
+::prompt
+Write two functions:
+
+- `is_prime(n)` returns `True` if the whole number `n` is prime (above 1 and divisible only by 1 and itself), otherwise `False`;
+- `primes_between(low, high)` returns a **list** of all primes from `low` to `high` inclusive, using `is_prime`.
+::starter
+def is_prime(n):
+    pass
+
+
+def primes_between(low, high):
+    pass
+::solution
+def is_prime(n):
+    if n < 2:
+        return False
+    d = 2
+    while d * d <= n:
+        if n % d == 0:
+            return False
+        d += 1
+    return True
+
+
+def primes_between(low, high):
+    result = []
+    for n in range(low, high + 1):
+        if is_prime(n):
+            result.append(n)
+    return result
+::tests
+assert is_prime(2) is True
+assert is_prime(17) is True
+assert is_prime(1) is False
+assert is_prime(0) is False
+assert is_prime(-7) is False
+assert is_prime(91) is False
+assert is_prime(7919) is True
+assert primes_between(10, 30) == [11, 13, 17, 19, 23, 29]
+assert primes_between(1, 2) == [2]
+assert primes_between(24, 28) == []
+::hints
+- Numbers below 2 are not prime.
+- You only need to try divisors up to the square root: loop while `d * d <= n`.
+- `primes_between` loops over `range(low, high + 1)` and appends each prime.
+--- exercise code python
+::prompt
+Write `caesar(text, shift)` that shifts every **letter** forward through the alphabet by `shift` places, wrapping around from `z` to `a`, keeping uppercase letters uppercase and leaving everything else (spaces, digits, punctuation) unchanged. A negative shift moves backwards, so `caesar(caesar(t, 3), -3)` gives back `t`.
+::starter
+def caesar(text, shift):
+    pass
+::solution
+def caesar(text, shift):
+    result = ""
+    for ch in text:
+        if ch.isalpha() and ch.isascii():
+            base = ord("A") if ch.isupper() else ord("a")
+            result += chr((ord(ch) - base + shift) % 26 + base)
+        else:
+            result += ch
+    return result
+::tests
+assert caesar("abc", 1) == "bcd"
+assert caesar("xyz", 3) == "abc"
+assert caesar("Hello, World!", 5) == "Mjqqt, Btwqi!"
+assert caesar("Mjqqt, Btwqi!", -5) == "Hello, World!"
+assert caesar("Python 3.12", 13) == "Clguba 3.12"
+assert caesar("abc", 26) == "abc"
+assert caesar("", 4) == ""
+::hints
+- Work letter by letter. For a letter, find its position 0–25 by subtracting `ord("a")` (or `ord("A")` for capitals).
+- Add the shift and wrap with `% 26`, then convert back with `chr(position + base)`.
+- Python's `%` always gives a result from 0 to 25 here, even for negative shifts.
+--- exercise code python
+::prompt
+The **Towers of Hanoi**: move a stack of `n` discs from peg `source` to peg `target`, one disc at a time, never putting a bigger disc on a smaller one, using `spare` as a helper. Recursively: move `n - 1` discs out of the way to the spare peg, move the biggest disc to the target, then move the `n - 1` discs onto it.
+
+Write `hanoi(n, source="A", target="C", spare="B")` that **returns the list of moves** as strings like `"A->C"`.
+::starter
+def hanoi(n, source="A", target="C", spare="B"):
+    pass
+::solution
+def hanoi(n, source="A", target="C", spare="B"):
+    if n == 0:
+        return []
+    moves = hanoi(n - 1, source, spare, target)
+    moves.append(f"{source}->{target}")
+    moves += hanoi(n - 1, spare, target, source)
+    return moves
+::tests
+assert hanoi(0) == []
+assert hanoi(1) == ["A->C"]
+assert hanoi(2) == ["A->B", "A->C", "B->C"]
+assert hanoi(3) == ["A->C", "A->B", "C->B", "A->C", "B->A", "B->C", "A->C"]
+assert len(hanoi(10)) == 1023
+assert hanoi(1, "X", "Y", "Z") == ["X->Y"]
+::hints
+- Base case: zero discs need no moves, so return an empty list.
+- First the moves for `n - 1` discs from source to spare (with target as the helper).
+- Then the single move `f"{source}->{target}"`, then the moves for `n - 1` discs from spare to target.

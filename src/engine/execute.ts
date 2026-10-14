@@ -35,14 +35,8 @@ export function modeLabel(lang: CodeLang): { icon: string; text: string } {
   return { icon: '📝', text: `${name} can't run here and no AI is set up: compare your answer with the solution (self-check)` };
 }
 
-/** Compare outputs line by line, ignoring trailing spaces and blank lines at the end. */
-export function sameOutput(a: string, b: string) {
-  const norm = (s: string) => s.replace(/\r\n/g, '\n').split('\n').map((l) => l.trimEnd()).join('\n').trim();
-  return norm(a) === norm(b);
-}
-
-export { applyVariants, looksHardcoded, type Reference } from './integrity';
-import { applyVariants, looksHardcoded, type Reference } from './integrity';
+export { applyVariants, looksHardcoded, sameOutput, type Reference } from './integrity';
+import { applyVariants, looksHardcoded, sameOutput, type Reference } from './integrity';
 
 const HARDCODED_MSG = '🕵️ Your program prints the expected output as fixed text instead of computing it. Write code that works it out, so it would still be right for other inputs.';
 const VARIANT_MSG = '🕵️ Your program matches the example, but gives different results when the inputs change (hidden test). Make sure it computes the answer from its inputs instead of returning fixed values.';

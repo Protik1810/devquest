@@ -1,0 +1,1316 @@
+=== module Module 7 · Errors, debugging and testing
+
+=== lesson py-errors | Handling exceptions | 95
+Programs meet a messy world: users type `ten` where you expected a number, files go missing, networks drop. When something goes wrong at runtime, Python **raises an exception**. If nothing handles it, the program crashes with a traceback. **Handling** exceptions lets a program recover gracefully.
+
+## try and except
+
+```python
+try:
+    age = int(input("Age: "))
+    print("Next year you'll be", age + 1)
+except ValueError:
+    print("That's not a whole number.")
+```
+
+Python runs the `try` block. If a `ValueError` happens anywhere in it, Python **jumps** straight to the `except ValueError` block; the rest of the `try` block is skipped. If no error happens, the `except` block is skipped. Either way, the program carries on after the whole statement instead of crashing.
+
+## Catch specific exceptions
+
+Always name the exception you expect. A bare `except:` (or `except Exception:`) catches **everything**, including your own bugs:
+
+```python
+try:
+    total = sum(prices) / len(pirces)     # typo!
+except Exception:
+    print("No prices yet")                 # hides the NameError: very confusing
+```
+
+The rule: **catch only what you know how to handle**, and let everything else crash loudly so you notice it.
+
+## Several kinds of error
+
+```python
+try:
+    result = values[index] / divisor
+except IndexError:
+    print("No value at that position")
+except ZeroDivisionError:
+    print("Can't divide by zero")
+except (TypeError, ValueError):          # a tuple catches any of these
+    print("Bad data")
+```
+
+Python checks the `except` clauses top to bottom and runs the **first** one that matches.
+
+## Looking at the exception
+
+`as` gives you the exception object, whose text is the error message:
+
+```python
+try:
+    int("ten")
+except ValueError as e:
+    print("Problem:", e)      # Problem: invalid literal for int() with base 10: 'ten'
+```
+
+## else and finally
+
+```python
+try:
+    value = int(text)
+except ValueError:
+    print("Not a number")
+else:
+    print("Converted:", value)    # runs only if the try block raised nothing
+finally:
+    print("Done")                 # ALWAYS runs: error or not, even after return
+```
+
+`else` keeps the `try` block small: only the risky line goes in `try`, and the code that depends on its success goes in `else`. `finally` is for **cleanup** that must happen no matter what, such as closing a connection. (For files, Module 11's `with` statement does this for you.)
+
+## The exception family tree
+
+Exceptions are organised in families. Catching a parent catches all its children:
+
+```
+BaseException
+ ├── KeyboardInterrupt        (Ctrl+C)
+ ├── SystemExit               (sys.exit())
+ └── Exception                (everything a program normally handles)
+      ├── ArithmeticError
+      │    └── ZeroDivisionError
+      ├── LookupError
+      │    ├── IndexError
+      │    └── KeyError
+      ├── ValueError
+      ├── TypeError
+      ├── NameError
+      ├── AttributeError
+      └── OSError
+           ├── FileNotFoundError
+           └── PermissionError
+```
+
+So `except LookupError:` handles both a bad list index and a missing dictionary key. Put specific exceptions **before** general ones, or the general one catches everything first. Never catch `BaseException`: you'd stop Ctrl+C from working.
+
+## A robust input loop
+
+```python
+while True:
+    try:
+        n = int(input("Number: "))
+        break                         # only reached if int() succeeded
+    except ValueError:
+        print("Please type a whole number.")
+```
+
+## Two styles: look before you leap, or ask forgiveness
+
+- **LBYL** (look before you leap): check first, `if text.isdigit(): n = int(text)`.
+- **EAFP** (easier to ask forgiveness than permission): just try it, and handle the failure.
+
+Python code often prefers EAFP, and for conversions it's more correct: `"-5".isdigit()` is `False`, yet `int("-5")` works fine. Let `int()` and `float()` decide what a valid number is.
+
+## Exceptions travel up the call stack
+
+If a function doesn't handle an exception, it passes up to the function that called it, then to *its* caller, and so on. Handle an exception at the level where you can **do something sensible** about it: ask the user again, use a default, skip a record. Often that's not where it happened.
+
+📚 **Go deeper:** Python Tutorial, chapter 8 "Errors and Exceptions"; Python Library Reference, "Built-in Exceptions" (with the full hierarchy); *Automate the Boring Stuff with Python*, chapter 4.
+--- quiz
+? What does this print?
+```python
+try:
+    x = int("12")
+    print("A")
+except ValueError:
+    print("B")
+print("C")
+```
++ `A` and `C`
+- `B` and `C`
+- `A`, `B` and `C`
+- `C` only
+> No error happens, so the `except` block is skipped.
+? What does this print?
+```python
+try:
+    print("start")
+    x = 1 / 0
+    print("middle")
+except ZeroDivisionError:
+    print("oops")
+```
+- `start`, `middle`, `oops`
++ `start`, `oops`
+- `oops`
+- A crash
+> The error jumps straight to the `except` block; `middle` never prints.
+? Which clause catches a `KeyError`?
+- `except IndexError:`
++ `except LookupError:`
+- `except ValueError:`
+- `except ArithmeticError:`
+> `KeyError` is a kind of `LookupError`.
+? When does a `finally` block run?
+- Only if an exception happened
+- Only if no exception happened
++ Always, whether or not there was an exception
+- Only after `else`
+> `finally` is for cleanup that must always happen.
+? Why is a bare `except:` a bad idea?
+- It's slower
++ It also catches bugs like typos (NameError) and hides them
+- It only catches ValueError
+- It's a syntax error
+> Catch only the exceptions you expect and can handle.
+? Which is the most reliable way to check whether text is a whole number (negatives included)?
+- `text.isdigit()`
++ Try `int(text)` and catch `ValueError`
+- `text.isnumeric()`
+- `len(text) > 0`
+> `"-5".isdigit()` is False, but `int("-5")` works. Letting `int` decide is EAFP.
+--- exercise code python
+::prompt
+Ask for a whole number (prompt `Number: `) until the user types a valid one, which may be negative. For each invalid attempt print `Not a whole number, try again.` Then print the number squared.
+::starter
+n = int(input("Number: "))
+print(n, "squared is", n * n)
+::solution
+while True:
+    try:
+        n = int(input("Number: "))
+        break
+    except ValueError:
+        print("Not a whole number, try again.")
+print(n, "squared is", n * n)
+::stdin
+twelve
+12
+::expected
+Number: twelve
+Not a whole number, try again.
+Number: 12
+12 squared is 144
+::cases
+>>> -3
+Number: -3
+-3 squared is 9
+>>> 4.5
+>>>
+>>> 7
+Number: 4.5
+Not a whole number, try again.
+Number:
+Not a whole number, try again.
+Number: 7
+7 squared is 49
+::hints
+- Put the `input` and `int` inside `try`, within a `while True:` loop.
+- `break` right after the conversion succeeds; the `except ValueError:` block prints the message.
+--- exercise code python
+::prompt
+Write `safe_int(text, default=0)` that returns `text` converted to an int, or `default` if it can't be converted. Spaces around the number are fine (`int` ignores them).
+::starter
+def safe_int(text, default=0):
+    return int(text)
+::solution
+def safe_int(text, default=0):
+    try:
+        return int(text)
+    except ValueError:
+        return default
+::tests
+assert safe_int("42") == 42
+assert safe_int(" -7 ") == -7
+assert safe_int("abc") == 0
+assert safe_int("3.5") == 0
+assert safe_int("", default=None) is None
+assert safe_int("x", -1) == -1
+::hints
+- Wrap the conversion in `try` and return the default from `except ValueError:`.
+--- exercise code python
+::prompt
+Write `average_of_valid(values)` that takes a list of strings, converts the ones that are valid numbers (with `float`), ignores the rest, and returns their average. If none are valid, return `None`.
+::starter
+def average_of_valid(values):
+    pass
+::solution
+def average_of_valid(values):
+    numbers = []
+    for v in values:
+        try:
+            numbers.append(float(v))
+        except ValueError:
+            pass
+    if not numbers:
+        return None
+    return sum(numbers) / len(numbers)
+::tests
+assert average_of_valid(["4", "x", "6"]) == 5
+assert average_of_valid(["1.5", "2.5", "", "n/a"]) == 2
+assert average_of_valid(["-3", "3"]) == 0
+assert average_of_valid(["abc"]) is None
+assert average_of_valid([]) is None
+::hints
+- Try to convert each value inside the loop; `pass` in the `except` skips it.
+- Collect the good numbers in a list, then check whether it's empty before dividing.
+--- exercise code python
+::prompt
+Data from web APIs is deeply nested. Write `dig(data, path)` that follows a list of keys and indexes into nested dictionaries and lists, returning the value at the end, or `None` if any step fails (a missing key, a bad index, or trying to index something that can't be indexed). For example `dig({"a": [10, {"b": 2}]}, ["a", 1, "b"])` is `2`.
+::starter
+def dig(data, path):
+    for step in path:
+        data = data[step]
+    return data
+::solution
+def dig(data, path):
+    try:
+        for step in path:
+            data = data[step]
+    except (LookupError, TypeError):
+        return None
+    return data
+::tests
+doc = {"user": {"name": "Ada", "langs": ["Python", "C"]}, "count": 2}
+assert dig(doc, ["user", "name"]) == "Ada"
+assert dig(doc, ["user", "langs", 1]) == "C"
+assert dig(doc, ["user", "age"]) is None
+assert dig(doc, ["user", "langs", 5]) is None
+assert dig(doc, ["count", "x"]) is None
+assert dig(doc, []) == doc
+::hints
+- A missing key is a `KeyError`, a bad index an `IndexError`: both are `LookupError`s.
+- Indexing a number (like `2["x"]`) raises `TypeError`.
+- Catch `(LookupError, TypeError)` around the loop and return `None`.
+--- cards
+try / except :: Runs the try block; if a matching exception is raised, jumps to the except block instead of crashing.
+except ... as e :: Gives access to the exception object; str(e) is its message.
+else / finally :: else runs only if try raised nothing; finally always runs (cleanup).
+Exception hierarchy :: Catching a parent catches its children: LookupError covers IndexError and KeyError. Specific before general.
+EAFP vs LBYL :: Try it and handle failure (EAFP) vs check first (LBYL). For conversions, EAFP is more reliable.
+
+=== lesson py-raise | Raising exceptions | 95
+Handling errors is half the story. The other half: making **your own code** report problems clearly, by **raising** exceptions.
+
+## raise
+
+```python
+def set_age(age):
+    if age < 0:
+        raise ValueError(f"age can't be negative, got {age}")
+    return age
+```
+
+`raise` stops the function immediately and sends the exception up to the caller, exactly like Python's own errors. If nobody handles it, the program shows a traceback with your message.
+
+## Why raise instead of returning something?
+
+Imagine `set_age(-5)` returned `None` or `-1` instead. Every caller would have to remember to check, and the ones that forget would carry on with a bad value, causing a confusing failure much later, far from the real problem. An exception **can't be silently ignored**. This principle is called **fail fast**: detect bad data as early as possible and refuse it loudly.
+
+## Choosing the exception type
+
+Use the built-in type whose meaning fits:
+
+| Situation | Raise |
+|---|---|
+| right type, but an unacceptable value (negative age, empty name) | `ValueError` |
+| the wrong type entirely (a list where a number belongs) | `TypeError` |
+| a missing key / position | `KeyError` / `IndexError` |
+| something you haven't written yet | `NotImplementedError` |
+
+And write a **helpful message**: what was wrong, and what was expected. `ValueError("percent must be between 0 and 100, got 150")` beats `ValueError("bad input")`.
+
+## Re-raising
+
+Sometimes you want to note an error and still let it continue upwards. A bare `raise` inside an `except` block re-raises the same exception:
+
+```python
+try:
+    process(order)
+except ValueError:
+    print("Could not process", order)
+    raise
+```
+
+## Chaining: raise ... from
+
+When you catch a low-level error and raise a more meaningful one, link them with `from`, so the traceback shows both:
+
+```python
+def get_port(settings):
+    try:
+        return int(settings["port"])
+    except (KeyError, ValueError) as e:
+        raise RuntimeError("the configuration needs a numeric 'port'") from e
+```
+
+The traceback then says "The above exception was the direct cause of the following exception", and the original error is kept on the new one as `__cause__`. Writing `from None` hides the original when it would only confuse.
+
+## Your own exception types
+
+You can define a new kind of exception in one line:
+
+```python
+class InsufficientFundsError(Exception):
+    """Raised when a withdrawal is larger than the balance."""
+
+def withdraw(balance, amount):
+    if amount > balance:
+        raise InsufficientFundsError(f"balance {balance} is less than {amount}")
+    return balance - amount
+
+try:
+    withdraw(50, 80)
+except InsufficientFundsError as e:
+    print("Declined:", e)
+```
+
+`class ... (Exception)` creates a new member of the `Exception` family. Classes are explained properly in Module 8, and Module 10 designs whole exception hierarchies; for now this one-line pattern is all you need. Custom exceptions let callers catch **exactly** your error and nothing else.
+
+## assert is for bugs, not for input
+
+`assert condition, "message"` checks something that should **always** be true if your code is correct, a sanity check for programmers:
+
+```python
+def apply_discount(price, percent):
+    if not 0 <= percent <= 100:
+        raise ValueError("percent must be between 0 and 100")     # bad INPUT: raise
+    result = price * (1 - percent / 100)
+    assert 0 <= result <= price, "discount maths is broken"      # a BUG would trigger this
+    return result
+```
+
+Don't use `assert` to validate user input: Python can be run with assertions switched off (`python -O`), and then the check would silently disappear.
+
+## Testing that something raises
+
+To check that code raises an exception, expect it with `try`/`except`/`else`:
+
+```python
+try:
+    set_age(-1)
+except ValueError:
+    pass                                       # good: it raised
+else:
+    raise AssertionError("set_age(-1) should raise ValueError")
+```
+
+Testing frameworks have shortcuts for this (`self.assertRaises` in unittest, `pytest.raises` in pytest), which you'll meet in the testing lesson.
+
+📚 **Go deeper:** Python Tutorial, sections 8.4–8.6 "Raising Exceptions", "Exception Chaining", "User-defined Exceptions"; *Effective Python* (3rd ed.), items on exceptions; PEP 3134 (exception chaining).
+--- quiz
+? What happens when `raise ValueError("bad")` runs inside a function?
+- The function returns `"bad"`
++ The function stops and the exception goes to the caller
+- Python prints "bad" and continues
+- Only a warning is shown
+> Raising stops the function at once; the exception travels up until something handles it.
+? Which is the best exception for `set_age("twelve")` when an int is required?
+- `ValueError`
++ `TypeError`
+- `KeyError`
+- `ZeroDivisionError`
+> The value is the wrong type altogether.
+? What does a bare `raise` inside an `except` block do?
+- Raises a new, empty exception
++ Re-raises the exception currently being handled
+- Ends the program without a traceback
+- It's a syntax error
+> It passes the same exception on upwards.
+? Why shouldn't `assert` validate user input?
+- It's too slow
++ Assertions can be switched off with `python -O`
+- It can't show a message
+- It only works with numbers
+> Use `raise` for input validation; `assert` is for programmer sanity checks.
+? After `raise RuntimeError("config") from e`, where is the original exception?
+- It's lost
++ In the new exception's `__cause__`
+- Printed and then deleted
+- In `e.args`
+> Chaining keeps the original error attached, and the traceback shows both.
+--- exercise code python
+::prompt
+Write `parse_percent(text)` that turns strings like `"45%"` or `" 7.5 % "` into a fraction (`0.45`, `0.075`). Raise a `ValueError` with a helpful message if the text doesn't end with `%`, if the number part isn't a number, or if the value isn't between 0 and 100.
+::starter
+def parse_percent(text):
+    pass
+::solution
+def parse_percent(text):
+    text = text.strip()
+    if not text.endswith("%"):
+        raise ValueError(f"a percentage must end with %, got {text!r}")
+    try:
+        value = float(text[:-1])
+    except ValueError:
+        raise ValueError(f"not a number: {text[:-1]!r}") from None
+    if not 0 <= value <= 100:
+        raise ValueError(f"a percentage must be between 0 and 100, got {value}")
+    return value / 100
+::tests
+assert parse_percent("45%") == 0.45
+assert parse_percent(" 7.5 % ") == 0.075
+assert parse_percent("0%") == 0
+assert parse_percent("100%") == 1
+for bad in ["45", "abc%", "%", "150%", "-1%"]:
+    try:
+        parse_percent(bad)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError(f"parse_percent({bad!r}) should raise ValueError")
+::hints
+- Strip spaces, then check `text.endswith("%")`.
+- Convert everything before the `%` with `float(text[:-1])`; it raises `ValueError` itself for bad numbers (and `float(" 7.5 ")` ignores spaces).
+- Check the range, then return `value / 100`.
+--- exercise code python
+::prompt
+`InsufficientFundsError` is defined for you. Write `withdraw(balance, amount)` that returns the new balance, but raises:
+
+- `ValueError` if `amount` is zero or negative;
+- `InsufficientFundsError` if `amount` is more than `balance`.
+::starter
+class InsufficientFundsError(Exception):
+    """Raised when a withdrawal is larger than the balance."""
+
+
+def withdraw(balance, amount):
+    return balance - amount
+::solution
+class InsufficientFundsError(Exception):
+    """Raised when a withdrawal is larger than the balance."""
+
+
+def withdraw(balance, amount):
+    if amount <= 0:
+        raise ValueError(f"amount must be positive, got {amount}")
+    if amount > balance:
+        raise InsufficientFundsError(f"balance {balance} is less than {amount}")
+    return balance - amount
+::tests
+assert withdraw(100, 30) == 70
+assert withdraw(50, 50) == 0
+try:
+    withdraw(50, 80)
+except InsufficientFundsError:
+    pass
+else:
+    raise AssertionError("withdraw(50, 80) should raise InsufficientFundsError")
+for amount in [0, -5]:
+    try:
+        withdraw(50, amount)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError(f"withdraw(50, {amount}) should raise ValueError")
+::hints
+- Check the amount first: `if amount <= 0: raise ValueError(...)`.
+- Then `if amount > balance: raise InsufficientFundsError(...)`.
+--- exercise code python
+::prompt
+`ConfigError` is defined for you. Write `get_port(settings)` that returns `settings["port"]` as an int. If the key is missing or the value isn't a whole number, raise `ConfigError` **chained** to the original exception with `from`, so the cause isn't lost.
+::starter
+class ConfigError(Exception):
+    pass
+
+
+def get_port(settings):
+    return int(settings["port"])
+::solution
+class ConfigError(Exception):
+    pass
+
+
+def get_port(settings):
+    try:
+        return int(settings["port"])
+    except (KeyError, ValueError) as e:
+        raise ConfigError("settings need a whole-number 'port'") from e
+::tests
+assert get_port({"port": "8080"}) == 8080
+assert get_port({"port": 22, "host": "x"}) == 22
+try:
+    get_port({})
+except ConfigError as err:
+    assert isinstance(err.__cause__, KeyError), "chain the original KeyError with 'from'"
+else:
+    raise AssertionError("a missing port should raise ConfigError")
+try:
+    get_port({"port": "eighty"})
+except ConfigError as err:
+    assert isinstance(err.__cause__, ValueError), "chain the original ValueError with 'from'"
+else:
+    raise AssertionError("a non-numeric port should raise ConfigError")
+::hints
+- Catch both possible errors: `except (KeyError, ValueError) as e:`.
+- Then `raise ConfigError("...") from e`.
+--- cards
+raise :: raise ValueError("message") stops the function and sends the exception to the caller.
+Fail fast :: Refuse bad data as early as possible with a clear exception, instead of returning a wrong or special value.
+raise ... from e :: Chains exceptions: the new one keeps the original as __cause__, and the traceback shows both.
+Custom exception :: class MyError(Exception): pass, lets callers catch exactly your error.
+assert vs raise :: assert checks for programmer bugs (can be disabled with -O); raise validates input.
+
+=== lesson py-debugging | Debugging and logging | 95
+**Debugging** is finding out why a program does what it does, rather than what you meant. Beginners often debug by randomly changing things until the error goes away. Professionals use a method, because it's faster and it actually finds the cause.
+
+## A debugging method
+
+It's the scientific method applied to code:
+
+1. **Reproduce** the bug reliably, ideally with the smallest input that triggers it.
+2. **Observe.** Read the traceback, or compare the expected output with the actual output line by line.
+3. **Locate.** Find the first point where reality differs from what you expected, by looking at intermediate values.
+4. **Hypothesise** one specific cause ("`total` is reset inside the loop"), and **test** it by changing one thing.
+5. **Fix the cause**, not the symptom, and add a test so the bug can never silently return.
+
+## Looking inside: print debugging done well
+
+```python
+print(f"{total=} {i=} {item=}")      # labels and values: total=12 i=3 item='5'
+print(repr(name))                     # 'Ada ' shows the stray space
+print(type(value))                    # <class 'str'>, not the int you expected?
+```
+
+Print **at the boundaries**: what goes into a function, and what comes out. Then narrow down. Remove the prints when you're done (or turn them into logging, below).
+
+## Divide and conquer
+
+If a long piece of code produces a wrong result, check the value **halfway** through. Correct there? The bug is in the second half. Wrong? The first half. Keep halving. This "binary search" finds a bug among 1,000 lines in about 10 checks. The same trick works on data: if a file of 10,000 records crashes your program, try the first half.
+
+## Explain it to a duck
+
+Explaining your code line by line, out loud, to someone (or a rubber duck) forces you to say what each line *actually* does. The mismatch with what you *meant* often jumps out. And when you're stuck for a long time, take a break: tired brains see what they expect, not what's there.
+
+## A field guide to common bugs
+
+| Symptom | Likely cause |
+|---|---|
+| `IndexError` at the end of a loop | off by one: `range(len(x) + 1)` or `<=` instead of `<` |
+| a value is unexpectedly `None` | a function forgot to `return`; `x = x.sort()` |
+| a list changes "by itself" | aliasing (`b = a`), or a mutable default argument |
+| `'int' object is not callable` | a variable named after a built-in (`sum`, `max`, `list`) |
+| `"5" + "3"` gives `"53"` | `input()` text never converted with `int()` |
+| the program hangs | a loop whose condition never becomes false |
+| `UnboundLocalError` | assigning to a global's name inside a function |
+| wrong only at the edges | `<` vs `<=`, empty input, a single item |
+| two floats "should" be equal | binary floats: use `math.isclose` |
+
+## Logging: print statements for grown-up programs
+
+`print` mixes debugging output with the program's real output. The `logging` module separates them and lets you choose how much detail to see:
+
+```python
+import logging
+
+logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+
+logging.debug("cart contents: %s", cart)          # hidden at INFO level
+logging.info("order %s processed", order_id)      # normal events
+logging.warning("stock low for %s", product)      # something unexpected
+logging.error("payment failed for %s", order_id)  # something went wrong
+```
+
+There are five levels, from least to most serious: `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`. The configured level hides everything below it, so you can leave the logging calls in your code and turn detail up or down without editing it. Logs can go to the screen, to files, or to monitoring services in production.
+
+In larger programs, each module gets its own named logger:
+
+```python
+logger = logging.getLogger(__name__)
+logger.info("starting import of %d rows", len(rows))
+```
+
+Notice the `%s`/`%d` placeholders with separate arguments: the message is only formatted if that level is actually shown.
+
+## Debuggers
+
+A **debugger** pauses a running program so you can step through it line by line and inspect every variable. Python has one built in: put `breakpoint()` in your code and run it in a terminal to drop into `pdb`. Editors like VS Code and PyCharm have friendly graphical debuggers: click beside a line number to set a breakpoint, run in debug mode, and step. In DevQuest, use `print`/`f"{x=}"`, the tracebacks, and the 🦉 tutor.
+
+📚 **Go deeper:** Python "Logging HOWTO" (docs.python.org/3/howto/logging.html); *Automate the Boring Stuff with Python*, chapter 5 "Debugging"; Julia Evans, "The Pocket Guide to Debugging".
+--- quiz
+? Your function returns the right answer for most inputs but crashes on an empty list. What's the best next step?
+- Rewrite the whole function
++ Reproduce it with `[]`, read the traceback, and handle the empty case
+- Wrap everything in `try`/`except Exception`
+- Add more print statements everywhere
+> Reproduce with the smallest failing input, then fix the cause.
+? What does `print(f"{name=}")` show when `name = "Ada "`?
+- `Ada`
+- `name`
++ `name='Ada '`
+- `"Ada "`
+> The `=` specifier shows the expression and its repr, so the trailing space is visible.
+? With `logging.basicConfig(level=logging.WARNING)`, which call produces output?
+- `logging.debug(...)`
+- `logging.info(...)`
++ `logging.error(...)`
+- None of them
+> Only WARNING and more serious levels (ERROR, CRITICAL) are shown.
+? A function's result is `None` when you expected a list. Which is the most likely cause?
++ It forgot to `return`, or it returned the result of `list.sort()`
+- An off-by-one error
+- A shadowed built-in
+- Floating-point rounding
+> Both a missing `return` and `sort()` give `None`.
+? You have 1,000 lines and a wrong final result. What does "divide and conquer" suggest?
+- Read all 1,000 lines carefully
++ Check the values halfway through, then keep halving the suspect part
+- Delete half the code
+- Start over in another language
+> Each check halves the search space, so about 10 checks locate it.
+--- exercise code python
+::prompt
+`find_max_index(values)` should return the **index** of the largest value (the first one, if there's a tie), or `None` for an empty list. It has **two** bugs: it's wrong for lists of negative numbers, and it never looks at the last item. Fix them.
+::starter
+def find_max_index(values):
+    if not values:
+        return None
+    best = 0
+    best_index = 0
+    for i in range(len(values) - 1):
+        if values[i] > best:
+            best = values[i]
+            best_index = i
+    return best_index
+::solution
+def find_max_index(values):
+    if not values:
+        return None
+    best = values[0]
+    best_index = 0
+    for i in range(len(values)):
+        if values[i] > best:
+            best = values[i]
+            best_index = i
+    return best_index
+::tests
+assert find_max_index([3, 9, 2]) == 1
+assert find_max_index([3, 2, 9]) == 2, "the last item is never checked"
+assert find_max_index([-5, -2, -9]) == 1, "wrong for negative numbers"
+assert find_max_index([4, 4, 1]) == 0
+assert find_max_index([7]) == 0
+assert find_max_index([]) is None
+::hints
+- Trace it with `[3, 2, 9]`: which indexes does `range(len(values) - 1)` produce?
+- Trace it with `[-5, -2, -9]`: can any value beat `best = 0`?
+- Start `best` at the first item, and loop over every index.
+--- exercise code python
+::prompt
+`running_totals(numbers)` should return a new list where each item is the sum of all the numbers up to that point: `[1, 2, 3]` gives `[1, 3, 6]`. It has **two** bugs from this lesson's field guide. Find and fix them.
+::starter
+def running_totals(numbers, totals=[]):
+    total = 0
+    for n in numbers:
+        total += n
+    totals.append(total)
+    return totals
+::solution
+def running_totals(numbers):
+    totals = []
+    total = 0
+    for n in numbers:
+        total += n
+        totals.append(total)
+    return totals
+::tests
+assert running_totals([1, 2, 3]) == [1, 3, 6]
+assert running_totals([5]) == [5], "results from earlier calls must not leak into later ones"
+assert running_totals([]) == []
+assert running_totals([2, -2, 10]) == [2, 0, 10]
+::hints
+- Look at the indentation of `totals.append(total)`: does it run once per number?
+- The default `totals=[]` is created once and shared by every call. Create the list inside the function instead.
+--- exercise code python
+::prompt
+Replace the `print` calls with **logging**. `process_orders(orders)` takes `(order_id, quantity)` pairs and returns how many were processed. For each order with a positive quantity, log at **INFO** level `processed <id>`; for others, log at **WARNING** level `skipped <id>: bad quantity`. Use `logging.info(...)` / `logging.warning(...)` (or a logger from `logging.getLogger(__name__)`).
+::starter
+import logging
+
+
+def process_orders(orders):
+    count = 0
+    for order_id, quantity in orders:
+        if quantity > 0:
+            print("processed", order_id)
+            count += 1
+        else:
+            print("skipped", order_id)
+    return count
+::solution
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+def process_orders(orders):
+    count = 0
+    for order_id, quantity in orders:
+        if quantity > 0:
+            logger.info("processed %s", order_id)
+            count += 1
+        else:
+            logger.warning("skipped %s: bad quantity", order_id)
+    return count
+::tests
+import logging as _logging
+_records = []
+class _Capture(_logging.Handler):
+    def emit(self, record):
+        _records.append((record.levelname, record.getMessage()))
+_root = _logging.getLogger()
+_root.addHandler(_Capture())
+_root.setLevel(_logging.INFO)
+assert process_orders([("A1", 2), ("A2", 0), ("A3", 5)]) == 2
+assert ("INFO", "processed A1") in _records, f"expected an INFO record 'processed A1', got {_records}"
+assert ("INFO", "processed A3") in _records
+assert ("WARNING", "skipped A2: bad quantity") in _records, f"expected a WARNING record 'skipped A2: bad quantity', got {_records}"
+assert len(_records) == 3, f"log exactly one record per order, got {_records}"
+::hints
+- `logging.info("processed %s", order_id)` logs at INFO level; `logging.warning(...)` at WARNING.
+- The messages must match exactly: `processed A1` and `skipped A2: bad quantity`.
+- Remove the `print` calls.
+--- cards
+Debugging method :: Reproduce, observe, locate where reality differs from expectation, hypothesise one cause, test it, fix the cause, add a test.
+f"{x=}" and repr() :: Show a value with its name, and with quotes so stray spaces or wrong types are visible.
+Logging levels :: DEBUG < INFO < WARNING < ERROR < CRITICAL. The configured level hides everything below it.
+breakpoint() :: Pauses the program in the pdb debugger (in a terminal) so you can step through and inspect variables.
+
+=== lesson py-testing | Writing automated tests | 100
+Every DevQuest exercise so far was checked by tests someone else wrote. Professional developers write their own, constantly. **Automated tests** are small programs that check your program, and they're one of the most valuable habits you can build.
+
+## Why bother?
+
+- **Catch mistakes early**, while the code is fresh in your mind.
+- **Change code without fear.** When you improve or **refactor** code, the tests tell you instantly if you broke something that used to work (a **regression**).
+- **Document behaviour.** A test like `test_rejects_negative_age` explains what the code should do better than a comment.
+
+## The shape of a test
+
+A good test has three parts, often called **Arrange, Act, Assert**:
+
+```python
+def test_discount_reduces_price():
+    price = 100              # arrange: set up the inputs
+    result = discount(price, 20)  # act: call the code
+    assert result == 80      # assert: check the outcome
+```
+
+Each test checks **one behaviour** and its name says which. When it fails, the name alone tells you what broke.
+
+## pytest: the popular way
+
+**pytest** is the most widely used test tool in Python (`pip install pytest`, Module 12). You write test files named `test_something.py` containing functions named `test_...` that use plain `assert`. Running `pytest` finds and runs them all and shows exactly which values differed:
+
+```python
+# test_pricing.py
+from pricing import discount
+
+def test_discount_reduces_price():
+    assert discount(100, 20) == 80
+
+def test_zero_percent_changes_nothing():
+    assert discount(59.99, 0) == 59.99
+
+def test_rejects_percent_over_100():
+    try:
+        discount(10, 150)
+    except ValueError:
+        pass
+    else:
+        assert False, "expected a ValueError"
+```
+
+With pytest, the last test is usually written `with pytest.raises(ValueError): discount(10, 150)`.
+
+## unittest: the one in the standard library
+
+Python ships with **unittest**. Tests are methods of a class (classes arrive in Module 8; just recognise the shape):
+
+```python
+import unittest
+from pricing import discount
+
+class TestDiscount(unittest.TestCase):
+    def test_reduces_price(self):
+        self.assertEqual(discount(100, 20), 80)
+
+    def test_rejects_percent_over_100(self):
+        with self.assertRaises(ValueError):
+            discount(10, 150)
+
+if __name__ == "__main__":
+    unittest.main()
+```
+
+Run it with `python -m unittest`. pytest can run unittest tests too.
+
+## What to test
+
+For each function, think in three groups:
+
+1. **Typical cases**: normal inputs, with an answer you've worked out by hand.
+2. **Edge cases**: empty input, zero, one item, negative numbers, very large values, exactly-on-the-boundary values, text with spaces or capitals.
+3. **Error cases**: inputs that should raise an exception.
+
+Bugs cluster at the edges, so that's where good testers spend their effort.
+
+## Test-driven development (TDD)
+
+Some developers write the test **before** the code:
+
+1. **Red:** write a test for the next small piece of behaviour; it fails, because the code doesn't exist.
+2. **Green:** write the simplest code that makes it pass.
+3. **Refactor:** tidy the code, with the tests guarding you.
+
+Even if you don't always work this way, writing a test first forces you to decide exactly what the function should do.
+
+## Do your tests actually catch bugs?
+
+A test suite that never fails is useless. One way to check it: deliberately put a bug in the code (a **mutant**). If no test fails, your tests have a gap. Tools like `mutmut` do this automatically. The exercises below work exactly like that: your tests are run against the correct code (they must pass) and against several buggy versions (each must make at least one test fail).
+
+📚 **Go deeper:** pytest documentation, "Get started"; Python Library Reference, `unittest`; *Python Testing with pytest* (2nd ed.) by Brian Okken; Kent Beck, *Test-Driven Development by Example*.
+--- quiz
+? What are the three parts of a well-structured test?
++ Arrange, act, assert
+- Write, run, delete
+- Import, print, exit
+- Red, green, refactor
+> Set up the inputs, call the code, check the result. (Red-green-refactor is the TDD cycle.)
+? How does pytest find your tests?
+- You list them in a config file
++ Files named `test_*.py` and functions named `test_*`
+- Every function in every file
+- Only classes that inherit from `TestCase`
+> pytest discovers tests by name.
+? Which input is an *edge case* for a function that averages a list?
+- `[1, 2, 3]`
++ `[]`
+- `[10, 20]`
+- `[5, 5, 5, 5]`
+> Empty input is the classic edge case (division by zero!).
+? In TDD, what comes first?
++ A failing test
+- The code
+- Refactoring
+- Documentation
+> Red (a failing test), then green (make it pass), then refactor.
+? You put a deliberate bug in your code and all your tests still pass. What does that tell you?
+- The bug doesn't matter
+- The tests are good
++ Your tests have a gap: no test checks that behaviour
+- pytest is broken
+> That's the idea behind mutation testing.
+--- exercise code python
+::prompt
+**You are the tester.** `discount(price, percent)` (given, correct) returns the price reduced by `percent`, rounded to 2 decimals, and raises `ValueError` if `percent` isn't between 0 and 100. Write **at least three** `test_...` functions (pytest style, plain `assert`) that call `discount`.
+
+When you submit, your tests run against this correct `discount` (they must all pass) and then against **four buggy versions** (for each one, at least one of your tests must fail). Think about which bugs are likely: wrong formula, returning the discount instead of the price, losing the cents, forgetting to reject bad percentages.
+::starter
+def discount(price, percent):
+    if not 0 <= percent <= 100:
+        raise ValueError("percent must be between 0 and 100")
+    return round(price - price * percent / 100, 2)
+
+
+def test_ten_percent_off():
+    assert discount(200, 10) == 180
+::solution
+def discount(price, percent):
+    if not 0 <= percent <= 100:
+        raise ValueError("percent must be between 0 and 100")
+    return round(price - price * percent / 100, 2)
+
+
+def test_ten_percent_off():
+    assert discount(200, 10) == 180
+
+
+def test_keeps_cents():
+    assert discount(19.99, 10) == 17.99
+
+
+def test_zero_and_full_discount():
+    assert discount(50, 0) == 50
+    assert discount(50, 100) == 0
+
+
+def test_rejects_bad_percent():
+    for bad in [-1, 101]:
+        try:
+            discount(10, bad)
+        except ValueError:
+            pass
+        else:
+            assert False, f"discount(10, {bad}) should raise ValueError"
+::tests
+_tests = [f for _name, f in list(globals().items()) if _name.startswith("test_") and callable(f)]
+assert len(_tests) >= 3, f"write at least 3 test_ functions (found {len(_tests)})"
+_real = discount
+for _t in _tests:
+    try:
+        _t()
+    except AssertionError:
+        raise AssertionError(f"{_t.__name__} fails on the CORRECT discount(), so one of its expected values is wrong") from None
+def _amount_not_percent(price, percent):
+    if not 0 <= percent <= 100:
+        raise ValueError("bad")
+    return round(price - percent, 2)
+def _returns_the_discount(price, percent):
+    if not 0 <= percent <= 100:
+        raise ValueError("bad")
+    return round(price * percent / 100, 2)
+def _loses_cents(price, percent):
+    if not 0 <= percent <= 100:
+        raise ValueError("bad")
+    return int(price - price * percent / 100)
+def _no_validation(price, percent):
+    return round(price - price * percent / 100, 2)
+for _bug, _what in [(_amount_not_percent, "subtracts percent as an amount (price - percent)"), (_returns_the_discount, "returns the discount instead of the reduced price"), (_loses_cents, "drops the cents (int instead of round)"), (_no_validation, "never raises ValueError for a percent outside 0-100")]:
+    discount = _bug
+    _caught = False
+    for _t in _tests:
+        try:
+            _t()
+        except Exception:
+            _caught = True
+    discount = _real
+    assert _caught, f"none of your tests caught this bug: discount {_what}"
+::hints
+- Each buggy version gets one behaviour wrong. Write a test that pins down each behaviour.
+- A price with cents (like 19.99) catches the version that loses the cents.
+- One test should check that `discount(10, 150)` (or a negative percent) raises `ValueError`, using `try`/`except`/`else`.
+--- exercise code python
+::prompt
+**Test-driven development:** the tests are written; write the code. `password_problems(pw)` returns a **list of problems** with a password, in this order, or an empty list if it's fine:
+
+- `"too short"` if it has fewer than 8 characters;
+- `"no digit"` if it contains no digit;
+- `"no uppercase"` if it contains no uppercase letter;
+- `"no lowercase"` if it contains no lowercase letter.
+
+The tests check `"abc"` → `["too short", "no digit", "no uppercase"]`, `"Password1"` → `[]`, `"PASSWORD12"` → `["no lowercase"]`, and more.
+::starter
+def password_problems(pw):
+    return []
+::solution
+def password_problems(pw):
+    problems = []
+    if len(pw) < 8:
+        problems.append("too short")
+    if not any(c.isdigit() for c in pw):
+        problems.append("no digit")
+    if not any(c.isupper() for c in pw):
+        problems.append("no uppercase")
+    if not any(c.islower() for c in pw):
+        problems.append("no lowercase")
+    return problems
+::tests
+assert password_problems("abc") == ["too short", "no digit", "no uppercase"]
+assert password_problems("Password1") == []
+assert password_problems("PASSWORD12") == ["no lowercase"]
+assert password_problems("password12") == ["no uppercase"]
+assert password_problems("Passwords") == ["no digit"]
+assert password_problems("") == ["too short", "no digit", "no uppercase", "no lowercase"]
+assert password_problems("Ab1") == ["too short"]
+::hints
+- Build a list and `append` each problem in the order given.
+- `any(c.isdigit() for c in pw)` is True if at least one character is a digit.
+--- exercise code python
+::prompt
+**You are the tester again.** `is_valid_username(name)` (given, correct) accepts usernames that are 3 to 16 characters long, contain only lowercase letters, digits and underscores, and **start with a letter**. Write at least three `test_...` functions. They'll be run against the correct version and against **four** buggy ones.
+::starter
+def is_valid_username(name):
+    if not 3 <= len(name) <= 16:
+        return False
+    if not name[0].isalpha():
+        return False
+    return all(c.islower() or c.isdigit() or c == "_" for c in name)
+
+
+def test_simple_name_is_valid():
+    assert is_valid_username("ada")
+::solution
+def is_valid_username(name):
+    if not 3 <= len(name) <= 16:
+        return False
+    if not name[0].isalpha():
+        return False
+    return all(c.islower() or c.isdigit() or c == "_" for c in name)
+
+
+def test_simple_name_is_valid():
+    assert is_valid_username("ada")
+
+
+def test_length_limits():
+    assert not is_valid_username("ab")
+    assert is_valid_username("abc")
+    assert is_valid_username("a" * 16)
+    assert not is_valid_username("a" * 17)
+
+
+def test_must_start_with_letter():
+    assert not is_valid_username("1ada")
+    assert not is_valid_username("_ada")
+
+
+def test_allowed_characters():
+    assert is_valid_username("ada_99")
+    assert not is_valid_username("Ada")
+    assert not is_valid_username("ada-99")
+    assert not is_valid_username("ada 99")
+::tests
+_tests = [f for _name, f in list(globals().items()) if _name.startswith("test_") and callable(f)]
+assert len(_tests) >= 3, f"write at least 3 test_ functions (found {len(_tests)})"
+_real = is_valid_username
+for _t in _tests:
+    try:
+        _t()
+    except AssertionError:
+        raise AssertionError(f"{_t.__name__} fails on the CORRECT is_valid_username(), so one of its expectations is wrong") from None
+def _off_by_one(name):
+    if not 3 <= len(name) < 16:
+        return False
+    if not name[0].isalpha():
+        return False
+    return all(c.islower() or c.isdigit() or c == "_" for c in name)
+def _any_start(name):
+    if not 3 <= len(name) <= 16:
+        return False
+    return all(c.islower() or c.isdigit() or c == "_" for c in name)
+def _allows_capitals(name):
+    if not 3 <= len(name) <= 16:
+        return False
+    if not name[0].isalpha():
+        return False
+    return all(c.isalnum() or c == "_" for c in name)
+def _allows_anything(name):
+    if not 3 <= len(name) <= 16:
+        return False
+    return name[0].isalpha()
+for _bug, _what in [(_off_by_one, "rejects names of exactly 16 characters"), (_any_start, "accepts names starting with a digit or underscore"), (_allows_capitals, "accepts uppercase letters"), (_allows_anything, "accepts any characters, like - or spaces")]:
+    is_valid_username = _bug
+    _caught = False
+    for _t in _tests:
+        try:
+            _t()
+        except Exception:
+            _caught = True
+    is_valid_username = _real
+    assert _caught, f"none of your tests caught this bug: the function {_what}"
+::hints
+- Test the boundaries of the length rule: 2, 3, 16 and 17 characters (`"a" * 16` is handy).
+- Test names that start with a digit and with an underscore.
+- Test forbidden characters: a capital letter, a hyphen, a space.
+--- cards
+Automated test :: Code that calls your code and asserts the result. Arrange, act, assert; one behaviour per test.
+pytest :: Finds test_*.py files and test_* functions and runs them; uses plain assert. pytest.raises checks exceptions.
+unittest :: Standard-library test framework: classes inheriting unittest.TestCase with assertEqual, assertRaises.
+Edge cases :: Empty, zero, one item, negatives, huge values, exact boundaries. Bugs cluster there.
+TDD :: Red (failing test), green (simplest passing code), refactor.
+Mutation testing :: Deliberately insert bugs; good tests fail for each one.
+
+=== lesson py-m7-test | Module 7 test | 200
+This test covers handling and raising exceptions, debugging, logging and writing tests: the skills that turn code that *works on your machine* into code you can trust.
+
+Make sure you can:
+
+- handle specific exceptions with `try`/`except`/`else`/`finally`, and explain why bare `except` is dangerous;
+- raise built-in and custom exceptions with useful messages, and chain them with `from`;
+- debug methodically and recognise the common bug patterns;
+- use logging levels;
+- write tests that cover typical, edge and error cases.
+--- quiz
+? What does this print?
+```python
+def f():
+    try:
+        return "try"
+    finally:
+        print("cleanup")
+
+print(f())
+```
+- `try`
++ `cleanup` then `try`
+- `try` then `cleanup`
+- `cleanup`
+> `finally` runs before the function actually returns, so `cleanup` is printed first; then the returned value is printed.
+? Which `except` order is correct?
++ `except FileNotFoundError:` before `except OSError:`
+- `except OSError:` before `except FileNotFoundError:`
+- The order never matters
+- You can't have both
+> The first matching clause wins, so specific exceptions must come first.
+? What does `int("4.0")` raise?
+- Nothing; it returns 4
++ `ValueError`
+- `TypeError`
+- `SyntaxError`
+> `int()` only accepts whole-number text; use `int(float("4.0"))`.
+? Which statement validates a function's input correctly?
+- `assert age >= 0`
++ `if age < 0: raise ValueError("age must be >= 0")`
+- `print("bad age")`
+- `return -1`
+> Raise for bad input; asserts can be disabled and printing doesn't stop anything.
+? What does a bare `raise` do inside `except ValueError:`?
+- Raises a `RuntimeError`
++ Re-raises the same `ValueError`
+- Swallows the error
+- Exits the program quietly
+> It passes the exception on to the caller unchanged.
+? Which logging call is shown with `basicConfig(level=logging.INFO)`?
+- `logging.debug("x")`
++ `logging.info("x")`
+- Neither
+- Only `print`
+> INFO and everything more serious is shown; DEBUG is hidden.
+? A function that averages scores crashes only when given `[]`. What kind of case is that?
+- A typical case
++ An edge case
+- An error in Python
+- A regression
+> Empty input is the classic edge case.
+? What is a regression?
++ A bug in something that used to work, often caused by a later change
+- A slow test
+- A kind of exception
+- A statistical model
+> Regression tests make sure fixed bugs and working features stay that way.
+--- exercise code python
+::prompt
+Write `to_celsius(reading)` for thermometer readings like `"21.5C"`, `"70F"` or `" 98.6 f "`: a number followed by a unit, `C` or `F` (any case, spaces around allowed). Return the temperature in Celsius, rounded to 1 decimal (F → C is `(F - 32) * 5 / 9`). Raise `ValueError` for an unknown unit or a number that can't be read.
+::starter
+def to_celsius(reading):
+    pass
+::solution
+def to_celsius(reading):
+    text = reading.strip().upper()
+    if not text or text[-1] not in "CF":
+        raise ValueError(f"unknown unit in {reading!r}")
+    try:
+        value = float(text[:-1])
+    except ValueError:
+        raise ValueError(f"no number in {reading!r}") from None
+    if text[-1] == "F":
+        value = (value - 32) * 5 / 9
+    return round(value, 1)
+::tests
+assert to_celsius("21.5C") == 21.5
+assert to_celsius("212F") == 100
+assert to_celsius(" 98.6 f ") == 37
+assert to_celsius("-40F") == -40
+assert to_celsius("0c") == 0
+for bad in ["21.5K", "C", "abcF", "", "42"]:
+    try:
+        to_celsius(bad)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError(f"to_celsius({bad!r}) should raise ValueError")
+::hints
+- Normalise first: `reading.strip().upper()`, and check the last character is `C` or `F` (careful with the empty string).
+- Convert the rest with `float(...)`, turning its error into your own `ValueError`.
+- Convert Fahrenheit, then `round(value, 1)`.
+--- exercise code python
+::prompt
+**You are the tester.** `median(numbers)` (given, correct) returns the middle value of the numbers in sorted order, the average of the two middle values for an even count, and raises `ValueError` for an empty list. It must not change the list it's given. Write at least three tests; they'll face **four** buggy versions.
+::starter
+def median(numbers):
+    if not numbers:
+        raise ValueError("median of an empty list")
+    ordered = sorted(numbers)
+    mid = len(ordered) // 2
+    if len(ordered) % 2 == 1:
+        return ordered[mid]
+    return (ordered[mid - 1] + ordered[mid]) / 2
+
+
+def test_odd_count():
+    assert median([1, 3, 2]) == 2
+::solution
+def median(numbers):
+    if not numbers:
+        raise ValueError("median of an empty list")
+    ordered = sorted(numbers)
+    mid = len(ordered) // 2
+    if len(ordered) % 2 == 1:
+        return ordered[mid]
+    return (ordered[mid - 1] + ordered[mid]) / 2
+
+
+def test_odd_count():
+    assert median([1, 3, 2]) == 2
+
+
+def test_even_count_averages_middle_pair():
+    assert median([4, 1, 3, 2]) == 2.5
+
+
+def test_unsorted_input_and_unchanged_list():
+    data = [9, 1, 5]
+    assert median(data) == 5
+    assert data == [9, 1, 5]
+
+
+def test_empty_list_raises():
+    try:
+        median([])
+    except ValueError:
+        pass
+    else:
+        assert False, "median([]) should raise ValueError"
+::tests
+_tests = [f for _name, f in list(globals().items()) if _name.startswith("test_") and callable(f)]
+assert len(_tests) >= 3, f"write at least 3 test_ functions (found {len(_tests)})"
+_real = median
+for _t in _tests:
+    try:
+        _t()
+    except AssertionError:
+        raise AssertionError(f"{_t.__name__} fails on the CORRECT median(), so one of its expected values is wrong") from None
+def _no_sort(numbers):
+    if not numbers:
+        raise ValueError("empty")
+    mid = len(numbers) // 2
+    if len(numbers) % 2 == 1:
+        return numbers[mid]
+    return (numbers[mid - 1] + numbers[mid]) / 2
+def _upper_middle(numbers):
+    if not numbers:
+        raise ValueError("empty")
+    ordered = sorted(numbers)
+    return ordered[len(ordered) // 2]
+def _sorts_in_place(numbers):
+    if not numbers:
+        raise ValueError("empty")
+    numbers.sort()
+    mid = len(numbers) // 2
+    if len(numbers) % 2 == 1:
+        return numbers[mid]
+    return (numbers[mid - 1] + numbers[mid]) / 2
+def _empty_is_zero(numbers):
+    if not numbers:
+        return 0
+    ordered = sorted(numbers)
+    mid = len(ordered) // 2
+    if len(ordered) % 2 == 1:
+        return ordered[mid]
+    return (ordered[mid - 1] + ordered[mid]) / 2
+for _bug, _what in [(_no_sort, "forgets to sort the numbers"), (_upper_middle, "ignores the even-count rule (no average of the middle pair)"), (_sorts_in_place, "sorts the caller's list in place, changing it"), (_empty_is_zero, "returns 0 for an empty list instead of raising ValueError")]:
+    median = _bug
+    _caught = False
+    for _t in _tests:
+        try:
+            _t()
+        except Exception:
+            _caught = True
+    median = _real
+    assert _caught, f"none of your tests caught this bug: median {_what}"
+::hints
+- Use unsorted inputs, so a version that forgets to sort gives a wrong answer.
+- Include an even-length list.
+- Keep a reference to your input list and check it's unchanged after the call.
+- Check that `median([])` raises `ValueError` with `try`/`except`/`else`.

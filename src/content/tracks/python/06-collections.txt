@@ -1,0 +1,1575 @@
+=== module Module 6 · Collections
+
+=== lesson py-lists | Lists | 90
+A **list** holds many values in order, under one name: a shopping list, the scores of every player, the lines of a file. Lists are the workhorse of Python.
+
+```python
+fruits = ["apple", "banana", "cherry"]
+scores = [72, 95, 88, 95]
+mixed = ["Ada", 36, True, 3.5]     # any types can mix
+empty = []
+```
+
+## Indexing and slicing: just like strings
+
+```python
+fruits[0]        # 'apple'
+fruits[-1]       # 'cherry'
+fruits[1:]       # ['banana', 'cherry']
+len(fruits)      # 3
+"banana" in fruits    # True
+```
+
+Going past the end raises `IndexError: list index out of range`.
+
+## Lists can change
+
+Unlike strings, lists are **mutable**: you can change them in place.
+
+```python
+fruits[0] = "apricot"          # replace an item
+fruits.append("date")          # add to the end
+fruits.insert(1, "blueberry")  # insert before index 1
+fruits.extend(["fig", "grape"])  # add several items at the end
+print(fruits)
+# ['apricot', 'blueberry', 'banana', 'cherry', 'date', 'fig', 'grape']
+```
+
+Removing items:
+
+| Code | What it does |
+|---|---|
+| `fruits.remove("banana")` | removes the first item equal to `"banana"` (`ValueError` if there isn't one) |
+| `fruits.pop()` | removes **and returns** the last item |
+| `fruits.pop(0)` | removes and returns the item at index 0 |
+| `del fruits[1]` | deletes the item at index 1 (also works with slices: `del fruits[:2]`) |
+| `fruits.clear()` | empties the list |
+
+Finding things: `fruits.index("cherry")` gives the position (or `ValueError`), and `scores.count(95)` counts matching items.
+
+## Sorting
+
+```python
+scores = [72, 95, 88, 61]
+scores.sort()                    # sorts the list IN PLACE: [61, 72, 88, 95]
+scores.sort(reverse=True)        # [95, 88, 72, 61]
+ordered = sorted(scores)         # returns a NEW sorted list; scores is unchanged
+scores.reverse()                 # reverses in place
+```
+
+**Careful:** `sort()` changes the list and returns `None`. Writing `scores = scores.sort()` throws your list away and leaves `scores` set to `None`. Use `sorted()` when you want a new list.
+
+Strings sort alphabetically, with capitals before lowercase letters. `sorted(words, key=str.lower)` sorts ignoring case; the `key` is a function applied to each item to decide the order (more in the comprehensions lesson).
+
+## Built-ins that work on lists
+
+```python
+nums = [4, 9, 1, 7]
+sum(nums), min(nums), max(nums), len(nums)    # 21 1 9 4
+sorted(nums), list(reversed(nums))
+```
+
+## Building lists
+
+```python
+squares = []
+for n in range(1, 6):
+    squares.append(n * n)          # [1, 4, 9, 16, 25]
+
+list("abc")                        # ['a', 'b', 'c']
+list(range(3))                     # [0, 1, 2]
+"a b c".split()                    # ['a', 'b', 'c']
+[0] * 4                            # [0, 0, 0, 0]
+[1, 2] + [3]                       # [1, 2, 3]
+```
+
+## Lists inside lists
+
+A list can contain other lists, for example a grid of rows:
+
+```python
+board = [
+    ["X", "O", "X"],
+    [" ", "X", "O"],
+    ["O", " ", "X"],
+]
+board[1][2]     # 'O': row 1, then column 2
+```
+
+## Common mistakes
+
+- `x = x.sort()` (sets `x` to `None`). Use `x.sort()` alone, or `x = sorted(x)`.
+- Removing items from a list **while looping over it**: the loop skips items. Loop over a copy (`for x in items[:]`) or build a new list.
+- Confusing `append` and `extend`: `a.append([1, 2])` adds **one** item (a list); `a.extend([1, 2])` adds two items.
+
+📚 **Go deeper:** Python Tutorial, sections 3.1.3 "Lists" and 5.1 "More on Lists"; *Python Crash Course* (3rd ed.), chapters 3–4; Python for Everybody, chapter 8.
+--- quiz
+? What does this print?
+```python
+nums = [10, 20, 30]
+nums[1] = 25
+nums.append(40)
+print(nums)
+```
++ `[10, 25, 30, 40]`
+- `[10, 20, 30, 40]`
+- `[25, 20, 30, 40]`
+- `[10, 25, 40]`
+> Index 1 is replaced, then 40 is added at the end.
+? What is `nums` after this?
+```python
+nums = [3, 1, 2]
+nums = nums.sort()
+```
+- `[1, 2, 3]`
+- `[3, 1, 2]`
++ `None`
+- An error
+> `sort()` sorts in place and returns `None`, which then replaces the list.
+? What does `pop()` return in this code?
+```python
+stack = ["a", "b", "c"]
+top = stack.pop()
+```
++ `'c'`, and `stack` becomes `['a', 'b']`
+- `'a'`, and `stack` becomes `['b', 'c']`
+- `None`
+- `['a', 'b']`
+> `pop()` removes and returns the last item.
+? What is `len(a)` after this?
+```python
+a = [1, 2]
+a.append([3, 4])
+```
+- 4
++ 3
+- 2
+- 5
+> `append` adds one item, which here is the whole list `[3, 4]`. `extend` would add two items.
+? What is `grid[2][0]`?
+```python
+grid = [[1, 2], [3, 4], [5, 6]]
+```
+- 2
+- 3
++ 5
+- 6
+> Row 2 is `[5, 6]`, and its item 0 is 5.
+--- exercise code python
+::prompt
+Write `top_three(scores)` that returns the **three highest** scores, highest first, **without changing** the list it was given. If there are fewer than three scores, return them all, highest first.
+::starter
+def top_three(scores):
+    scores.sort()
+    return scores
+::solution
+def top_three(scores):
+    return sorted(scores, reverse=True)[:3]
+::tests
+original = [72, 95, 61, 88, 79]
+assert top_three(original) == [95, 88, 79]
+assert original == [72, 95, 61, 88, 79], "the original list must not change"
+assert top_three([5, 9]) == [9, 5]
+assert top_three([4, 4, 4, 1]) == [4, 4, 4]
+assert top_three([]) == []
+::hints
+- `sorted(scores, reverse=True)` makes a new list, highest first, leaving `scores` alone.
+- Slice the first three: `[:3]`. Slicing a short list just returns what's there.
+--- exercise code python
+::prompt
+Write `rotate(items, k)` that returns a **new** list with the items rotated left by `k` places: `rotate([1, 2, 3, 4, 5], 2)` gives `[3, 4, 5, 1, 2]`. `k` may be larger than the list's length (rotating 7 places on 5 items is the same as 2), and an empty list stays empty.
+::starter
+def rotate(items, k):
+    pass
+::solution
+def rotate(items, k):
+    if not items:
+        return []
+    k = k % len(items)
+    return items[k:] + items[:k]
+::tests
+assert rotate([1, 2, 3, 4, 5], 2) == [3, 4, 5, 1, 2]
+assert rotate([1, 2, 3, 4, 5], 0) == [1, 2, 3, 4, 5]
+assert rotate([1, 2, 3, 4, 5], 5) == [1, 2, 3, 4, 5]
+assert rotate([1, 2, 3, 4, 5], 7) == [3, 4, 5, 1, 2]
+assert rotate(["a", "b"], 1) == ["b", "a"]
+assert rotate([], 3) == []
+::hints
+- Two slices glued together: everything from `k` onwards, then everything before `k`.
+- `k % len(items)` brings a large `k` back into range. Handle the empty list first (you can't divide by 0).
+--- exercise code python
+::prompt
+Write `second_largest(numbers)` that returns the second-largest **distinct** value, or `None` if there isn't one: `[5, 9, 9, 3]` gives `5`, and `[4, 4]` gives `None`. Don't change the list you're given.
+::starter
+def second_largest(numbers):
+    pass
+::solution
+def second_largest(numbers):
+    largest = None
+    second = None
+    for n in numbers:
+        if largest is None or n > largest:
+            second = largest
+            largest = n
+        elif n != largest and (second is None or n > second):
+            second = n
+    return second
+::tests
+assert second_largest([5, 9, 9, 3]) == 5
+assert second_largest([1, 2, 3, 4]) == 3
+assert second_largest([4, 4]) is None
+assert second_largest([7]) is None
+assert second_largest([]) is None
+assert second_largest([-2, -5, -1]) == -2
+data = [3, 1, 2]
+second_largest(data)
+assert data == [3, 1, 2], "the list must not change"
+::hints
+- One way: go through the numbers once, tracking the largest and second-largest seen so far.
+- When a new largest appears, the old largest becomes the second.
+- Another way: `sorted(set(numbers))` gives distinct values in order (sets come in two lessons' time).
+--- cards
+List :: An ordered, mutable collection: [1, "a", True]. Indexing and slicing work like strings.
+append / extend / insert :: append(x) adds one item at the end; extend(xs) adds every item of xs; insert(i, x) adds before index i.
+remove / pop / del :: remove(x) deletes the first x; pop(i) removes and returns (default: last); del items[i] deletes by index.
+sort() vs sorted() :: list.sort() sorts in place and returns None; sorted(list) returns a new sorted list.
+
+=== lesson py-list-copies | References, copies and nested lists | 90
+This lesson explains one of the most important ideas in Python, and the source of many confusing bugs: **variables are references to objects**.
+
+## Names point at objects
+
+When you write `a = [1, 2, 3]`, Python creates a list **object** in memory, and the name `a` refers to it, like a label tied to a box. Assigning to another name does **not** copy the list; it ties a second label to the **same** box:
+
+```python
+a = [1, 2, 3]
+b = a            # b refers to the same list as a
+b.append(4)
+print(a)         # [1, 2, 3, 4]   ← a "changed" too!
+```
+
+Two names for one object is called **aliasing**. With strings and numbers it never causes surprises, because they're immutable: nothing can change them in place. With mutable objects like lists, a change through one name is visible through all of them.
+
+## is versus ==
+
+- `a == b` asks: do they have **equal values**?
+- `a is b` asks: are they the **same object**?
+
+```python
+a = [1, 2, 3]
+b = a
+c = [1, 2, 3]
+print(a == c, a is c)    # True False  (equal values, different lists)
+print(a == b, a is b)    # True True   (the same list)
+```
+
+`id(x)` shows an object's identity number; `a is b` is the same as `id(a) == id(b)`. Use `is` mainly for `None`: `if result is None:`.
+
+## Making a real copy
+
+```python
+a = [1, 2, 3]
+b = a.copy()     # or list(a), or a[:]
+b.append(4)
+print(a)         # [1, 2, 3]   unchanged
+print(b)         # [1, 2, 3, 4]
+```
+
+## Shallow and deep copies
+
+`copy()` makes a **shallow** copy: a new outer list, but the items inside are the same objects. For a list of lists, the inner lists are still shared:
+
+```python
+grid = [[1, 2], [3, 4]]
+shallow = grid.copy()
+shallow[0].append(99)
+print(grid)          # [[1, 2, 99], [3, 4]]   the inner list is shared
+```
+
+For a fully independent copy at every level, use a **deep copy**:
+
+```python
+import copy
+deep = copy.deepcopy(grid)
+```
+
+## Functions receive references too
+
+Passing a list to a function passes a reference, so the function can change the caller's list:
+
+```python
+def add_bonus(scores):
+    for i in range(len(scores)):
+        scores[i] += 5
+
+marks = [70, 80]
+add_bonus(marks)
+print(marks)     # [75, 85]
+```
+
+Sometimes that's what you want (and the function's docstring should say so). Usually it's safer for a function to **return a new list** and leave its input alone, so callers aren't surprised.
+
+Reassigning the parameter is different: `scores = [0, 0]` inside the function just points the local name at a new list, and the caller's list is unaffected.
+
+## The [[0] * 3] * 3 trap
+
+Multiplying a list copies **references**, so this "grid" has three references to one row:
+
+```python
+grid = [[0] * 3] * 3
+grid[0][0] = 1
+print(grid)      # [[1, 0, 0], [1, 0, 0], [1, 0, 0]]   all rows changed!
+```
+
+Build each row separately instead:
+
+```python
+grid = []
+for _ in range(3):
+    grid.append([0] * 3)       # a brand-new row each time
+```
+
+(`[0] * 3` itself is fine: numbers are immutable, so sharing them can't cause trouble.)
+
+## Working with grids (matrices)
+
+A list of lists is the usual way to store a table or a matrix. Use two indexes, row first, and nested loops to visit every cell:
+
+```python
+matrix = [[1, 2, 3],
+          [4, 5, 6]]
+for row in matrix:
+    for value in row:
+        print(value, end=" ")
+    print()
+rows = len(matrix)         # 2
+cols = len(matrix[0])      # 3
+```
+
+📚 **Go deeper:** Python FAQ "Why did changing list 'y' also change list 'x'?"; Ned Batchelder's talk "Facts and Myths about Python Names and Values"; Python Library Reference, `copy` module.
+--- quiz
+? What does this print?
+```python
+a = [1, 2]
+b = a
+b.append(3)
+print(a)
+```
+- `[1, 2]`
++ `[1, 2, 3]`
+- `[3]`
+- An error
+> `b = a` doesn't copy; both names refer to the same list.
+? What does this print?
+```python
+x = [1, 2]
+y = [1, 2]
+print(x == y, x is y)
+```
++ `True False`
+- `True True`
+- `False False`
+- `False True`
+> Equal contents, but two separate list objects.
+? What does this print?
+```python
+a = [1, 2]
+b = a[:]
+b.append(3)
+print(len(a))
+```
++ 2
+- 3
+- 1
+- An error
+> `a[:]` makes a new list, so appending to `b` doesn't affect `a`.
+? What does `grid` look like after this?
+```python
+grid = [[0] * 2] * 2
+grid[1][1] = 7
+```
+- `[[0, 0], [0, 7]]`
++ `[[0, 7], [0, 7]]`
+- `[[7, 7], [7, 7]]`
+- An error
+> Both rows are the same list object, so the change shows in both.
+? What does this print?
+```python
+def reset(items):
+    items = []
+
+data = [1, 2, 3]
+reset(data)
+print(data)
+```
+- `[]`
++ `[1, 2, 3]`
+- `None`
+- An error
+> Assigning to the parameter only re-points the local name; the caller's list is untouched.
+--- exercise code python
+::prompt
+`with_bonus(scores, bonus)` should return a **new** list with `bonus` added to every score, but this version also changes the caller's list. Fix it so the original list is left alone.
+::starter
+def with_bonus(scores, bonus):
+    for i in range(len(scores)):
+        scores[i] += bonus
+    return scores
+::solution
+def with_bonus(scores, bonus):
+    result = []
+    for s in scores:
+        result.append(s + bonus)
+    return result
+::tests
+marks = [70, 85, 90]
+assert with_bonus(marks, 5) == [75, 90, 95]
+assert marks == [70, 85, 90], "the original list must not change"
+assert with_bonus([], 10) == []
+new = with_bonus(marks, 0)
+assert new == marks and new is not marks, "always return a new list"
+::hints
+- Build a new list with `append` instead of assigning to `scores[i]`.
+- Or copy first: `result = scores.copy()`, then change `result`.
+--- exercise code python
+::prompt
+Write `make_grid(rows, cols, fill)` that returns a grid (a list of `rows` lists, each with `cols` copies of `fill`) where every row is a **separate** list, so changing one cell changes only that cell.
+::starter
+def make_grid(rows, cols, fill):
+    return [[fill] * cols] * rows
+::solution
+def make_grid(rows, cols, fill):
+    grid = []
+    for _ in range(rows):
+        grid.append([fill] * cols)
+    return grid
+::tests
+g = make_grid(3, 2, 0)
+assert g == [[0, 0], [0, 0], [0, 0]]
+g[0][1] = 5
+assert g == [[0, 5], [0, 0], [0, 0]], "changing one cell must not change the other rows"
+assert make_grid(1, 3, ".") == [[".", ".", "."]]
+assert make_grid(0, 4, 1) == []
+::hints
+- Multiplying the outer list repeats a reference to one row.
+- Create each row inside a loop: `grid.append([fill] * cols)`.
+--- exercise code python
+::prompt
+Write `transpose(matrix)` that returns a new matrix whose rows are the columns of the original: `[[1, 2, 3], [4, 5, 6]]` becomes `[[1, 4], [2, 5], [3, 6]]`. Assume every row has the same length, and an empty matrix gives `[]`.
+::starter
+def transpose(matrix):
+    pass
+::solution
+def transpose(matrix):
+    if not matrix:
+        return []
+    result = []
+    for c in range(len(matrix[0])):
+        new_row = []
+        for row in matrix:
+            new_row.append(row[c])
+        result.append(new_row)
+    return result
+::tests
+assert transpose([[1, 2, 3], [4, 5, 6]]) == [[1, 4], [2, 5], [3, 6]]
+assert transpose([[1, 2], [3, 4]]) == [[1, 3], [2, 4]]
+assert transpose([[7]]) == [[7]]
+assert transpose([[1, 2, 3]]) == [[1], [2], [3]]
+assert transpose([]) == []
+m = [[1, 2], [3, 4]]
+transpose(m)
+assert m == [[1, 2], [3, 4]], "don't change the input"
+::hints
+- The result has one row for each column of the input: loop over column numbers `range(len(matrix[0]))`.
+- For column `c`, collect `row[c]` from every row.
+--- cards
+Aliasing :: b = a makes b refer to the same object as a; changes to a mutable object show through both names.
+is vs == :: == compares values; is checks whether two names refer to the very same object. Use is for None.
+Shallow vs deep copy :: list.copy() / list(a) / a[:] copy the outer list only; copy.deepcopy copies nested objects too.
+[[0] * 3] * 3 :: Creates three references to one row. Build rows in a loop (or a comprehension) instead.
+
+=== lesson py-list-comprehensions | List comprehensions and sorting | 95
+Building a list with a loop and `append` is so common that Python has a compact expression for it: the **list comprehension**.
+
+```python
+squares = []
+for n in range(1, 6):
+    squares.append(n * n)
+
+squares = [n * n for n in range(1, 6)]      # the same, in one line
+```
+
+Read it as "**n squared, for each n in range(1, 6)**". The general shape is:
+
+```
+[expression for item in iterable]
+```
+
+## Filtering with if
+
+Add a condition at the end to keep only some items:
+
+```python
+evens = [n for n in range(20) if n % 2 == 0]
+long_words = [w for w in words if len(w) > 5]
+```
+
+## Transforming with if/else
+
+To **change** items depending on a condition (rather than drop them), put a conditional expression in the expression part:
+
+```python
+labels = ["even" if n % 2 == 0 else "odd" for n in range(4)]
+# ['even', 'odd', 'even', 'odd']
+```
+
+Remember the difference: an `if` at the **end** filters; an `if ... else` at the **start** chooses a value.
+
+## Nested comprehensions
+
+Two `for`s read in the same order as nested loops:
+
+```python
+matrix = [[1, 2], [3, 4], [5, 6]]
+flat = [x for row in matrix for x in row]          # [1, 2, 3, 4, 5, 6]
+grid = [[0] * 3 for _ in range(2)]                 # [[0, 0, 0], [0, 0, 0]], separate rows
+table = [[r * c for c in range(1, 4)] for r in range(1, 4)]
+```
+
+The middle example is the safe way to build a grid from the last lesson.
+
+## Feeding functions directly
+
+Without the square brackets, the same syntax inside a function call is a **generator expression**: it produces the values one at a time without building a list first.
+
+```python
+total = sum(n * n for n in range(1, 101))
+any_negative = any(x < 0 for x in data)     # True if at least one is
+all_passed = all(s >= 50 for s in scores)   # True if every one is
+```
+
+## When not to use one
+
+Comprehensions are for building a collection from another one. If the logic needs several steps, `print`s or `try`, a normal loop is clearer. Readability beats cleverness.
+
+## Sorting with a key
+
+`sorted()` and `list.sort()` accept a `key`: a **function** called on each item to get the value to sort by. You pass the function itself, without calling it:
+
+```python
+words = ["banana", "Kiwi", "apple", "fig"]
+sorted(words)                    # ['Kiwi', 'apple', 'banana', 'fig']   capitals first
+sorted(words, key=str.lower)     # ['apple', 'banana', 'fig', 'Kiwi']
+sorted(words, key=len)           # ['fig', 'Kiwi', 'apple', 'banana']
+sorted(words, key=len, reverse=True)
+```
+
+You can write your own key function:
+
+```python
+def last_letter(word):
+    return word[-1]
+
+sorted(words, key=last_letter)
+```
+
+Python's sort is **stable**: items with equal keys keep their original order. That gives a neat trick for sorting by two things: sort by the *secondary* key first, then by the *primary* key:
+
+```python
+by_name = sorted(words)              # alphabetical first...
+by_length = sorted(by_name, key=len) # ...then by length; equal lengths stay alphabetical
+```
+
+Module 12 shows a shorter way with `lambda`.
+
+📚 **Go deeper:** Python Tutorial, section 5.1.3 "List Comprehensions"; Python "Sorting Techniques" HOWTO (docs.python.org/3/howto/sorting.html); *Fluent Python* (2nd ed.), chapter 2.
+--- quiz
+? What is `[n * 2 for n in [1, 2, 3]]`?
++ `[2, 4, 6]`
+- `[1, 2, 3, 1, 2, 3]`
+- `[1, 2, 3]`
+- `6`
+> Each item is doubled.
+? What is `[c for c in "Hello" if c.isupper()]`?
+- `['e', 'l', 'l', 'o']`
++ `['H']`
+- `'H'`
+- `['HELLO']`
+> The `if` at the end keeps only the characters that pass the test.
+? What is `[x if x > 0 else 0 for x in [-2, 5, -1, 3]]`?
+- `[5, 3]`
++ `[0, 5, 0, 3]`
+- `[-2, -1]`
+- A `SyntaxError`
+> `if ... else` at the start chooses a value for every item; nothing is dropped.
+? What is `[x for row in [[1, 2], [3]] for x in row]`?
++ `[1, 2, 3]`
+- `[[1, 2], [3]]`
+- `[3, 1, 2]`
+- `[1, 2]`
+> The `for`s read like nested loops: for each row, for each x in it.
+? What does `sorted(["bb", "a", "ccc"], key=len, reverse=True)` give?
++ `['ccc', 'bb', 'a']`
+- `['a', 'bb', 'ccc']`
+- `[3, 2, 1]`
+- `['ccc', 'a', 'bb']`
+> Sorted by length, longest first.
+? What is `any(n > 10 for n in [3, 15, 7])`?
++ `True`
+- `False`
+- `15`
+- `[False, True, False]`
+> `any` is True if at least one value is truthy.
+--- exercise code python
+::prompt
+Write each of these functions as a **single `return` with a list comprehension**:
+
+- `squares_of_evens(numbers)`: the squares of the even numbers only;
+- `lengths(words)`: the length of each word;
+- `initials(names)`: the first letter of each name, in capitals.
+::starter
+def squares_of_evens(numbers):
+    pass
+
+
+def lengths(words):
+    pass
+
+
+def initials(names):
+    pass
+::solution
+def squares_of_evens(numbers):
+    return [n * n for n in numbers if n % 2 == 0]
+
+
+def lengths(words):
+    return [len(w) for w in words]
+
+
+def initials(names):
+    return [name[0].upper() for name in names]
+::tests
+assert squares_of_evens([1, 2, 3, 4, 5, 6]) == [4, 16, 36]
+assert squares_of_evens([1, 3]) == []
+assert squares_of_evens([-2, 0]) == [4, 0]
+assert lengths(["hi", "hello", ""]) == [2, 5, 0]
+assert initials(["ada", "Grace", "linus"]) == ["A", "G", "L"]
+assert initials([]) == []
+::hints
+- The pattern is `[expression for item in items if condition]`.
+- `name[0].upper()` is the first letter as a capital.
+--- exercise code python
+::prompt
+Survey answers arrive as messy strings. Write `clean_scores(raw)` that returns a list of **ints** for the answers that are whole numbers (ignoring spaces around them), skipping everything else: `[" 42", "x", "17 ", "", "3.5"]` gives `[42, 17]`. Use a comprehension.
+::starter
+def clean_scores(raw):
+    pass
+::solution
+def clean_scores(raw):
+    return [int(s.strip()) for s in raw if s.strip().isdigit()]
+::tests
+assert clean_scores([" 42", "x", "17 ", "", "3.5"]) == [42, 17]
+assert clean_scores(["7", "007", "  1  "]) == [7, 7, 1]
+assert clean_scores(["n/a", "-", "  "]) == []
+assert clean_scores([]) == []
+::hints
+- Filter with `if s.strip().isdigit()`.
+- The expression part converts: `int(s.strip())`.
+--- exercise code python
+::prompt
+Write with comprehensions:
+
+- `flatten(matrix)`: all the values of a list of lists in one flat list, row by row;
+- `times_table(n)`: an `n` × `n` multiplication table as a list of rows, where row `r`, column `c` (both counted from 1) holds `r * c`.
+::starter
+def flatten(matrix):
+    pass
+
+
+def times_table(n):
+    pass
+::solution
+def flatten(matrix):
+    return [x for row in matrix for x in row]
+
+
+def times_table(n):
+    return [[r * c for c in range(1, n + 1)] for r in range(1, n + 1)]
+::tests
+assert flatten([[1, 2], [3], [], [4, 5]]) == [1, 2, 3, 4, 5]
+assert flatten([]) == []
+assert times_table(3) == [[1, 2, 3], [2, 4, 6], [3, 6, 9]]
+assert times_table(1) == [[1]]
+t = times_table(4)
+t[0][0] = 99
+assert t[1][0] == 2, "each row must be a separate list"
+::hints
+- Flatten: two `for`s, outer first: `[x for row in matrix for x in row]`.
+- Table: a comprehension inside a comprehension. The inner one builds a row for a fixed `r`.
+--- exercise code python
+::prompt
+Write `sort_words(words)` that returns the words sorted **by length**, shortest first, with words of the same length in **alphabetical order, ignoring case**. Don't change the original list.
+::starter
+def sort_words(words):
+    pass
+::solution
+def sort_words(words):
+    alphabetical = sorted(words, key=str.lower)
+    return sorted(alphabetical, key=len)
+::tests
+assert sort_words(["pear", "fig", "Apple", "kiwi", "date"]) == ["fig", "date", "kiwi", "pear", "Apple"]
+assert sort_words(["bb", "B", "a", "AA"]) == ["a", "B", "AA", "bb"]
+assert sort_words([]) == []
+w = ["ccc", "a"]
+sort_words(w)
+assert w == ["ccc", "a"], "don't change the original list"
+::hints
+- Sorting is stable: sort by the secondary rule first, then by the main rule.
+- First `sorted(words, key=str.lower)`, then sort that result with `key=len`.
+--- cards
+List comprehension :: [expression for item in iterable if condition]: builds a new list in one expression.
+Filter vs transform :: An if at the end of a comprehension filters items out; x if cond else y at the start chooses a value.
+Generator expression :: A comprehension without brackets inside a call, e.g. sum(x * x for x in nums); values are produced one by one.
+sorted(key=...) :: key is a function applied to each item to decide the order: key=len, key=str.lower. Sorting is stable.
+any() / all() :: any: at least one truthy; all: every item truthy (all of an empty sequence is True).
+
+=== lesson py-tuples-sets | Tuples and sets | 90
+Lists aren't the only collections. Two more are used constantly: **tuples** for fixed groups of values, and **sets** for collections of unique items.
+
+## Tuples: fixed, ordered groups
+
+A tuple is like a list that can't be changed. It's written with parentheses (or just commas):
+
+```python
+point = (3, 4)
+rgb = (255, 128, 0)
+person = ("Ada", 1815, "London")
+point[0]           # 3     indexing and slicing work
+len(rgb)           # 3
+point[0] = 10      # TypeError: 'tuple' object does not support item assignment
+```
+
+Use a tuple for a **record**: a fixed number of related values whose positions have meanings (x and y; name, year, city). Use a list for a varying number of **similar** things.
+
+A tuple with one item needs a comma: `(5,)` is a tuple, but `(5)` is just the number 5 in parentheses. `()` is the empty tuple.
+
+## Packing and unpacking
+
+You've been using tuples already: `a, b = 1, 2` **packs** `1, 2` into a tuple and **unpacks** it into two names. It works with any sequence of the right length:
+
+```python
+name, year, city = person
+x, y = point
+first, *rest = [1, 2, 3, 4]     # first = 1, rest = [2, 3, 4]
+for name, score in [("Ada", 95), ("Alan", 88)]:
+    print(name, score)
+```
+
+Functions that `return a, b` are returning a tuple, which is why `low, high = min_max(nums)` works.
+
+Because tuples are immutable, they can be used where Python needs values that never change, such as dictionary keys (next lesson): `distances[("London", "Paris")] = 344`.
+
+## Sets: unique items, no order
+
+A **set** holds each value at most once, in no particular order:
+
+```python
+colours = {"red", "green", "blue", "red"}
+print(colours)            # {'green', 'red', 'blue'}  (order may vary; duplicates gone)
+len(colours)              # 3
+"red" in colours          # True, and very fast even for millions of items
+empty = set()             # NOT {}  (that's an empty dictionary)
+```
+
+Changing a set:
+
+```python
+colours.add("yellow")
+colours.remove("green")      # KeyError if it isn't there
+colours.discard("purple")    # no error if it isn't there
+```
+
+Sets can't be indexed (`colours[0]` is a `TypeError`); there's no "first" item. Loop over them, or convert: `sorted(colours)` gives a sorted list.
+
+## Removing duplicates
+
+```python
+emails = ["a@x.com", "b@x.com", "a@x.com"]
+unique = set(emails)               # {'a@x.com', 'b@x.com'}
+has_duplicates = len(set(emails)) != len(emails)
+```
+
+`set()` loses the original order. To keep the order of first appearance, remember what you've seen:
+
+```python
+seen = set()
+unique_in_order = []
+for e in emails:
+    if e not in seen:
+        seen.add(e)
+        unique_in_order.append(e)
+```
+
+## Set operations
+
+Sets support the operations from maths, with operators:
+
+```python
+a = {"Ada", "Alan", "Grace"}
+b = {"Grace", "Linus"}
+a | b      # union: in either          {'Ada', 'Alan', 'Grace', 'Linus'}
+a & b      # intersection: in both     {'Grace'}
+a - b      # difference: in a, not b   {'Ada', 'Alan'}
+a ^ b      # symmetric difference: in exactly one   {'Ada', 'Alan', 'Linus'}
+a <= b     # is a a subset of b?        False
+```
+
+These make questions like "which customers bought both products?" one-liners.
+
+## Why is `in` so fast for sets?
+
+A list check `x in items` looks at the items one by one, so it gets slower as the list grows. A set stores items by their **hash** (a number computed from the value), so it can jump straight to where `x` would be. That's also why set items (and dictionary keys) must be **hashable**: immutable values like numbers, strings and tuples. A list can't go in a set.
+
+Set comprehensions work too: `{w.lower() for w in words}`. And `frozenset` is an immutable set, usable as a dictionary key.
+
+📚 **Go deeper:** Python Tutorial, sections 5.3 "Tuples and Sequences" and 5.4 "Sets"; *Think Python* (3rd ed.), chapter 11 "Tuples"; Python Library Reference, "Set Types".
+--- quiz
+? What is `type((5,))` and `type((5))`?
++ `tuple` and `int`
+- `tuple` and `tuple`
+- `int` and `int`
+- `list` and `int`
+> A one-item tuple needs a trailing comma; plain parentheses just group.
+? What is `len({1, 2, 2, 3, 3, 3})`?
+- 6
++ 3
+- 1
+- An error
+> A set keeps each value only once.
+? What is `{1, 2, 3} & {2, 3, 4}`?
+- `{1, 2, 3, 4}`
++ `{2, 3}`
+- `{1, 4}`
+- `{1}`
+> `&` is the intersection: values in both sets.
+? What does `first, *rest = "abc"` set `rest` to?
+- `"bc"`
++ `['b', 'c']`
+- `('b', 'c')`
+- `'c'`
+> A starred name collects the remaining items into a list.
+? How do you create an empty set?
+- `{}`
++ `set()`
+- `[]`
+- `()`
+> `{}` is an empty dictionary.
+? Why can't a list be put into a set?
+- Sets only hold numbers
++ Set items must be hashable (immutable), and lists can change
+- Lists are too big
+- It can, with `add`
+> A tuple can go in a set; a list can't.
+--- exercise code python
+::prompt
+Write `stats(numbers)` that returns a **tuple** `(smallest, largest, average)` for a non-empty list, with the average rounded to 2 decimals.
+::starter
+def stats(numbers):
+    pass
+::solution
+def stats(numbers):
+    return min(numbers), max(numbers), round(sum(numbers) / len(numbers), 2)
+::tests
+assert stats([4, 8, 6]) == (4, 8, 6.0)
+low, high, avg = stats([1, 2])
+assert (low, high, avg) == (1, 2, 1.5)
+assert stats([7]) == (7, 7, 7)
+assert stats([1, 2, 2]) == (1, 2, 1.67)
+assert isinstance(stats([3, 5]), tuple), "return a tuple"
+::hints
+- `return a, b, c` returns a tuple.
+- Use `min`, `max`, and `round(sum(numbers) / len(numbers), 2)`.
+--- exercise code python
+::prompt
+Write `unique_in_order(items)` that removes duplicates but keeps the **order of first appearance**: `[3, 1, 3, 2, 1]` gives `[3, 1, 2]`. Use a set to remember what you've already seen.
+::starter
+def unique_in_order(items):
+    return list(set(items))
+::solution
+def unique_in_order(items):
+    seen = set()
+    result = []
+    for item in items:
+        if item not in seen:
+            seen.add(item)
+            result.append(item)
+    return result
+::tests
+assert unique_in_order([3, 1, 3, 2, 1]) == [3, 1, 2]
+assert unique_in_order(["b", "a", "b", "c", "a"]) == ["b", "a", "c"]
+assert unique_in_order([]) == []
+assert unique_in_order([5, 5, 5]) == [5]
+assert unique_in_order(list(range(10, 0, -1)) * 2) == list(range(10, 0, -1))
+::hints
+- `list(set(items))` loses the order, so loop instead.
+- Keep a set of items seen so far; append an item to the result only the first time you meet it.
+--- exercise code python
+::prompt
+Two clubs list their members. Write `compare_clubs(a, b)` that takes two lists of names and returns a tuple of three **sorted lists**: the names in both clubs, the names only in club `a`, and the names only in club `b`. Each name appears at most once in each result.
+::starter
+def compare_clubs(a, b):
+    pass
+::solution
+def compare_clubs(a, b):
+    a, b = set(a), set(b)
+    return sorted(a & b), sorted(a - b), sorted(b - a)
+::tests
+both, only_a, only_b = compare_clubs(["Ada", "Alan", "Grace"], ["Grace", "Linus", "Ada"])
+assert both == ["Ada", "Grace"]
+assert only_a == ["Alan"]
+assert only_b == ["Linus"]
+assert compare_clubs([], ["Bo"]) == ([], [], ["Bo"])
+assert compare_clubs(["X", "X"], ["X"]) == (["X"], [], [])
+::hints
+- Convert both lists to sets first.
+- `&` gives the members of both, `-` the members of only one.
+- `sorted()` turns a set into a sorted list.
+--- cards
+Tuple :: An ordered, immutable sequence: (1, 2). One item needs a comma: (5,). Good for fixed records and dict keys.
+Unpacking :: x, y = point; first, *rest = items. Functions returning a, b return a tuple.
+Set :: Unordered collection of unique, hashable items: {1, 2}. Empty set: set(). Fast membership tests.
+Set operations :: a | b union, a & b intersection, a - b difference, a ^ b in exactly one, a <= b subset.
+
+=== lesson py-dicts | Dictionaries | 95
+A **dictionary** (`dict`) stores **key → value** pairs. Instead of finding things by position, you find them by a meaningful key, like looking up a word in a real dictionary.
+
+```python
+ages = {"Ada": 36, "Alan": 41, "Grace": 85}
+print(ages["Alan"])      # 41
+```
+
+Keys are usually strings or numbers (any hashable value); values can be anything, including lists and other dictionaries.
+
+## Reading values safely
+
+```python
+ages["Linus"]                # KeyError: 'Linus'
+ages.get("Linus")            # None   (no error)
+ages.get("Linus", 0)         # 0      (your own default)
+"Ada" in ages                # True   (in checks the KEYS)
+36 in ages                   # False  (36 is a value, not a key)
+```
+
+## Adding, changing and removing
+
+```python
+ages["Linus"] = 54           # adds a new key
+ages["Ada"] = 37             # replaces the value of an existing key
+del ages["Alan"]             # removes a key (KeyError if missing)
+grace = ages.pop("Grace")    # removes and returns the value
+ages.update({"Tim": 69, "Ada": 38})   # adds or replaces several at once
+```
+
+A key can appear only once: assigning to an existing key overwrites its value.
+
+## Looping over a dictionary
+
+```python
+for name in ages:                  # keys
+    print(name)
+for age in ages.values():          # values
+    print(age)
+for name, age in ages.items():     # (key, value) pairs
+    print(f"{name} is {age}")
+```
+
+Since Python 3.7, dictionaries remember the **order in which keys were added**.
+
+## The counting pattern
+
+Counting things is the classic dictionary job:
+
+```python
+counts = {}
+for word in "the cat and the hat".split():
+    counts[word] = counts.get(word, 0) + 1
+print(counts)    # {'the': 2, 'cat': 1, 'and': 1, 'hat': 1}
+```
+
+`counts.get(word, 0)` reads the current count, or 0 the first time.
+
+## The grouping pattern
+
+A dictionary of lists groups items by some property:
+
+```python
+groups = {}
+for word in ["apple", "avocado", "banana", "blueberry", "cherry"]:
+    first = word[0]
+    if first not in groups:
+        groups[first] = []
+    groups[first].append(word)
+# {'a': ['apple', 'avocado'], 'b': ['banana', 'blueberry'], 'c': ['cherry']}
+```
+
+(`groups.setdefault(first, []).append(word)` does the same in one line.)
+
+## Dictionary comprehensions
+
+```python
+squares = {n: n * n for n in range(1, 5)}      # {1: 1, 2: 4, 3: 9, 4: 16}
+lengths = {w: len(w) for w in ["hi", "hello"]}
+```
+
+## Nested dictionaries
+
+Real data is often dictionaries inside dictionaries (and lists), exactly the shape of the **JSON** data that web APIs send:
+
+```python
+inventory = {
+    "apple":  {"price": 0.5, "qty": 120},
+    "banana": {"price": 0.25, "qty": 0},
+}
+inventory["apple"]["qty"]          # 120
+for name, item in inventory.items():
+    if item["qty"] == 0:
+        print(name, "is out of stock")
+```
+
+## Sorting a dictionary's items
+
+A dictionary isn't sorted itself, but you can sort its items. Each item is a `(key, value)` tuple, so to sort by value write a small key function:
+
+```python
+def by_score(pair):
+    return pair[1]
+
+scores = {"Ada": 95, "Alan": 88, "Grace": 99}
+ranking = sorted(scores.items(), key=by_score, reverse=True)
+# [('Grace', 99), ('Ada', 95), ('Alan', 88)]
+```
+
+## Choosing a data structure
+
+| Need | Use |
+|---|---|
+| items in order, changing over time | `list` |
+| a fixed record of a few values | `tuple` |
+| unique items, fast "is it in there?" | `set` |
+| look up values by a key | `dict` |
+
+📚 **Go deeper:** Python Tutorial, section 5.5 "Dictionaries"; *Python Crash Course* (3rd ed.), chapter 6; Python for Everybody, chapter 9.
+--- quiz
+? What does this print?
+```python
+d = {"a": 1, "b": 2}
+d["a"] = 10
+d["c"] = 3
+print(len(d), d["a"])
+```
++ `3 10`
+- `4 10`
+- `3 1`
+- An error
+> Assigning to an existing key replaces its value; a new key adds a pair.
+? What does `{"x": 1}.get("y", 0)` return?
+- `None`
++ `0`
+- `1`
+- A `KeyError`
+> `get` returns the default when the key is missing.
+? What is `"Ada" in {"name": "Ada"}`?
+- `True`
++ `False`
+- `"name"`
+- An error
+> `in` checks the keys, and `"Ada"` is a value.
+? What does this print?
+```python
+counts = {}
+for ch in "banana":
+    counts[ch] = counts.get(ch, 0) + 1
+print(counts["a"])
+```
+- 1
+- 2
++ 3
+- A `KeyError`
+> There are three a's in banana.
+? What is `{k: v for k, v in [("a", 1), ("b", 2)]}`?
++ `{'a': 1, 'b': 2}`
+- `[('a', 1), ('b', 2)]`
+- `{'a', 'b'}`
+- `{1: 'a', 2: 'b'}`
+> A dict comprehension builds key: value pairs.
+? What happens with a list as a key, `d[[1, 2]] = "x"`?
+- It works
++ `TypeError: unhashable type: 'list'`
+- The list is converted to a tuple
+- `KeyError`
+> Keys must be hashable. Use the tuple `(1, 2)` instead.
+--- exercise code python
+::prompt
+Write `word_count(text)` that returns a dictionary mapping each word to how many times it appears. Words are compared in lowercase, and the punctuation `.,!?` at the start or end of a word is ignored.
+::starter
+def word_count(text):
+    counts = {}
+    return counts
+::solution
+def word_count(text):
+    counts = {}
+    for word in text.lower().split():
+        word = word.strip(".,!?")
+        if word:
+            counts[word] = counts.get(word, 0) + 1
+    return counts
+::tests
+assert word_count("the cat and the hat") == {"the": 2, "cat": 1, "and": 1, "hat": 1}
+assert word_count("Hello, hello! HELLO?") == {"hello": 3}
+assert word_count("") == {}
+assert word_count("One. Two, two!") == {"one": 1, "two": 2}
+assert word_count("Wait ... what") == {"wait": 1, "what": 1}
+::hints
+- Lowercase the text and split it into words.
+- `word.strip(".,!?")` removes punctuation at the ends; skip words that become empty.
+- Count with `counts[word] = counts.get(word, 0) + 1`.
+--- exercise code python
+::prompt
+Write two functions:
+
+- `group_by_length(words)` returns a dictionary mapping each word length to the list of words of that length, in their original order;
+- `invert(d)` returns a new dictionary with keys and values swapped (assume the values are unique).
+::starter
+def group_by_length(words):
+    pass
+
+
+def invert(d):
+    pass
+::solution
+def group_by_length(words):
+    groups = {}
+    for w in words:
+        groups.setdefault(len(w), []).append(w)
+    return groups
+
+
+def invert(d):
+    return {value: key for key, value in d.items()}
+::tests
+assert group_by_length(["hi", "cat", "yo", "dog", "a"]) == {2: ["hi", "yo"], 3: ["cat", "dog"], 1: ["a"]}
+assert group_by_length([]) == {}
+assert invert({"a": 1, "b": 2}) == {1: "a", 2: "b"}
+assert invert({}) == {}
+codes = {"UK": 44, "FR": 33}
+assert invert(codes)[33] == "FR"
+assert codes == {"UK": 44, "FR": 33}, "don't change the original"
+::hints
+- For grouping: if the length isn't a key yet, create an empty list for it, then append the word.
+- `invert` fits in one dict comprehension over `d.items()`.
+--- exercise code python
+::prompt
+A shop's inventory maps product names to `{"price": ..., "qty": ...}`. Write:
+
+- `stock_value(inventory)`: the total value of all the stock (price × quantity, summed), rounded to 2 decimals;
+- `low_stock(inventory, threshold)`: an alphabetically **sorted** list of the products whose quantity is **below** `threshold`.
+::starter
+def stock_value(inventory):
+    pass
+
+
+def low_stock(inventory, threshold):
+    pass
+::solution
+def stock_value(inventory):
+    total = 0
+    for item in inventory.values():
+        total += item["price"] * item["qty"]
+    return round(total, 2)
+
+
+def low_stock(inventory, threshold):
+    return sorted(name for name, item in inventory.items() if item["qty"] < threshold)
+::tests
+shop = {
+    "apple": {"price": 0.5, "qty": 120},
+    "banana": {"price": 0.25, "qty": 4},
+    "cherry": {"price": 3.0, "qty": 0},
+    "date": {"price": 2.2, "qty": 10},
+}
+assert stock_value(shop) == 83.0
+assert low_stock(shop, 10) == ["banana", "cherry"]
+assert low_stock(shop, 1) == ["cherry"]
+assert low_stock(shop, 0) == []
+assert stock_value({}) == 0
+::hints
+- Loop over `inventory.values()` to reach each `{"price": ..., "qty": ...}` dictionary.
+- For `low_stock`, loop over `.items()` to get the name too, and keep those with `item["qty"] < threshold`.
+--- cards
+Dictionary :: Key → value pairs: {"a": 1}. Look up with d[key] (KeyError if missing) or d.get(key, default).
+Looping a dict :: for k in d (keys), d.values(), d.items() gives (key, value) pairs. Order = insertion order.
+Counting pattern :: counts[x] = counts.get(x, 0) + 1
+Grouping pattern :: groups.setdefault(key, []).append(item) builds a dict of lists.
+Hashable keys :: Dict keys and set items must be immutable: str, int, tuple yes; list no.
+
+=== lesson py-collections-module | The collections module | 90
+Python's standard library includes the `collections` module: specialised containers that make common jobs shorter and faster. Import what you need:
+
+```python
+from collections import Counter, defaultdict, namedtuple, deque
+```
+
+## Counter: counting made easy
+
+```python
+from collections import Counter
+
+votes = ["red", "blue", "red", "green", "red", "blue"]
+tally = Counter(votes)
+print(tally)                    # Counter({'red': 3, 'blue': 2, 'green': 1})
+tally["red"]                    # 3
+tally["purple"]                 # 0   (no KeyError for missing items)
+tally.most_common(2)            # [('red', 3), ('blue', 2)]
+Counter("mississippi")          # counts letters
+```
+
+A `Counter` is a dictionary with superpowers: counters can be added (`c1 + c2`), updated with more items (`tally.update(["red"])`), and asked for the top items.
+
+## defaultdict: no more "if key not in"
+
+A `defaultdict` creates a value automatically the first time a missing key is used. You give it a function that makes the default:
+
+```python
+from collections import defaultdict
+
+groups = defaultdict(list)        # missing keys start as []
+for word in ["apple", "avocado", "banana"]:
+    groups[word[0]].append(word)
+# defaultdict(<class 'list'>, {'a': ['apple', 'avocado'], 'b': ['banana']})
+
+totals = defaultdict(int)         # missing keys start as 0
+for item, amount in [("tea", 3), ("cake", 5), ("tea", 2)]:
+    totals[item] += amount
+```
+
+Pass the function itself: `list`, not `list()`. Convert back with `dict(groups)` if you need a plain dictionary.
+
+## namedtuple: tuples with field names
+
+```python
+from collections import namedtuple
+
+Point = namedtuple("Point", ["x", "y"])
+p = Point(3, 4)
+p.x, p.y          # 3 4   (much clearer than p[0], p[1])
+x, y = p          # still unpacks like a tuple
+p._replace(x=10)  # a new Point(x=10, y=4)
+```
+
+Great for small, fixed records. (Module 9's **dataclasses** are the more flexible modern option.)
+
+## deque: a fast double-ended queue
+
+A list is fast at the end but slow at the **front**: `items.pop(0)` and `items.insert(0, x)` shift every other item. A `deque` ("deck") is fast at both ends:
+
+```python
+from collections import deque
+
+queue = deque(["Ada", "Alan"])
+queue.append("Grace")        # join at the back
+first = queue.popleft()      # serve from the front: 'Ada'
+queue.appendleft("VIP")      # jump the queue
+
+recent = deque(maxlen=3)     # keeps only the last 3 items
+for page in ["home", "about", "blog", "contact"]:
+    recent.append(page)
+print(list(recent))          # ['about', 'blog', 'contact']
+```
+
+Use a deque for queues (first in, first out), "the last N things", and breadth-first search (algorithms track).
+
+## Choosing well
+
+| Task | Tool |
+|---|---|
+| count how often things occur | `Counter` |
+| group or total by key | `defaultdict(list)` / `defaultdict(int)` |
+| a small record with named fields | `namedtuple` (or a dataclass) |
+| a queue, or the last N items | `deque` |
+
+Picking the right data structure is one of the most valuable skills in programming: good structures make the code simple, and the code obviously correct.
+
+📚 **Go deeper:** Python Library Reference, `collections` — Container datatypes; Python Module of the Week (pymotw.com), "collections"; *Fluent Python* (2nd ed.), chapter 3.
+--- quiz
+? What does `Counter("banana").most_common(1)` return?
++ `[('a', 3)]`
+- `('a', 3)`
+- `'a'`
+- `[('b', 1)]`
+> `most_common(n)` returns a list of the n most frequent (item, count) pairs.
+? What is `Counter(["x"])["y"]`?
+- `None`
++ `0`
+- A `KeyError`
+- `1`
+> Missing items count as 0 in a Counter.
+? What does this print?
+```python
+from collections import defaultdict
+d = defaultdict(int)
+d["a"] += 5
+print(d["a"], d["b"])
+```
++ `5 0`
+- `5 None`
+- A `KeyError`
+- `5 5`
+> `int()` is 0, so missing keys start at 0. Even reading `d["b"]` creates it.
+? Which is the fastest way to take items from the **front** of a long queue?
+- `items.pop(0)` on a list
++ `queue.popleft()` on a deque
+- `items.remove(items[0])`
+- `del items[0]`
+> Removing from the front of a list shifts every other item; a deque doesn't.
+? What does `deque([1, 2, 3, 4], maxlen=2)` contain?
+- `[1, 2]`
++ `[3, 4]`
+- `[1, 2, 3, 4]`
+- An error
+> When full, adding to one end drops items from the other end, so the last 2 remain.
+--- exercise code python
+::prompt
+Write `top_words(text, n)` that returns the `n` most common lowercase words in `text` as a list of `(word, count)` pairs, using `Counter.most_common`. (Words are separated by whitespace; no punctuation handling needed.)
+::starter
+from collections import Counter
+
+def top_words(text, n):
+    pass
+::solution
+from collections import Counter
+
+def top_words(text, n):
+    return Counter(text.lower().split()).most_common(n)
+::tests
+assert top_words("the cat saw the other cat and the dog", 2) == [("the", 3), ("cat", 2)]
+assert top_words("A a b", 1) == [("a", 2)]
+assert top_words("", 3) == []
+assert top_words("x y z", 5) == [("x", 1), ("y", 1), ("z", 1)]
+::hints
+- `Counter(list_of_words)` counts them.
+- `.most_common(n)` gives exactly the list of pairs you need.
+--- exercise code python
+::prompt
+**Anagrams** are words with the same letters in a different order (`listen`, `silent`). Write `group_anagrams(words)` that groups them with a `defaultdict(list)` keyed by each word's sorted letters. Return the groups as a list of lists, each group in its original word order, and the groups in the order their first word appeared.
+::starter
+from collections import defaultdict
+
+def group_anagrams(words):
+    pass
+::solution
+from collections import defaultdict
+
+def group_anagrams(words):
+    groups = defaultdict(list)
+    for w in words:
+        key = "".join(sorted(w))
+        groups[key].append(w)
+    return list(groups.values())
+::tests
+assert group_anagrams(["listen", "google", "silent", "enlist", "gogole", "cat"]) == [["listen", "silent", "enlist"], ["google", "gogole"], ["cat"]]
+assert group_anagrams([]) == []
+assert group_anagrams(["ab", "ba", "ab"]) == [["ab", "ba", "ab"]]
+::hints
+- `sorted("listen")` is a list of letters; `"".join(...)` turns it into the key `"eilnst"`.
+- Dictionaries keep insertion order, so `list(groups.values())` is already in first-appearance order.
+--- exercise code python
+::prompt
+Use the tools from this lesson:
+
+- `last_lines(lines, n)` returns the last `n` items of `lines` as a list, using a `deque` with `maxlen` (like the Unix `tail` command);
+- `distance(p, q)` takes two `Point` namedtuples (already defined) and returns the straight-line distance between them, `√((x₂ − x₁)² + (y₂ − y₁)²)`.
+::starter
+from collections import deque, namedtuple
+import math
+
+Point = namedtuple("Point", ["x", "y"])
+
+def last_lines(lines, n):
+    pass
+
+
+def distance(p, q):
+    pass
+::solution
+from collections import deque, namedtuple
+import math
+
+Point = namedtuple("Point", ["x", "y"])
+
+def last_lines(lines, n):
+    return list(deque(lines, maxlen=n))
+
+
+def distance(p, q):
+    return math.sqrt((q.x - p.x) ** 2 + (q.y - p.y) ** 2)
+::tests
+assert last_lines(["a", "b", "c", "d"], 2) == ["c", "d"]
+assert last_lines(["a"], 3) == ["a"]
+assert last_lines([], 3) == []
+assert distance(Point(0, 0), Point(3, 4)) == 5
+assert distance(Point(1, 1), Point(1, 1)) == 0
+assert abs(distance(Point(-1, 2), Point(2, -2)) - 5) < 1e-9
+::hints
+- `deque(lines, maxlen=n)` keeps only the last `n` items; wrap it in `list(...)`.
+- Namedtuple fields read like attributes: `q.x - p.x`.
+--- cards
+Counter :: Counts hashable items: Counter(items)["x"], .most_common(n). Missing items count as 0.
+defaultdict :: A dict that creates missing values with a factory: defaultdict(list), defaultdict(int).
+namedtuple :: A tuple whose fields have names: Point = namedtuple("Point", ["x", "y"]); p.x.
+deque :: Double-ended queue with fast append/pop at both ends (popleft, appendleft). maxlen keeps the last N.
+
+=== lesson py-m6-test | Module 6 test | 190
+Collections are where programs keep their data. This test covers lists, references and copies, comprehensions, sorting, tuples, sets, dictionaries and the `collections` module.
+
+Make sure you can:
+
+- use list methods, and know which ones change the list and which return something new;
+- explain aliasing, `is` versus `==`, and shallow versus deep copies;
+- write list, set and dict comprehensions, with filters;
+- sort with `key=` and `reverse=`;
+- pick the right structure for a job, and use the counting and grouping patterns.
+--- quiz
+? What does this print?
+```python
+a = [3, 1, 2]
+b = sorted(a)
+a.append(0)
+print(b)
+```
++ `[1, 2, 3]`
+- `[0, 1, 2, 3]`
+- `[3, 1, 2, 0]`
+- `None`
+> `sorted` made a new list before `a` changed.
+? What does this print?
+```python
+a = [[1], [2]]
+b = a.copy()
+b[0].append(9)
+b.append([3])
+print(a)
+```
+- `[[1], [2]]`
++ `[[1, 9], [2]]`
+- `[[1, 9], [2], [3]]`
+- `[[1], [2], [3]]`
+> A shallow copy shares the inner lists, but the outer lists are separate.
+? What is `{x % 3 for x in range(10)}`?
++ `{0, 1, 2}`
+- `[0, 1, 2, 0, 1, 2, 0, 1, 2, 0]`
+- `{0: 0, 1: 1, 2: 2}`
+- `{3, 6, 9}`
+> A set comprehension keeps only distinct remainders.
+? What does `sorted({"b": 1, "a": 2})` return?
++ `['a', 'b']`
+- `[('a', 2), ('b', 1)]`
+- `[1, 2]`
+- `{'a': 2, 'b': 1}`
+> Iterating a dictionary gives its keys.
+? Which structure would you use to check quickly whether a username is already taken, among millions?
+- a list
+- a tuple
++ a set
+- a deque
+> Set membership doesn't slow down as the collection grows.
+? What is `len(dict.fromkeys("hello"))`?
+- 5
++ 4
+- 1
+- An error
+> Keys are unique: h, e, l, o.
+? What does `[n for n in range(10) if n % 2][:2]` give?
+- `[0, 2]`
++ `[1, 3]`
+- `[1, 2]`
+- `[0, 1]`
+> `n % 2` is truthy for odd numbers; then the first two are taken.
+? What is `Counter("aab") + Counter("bc")`?
++ `Counter({'a': 2, 'b': 2, 'c': 1})`
+- `Counter({'a': 2, 'b': 1, 'c': 1})`
+- `'aabbc'`
+- An error
+> Adding counters adds the counts.
+--- exercise code python
+::prompt
+Write `merge_stock(a, b)` that merges two inventory dictionaries (product → quantity) into a **new** dictionary, adding quantities for products that appear in both. Leave both inputs unchanged.
+::starter
+def merge_stock(a, b):
+    pass
+::solution
+def merge_stock(a, b):
+    merged = dict(a)
+    for product, qty in b.items():
+        merged[product] = merged.get(product, 0) + qty
+    return merged
+::tests
+x = {"apple": 3, "pear": 2}
+y = {"pear": 5, "fig": 1}
+assert merge_stock(x, y) == {"apple": 3, "pear": 7, "fig": 1}
+assert x == {"apple": 3, "pear": 2} and y == {"pear": 5, "fig": 1}, "inputs must not change"
+assert merge_stock({}, {}) == {}
+assert merge_stock({"a": 1}, {}) == {"a": 1}
+::hints
+- Start from a copy: `dict(a)` or `a.copy()`.
+- Add each of `b`'s quantities with the `.get(product, 0)` pattern.
+--- exercise code python
+::prompt
+Write `matrix_summary(matrix)` for a non-empty rectangular list of lists of numbers. Return a dictionary with:
+
+- `"rows"`: a list of each row's sum;
+- `"cols"`: a list of each column's sum;
+- `"total"`: the sum of everything;
+- `"max"`: the largest value.
+::starter
+def matrix_summary(matrix):
+    pass
+::solution
+def matrix_summary(matrix):
+    rows = [sum(row) for row in matrix]
+    cols = [sum(row[c] for row in matrix) for c in range(len(matrix[0]))]
+    return {"rows": rows, "cols": cols, "total": sum(rows), "max": max(max(row) for row in matrix)}
+::tests
+m = [[1, 2, 3], [4, 5, 6]]
+assert matrix_summary(m) == {"rows": [6, 15], "cols": [5, 7, 9], "total": 21, "max": 6}
+assert matrix_summary([[7]]) == {"rows": [7], "cols": [7], "total": 7, "max": 7}
+assert matrix_summary([[-1, -2], [-3, -4]])["max"] == -1
+::hints
+- Row sums: `[sum(row) for row in matrix]`.
+- Column `c`'s sum adds `row[c]` from every row.
+- The overall maximum is the largest of the rows' maximums.
+--- exercise code python
+::prompt
+`records` is a list of `(name, score)` tuples. Write `top_students(records, n)` that returns the **names** of the `n` best students: highest score first, and students with equal scores in alphabetical order.
+::starter
+def top_students(records, n):
+    pass
+::solution
+def score_of(record):
+    return record[1]
+
+
+def top_students(records, n):
+    by_name = sorted(records)
+    ranked = sorted(by_name, key=score_of, reverse=True)
+    return [name for name, score in ranked[:n]]
+::tests
+data = [("Ada", 91), ("Linus", 78), ("Grace", 97), ("Alan", 91), ("Tim", 85)]
+assert top_students(data, 3) == ["Grace", "Ada", "Alan"]
+assert top_students(data, 1) == ["Grace"]
+assert top_students(data, 10) == ["Grace", "Ada", "Alan", "Tim", "Linus"]
+assert top_students([], 2) == []
+::hints
+- Sort by name first (`sorted(records)` sorts tuples by their first item).
+- Then sort that by score with a key function returning `record[1]`, `reverse=True`. Stability keeps equal scores alphabetical.
+- Finally take the first `n` and keep just the names.

@@ -7,6 +7,7 @@ import { runPostgres } from './postgres';
 import { registerMysql, translateMysql } from './mysql';
 import { RedisEngine } from './redis';
 import { PY_TEST_HELPER } from './pyTestHelper';
+import { sameOutput } from './integrity';
 
 export type RunResult = { ok: boolean; output: string; error?: string; passed?: boolean; message?: string; table?: { columns: string[]; values: unknown[][] } };
 
@@ -74,7 +75,7 @@ onmessage = async (e) => {
   py.setStderr(write);
   const flush = () => { try { py.runPython('import sys\\nsys.stdout.flush()\\nsys.stderr.flush()'); } catch (err) { /* nothing to flush */ } };
   const ns = py.globals.get('dict')();
-  py.globals.get('__dq_set_stdin')(e.data.stdin ?? null);
+  py.globals.get('__dq_prepare')(e.data.stdin ?? null);
   try {
     try { await py.runPythonAsync(e.data.code, { globals: ns }); } finally { flush(); }
     if (e.data.tests) {
@@ -482,12 +483,12 @@ ${check.expected}` };
     if (!r.ok) return { ok: false, output: r.output, error: r.error, passed: check ? false : undefined };
     if (!check) return { ok: true, output: r.output };
     if (check.type === 'stdout') {
-      const passed = r.output.trim() === check.expected.trim();
+      const passed = sameOutput(r.output, check.expected);
       if (!passed) return { ok: true, output: r.output, passed, message: `Expected output:\n${check.expected}` };
       // The example passed: run the other inputs too, so every branch of the program gets checked
       for (const c of check.cases ?? []) {
         const o = await runner.run(code, undefined, 15000, c.stdin);
-        if (o.ok && o.output.trim() === c.expected.trim()) continue;
+        if (o.ok && sameOutput(o.output, c.expected)) continue;
         return { ok: true, output: r.output, passed: false, message: `Right for the example, but not for another input.\n\nTyped in:\n${c.stdin}\n\nExpected output:\n${c.expected}\n\nYour program printed:\n${o.ok ? o.output.trim() : o.error}` };
       }
       const n = check.cases?.length ?? 0;

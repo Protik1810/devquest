@@ -1,0 +1,1129 @@
+=== module Module 4 · Loops
+
+=== lesson py-loops | while loops | 85
+Computers are brilliant at repetition: they'll do the same thing a million times without a single mistake or complaint. A **loop** runs a block of code over and over. Python has two kinds; this lesson covers `while`, which repeats **as long as a condition is true**.
+
+## Anatomy of a while loop
+
+```python
+count = 1
+while count <= 5:
+    print("Lap", count)
+    count += 1
+print("Finished!")
+```
+
+Python checks the condition. If it's true, it runs the indented **body**, then goes back up and checks the condition again. When the condition is false, it skips to the first line after the loop. Each pass through the body is called an **iteration**.
+
+Tracing it:
+
+| count | `count <= 5`? | prints |
+|---|---|---|
+| 1 | True | Lap 1 |
+| 2 | True | Lap 2 |
+| ... | ... | ... |
+| 5 | True | Lap 5 |
+| 6 | False | (the loop ends) Finished! |
+
+Every `while` loop needs three things:
+
+1. **initialise** the variable the condition depends on (`count = 1`);
+2. a **condition** that will eventually become false (`count <= 5`);
+3. an **update** inside the body that moves towards that (`count += 1`).
+
+Forget the update and the condition never changes: an **infinite loop**. In DevQuest a run stops itself after a few seconds ("Timed out... Is there an infinite loop?"); in a terminal, press **Ctrl+C** to stop a runaway program.
+
+## Accumulating a result
+
+A very common pattern: a variable created **before** the loop, updated **in** it, and used **after** it.
+
+```python
+total = 0
+n = 1
+while n <= 100:
+    total += n
+    n += 1
+print(total)    # 5050
+```
+
+## Reading input until a sentinel
+
+Loops shine when you don't know in advance how many times to repeat, for example reading numbers until the user types `done`. A special value that means "stop" is called a **sentinel**:
+
+```python
+total = 0
+entry = input("Number (or done): ")
+while entry != "done":
+    total += int(entry)
+    entry = input("Number (or done): ")
+print("Total:", total)
+```
+
+## while True and break
+
+`break` leaves the loop immediately, whatever the condition. Combined with `while True` (a loop that would run forever), it lets you test in the middle of the body, so the `input` line isn't written twice:
+
+```python
+total = 0
+while True:
+    entry = input("Number (or done): ")
+    if entry == "done":
+        break
+    total += int(entry)
+print("Total:", total)
+```
+
+This "loop and a half" is a very common shape for programs that talk to a user.
+
+## continue
+
+`continue` skips the rest of the current iteration and jumps straight back to the condition:
+
+```python
+n = 0
+while n < 10:
+    n += 1
+    if n % 3 == 0:
+        continue           # skip multiples of 3
+    print(n, end=" ")
+# 1 2 4 5 7 8 10
+```
+
+Careful: if the update came *after* the `continue`, it would be skipped too, and the loop would never end.
+
+## Validating input with a loop
+
+Keep asking until the answer is usable:
+
+```python
+age = input("Age: ")
+while not age.isdigit():
+    print("Please type a whole number.")
+    age = input("Age: ")
+age = int(age)
+```
+
+## while ... else
+
+A loop can have an `else` block. It runs when the loop ends **normally** (its condition became false), but **not** when it's left with `break`. That's perfect for searches:
+
+```python
+target = 91
+d = 2
+while d * d <= target:
+    if target % d == 0:
+        print(target, "is divisible by", d)
+        break
+    d += 1
+else:
+    print(target, "is prime")
+# 91 is divisible by 7
+```
+
+## Common loop bugs
+
+- **Off by one**: `<` where `<=` was needed, so the loop runs one time too few (or too many). Trace the first and last iterations.
+- **No update**, or an update hidden inside an `if` that doesn't always run: infinite loop.
+- **Resetting the accumulator inside the loop** (`total = 0` in the body), so it starts over every time.
+
+📚 **Go deeper:** Python Tutorial, section 3.2 "First Steps Towards Programming" and 4.4 "break and continue"; *Think Python* (3rd ed.), chapter 7; Python for Everybody, chapter 5 "Loops and Iteration".
+--- quiz
+? What does this print?
+```python
+i = 0
+while i < 3:
+    print(i, end=" ")
+    i += 1
+```
++ `0 1 2`
+- `0 1 2 3`
+- `1 2 3`
+- It never stops
+> The condition is checked before each iteration; when `i` reaches 3, `3 < 3` is false.
+? What is printed?
+```python
+n = 10
+while n > 0:
+    n -= 3
+print(n)
+```
+- `0`
+- `1`
++ `-2`
+- `-3`
+> n goes 10, 7, 4, 1, -2. Only then is `n > 0` false.
+? How many times does the body run?
+```python
+i = 1
+while i < 20:
+    i *= 2
+```
+- 4
++ 5
+- 6
+- 20
+> i goes 1, 2, 4, 8, 16 (five iterations), and becomes 32, which stops the loop.
+? What does `break` do?
+- Skips to the next iteration
++ Leaves the loop immediately
+- Stops the whole program
+- Restarts the loop
+> `continue` skips to the next iteration; `break` exits the loop entirely.
+? When does a loop's `else` block run?
+- Always, after the loop
++ When the loop ends normally, without `break`
+- Only when the loop body never ran
+- When the loop is left with `break`
+> `break` skips the `else`. That's why `while`/`for` + `else` is handy for "search, and report if not found".
+? Why does this loop never end?
+```python
+n = 0
+while n < 5:
+    if n % 2 == 0:
+        print(n)
+        n += 1
+```
+- `print` stops loops
+- `%` can't be used in a loop
++ When n becomes 1, the update is skipped, so n stays 1 forever
+- It does end, after 5 iterations
+> The update only happens for even n. Put `n += 1` outside the `if`.
+--- exercise code python
+::prompt
+Write a countdown with a `while` loop: count down from `start` to 1, printing each number, then print `Liftoff!`.
+::starter
+start = 5
+::solution
+start = 5
+n = start
+while n >= 1:
+    print(n)
+    n -= 1
+print("Liftoff!")
+::expected
+5
+4
+3
+2
+1
+Liftoff!
+::variants
+start = 5 => start = 8
+::hints
+- Use a variable that starts at `start` and goes down by 1 each iteration.
+- The loop should continue while the number is at least 1.
+--- exercise code python
+::prompt
+Read numbers until the user types `done` (prompt `Number: `). Then print how many numbers there were, their total, and their average with one decimal. If no numbers were entered, print `No numbers entered` instead.
+::starter
+count = 0
+total = 0
+::solution
+count = 0
+total = 0
+while True:
+    entry = input("Number: ")
+    if entry == "done":
+        break
+    total += float(entry)
+    count += 1
+if count == 0:
+    print("No numbers entered")
+else:
+    print("Count:", count)
+    print("Total:", total)
+    print(f"Average: {total / count:.1f}")
+::stdin
+4
+7.5
+10
+done
+::expected
+Number: 4
+Number: 7.5
+Number: 10
+Number: done
+Count: 3
+Total: 21.5
+Average: 7.2
+::cases
+>>> done
+Number: done
+No numbers entered
+>>> 8
+>>> done
+Number: 8
+Number: done
+Count: 1
+Total: 8.0
+Average: 8.0
+::hints
+- `while True:` with `if entry == "done": break` inside is the cleanest shape.
+- Convert with `float(entry)`, because numbers like 7.5 are allowed.
+- Check `count == 0` after the loop, before dividing.
+--- exercise code python
+::prompt
+Ask for a new PIN (prompt `New PIN: `) until the user types exactly **4 digits**. For each bad attempt print `A PIN is exactly 4 digits.`; when it's valid print `PIN saved.`
+::starter
+pin = input("New PIN: ")
+::solution
+pin = input("New PIN: ")
+while not (pin.isdigit() and len(pin) == 4):
+    print("A PIN is exactly 4 digits.")
+    pin = input("New PIN: ")
+print("PIN saved.")
+::stdin
+12a4
+123
+4321
+::expected
+New PIN: 12a4
+A PIN is exactly 4 digits.
+New PIN: 123
+A PIN is exactly 4 digits.
+New PIN: 4321
+PIN saved.
+::cases
+>>> 0000
+New PIN: 0000
+PIN saved.
+>>> 12345
+>>> abcd
+>>> 9876
+New PIN: 12345
+A PIN is exactly 4 digits.
+New PIN: abcd
+A PIN is exactly 4 digits.
+New PIN: 9876
+PIN saved.
+::hints
+- Loop while the PIN is **not** valid: `while not (pin.isdigit() and len(pin) == 4):`
+- Inside the loop, print the message and ask again.
+--- exercise code python
+::prompt
+The **Collatz** sequence: if a number is even, halve it; if it's odd, triple it and add 1. Repeat until you reach 1. Count how many steps it takes for `n` and print it:
+```
+27 reaches 1 after 111 steps
+```
+::starter
+n = 27
+steps = 0
+::solution
+n = 27
+start = n
+steps = 0
+while n != 1:
+    if n % 2 == 0:
+        n = n // 2
+    else:
+        n = 3 * n + 1
+    steps += 1
+print(start, "reaches 1 after", steps, "steps")
+::expected
+27 reaches 1 after 111 steps
+::variants
+n = 27 => n = 97
+::hints
+- Remember the starting value in another variable before the loop changes `n`.
+- Use `n // 2` (not `/`) so `n` stays an int.
+- Loop `while n != 1`, counting each step.
+--- cards
+while loop :: Repeats its body as long as its condition is true. Needs an initial value, a condition, and an update that eventually makes the condition false.
+Accumulator :: A variable created before a loop, updated inside it (total += x), and used after it.
+Sentinel :: A special input value that means "stop", like typing done.
+break / continue :: break leaves the loop now; continue skips to the next iteration.
+Loop else :: Runs when the loop finishes without break. Good for "search and report not found".
+
+=== lesson py-for | for loops, range, enumerate and zip | 90
+A `while` loop repeats while a condition holds. A `for` loop does something simpler and more common: it goes through a **sequence of items, one at a time**.
+
+```python
+for letter in "Hi!":
+    print(letter)
+```
+
+prints `H`, `i` and `!` on separate lines. Each time round, the **loop variable** (`letter`) refers to the next item, and the body runs once per item. There's no counter to update and no condition to get wrong, so `for` loops can't accidentally run forever.
+
+## Looping over a list
+
+You've seen lists come out of `split()`. A **list** is an ordered collection written in square brackets (Module 6 covers them in depth):
+
+```python
+scores = [72, 95, 88]
+for score in scores:
+    print("Score:", score)
+```
+
+## range(): looping over numbers
+
+`range` produces a sequence of whole numbers. Like slicing, it goes **up to but not including** the stop value:
+
+| Call | Numbers |
+|---|---|
+| `range(5)` | 0, 1, 2, 3, 4 |
+| `range(2, 6)` | 2, 3, 4, 5 |
+| `range(0, 20, 5)` | 0, 5, 10, 15 |
+| `range(10, 0, -1)` | 10, 9, ... , 1 |
+
+```python
+for i in range(1, 4):
+    print(i, "squared is", i ** 2)
+```
+
+To just repeat something N times, loop over `range(N)`. By convention, a loop variable you don't use is named `_`:
+
+```python
+for _ in range(3):
+    print("Hip hip hooray!")
+```
+
+`range` doesn't build a list in memory; it produces numbers as needed. To see them, convert it: `list(range(5))` is `[0, 1, 2, 3, 4]`.
+
+## Accumulating with for
+
+The accumulator pattern from `while` works the same way:
+
+```python
+prices = [3.5, 12.0, 7.25]
+total = 0
+for price in prices:
+    total += price
+print(total)    # 22.75
+```
+
+Python has built-ins for the common cases: `sum(prices)`, `max(prices)`, `min(prices)`, `len(prices)`. Use them in real code, but learn the pattern: you'll need it for everything the built-ins don't cover.
+
+## enumerate: the position and the item
+
+When you need to know *where* you are, `enumerate` gives you pairs of (position, item):
+
+```python
+names = ["Ada", "Alan", "Grace"]
+for i, name in enumerate(names, start=1):
+    print(f"{i}. {name}")
+# 1. Ada
+# 2. Alan
+# 3. Grace
+```
+
+`for i, name in ...` unpacks each pair into two variables, like `a, b = 1, 2`. Without `start=1`, counting begins at 0. Prefer `enumerate` to `for i in range(len(names))`, which works but is harder to read.
+
+## zip: walking two sequences side by side
+
+```python
+names = ["Ada", "Alan", "Grace"]
+years = [1815, 1912, 1906]
+for name, year in zip(names, years):
+    print(name, "was born in", year)
+```
+
+`zip` pairs up the first items, then the second items, and so on. It stops when the **shortest** sequence runs out.
+
+## break, continue and else work in for loops too
+
+```python
+for n in [3, 7, 12, 5]:
+    if n % 2 == 0:
+        print("First even number:", n)
+        break
+else:
+    print("No even numbers")
+```
+
+## Don't change a list while looping over it
+
+Adding or removing items of the list you're looping over makes the loop skip or repeat items. Build a new list instead (Module 6 shows how).
+
+## for or while?
+
+- Use `for` when you're going through **known items** or a **known number of times**: every letter, every line of a file, 10 times.
+- Use `while` when you repeat **until something happens**: the user types `done`, a value gets small enough, the game ends.
+
+## A small gotcha
+
+After a `for` loop ends, the loop variable still holds the **last** item. And if the sequence was empty, the variable is never created at all.
+
+📚 **Go deeper:** Python Tutorial, sections 4.2–4.5 "for Statements", "The range() Function", "break and continue"; Python Library Reference, `enumerate` and `zip`; *Python Crash Course* (3rd ed.), chapter 4.
+--- quiz
+? What is `list(range(2, 10, 3))`?
++ `[2, 5, 8]`
+- `[2, 5, 8, 11]`
+- `[3, 6, 9]`
+- `[2, 3, 4, 5, 6, 7, 8, 9]`
+> Start at 2, step by 3, and stop before 10.
+? What does this print?
+```python
+for i in range(3):
+    print(i * i, end=" ")
+```
+- `1 4 9`
++ `0 1 4`
+- `0 1 2`
+- `0 1 4 9`
+> `range(3)` is 0, 1, 2, and their squares are 0, 1, 4.
+? How many times does this print "hi"?
+```python
+for _ in range(1, 5):
+    print("hi")
+```
+- 5
++ 4
+- 1
+- 6
+> `range(1, 5)` is 1, 2, 3, 4: four numbers.
+? What does this print?
+```python
+for i, ch in enumerate("ab"):
+    print(i, ch)
+```
++ `0 a` then `1 b`
+- `1 a` then `2 b`
+- `a 0` then `b 1`
+- `ab`
+> `enumerate` starts counting at 0 unless you pass `start=`.
+? How many pairs does `zip("abc", [1, 2])` produce?
+- 3
++ 2
+- 5
+- An error, because the lengths differ
+> `zip` stops at the shortest input.
+? What does this print?
+```python
+for n in [1, 3, 5]:
+    if n == 4:
+        break
+else:
+    print("not found")
+```
+- Nothing
++ `not found`
+- `4`
+- An error
+> The loop never hit `break`, so the `else` block runs.
+--- exercise code python
+::prompt
+Print the times table for `n`, from 1 to 10, using a `for` loop over `range`:
+```
+7 x 1 = 7
+7 x 2 = 14
+...
+7 x 10 = 70
+```
+::starter
+n = 7
+::solution
+n = 7
+for i in range(1, 11):
+    print(f"{n} x {i} = {n * i}")
+::expected
+7 x 1 = 7
+7 x 2 = 14
+7 x 3 = 21
+7 x 4 = 28
+7 x 5 = 35
+7 x 6 = 42
+7 x 7 = 49
+7 x 8 = 56
+7 x 9 = 63
+7 x 10 = 70
+::variants
+n = 7 => n = 9
+::hints
+- `range(1, 11)` gives 1 to 10.
+- `f"{n} x {i} = {n * i}"` builds each line.
+--- exercise code python
+::prompt
+Count the vowels and the consonants in `sentence` with a `for` loop over its characters. Vowels are `a e i o u` in either case; consonants are the other letters (spaces and punctuation don't count).
+```
+Vowels: 11
+Consonants: 24
+```
+::starter
+sentence = "The quick brown fox jumps over the lazy dog!"
+vowels = 0
+consonants = 0
+::solution
+sentence = "The quick brown fox jumps over the lazy dog!"
+vowels = 0
+consonants = 0
+for ch in sentence.lower():
+    if ch in "aeiou":
+        vowels += 1
+    elif ch.isalpha():
+        consonants += 1
+print("Vowels:", vowels)
+print("Consonants:", consonants)
+::expected
+Vowels: 11
+Consonants: 24
+::variants
+"The quick brown fox jumps over the lazy dog!" => "Hello, World! Python is fun."
+::hints
+- Loop over `sentence.lower()` so you only need to check lowercase vowels.
+- `ch in "aeiou"` checks for a vowel; `ch.isalpha()` checks for any letter.
+- Check vowels first, and use `elif` for consonants.
+--- exercise code python
+::prompt
+Print a leaderboard from the two lists, numbered from 1, using `zip` and `enumerate` together:
+```
+1. Ada - 95 pts
+2. Grace - 88 pts
+3. Alan - 72 pts
+```
+::starter
+names = ["Ada", "Grace", "Alan"]
+points = [95, 88, 72]
+::solution
+names = ["Ada", "Grace", "Alan"]
+points = [95, 88, 72]
+for rank, (name, score) in enumerate(zip(names, points), start=1):
+    print(f"{rank}. {name} - {score} pts")
+::expected
+1. Ada - 95 pts
+2. Grace - 88 pts
+3. Alan - 72 pts
+::variants
+95 => 97
+88 => 91
+::hints
+- `zip(names, points)` gives pairs like `("Ada", 95)`.
+- `enumerate(zip(names, points), start=1)` gives `(1, ("Ada", 95))`, which unpacks as `rank, (name, score)`.
+- Or keep it simple: a counter variable that you increase in a `for name, score in zip(...)` loop.
+--- exercise code python
+::prompt
+The classic interview warm-up, **FizzBuzz**: for each number from 1 to `n`, print `Fizz` if it's divisible by 3, `Buzz` if it's divisible by 5, `FizzBuzz` if it's divisible by both, and otherwise the number itself.
+::starter
+n = 15
+::solution
+n = 15
+for i in range(1, n + 1):
+    if i % 15 == 0:
+        print("FizzBuzz")
+    elif i % 3 == 0:
+        print("Fizz")
+    elif i % 5 == 0:
+        print("Buzz")
+    else:
+        print(i)
+::expected
+1
+2
+Fizz
+4
+Buzz
+Fizz
+7
+8
+Fizz
+Buzz
+11
+Fizz
+13
+14
+FizzBuzz
+::variants
+n = 15 => n = 20
+::hints
+- `range(1, n + 1)` includes `n` itself.
+- Check "divisible by both" (that is, by 15) **first**; otherwise 15 would print just Fizz.
+--- cards
+for loop :: Runs its body once for each item of a sequence; the loop variable takes each item in turn.
+range(start, stop, step) :: Whole numbers from start up to, but not including, stop. range(5) is 0..4; range(10, 0, -1) counts down.
+enumerate() :: Gives (index, item) pairs: for i, x in enumerate(items, start=1).
+zip() :: Pairs up items from several sequences: for a, b in zip(xs, ys). Stops at the shortest.
+for vs while :: for: known items or a known count. while: repeat until something happens.
+
+=== lesson py-nested-loops | Loop patterns and nested loops | 90
+Most loops you'll ever write are one of a handful of **patterns**. Recognise them, and new problems become variations on things you already know.
+
+## The core patterns
+
+**Count** the items that match:
+
+```python
+count = 0
+for word in words:
+    if len(word) > 5:
+        count += 1
+```
+
+**Sum or average**: the accumulator from the last lessons.
+
+**Find the biggest (or smallest) yourself**, remembering where it was:
+
+```python
+temps = [18, 24, 21, 31, 27]
+best = temps[0]
+best_day = 1
+for day, t in enumerate(temps, start=1):
+    if t > best:
+        best = t
+        best_day = day
+print(f"Hottest: {best} on day {best_day}")
+```
+
+Start with the first item, not with 0: if all values were negative, 0 would wrongly "win".
+
+**Search with an early exit**: stop as soon as you've found it, using `break` (and `else` for "not found"), or a **flag** variable:
+
+```python
+found = False
+for name in names:
+    if name.startswith("Z"):
+        found = True
+        break
+```
+
+**Filter into a new list**, using the list method `append()` to add an item at the end:
+
+```python
+long_words = []
+for word in words:
+    if len(word) > 5:
+        long_words.append(word)
+```
+
+**Build a string** piece by piece:
+
+```python
+no_vowels = ""
+for ch in text:
+    if ch.lower() not in "aeiou":
+        no_vowels += ch
+```
+
+**Compare each item with the previous one**, keeping a "running" state, for example the longest streak:
+
+```python
+results = "WWLWWWLW"
+streak = best = 0
+for r in results:
+    if r == "W":
+        streak += 1
+        best = max(best, streak)
+    else:
+        streak = 0
+print("Longest winning streak:", best)    # 3
+```
+
+## Nested loops
+
+A loop inside a loop: for **each** iteration of the outer loop, the inner loop runs **all the way through**.
+
+```python
+for row in range(1, 4):
+    for col in range(1, 4):
+        print(row * col, end="\t")
+    print()        # end the row
+```
+
+```
+1	2	3
+2	4	6
+3	6	9
+```
+
+Trace it as a table of `row` and `col`: (1,1), (1,2), (1,3), then (2,1), (2,2)... The inner variable changes fastest, like the minutes on a clock while the hour hand moves slowly.
+
+Nested loops are how you handle **grids** (rows and columns), **all pairs** of items, and **text patterns**:
+
+```python
+for i in range(1, 5):
+    print("*" * i)
+```
+
+```
+*
+**
+***
+****
+```
+
+Two things to know:
+
+- `break` only leaves the **innermost** loop it's in.
+- The work multiplies: an outer loop of 1,000 with an inner loop of 1,000 runs the body **a million** times. That's why nested loops over big data can be slow, a topic you'll study as "Big-O" in the algorithms track.
+
+## Reading a loop
+
+When you meet an unfamiliar loop, try to describe it in **one sentence**: "it counts the words longer than five letters", "it finds the hottest day". If you can't, trace a few iterations on paper until you can.
+
+📚 **Go deeper:** *Think Python* (3rd ed.), chapter 7 "Iteration and Search"; Python for Everybody, chapter 5 ("Loop patterns"); *Automate the Boring Stuff with Python*, chapter 3.
+--- quiz
+? How many times does `print` run?
+```python
+for i in range(3):
+    for j in range(4):
+        print(i, j)
+```
+- 7
++ 12
+- 4
+- 3
+> The inner loop runs 4 times for each of the 3 outer iterations.
+? What does this print?
+```python
+for i in range(1, 4):
+    print("#" * i, end=" ")
+```
++ `# ## ###`
+- `### ## #`
+- `#  #  #`
+- `###`
+> A string times i repeats it i times.
+? Why start `best` at `temps[0]` rather than 0 when finding the maximum?
+- It's faster
++ If every value were negative, 0 would wrongly be the maximum
+- Lists can't contain 0
+- `max` requires it
+> The starting value must be one of the real values.
+? What does `break` in the inner loop do here?
+```python
+for i in range(3):
+    for j in range(3):
+        if j == 1:
+            break
+        print(i, j)
+```
+- Stops both loops after printing `0 0`
++ Leaves only the inner loop, so it prints `0 0`, `1 0`, `2 0`
+- Prints all 9 pairs
+- Prints nothing
+> `break` exits the innermost loop; the outer loop carries on.
+? Which pattern does this loop follow?
+```python
+result = []
+for x in data:
+    if x > 0:
+        result.append(x)
+```
+- Counting
+- Searching with early exit
++ Filtering into a new list
+- Accumulating a sum
+> It keeps only the items that pass a test, collecting them in a new list.
+--- exercise code python
+::prompt
+Without using `max()` or `min()`, find the hottest and coldest days in `temps` (days are numbered from 1). If two days tie, report the first one.
+```
+Hottest: 31 on day 4
+Coldest: 16 on day 6
+```
+::starter
+temps = [18, 24, 21, 31, 27, 16, 22]
+::solution
+temps = [18, 24, 21, 31, 27, 16, 22]
+hot = cold = temps[0]
+hot_day = cold_day = 1
+for day, t in enumerate(temps, start=1):
+    if t > hot:
+        hot = t
+        hot_day = day
+    if t < cold:
+        cold = t
+        cold_day = day
+print(f"Hottest: {hot} on day {hot_day}")
+print(f"Coldest: {cold} on day {cold_day}")
+::expected
+Hottest: 31 on day 4
+Coldest: 16 on day 6
+::variants
+[18, 24, 21, 31, 27, 16, 22] => [25, 19, 30, 30, 12, 21, 12]
+::hints
+- Start both the hottest and coldest at `temps[0]`, day 1.
+- Use `enumerate(temps, start=1)` to get each day number with its temperature.
+- Use `>` and `<` (not `>=`/`<=`) so a tie keeps the earlier day.
+--- exercise code python
+::prompt
+`results` is a team's season: `W` for a win, `L` for a loss, `D` for a draw. Print the number of wins, and the **longest run of consecutive wins**:
+```
+Wins: 9
+Longest winning streak: 4
+```
+::starter
+results = "WWLWDWWWWLLWWL"
+::solution
+results = "WWLWDWWWWLLWWL"
+wins = 0
+streak = 0
+best = 0
+for r in results:
+    if r == "W":
+        wins += 1
+        streak += 1
+        if streak > best:
+            best = streak
+    else:
+        streak = 0
+print("Wins:", wins)
+print("Longest winning streak:", best)
+::expected
+Wins: 9
+Longest winning streak: 4
+::variants
+"WWLWDWWWWLLWWL" => "LWWWDLWWWWWLW"
+::hints
+- Keep three numbers: total wins, the current streak, and the best streak so far.
+- A win adds one to the current streak; anything else resets it to 0.
+- After increasing the streak, check whether it beats the best.
+--- exercise code python
+::prompt
+Print a pyramid of `height` rows. Row `i` (from 1) has `height - i` spaces followed by `2 * i - 1` stars:
+```
+   *
+  ***
+ *****
+*******
+```
+::starter
+height = 4
+::solution
+height = 4
+for i in range(1, height + 1):
+    print(" " * (height - i) + "*" * (2 * i - 1))
+::expected
+   *
+  ***
+ *****
+*******
+::variants
+height = 4 => height = 6
+::hints
+- Loop `for i in range(1, height + 1)`.
+- Build each row from two repeated strings: `" " * (height - i)` and `"*" * (2 * i - 1)`.
+--- exercise code python
+::prompt
+Print a multiplication grid of `size` rows and columns with **nested loops**. Each number is right-aligned in 4 characters (`f"{value:4}"`), printed with `end=""`, and each row ends with `print()`:
+```
+   1   2   3   4   5
+   2   4   6   8  10
+   3   6   9  12  15
+   4   8  12  16  20
+   5  10  15  20  25
+```
+::starter
+size = 5
+::solution
+size = 5
+for row in range(1, size + 1):
+    for col in range(1, size + 1):
+        print(f"{row * col:4}", end="")
+    print()
+::expected
+   1   2   3   4   5
+   2   4   6   8  10
+   3   6   9  12  15
+   4   8  12  16  20
+   5  10  15  20  25
+::variants
+size = 5 => size = 7
+::hints
+- The outer loop goes over rows, the inner loop over columns.
+- Inside, `print(f"{row * col:4}", end="")` prints one cell without starting a new line.
+- After the inner loop (but inside the outer one), `print()` ends the row.
+--- cards
+Loop patterns :: Count, sum/average, find max/min, search with early exit, filter into a new list, build a string, compare with the previous item.
+Finding a maximum :: Start with the first item (not 0), then replace it whenever a bigger one appears.
+list.append(x) :: Adds x to the end of a list. Used to collect results in a loop.
+Nested loops :: The inner loop runs completely for every iteration of the outer one; the total work multiplies.
+
+=== lesson py-m4-test | Module 4 test | 170
+This test is all about repetition: `while` and `for`, `range`, `enumerate` and `zip`, `break`/`continue`/`else`, the loop patterns and nested loops.
+
+Check that you can:
+
+- trace a loop and predict exactly how many times it runs;
+- write a `while` loop that reads input until a sentinel, without an infinite loop;
+- choose between `for` and `while`;
+- use the counting, summing, maximum, search, filter and string-building patterns;
+- write and trace nested loops.
+--- quiz
+? What does this print?
+```python
+total = 0
+for i in range(1, 5):
+    total += i
+print(total)
+```
+- 15
++ 10
+- 4
+- 5
+> 1 + 2 + 3 + 4 = 10 (5 isn't included).
+? What does this print?
+```python
+for ch in "loop":
+    if ch == "o":
+        continue
+    print(ch, end="")
+```
+- `loop`
+- `oo`
++ `lp`
+- `l`
+> `continue` skips the print for both o's.
+? What does this print?
+```python
+n = 1
+while n < 100:
+    n = n * 3
+print(n)
+```
+- 81
++ 243
+- 99
+- 100
+> n goes 1, 3, 9, 27, 81, 243. When n is 81 the condition is still true, so it's multiplied once more.
+? Which loop prints the even numbers from 10 down to 2?
++ `for i in range(10, 1, -2): print(i)`
+- `for i in range(10, 2, -2): print(i)`
+- `for i in range(2, 10, 2): print(i)`
+- `for i in range(10, 0, 2): print(i)`
+> Start at 10, step by -2, and stop before 1, so 2 is the last number.
+? How many lines does this print?
+```python
+for i in range(4):
+    for j in range(i):
+        print(i, j)
+```
+- 16
+- 4
++ 6
+- 10
+> The inner loop runs 0, 1, 2 and 3 times: 6 in total.
+? What is `list(zip([1, 2, 3], "ab"))`?
++ `[(1, 'a'), (2, 'b')]`
+- `[(1, 'a'), (2, 'b'), (3, None)]`
+- `[1, 'a', 2, 'b']`
+- An error
+> `zip` stops at the shorter input.
+? When is the `else` of a `for` loop skipped?
+- When the loop body runs at least once
++ When the loop is left with `break`
+- When the sequence is empty
+- Never
+> `else` runs after a loop that finishes normally, including one over an empty sequence.
+? What is wrong with this program?
+```python
+count = 0
+while count < 3:
+    print("hello")
+```
+- `while` needs `range`
++ `count` never changes, so it loops forever
+- `print` can't be in a loop
+- Nothing; it prints hello three times
+> Without `count += 1` in the body, the condition is always true.
+--- exercise code python
+::prompt
+Write a number-guessing game. The secret is 42. Keep reading guesses (prompt `Guess: `) and reply `Too low` or `Too high`, until the guess is right. Then print `Correct! You took N guesses.`
+::starter
+secret = 42
+guess = int(input("Guess: "))
+::solution
+secret = 42
+guesses = 0
+while True:
+    guess = int(input("Guess: "))
+    guesses += 1
+    if guess < secret:
+        print("Too low")
+    elif guess > secret:
+        print("Too high")
+    else:
+        break
+print(f"Correct! You took {guesses} guesses.")
+::stdin
+50
+25
+42
+::expected
+Guess: 50
+Too high
+Guess: 25
+Too low
+Guess: 42
+Correct! You took 3 guesses.
+::cases
+>>> 42
+Guess: 42
+Correct! You took 1 guesses.
+>>> 1
+>>> 99
+>>> 41
+>>> 43
+>>> 42
+Guess: 1
+Too low
+Guess: 99
+Too high
+Guess: 41
+Too low
+Guess: 43
+Too high
+Guess: 42
+Correct! You took 5 guesses.
+::hints
+- Use `while True:` and `break` when the guess is right.
+- Count each guess with a counter that starts at 0.
+--- exercise code python
+::prompt
+Print all the prime numbers up to `n` on one line. A prime is a number above 1 that's only divisible by 1 and itself. Use a nested loop: for each candidate, try dividing it by smaller numbers (a `for`/`else` is perfect here).
+```
+Primes up to 30: 2 3 5 7 11 13 17 19 23 29
+```
+::starter
+n = 30
+::solution
+n = 30
+primes = ""
+for candidate in range(2, n + 1):
+    for d in range(2, candidate):
+        if candidate % d == 0:
+            break
+    else:
+        primes += " " + str(candidate)
+print(f"Primes up to {n}:{primes}")
+::expected
+Primes up to 30: 2 3 5 7 11 13 17 19 23 29
+::variants
+n = 30 => n = 50
+::hints
+- Outer loop: every candidate from 2 to n. Inner loop: every divisor from 2 to candidate - 1.
+- If a divisor divides evenly, `break`: it's not prime.
+- The inner loop's `else` runs only when nothing divided it, so that's where you record a prime.
+--- exercise code python
+::prompt
+Using only a `while` loop with `//` and `%` (no strings), take the number `n` apart: count its digits, add them up, and build the number with its digits **reversed**.
+```
+90215 has 5 digits
+Digit sum: 17
+Reversed: 51209
+```
+::starter
+n = 90215
+::solution
+n = 90215
+original = n
+digits = 0
+total = 0
+reversed_number = 0
+while n > 0:
+    last = n % 10
+    digits += 1
+    total += last
+    reversed_number = reversed_number * 10 + last
+    n //= 10
+print(original, "has", digits, "digits")
+print("Digit sum:", total)
+print("Reversed:", reversed_number)
+::expected
+90215 has 5 digits
+Digit sum: 17
+Reversed: 51209
+::variants
+n = 90215 => n = 3074
+::hints
+- `n % 10` is the last digit, and `n //= 10` removes it. Loop while `n > 0`.
+- To build the reversed number, shift what you have one place left and add the digit: `rev = rev * 10 + last`.
+- Save the original value before the loop changes `n`.
