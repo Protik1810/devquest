@@ -212,7 +212,15 @@ function devquestJsRuntime(g: any) {
     } else if (v instanceof Number || v instanceof String || v instanceof Boolean) {
       return `[${v.constructor.name}: ${formatPrimitive(v.valueOf())}]`;
     } else {
-      const p = ctor === 'Object' ? '' : ctor === null ? '[Object: null prototype] ' : `${ctor} `;
+      // Like Node: a Symbol.toStringTag that differs from the constructor's name is shown, e.g. "Object [Generator] {}"
+      let tag = '';
+      try {
+        const t = v[Symbol.toStringTag];
+        if (typeof t === 'string' && !Object.prototype.propertyIsEnumerable.call(v, Symbol.toStringTag)) tag = t;
+      } catch {
+        // a getter that throws: no tag
+      }
+      const p = ctor === null ? `[Object: null prototype] ${tag ? `[${tag}] ` : ''}` : tag && tag !== ctor ? `${ctor} [${tag}] ` : ctor === 'Object' ? '' : `${ctor} `;
       braces = [`${p}{`, '}'];
       if (keys.length === 0) return `${p}{}`;
       if (recurseTimes > DEPTH) return `[${ctor === null ? 'Object: null prototype' : ctor}]`;
