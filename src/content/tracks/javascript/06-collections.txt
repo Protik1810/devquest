@@ -1,0 +1,2257 @@
+=== module Module 6 · Arrays, objects and data
+
+=== lesson js-arrays | Arrays | 85
+## Many values in one place
+
+Programs work with *collections* of things: the songs in a playlist, the items in a basket, the scores in a game. An **array** is an ordered list of values, written in square brackets:
+
+```js
+const playlist = ["Intro", "Song for Ada", "Loops", "Outro"];
+const scores = [72, 95, 88];
+const empty = [];
+const mixed = ["text", 42, true, null];
+console.log(playlist);
+console.log(scores.length, empty.length);
+```
+
+An array can hold any values, even different types, but in practice an array usually holds many values *of the same kind*. Arrays are **objects**, so `typeof []` is `"object"`; to check for an array, use `Array.isArray(value)`.
+
+## Reading and changing items
+
+Arrays are indexed like strings, from 0:
+
+```js
+const colours = ["red", "green", "blue"];
+console.log(colours[0], colours[2], colours.at(-1));
+console.log(colours[5]);
+colours[1] = "yellow";
+console.log(colours);
+```
+
+Unlike strings, **arrays can be changed** in place. Notice that `colours` is a `const`, and yet we changed an item. `const` means the *name* always refers to the same array; the array's contents can still change. (The next lessons explain this properly.)
+
+## Adding and removing items
+
+| Method | Does | Returns |
+|---|---|---|
+| `push(x, ...)` | adds to the **end** | the new length |
+| `pop()` | removes from the **end** | the removed item |
+| `unshift(x, ...)` | adds to the **start** | the new length |
+| `shift()` | removes from the **start** | the removed item |
+
+```js
+const queue = ["Ada", "Grace"];
+queue.push("Linus");
+queue.unshift("Alan");
+console.log(queue);
+const served = queue.shift();
+const lastIn = queue.pop();
+console.log(served, lastIn, queue);
+```
+
+`push` and `pop` are fast whatever the array's size; `unshift` and `shift` must move every other item along, so they get slow on huge arrays. Using only `push` and `pop` gives you a **stack** (last in, first out, like the call stack); `push` plus `shift` gives a **queue** (first in, first out).
+
+## Looping over an array
+
+All the loops from Module 4 work:
+
+```js
+const scores = [72, 95, 88];
+for (const score of scores) {
+  console.log("Score:", score);
+}
+for (let i = 0; i < scores.length; i++) {
+  console.log(`#${i + 1}: ${scores[i]}`);
+}
+for (const [i, score] of scores.entries()) {
+  console.log(i, score);
+}
+```
+
+Use `for...of` when you need the items, and `entries()` (which gives `[index, item]` pairs) or a counting loop when you also need the positions. The loop patterns from Module 4 (sum, count, max, search with a flag) all apply directly to arrays.
+
+## Searching
+
+```js
+const fruit = ["apple", "banana", "cherry", "banana"];
+console.log(fruit.includes("cherry"));
+console.log(fruit.indexOf("banana"), fruit.lastIndexOf("banana"), fruit.indexOf("kiwi"));
+```
+
+`includes` and `indexOf` compare with `===`, so they work for strings and numbers. Finding *objects* by a property (the user whose id is 7) needs `find`, coming in the next lesson.
+
+## Slicing, splicing, joining
+
+- `slice(start, end)` returns a **new** array with part of the items (just like strings). `slice()` with no arguments copies the whole array.
+- `splice(start, count, ...newItems)` **changes** the array: removes `count` items at `start`, optionally inserts new ones there, and returns the removed items.
+- `concat(other)` returns a new array with the items of both.
+- `join(separator)` makes a string; `split` (Module 2) goes the other way.
+
+```js
+const letters = ["a", "b", "c", "d", "e"];
+console.log(letters.slice(1, 3), letters);
+const removed = letters.splice(1, 2, "X");
+console.log(removed, letters);
+console.log(letters.concat(["f", "g"]).join("-"));
+```
+
+⚠️ Notice the pattern: some methods **mutate** (change) the array they're called on, others return a new one and leave the original alone. Mixing them up is a common source of bugs. `push`, `pop`, `shift`, `unshift`, `splice`, `sort`, `reverse` and `fill` mutate; `slice`, `concat`, `join`, `map`, `filter` and most others don't.
+
+~~~check
+? What does this print?
+```js
+const a = [1, 2, 3, 4];
+const b = a.slice(1, 3);
+a.push(5);
+console.log(b, a.length);
+```
+- `[ 2, 3, 4 ] 5`
++ `[ 2, 3 ] 5`
+- `[ 2, 3 ] 4`
+- `[ 1, 2, 3 ] 5`
+> slice(1, 3) copies the items at indexes 1 and 2 into a new array. Pushing to `a` afterwards doesn't change `b`.
+~~~
+
+## Building arrays
+
+```js
+const squares = [];
+for (let i = 1; i <= 5; i++) {
+  squares.push(i * i);
+}
+console.log(squares);
+console.log(Array.from({ length: 5 }, (_, i) => i * 10));
+console.log(new Array(4).fill(0));
+console.log(Array.from("hello"));
+```
+
+Starting with `[]` and pushing in a loop is the most common way. `Array.from({ length: n }, fn)` builds an array of n items by calling `fn` with each index (the `_` is a conventional name for a parameter you don't use).
+
+## Arrays of arrays
+
+An array can contain arrays, which gives you a grid (a **two-dimensional** array): a game board, a spreadsheet, an image. `grid[row][col]` reads one cell:
+
+```js
+const board = [
+  ["X", "O", "X"],
+  [" ", "X", "O"],
+  ["O", " ", "X"],
+];
+console.log(board[1][2]);
+for (const row of board) {
+  console.log(row.join(" | "));
+}
+```
+
+`[[1, 2], [3, [4]]].flat()` flattens one level of nesting; `.flat(Infinity)` flattens all levels.
+
+📚 **Go deeper:** javascript.info, "Arrays"; MDN, "Array" reference and the JavaScript Guide's "Indexed collections"; *Eloquent JavaScript* (4th ed.), chapter 4, "Data Structures: Objects and Arrays".
+--- goals
+- create arrays and read, change and count their items
+- add and remove items with `push`, `pop`, `shift` and `unshift`
+- loop over arrays with `for...of`, `entries()` and counting loops
+- search with `includes` and `indexOf`
+- copy parts with `slice`, change in place with `splice`, and know which methods mutate
+- build arrays in loops and with `Array.from`, and use 2D arrays as grids
+--- quiz
+? What does this print?
+```js
+const a = ["x", "y", "z"];
+console.log(a[a.length - 1], a.length);
+```
+- `undefined 3`
++ `z 3`
+- `y 3`
+- `z 2`
+> The last item is at index length - 1.
+? What does this print?
+```js
+const stack = [1, 2];
+stack.push(3);
+stack.pop();
+stack.push(4);
+console.log(stack);
+```
+- `[ 1, 2, 3, 4 ]`
++ `[ 1, 2, 4 ]`
+- `[ 1, 2, 3 ]`
+- `[ 4, 1, 2 ]`
+> push adds 3 at the end, pop removes it, then 4 is added.
+? What is true of an array declared with `const`?
+- can't be changed at all
++ can have its items changed, but the name can't be made to refer to a different array
+- can only grow, never shrink
+- is copied every time it's used
+> const protects the name, not the array's contents.
+? Which method does NOT change the array it's called on?
+- `splice`
+- `push`
+- `reverse`
++ `slice`
+> slice returns a new array; the others mutate the original.
+? What does `[3, 1, 2].indexOf(5)` give?
+- `undefined`
+- `null`
++ `-1`
+- An error
+> Like strings, -1 means "not found".
+? What is `grid[2][0]` for `const grid = [[1, 2], [3, 4], [5, 6]];`?
+- 2
+- 3
++ 5
+- 6
+> Row 2 is `[5, 6]`; its item 0 is 5.
+--- exercise code javascript
+::prompt
+Write `stats(numbers)` that returns an array `[min, max, total]` for an array of numbers, using **one** `for...of` loop (no `Math.min`/`Math.max`). For an empty array, return `[0, 0, 0]`.
+::starter
+function stats(numbers) {
+}
+::solution
+function stats(numbers) {
+  if (numbers.length === 0) return [0, 0, 0];
+  let min = numbers[0];
+  let max = numbers[0];
+  let total = 0;
+  for (const n of numbers) {
+    if (n < min) min = n;
+    if (n > max) max = n;
+    total += n;
+  }
+  return [min, max, total];
+}
+::tests
+assert.deepStrictEqual(stats([4, 9, 1, 7]), [1, 9, 21]);
+assert.deepStrictEqual(stats([5]), [5, 5, 5]);
+assert.deepStrictEqual(stats([-3, -8, -1]), [-8, -1, -12]);
+assert.deepStrictEqual(stats([]), [0, 0, 0]);
+::hints
+- Start min and max at the first item (after handling the empty array).
+- `assert.deepStrictEqual` compares arrays item by item: `[1, 9, 21]` must match exactly.
+--- exercise code javascript
+::prompt
+Write `removeAll(items, unwanted)` that returns a **new** array with every occurrence of `unwanted` removed, without changing `items`. Then write `moveToFront(items, index)` that returns a new array where the item at `index` comes first and the others keep their order (use `slice`).
+::starter
+function removeAll(items, unwanted) {
+}
+
+function moveToFront(items, index) {
+}
+::solution
+function removeAll(items, unwanted) {
+  const result = [];
+  for (const item of items) {
+    if (item !== unwanted) result.push(item);
+  }
+  return result;
+}
+
+function moveToFront(items, index) {
+  return [items[index]].concat(items.slice(0, index), items.slice(index + 1));
+}
+::tests
+const __items = ["a", "b", "a", "c"];
+assert.deepStrictEqual(removeAll(__items, "a"), ["b", "c"]);
+assert.deepStrictEqual(__items, ["a", "b", "a", "c"], "removeAll must not change the original array");
+assert.deepStrictEqual(removeAll([1, 2, 3], 9), [1, 2, 3]);
+assert.deepStrictEqual(removeAll([], 1), []);
+assert.deepStrictEqual(moveToFront(["a", "b", "c", "d"], 2), ["c", "a", "b", "d"]);
+assert.deepStrictEqual(moveToFront(["a", "b"], 0), ["a", "b"]);
+assert.deepStrictEqual(__items, ["a", "b", "a", "c"]);
+::hints
+- Build a new array: start with `[]` and `push` the items you keep.
+- For moveToFront: the item itself, then the items before it (`slice(0, index)`), then the items after it (`slice(index + 1)`).
+--- exercise code javascript
+::prompt
+Write `transpose(grid)` that turns the rows of a rectangular 2D array into columns: `transpose([[1, 2, 3], [4, 5, 6]])` is `[[1, 4], [2, 5], [3, 6]]`. Use nested loops: for each column index, build a new row from that column of every row.
+::starter
+function transpose(grid) {
+}
+::solution
+function transpose(grid) {
+  if (grid.length === 0) return [];
+  const result = [];
+  for (let c = 0; c < grid[0].length; c++) {
+    const row = [];
+    for (let r = 0; r < grid.length; r++) {
+      row.push(grid[r][c]);
+    }
+    result.push(row);
+  }
+  return result;
+}
+::tests
+assert.deepStrictEqual(transpose([[1, 2, 3], [4, 5, 6]]), [[1, 4], [2, 5], [3, 6]]);
+assert.deepStrictEqual(transpose([[1], [2], [3]]), [[1, 2, 3]]);
+assert.deepStrictEqual(transpose([["a", "b"], ["c", "d"]]), [["a", "c"], ["b", "d"]]);
+assert.deepStrictEqual(transpose([]), []);
+::hints
+- The result has as many rows as the grid has columns: `grid[0].length`.
+- Row c of the result is `grid[0][c], grid[1][c], ...`.
+--- cards
+Array :: An ordered list of values in [ ]. Indexed from 0; .length is the number of items. typeof [] is "object".
+push / pop :: Add to / remove from the END of an array (fast). Both change the array.
+unshift / shift :: Add to / remove from the START of an array (slower on huge arrays).
+slice vs splice :: slice(a, b) returns a new array of part of the items; splice(start, count, ...new) changes the array in place.
+Mutating methods :: push, pop, shift, unshift, splice, sort, reverse, fill change the array. slice, concat, map, filter don't.
+entries() :: for (const [i, item] of arr.entries()) loops with both index and item.
+2D array :: An array of arrays: grid[row][col].
+
+=== lesson js-array-methods | Array methods: map, filter, reduce and friends | 90
+## Loops you don't have to write
+
+Most loops over arrays do one of a few jobs: transform every item, keep some items, find one item, or combine all items into one value. Arrays have a method for each job. They take a **callback** (Module 5) and call it for each item, so you write only the interesting part:
+
+```js
+const prices = [12, 5, 30, 8];
+const withTax = prices.map((p) => p * 1.2);
+const cheap = prices.filter((p) => p < 10);
+const total = prices.reduce((sum, p) => sum + p, 0);
+console.log(withTax, cheap, total);
+```
+
+These methods are everywhere in professional JavaScript, front end and back end. Learn them well.
+
+## map: transform every item
+
+`map(fn)` returns a **new array of the same length**, where each item is `fn(item)`:
+
+```js
+const names = ["ada", "grace", "linus"];
+const capitalised = names.map((n) => n[0].toUpperCase() + n.slice(1));
+const lengths = names.map((n) => n.length);
+console.log(capitalised, lengths, names);
+```
+
+The callback also receives the index as a second argument: `names.map((n, i) => `${i + 1}. ${n}`)`.
+
+## filter: keep some items
+
+`filter(predicate)` returns a **new array** with only the items for which the predicate returns a truthy value:
+
+```js
+const scores = [45, 82, 67, 91, 30, 75];
+const passed = scores.filter((s) => s >= 50);
+const evens = scores.filter((s) => s % 2 === 0);
+console.log(passed, evens);
+```
+
+## find, findIndex, some, every
+
+| Method | Returns |
+|---|---|
+| `find(pred)` | the **first** item that matches, or `undefined` |
+| `findIndex(pred)` | its index, or `-1` |
+| `findLast(pred)` / `findLastIndex(pred)` | the same, searching from the end |
+| `some(pred)` | `true` if **at least one** item matches |
+| `every(pred)` | `true` if **all** items match |
+
+They stop as soon as they know the answer, just like the search and any/all loops from Module 4:
+
+```js
+const users = [
+  { name: "Ada", age: 36, admin: false },
+  { name: "Grace", age: 85, admin: true },
+  { name: "Linus", age: 21, admin: false },
+];
+console.log(users.find((u) => u.admin));
+console.log(users.findIndex((u) => u.name === "Linus"));
+console.log(users.some((u) => u.age < 18), users.every((u) => u.age >= 18));
+```
+
+(These are arrays of **objects**, the most common shape of real data. `u.name` reads the object's `name` property; objects are the next lesson.)
+
+## reduce: combine everything into one value
+
+`reduce(fn, start)` walks through the array carrying an **accumulator**, the sum/count/max pattern from Module 4 in method form. The callback receives the accumulator so far and the current item, and returns the new accumulator:
+
+```js
+const cart = [12.5, 4, 30, 8.25];
+const total = cart.reduce((sum, price) => sum + price, 0);
+const most = cart.reduce((best, price) => (price > best ? price : best), -Infinity);
+console.log(total, most);
+```
+
+Trace `reduce((sum, price) => sum + price, 0)`: `sum` starts at 0; then 0 + 12.5 = 12.5; 12.5 + 4 = 16.5; and so on. **Always pass the start value**: without it, `reduce` uses the first item as the start, and on an empty array it throws `TypeError: Reduce of empty array with no initial value`.
+
+`reduce` can build any kind of result, including objects. Counting how often each word appears:
+
+```js
+const words = ["js", "css", "js", "html", "js", "css"];
+const counts = words.reduce((acc, w) => {
+  acc[w] = (acc[w] ?? 0) + 1;
+  return acc;
+}, {});
+console.log(counts);
+```
+
+If a `reduce` gets hard to read, a plain `for...of` loop is a perfectly professional alternative. Clarity beats cleverness.
+
+~~~check
+? What does this print?
+```js
+const r = [1, 2, 3, 4].filter((n) => n % 2 === 0).map((n) => n * 10);
+console.log(r);
+```
+- `[ 10, 20, 30, 40 ]`
++ `[ 20, 40 ]`
+- `[ 2, 4 ]`
+- `60`
+> filter keeps 2 and 4; map multiplies each by 10.
+~~~
+
+## Chaining: data pipelines
+
+Because `map` and `filter` return arrays, you can chain them into a pipeline that reads like a description of the task:
+
+```js
+const orders = [
+  { item: "Laptop", price: 999, paid: true },
+  { item: "Mouse", price: 25, paid: false },
+  { item: "Monitor", price: 189, paid: true },
+  { item: "Cable", price: 9, paid: true },
+];
+const paidTotal = orders
+  .filter((o) => o.paid)
+  .map((o) => o.price)
+  .reduce((sum, p) => sum + p, 0);
+console.log(paidTotal);
+```
+
+"Take the paid orders, get their prices, add them up." Put each step on its own line.
+
+## forEach: just do something with each item
+
+`forEach(fn)` calls `fn` for each item and returns nothing. It's for side effects such as printing; when you're building a value, `map`, `filter` or `reduce` say more about your intent. Note that you can't `break` out of `forEach`; use `for...of` when you might need to stop early.
+
+## Sorting
+
+`sort()` sorts the array **in place** (it mutates!) and, by default, compares items **as strings**:
+
+```js
+const nums = [10, 9, 1, 100, 25];
+console.log([...nums].sort());
+console.log([...nums].sort((a, b) => a - b));
+console.log([...nums].sort((a, b) => b - a));
+```
+
+`[10, 9, 1, 100, 25].sort()` gives `[1, 10, 100, 25, 9]` because "10" comes before "9" as text: one of JavaScript's most famous surprises. To sort numbers, pass a **comparator** function `(a, b) => ...` that returns a negative number if `a` should come first, positive if `b` should, and 0 if they're equal. `a - b` does exactly that for ascending order.
+
+For text, use `localeCompare`, and for objects, compare a property:
+
+```js
+const people = [
+  { name: "Linus", age: 21 },
+  { name: "ada", age: 36 },
+  { name: "Grace", age: 85 },
+];
+console.log(people.map((p) => p.name).sort());
+console.log(people.map((p) => p.name).sort((a, b) => a.localeCompare(b)));
+const byAge = [...people].sort((a, b) => b.age - a.age);
+console.log(byAge.map((p) => `${p.name} (${p.age})`));
+```
+
+`[...people]` makes a copy first (spread syntax, two lessons from now), so the original order is kept. Newer JavaScript (2023+) has non-mutating versions: `toSorted`, `toReversed` and `toSpliced` return new arrays and leave the original alone.
+
+## Mutating or not?
+
+| Returns a new array (original unchanged) | Changes the original |
+|---|---|
+| `map`, `filter`, `slice`, `concat`, `flat`, `flatMap`, `toSorted`, `toReversed` | `push`, `pop`, `shift`, `unshift`, `splice`, `sort`, `reverse`, `fill` |
+
+Prefer the left column. Code that doesn't change data behind other code's back is far easier to reason about.
+
+📚 **Go deeper:** javascript.info, "Array methods"; MDN, "Array" reference (each method has examples); *Eloquent JavaScript* (4th ed.), chapter 5, "Higher-Order Functions".
+--- goals
+- transform arrays with `map` and select items with `filter`
+- search with `find`, `findIndex`, `some` and `every`
+- combine items into one value with `reduce`, always with a start value
+- chain methods into readable data pipelines
+- sort numbers, strings and objects correctly with comparators
+- tell mutating from non-mutating methods
+--- quiz
+? What does `[1, 2, 3].map((n) => n * n)` return?
++ `[1, 4, 9]`
+- `[1, 2, 3]`
+- `14`
+- `undefined`
+> map returns a new array with each item transformed.
+? What does `[5, 12, 8].find((n) => n > 6)` return?
+- `[12, 8]`
++ `12`
+- `1`
+- `true`
+> find returns the first matching item itself.
+? What does this print?
+```js
+console.log([3, 20, 100].sort());
+```
+- `[ 3, 20, 100 ]`
++ `[ 100, 20, 3 ]`
+- `[ 100, 3, 20 ]`
+- `[ 20, 3, 100 ]`
+> The default sort compares as strings: "100" < "20" < "3".
+? What does `[].reduce((a, b) => a + b, 0)` return?
++ `0`
+- `undefined`
+- `NaN`
+- It throws a TypeError
+> With a start value, reducing an empty array simply returns the start value. Without one, it throws.
+? Which expression is true if any number in `nums` is negative?
+- `nums.every((n) => n < 0)`
++ `nums.some((n) => n < 0)`
+- `nums.filter((n) => n < 0)`
+- `nums.find((n) => n < 0) > 0`
+> some answers "is there at least one?". (filter returns an array, which is always truthy, even when empty.)
+? Which comparator sorts objects by `price`, cheapest first?
++ `(a, b) => a.price - b.price`
+- `(a, b) => b.price - a.price`
+- `(a, b) => a.price > b.price`
+- `(a) => a.price`
+> Negative when a is cheaper puts a first. A comparator must return a number, not a boolean.
+? What does this give?
+```js
+["a", "b", "c"].map((x, i) => x.repeat(i + 1));
+```
+- `["a", "b", "c"]`
++ `["a", "bb", "ccc"]`
+- `["a1", "b2", "c3"]`
+- `["aaa", "bb", "c"]`
+> The second callback argument is the index, so each letter is repeated index + 1 times.
+--- exercise code javascript
+::prompt
+You get an array of products like `{ name: "Pen", price: 1.5, stock: 0 }`. Using array methods (no `for` loops), write:
+
+- `inStock(products)`: the products with `stock` above 0;
+- `names(products)`: their names, in the same order;
+- `stockValue(products)`: the total of `price * stock` over all products;
+- `cheapestInStock(products)`: the **name** of the cheapest product that's in stock, or `null` if none is.
+::starter
+function inStock(products) {
+}
+
+function names(products) {
+}
+
+function stockValue(products) {
+}
+
+function cheapestInStock(products) {
+}
+::solution
+function inStock(products) {
+  return products.filter((p) => p.stock > 0);
+}
+
+function names(products) {
+  return products.map((p) => p.name);
+}
+
+function stockValue(products) {
+  return products.reduce((sum, p) => sum + p.price * p.stock, 0);
+}
+
+function cheapestInStock(products) {
+  const available = inStock(products).toSorted((a, b) => a.price - b.price);
+  return available.length ? available[0].name : null;
+}
+::tests
+const __p = [
+  { name: "Pen", price: 1.5, stock: 10 },
+  { name: "Book", price: 12, stock: 0 },
+  { name: "Lamp", price: 25, stock: 2 },
+  { name: "Clip", price: 0.25, stock: 0 },
+];
+assert.deepStrictEqual(names(inStock(__p)), ["Pen", "Lamp"]);
+assert.deepStrictEqual(names(__p), ["Pen", "Book", "Lamp", "Clip"]);
+assert.strictEqual(stockValue(__p), 65);
+assert.strictEqual(stockValue([]), 0);
+assert.strictEqual(cheapestInStock(__p), "Pen");
+assert.strictEqual(cheapestInStock([{ name: "X", price: 1, stock: 0 }]), null);
+assert.strictEqual(__p[0].name, "Pen", "don't change the input array");
+::hints
+- `filter` for inStock, `map` for names, `reduce` with a start of 0 for stockValue.
+- For the cheapest: sort a copy of the in-stock products by price (`toSorted` or `[...arr].sort`), then take the first one's name.
+--- exercise code javascript
+::prompt
+Write `wordFrequencies(text)` that returns an array of `[word, count]` pairs for the words in `text`, sorted by count (highest first), and alphabetically for equal counts. Words are separated by spaces; ignore case and empty words (from double spaces). Use `split`, `filter`, `reduce` (to count into an object) and `Object.entries(counts)`, which turns an object into an array of `[key, value]` pairs.
+::starter
+function wordFrequencies(text) {
+}
+::solution
+function wordFrequencies(text) {
+  const counts = text
+    .toLowerCase()
+    .split(" ")
+    .filter((w) => w !== "")
+    .reduce((acc, w) => {
+      acc[w] = (acc[w] ?? 0) + 1;
+      return acc;
+    }, {});
+  return Object.entries(counts).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+}
+::tests
+assert.deepStrictEqual(wordFrequencies("the cat and the hat"), [["the", 2], ["and", 1], ["cat", 1], ["hat", 1]]);
+assert.deepStrictEqual(wordFrequencies("Go go  GO stop"), [["go", 3], ["stop", 1]]);
+assert.deepStrictEqual(wordFrequencies(""), []);
+assert.deepStrictEqual(wordFrequencies("b a"), [["a", 1], ["b", 1]]);
+::hints
+- Count with `reduce` into an object: `acc[w] = (acc[w] ?? 0) + 1`.
+- `Object.entries(counts)` gives pairs like `["the", 2]`: `pair[0]` is the word, `pair[1]` the count.
+- In the comparator, `b[1] - a[1]` sorts by count; when that's 0, `||` falls back to `a[0].localeCompare(b[0])`.
+--- exercise fill javascript
+::prompt
+Complete the pipeline that prints the names of students who passed (score 50 or more), best first, in uppercase.
+::template
+const students = [
+  { name: "Ada", score: 91 },
+  { name: "Bob", score: 42 },
+  { name: "Cleo", score: 67 },
+  { name: "Dan", score: 50 },
+];
+const result = students
+  .____((s) => s.score >= 50)
+  .sort((a, b) => b.score ____ a.score)
+  .____((s) => s.name.toUpperCase());
+console.log(result.join(", "));
+::answers
+filter
+-
+map
+::expected
+ADA, CLEO, DAN
+::hints
+- First keep the passing students, then sort them, then turn each into its name.
+- A comparator for "highest first" returns `b.score - a.score`.
+--- cards
+map(fn) :: A new array of the same length with fn(item) for each item.
+filter(pred) :: A new array with only the items for which pred returns truthy.
+find / findIndex :: The first matching item (or undefined) / its index (or -1).
+some / every :: true if at least one item / all items match the predicate.
+reduce(fn, start) :: Combines all items into one value: (acc, item) => newAcc. Always give a start value.
+sort() pitfall :: Default sort compares as strings: [10, 9, 1].sort() is [1, 10, 9]. Use (a, b) => a - b for numbers.
+Comparator :: (a, b) => negative if a comes first, positive if b does, 0 if equal.
+toSorted / toReversed :: Non-mutating versions of sort and reverse (ES2023).
+
+=== lesson js-objects | Objects | 85
+## Grouping data with names
+
+An array is a list of values in order. An **object** groups values by **name**: a user has a name, an email and an age; a product has a title, a price and a stock level. Each named value is a **property** (a key and its value):
+
+```js
+const user = {
+  name: "Ada Lovelace",
+  email: "ada@example.com",
+  age: 36,
+  isAdmin: false,
+};
+console.log(user);
+console.log(user.name, user.age);
+```
+
+Objects are JavaScript's main way of modelling things. Every value that isn't a primitive (arrays, functions, dates, maps...) is some kind of object.
+
+## Reading properties: dot and brackets
+
+Two ways to read a property:
+
+```js
+const book = { title: "Eloquent JavaScript", "page count": 472, year: 2024 };
+console.log(book.title);
+console.log(book["page count"]);
+const field = "year";
+console.log(book[field]);
+console.log(book.author);
+```
+
+- **Dot notation** (`book.title`) is the normal way, for keys that are valid names.
+- **Bracket notation** (`book["page count"]`) works for any key, including keys with spaces, and keys **stored in a variable** (`book[field]`). That last one is essential: it's how code works with keys it doesn't know in advance.
+- A property that doesn't exist reads as `undefined`, without an error. But reading a property **of** `undefined` is an error: `book.author.name` throws `TypeError: Cannot read properties of undefined (reading 'name')`, which is the error from Module 1, finally explained.
+
+## Adding, changing and deleting
+
+Objects are mutable, like arrays:
+
+```js
+const player = { name: "Ada", score: 0 };
+player.score += 10;
+player.level = 2;
+player["lives"] = 3;
+delete player.level;
+console.log(player);
+console.log("lives" in player, "level" in player);
+```
+
+`"key" in obj` tells you whether a property exists, which is different from its value being `undefined`. `Object.hasOwn(obj, key)` does the same but ignores properties the object inherits (Module 8).
+
+## Nested data
+
+Properties can hold arrays and other objects, so real data is usually a tree:
+
+```js
+const order = {
+  id: 1042,
+  customer: { name: "Grace", city: "Arlington" },
+  items: [
+    { product: "Keyboard", qty: 1, price: 49 },
+    { product: "Mouse pad", qty: 2, price: 8 },
+  ],
+};
+console.log(order.customer.city);
+console.log(order.items[1].product);
+console.log(order.items.length, "items");
+const total = order.items.reduce((sum, it) => sum + it.qty * it.price, 0);
+console.log("Total:", total);
+```
+
+Read `order.items[1].product` from left to right: the order's items, the one at index 1, its product. An **array of objects** like `items` is the most common data shape there is: rows from a database, results from a web API, the posts in a feed.
+
+## Looping over an object
+
+```js
+const prices = { coffee: 3.2, tea: 2.5, juice: 4 };
+console.log(Object.keys(prices));
+console.log(Object.values(prices));
+console.log(Object.entries(prices));
+for (const [item, price] of Object.entries(prices)) {
+  console.log(`${item}: ${price.toFixed(2)}`);
+}
+```
+
+`Object.keys`, `Object.values` and `Object.entries` turn an object into arrays, and from there all the array methods work. `Object.fromEntries(pairs)` goes the other way. You may also see `for (const key in obj)`, which loops over the keys; `Object.entries` with `for...of` is usually clearer.
+
+Keys are kept in the order they were added, except that keys that look like whole numbers (`"1"`, `"42"`) come first, in numeric order.
+
+~~~check
+? What does this print?
+```js
+const scores = { ada: 9, bob: 7 };
+const who = "bob";
+scores[who] += 1;
+console.log(scores.bob, scores.who);
+```
++ `8 undefined`
+- `7 8`
+- `8 8`
+- An error
+> `scores[who]` uses the variable's value ("bob"). `scores.who` looks for a property literally named "who", which doesn't exist.
+~~~
+
+## Objects as lookup tables
+
+An object makes a fast **dictionary**: look up a value by its key directly, instead of searching through a list.
+
+```js
+const capitals = { France: "Paris", Japan: "Tokyo", Kenya: "Nairobi" };
+const country = "Japan";
+console.log(capitals[country] ?? "unknown");
+
+const text = "to be or not to be";
+const counts = {};
+for (const word of text.split(" ")) {
+  counts[word] = (counts[word] ?? 0) + 1;
+}
+console.log(counts);
+```
+
+The counting idiom `counts[key] = (counts[key] ?? 0) + 1` is worth memorising. (For lookup tables whose keys come from users or can be anything, the `Map` coming later in this module is safer.)
+
+## Shorthand syntax
+
+When a property's value comes from a variable with the same name, write it once. Functions stored in objects can drop the `function` keyword. Keys can be computed with `[ ]`:
+
+```js
+const name = "Ada";
+const age = 36;
+const key = "favourite" + "Language";
+const person = {
+  name,
+  age,
+  [key]: "JavaScript",
+  greet() {
+    return `Hi, I'm ${this.name}`;
+  },
+};
+console.log(person);
+console.log(person.greet());
+```
+
+A function stored in an object is a **method**, just like `toUpperCase` belongs to strings. Inside it, `this` refers to the object the method was called on (`person` here). Methods and `this` get a full lesson in Module 8.
+
+## Arrays or objects?
+
+| Use an array when... | Use an object when... |
+|---|---|
+| the items are many values of the same kind | the values are different facts about one thing |
+| order matters | you look things up by name |
+| you'll loop over all of them | each property has its own meaning |
+
+Most real data combines both: an array of objects, or an object whose properties hold arrays.
+
+📚 **Go deeper:** javascript.info, "Objects" and "Object.keys, values, entries"; MDN JavaScript Guide, "Working with objects"; *Eloquent JavaScript* (4th ed.), chapter 4, "Objects".
+--- goals
+- create objects and read properties with dot and bracket notation
+- add, change and delete properties, and test for them with `in`
+- navigate nested data such as arrays of objects
+- loop over objects with `Object.keys`, `values` and `entries`
+- use objects as lookup tables, including the counting idiom
+- write shorthand properties, computed keys and methods
+--- quiz
+? What does this print?
+```js
+const car = { make: "Volvo", year: 2020 };
+car.year = 2024;
+car.colour = "red";
+console.log(Object.keys(car).length, car.year);
+```
+- `2 2020`
++ `3 2024`
+- `3 2020`
+- An error, because `car` is a const
+> Properties can be added and changed on a const object.
+? `const prop = "size";` Which reads the property named "size" of `box`?
+- `box.prop`
++ `box[prop]`
+- `box["prop"]`
+- `box.[prop]`
+> Brackets with a variable use the variable's value as the key.
+? What happens?
+```js
+const user = { name: "Ada" };
+console.log(user.address.city);
+```
+- Prints `undefined`
+- Prints `null`
++ `TypeError: Cannot read properties of undefined (reading 'city')`
+- `ReferenceError: address is not defined`
+> `user.address` is undefined, and you can't read a property of undefined.
+? What does `Object.entries({ a: 1, b: 2 })` return?
+- `["a", "b"]`
+- `[1, 2]`
++ `[["a", 1], ["b", 2]]`
+- `{ a: 1, b: 2 }`
+> entries gives [key, value] pairs.
+? What does this print?
+```js
+const counts = {};
+for (const c of "abca") {
+  counts[c] = (counts[c] ?? 0) + 1;
+}
+console.log(counts);
+```
++ `{ a: 2, b: 1, c: 1 }`
+- `{ a: 1, b: 1, c: 1 }`
+- `{ abca: 1 }`
+- `[ 2, 1, 1 ]`
+> Each character's counter starts from 0 (via ??) and goes up by 1.
+? `const x = 5; const obj = { x };` What is `obj`?
+- `{ 5: 5 }`
++ `{ x: 5 }`
+- `{ x: "x" }`
+- A syntax error
+> Shorthand property: the key is the variable's name, the value is its value.
+--- exercise code javascript
+::prompt
+An online shop stores a cart as an object mapping product names to quantities, and a price list as another object. Write:
+
+- `addToCart(cart, product, qty = 1)`: adds `qty` of `product` to the cart (creating the entry if needed) and returns the cart;
+- `removeFromCart(cart, product)`: deletes the product entirely and returns the cart;
+- `cartTotal(cart, prices)`: the total price. Throw an error with `throw new Error("Unknown product: " + name)` if a product has no price (you'll learn about errors in Module 7; for now, that line is all you need).
+::starter
+function addToCart(cart, product, qty = 1) {
+}
+
+function removeFromCart(cart, product) {
+}
+
+function cartTotal(cart, prices) {
+}
+::solution
+function addToCart(cart, product, qty = 1) {
+  cart[product] = (cart[product] ?? 0) + qty;
+  return cart;
+}
+
+function removeFromCart(cart, product) {
+  delete cart[product];
+  return cart;
+}
+
+function cartTotal(cart, prices) {
+  let total = 0;
+  for (const [name, qty] of Object.entries(cart)) {
+    if (!(name in prices)) throw new Error("Unknown product: " + name);
+    total += prices[name] * qty;
+  }
+  return total;
+}
+::tests
+const __prices = { apple: 0.5, bread: 2.25, milk: 1.2 };
+const __cart = {};
+addToCart(__cart, "apple", 4);
+addToCart(__cart, "bread");
+addToCart(__cart, "apple");
+assert.deepStrictEqual(__cart, { apple: 5, bread: 1 });
+assert.strictEqual(cartTotal(__cart, __prices), 4.75);
+removeFromCart(__cart, "apple");
+assert.deepStrictEqual(__cart, { bread: 1 });
+assert.strictEqual(cartTotal({}, __prices), 0);
+assert.throws(() => cartTotal({ caviar: 1 }, __prices), /Unknown product: caviar/);
+::hints
+- The counting idiom: `cart[product] = (cart[product] ?? 0) + qty`.
+- `delete cart[product]` removes the key.
+- Loop over `Object.entries(cart)`; check `name in prices` before using the price.
+--- exercise code javascript
+::prompt
+Write `groupBy(items, key)` that groups an array of objects by the value of one of their properties, returning an object whose keys are those values and whose values are arrays of the matching items, in their original order. For example, grouping people by `"city"` gives `{ Paris: [...], Rome: [...] }`. (Modern JavaScript has `Object.groupBy` built in; write your own to see how it works.)
+::starter
+function groupBy(items, key) {
+}
+::solution
+function groupBy(items, key) {
+  const groups = {};
+  for (const item of items) {
+    const value = item[key];
+    if (!(value in groups)) groups[value] = [];
+    groups[value].push(item);
+  }
+  return groups;
+}
+::tests
+const __people = [
+  { name: "Ada", city: "London" },
+  { name: "Marie", city: "Paris" },
+  { name: "Alan", city: "London" },
+];
+assert.deepStrictEqual(groupBy(__people, "city"), {
+  London: [{ name: "Ada", city: "London" }, { name: "Alan", city: "London" }],
+  Paris: [{ name: "Marie", city: "Paris" }],
+});
+assert.deepStrictEqual(groupBy([], "x"), {});
+assert.deepStrictEqual(groupBy([{ t: "a" }, { t: "b" }, { t: "a" }], "t"), { a: [{ t: "a" }, { t: "a" }], b: [{ t: "b" }] });
+::hints
+- `item[key]` reads the property whose name is in `key`.
+- Create an empty array for a group the first time you see its value, then `push` the item.
+--- exercise code javascript
+::prompt
+A web API returned this nested data about a blog. Write `summary(blog)` that returns an object `{ title, posts, comments, topAuthor }`: the blog's title, the number of posts, the total number of comments over all posts, and the name of the author who wrote the most posts (any one if tied; `null` if there are no posts).
+::starter
+function summary(blog) {
+}
+::solution
+function summary(blog) {
+  const comments = blog.posts.reduce((sum, p) => sum + p.comments.length, 0);
+  const byAuthor = {};
+  for (const post of blog.posts) {
+    byAuthor[post.author] = (byAuthor[post.author] ?? 0) + 1;
+  }
+  let topAuthor = null;
+  for (const [author, count] of Object.entries(byAuthor)) {
+    if (topAuthor === null || count > byAuthor[topAuthor]) topAuthor = author;
+  }
+  return { title: blog.title, posts: blog.posts.length, comments, topAuthor };
+}
+::tests
+const __blog = {
+  title: "Learning JS",
+  posts: [
+    { title: "Hello", author: "ada", comments: [{ by: "bob" }, { by: "cy" }] },
+    { title: "Loops", author: "grace", comments: [] },
+    { title: "Arrays", author: "ada", comments: [{ by: "dee" }] },
+  ],
+};
+assert.deepStrictEqual(summary(__blog), { title: "Learning JS", posts: 3, comments: 3, topAuthor: "ada" });
+assert.deepStrictEqual(summary({ title: "Empty", posts: [] }), { title: "Empty", posts: 0, comments: 0, topAuthor: null });
+::hints
+- Count comments with `reduce`, adding each post's `comments.length`.
+- Count posts per author in an object, then find the key with the biggest count.
+- Return an object literal; shorthand works when the variable has the property's name: `{ comments }`.
+--- cards
+Object :: A collection of named properties: { name: "Ada", age: 36 }. Mutable, even when declared with const.
+Dot vs bracket :: obj.name for fixed names; obj[key] for any key, including one stored in a variable.
+Missing property :: Reads as undefined. Reading a property OF undefined throws "Cannot read properties of undefined".
+in / Object.hasOwn :: "key" in obj is true if the property exists (even if its value is undefined).
+Object.keys / values / entries :: Turn an object into arrays of keys, values or [key, value] pairs.
+Counting idiom :: counts[k] = (counts[k] ?? 0) + 1;
+Shorthand property :: { name } means { name: name }. Computed key: { [expr]: value }.
+Method :: A function stored as a property: obj.greet(). Inside, this is the object it was called on.
+
+=== lesson js-destructuring | Destructuring, spread and optional chaining | 80
+## Unpacking values: destructuring
+
+**Destructuring** pulls values out of arrays and objects into variables in one step. With arrays, positions decide which variable gets what:
+
+```js
+const point = [3, 7];
+const [x, y] = point;
+console.log(x, y);
+
+const [first, , third = "default", ...others] = ["a", "b"];
+console.log(first, third, others);
+```
+
+- Leave a gap (`, ,`) to skip an item.
+- `= value` gives a **default** for a missing item.
+- `...rest` collects the remaining items into an array (it must come last).
+
+It also makes the classic swap from Module 1 a one-liner:
+
+```js
+let left = "coffee";
+let right = "tea";
+[left, right] = [right, left];
+console.log(left, right);
+```
+
+## Destructuring objects
+
+With objects, **names** decide: each variable takes the property with the same name, in any order:
+
+```js
+const user = { name: "Ada", email: "ada@example.com", age: 36 };
+const { name, age } = user;
+console.log(name, age);
+
+const { email: contact, country = "UK", phone } = user;
+console.log(contact, country, phone);
+```
+
+- `email: contact` reads the `email` property into a variable called `contact` (rename).
+- `country = "UK"` gives a default when the property is missing (or `undefined`).
+- A missing property with no default (`phone`) is just `undefined`.
+
+You can destructure nested data, too: `const { customer: { city } } = order;`. Keep it shallow, though: two levels is already hard to read.
+
+## Destructuring parameters: options objects
+
+The most useful place for destructuring is a function's parameter list. Instead of a long row of positional arguments, take **one object** and destructure it, with defaults:
+
+```js
+function createUser({ name, role = "member", active = true }) {
+  return `${name} (${role}${active ? "" : ", inactive"})`;
+}
+console.log(createUser({ name: "Ada" }));
+console.log(createUser({ name: "Grace", role: "admin" }));
+console.log(createUser({ active: false, name: "Linus" }));
+```
+
+Calls are self-explanatory (`createUser({ name: "Grace", role: "admin" })` versus `createUser("Grace", "admin", true)`), arguments can come in any order, and optional ones can simply be left out. This is called an **options object**, and you'll see it in every major library.
+
+It works in callbacks too: `users.map(({ name }) => name)`, and `Object.entries(obj)` pairs destructure nicely: `for (const [key, value] of Object.entries(obj))`.
+
+~~~check
+? What does this print?
+```js
+const { a, b = 2, c = 3 } = { a: 1, c: undefined };
+console.log(a, b, c);
+```
+- `1 undefined undefined`
++ `1 2 3`
+- `1 2 undefined`
+- An error
+> b is missing, so it gets its default. c is present but undefined, which also uses the default.
+~~~
+
+## Spread: unpacking into a new array or object
+
+The three dots also work the other way round. **Spread** (`...`) unpacks an array's items or an object's properties into a new array or object:
+
+```js
+const weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri"];
+const weekend = ["Sat", "Sun"];
+const week = [...weekdays, ...weekend];
+console.log(week.length);
+const copy = [...weekdays];
+copy.push("Extra");
+console.log(weekdays.length, copy.length);
+console.log(Math.max(...[4, 9, 2]));
+```
+
+With objects, later properties override earlier ones, which makes spread perfect for "a copy with some changes":
+
+```js
+const defaults = { theme: "light", fontSize: 14, autosave: true };
+const userSettings = { fontSize: 18 };
+const settings = { ...defaults, ...userSettings };
+console.log(settings);
+const updated = { ...settings, theme: "dark" };
+console.log(updated, settings.theme);
+```
+
+And **rest** in object destructuring collects "everything else", a neat way to leave a property out:
+
+```js
+const account = { id: 7, name: "Ada", password: "hunter2" };
+const { password, ...safe } = account;
+console.log(safe);
+```
+
+Same three dots, two jobs: on the **left** of `=` or in parameters, they *collect* (rest); in an array, object or call, they *spread*.
+
+## Optional chaining: ?.
+
+Reading deep into data that might be incomplete used to need a chain of checks: `user && user.address && user.address.city`. **Optional chaining** does it in one go: `a?.b` gives `undefined` (instead of throwing) if `a` is `null` or `undefined`:
+
+```js
+const user = { name: "Ada", address: null };
+console.log(user.address?.city);
+console.log(user.profile?.avatar?.url);
+console.log(user.address?.city ?? "No city given");
+console.log(user.greet?.());
+const list = null;
+console.log(list?.[0]);
+```
+
+- `obj?.prop` and `obj?.[key]` read safely.
+- `fn?.()` calls a function only if it exists.
+- Combine with `??` for a default.
+
+Don't sprinkle `?.` everywhere, though. If a value should *always* be there, a crash with a clear error is better than a silent `undefined` that causes a confusing bug later. Use `?.` for data that's genuinely optional.
+
+📚 **Go deeper:** javascript.info, "Destructuring assignment", "Rest parameters and spread syntax" and "Optional chaining '?.'"; MDN, "Destructuring assignment", "Spread syntax (...)" and "Optional chaining (?.)".
+--- goals
+- destructure arrays by position, with skips, defaults and rest
+- destructure objects by name, with renaming and defaults
+- write functions that take an options object with defaults
+- combine and copy arrays and objects with spread, and leave out properties with rest
+- read possibly-missing data safely with `?.` and `??`
+--- quiz
+? What does this print?
+```js
+const [a, b, ...rest] = [10, 20, 30, 40];
+console.log(b, rest);
+```
+- `20 30`
++ `20 [ 30, 40 ]`
+- `[ 20 ] [ 30, 40 ]`
+- `20 40`
+> rest collects all remaining items into an array.
+? What does this print?
+```js
+const { title: t = "Untitled", year } = { year: 2026 };
+console.log(t, year);
+```
++ `Untitled 2026`
+- `undefined 2026`
+- `title 2026`
+- An error
+> `title` is missing, so `t` gets the default.
+? What is `{ ...{ a: 1, b: 2 }, b: 3 }`?
+- `{ a: 1, b: 2 }`
++ `{ a: 1, b: 3 }`
+- `{ a: 1, b: 2, b: 3 }`
+- `{ b: 3 }`
+> Later properties override earlier ones.
+? `const order = { customer: null };` What is `order.customer?.name ?? "guest"`?
+- `null`
+- An error
++ `"guest"`
+- `undefined`
+> `?.` stops at null and gives undefined; `??` then supplies the default.
+? Why are options objects (`f({ name, size: 3 })`) popular for functions with many settings?
+- They make functions faster
++ Arguments are named, can come in any order, and optional ones can be left out
+- They're the only way to have default values
+- They stop functions from changing their arguments
+> Named arguments make calls readable and flexible.
+? What does `const { id, ...rest } = { id: 1, a: 2, b: 3 };` put in `rest`?
+- `[2, 3]`
++ `{ a: 2, b: 3 }`
+- `{ id: 1, a: 2, b: 3 }`
+- `2`
+> Object rest collects all the other properties into a new object.
+--- exercise code javascript
+::prompt
+Write `formatName({ first, last, middle, style = "full" })` using **parameter destructuring**:
+
+- `style: "full"` gives `"First Middle Last"` (no middle name: `"First Last"`);
+- `style: "formal"` gives `"Last, First"`;
+- `style: "initials"` gives the initials with dots, e.g. `"A.B.L."` (including the middle initial if there is one).
+::starter
+function formatName(options) {
+}
+::solution
+function formatName({ first, last, middle, style = "full" }) {
+  if (style === "formal") return `${last}, ${first}`;
+  const parts = middle ? [first, middle, last] : [first, last];
+  if (style === "initials") return parts.map((p) => p[0] + ".").join("");
+  return parts.join(" ");
+}
+::tests
+assert.strictEqual(formatName({ first: "Ada", last: "Lovelace" }), "Ada Lovelace");
+assert.strictEqual(formatName({ first: "Ada", middle: "Augusta", last: "King" }), "Ada Augusta King");
+assert.strictEqual(formatName({ first: "Grace", last: "Hopper", style: "formal" }), "Hopper, Grace");
+assert.strictEqual(formatName({ first: "Alan", middle: "Mathison", last: "Turing", style: "initials" }), "A.M.T.");
+assert.strictEqual(formatName({ last: "Torvalds", first: "Linus", style: "initials" }), "L.T.");
+::hints
+- Destructure in the parameter list: `function formatName({ first, last, middle, style = "full" })`.
+- Build an array of the name parts (with or without the middle name), then `join(" ")` or map to initials.
+--- exercise code javascript
+::prompt
+A settings screen merges three layers: built-in `defaults`, the user's `saved` settings, and `changes` they just made. Write `mergeSettings(defaults, saved, changes)` that returns a **new** object where later layers win, without changing any of the inputs. Then write `publicProfile(user)` that returns a copy of a user object **without** its `password` and `token` properties.
+::starter
+function mergeSettings(defaults, saved, changes) {
+}
+
+function publicProfile(user) {
+}
+::solution
+function mergeSettings(defaults, saved, changes) {
+  return { ...defaults, ...saved, ...changes };
+}
+
+function publicProfile(user) {
+  const { password, token, ...rest } = user;
+  return rest;
+}
+::tests
+const __d = { theme: "light", size: 14, lang: "en" };
+const __s = { size: 16 };
+const __c = { theme: "dark" };
+assert.deepStrictEqual(mergeSettings(__d, __s, __c), { theme: "dark", size: 16, lang: "en" });
+assert.deepStrictEqual(__d, { theme: "light", size: 14, lang: "en" }, "defaults must not change");
+assert.deepStrictEqual(mergeSettings(__d, {}, {}), __d);
+assert.notStrictEqual(mergeSettings(__d, {}, {}), __d, "return a new object, not the same one");
+const __u = { id: 1, name: "Ada", password: "secret", token: "abc" };
+assert.deepStrictEqual(publicProfile(__u), { id: 1, name: "Ada" });
+assert.strictEqual(__u.password, "secret", "the original user must keep its password");
+::hints
+- Spread the three objects into a new one, in order: `{ ...defaults, ...saved, ...changes }`.
+- Object rest leaves properties out: `const { password, token, ...rest } = user;`.
+--- exercise code javascript
+::prompt
+Data from an API may be incomplete. Write `cityOf(response)` that returns the city of the first address of the user in `response.data.user.addresses`, in uppercase, or `"UNKNOWN"` if anything along the way is missing (`response` itself may even be `undefined`). Use optional chaining and `??`; no `if` statements.
+::starter
+function cityOf(response) {
+}
+::solution
+function cityOf(response) {
+  return response?.data?.user?.addresses?.[0]?.city?.toUpperCase() ?? "UNKNOWN";
+}
+::tests
+assert.strictEqual(cityOf({ data: { user: { addresses: [{ city: "Paris" }, { city: "Lyon" }] } } }), "PARIS");
+assert.strictEqual(cityOf({ data: { user: { addresses: [] } } }), "UNKNOWN");
+assert.strictEqual(cityOf({ data: { user: {} } }), "UNKNOWN");
+assert.strictEqual(cityOf({ data: null }), "UNKNOWN");
+assert.strictEqual(cityOf(undefined), "UNKNOWN");
+assert.strictEqual(cityOf({ data: { user: { addresses: [{ street: "Main St" }] } } }), "UNKNOWN");
+::hints
+- `?.[0]` reads the first item of an array that may be missing.
+- `?.toUpperCase()` calls the method only if there is a city.
+- End the chain with `?? "UNKNOWN"`.
+--- cards
+Array destructuring :: const [a, , c = 0, ...rest] = arr; positions decide; skip with commas; defaults; rest last.
+Object destructuring :: const { name, email: contact, role = "user" } = obj; names decide; rename with :, default with =.
+Options object :: function f({ size = 10, color = "red" } = {}) { ... }: named, optional, any-order arguments.
+Spread :: [...a, ...b] and { ...a, ...b } copy items/properties into a new array/object; later properties win.
+Object rest :: const { password, ...safe } = user; collects the other properties, leaving some out.
+Optional chaining :: a?.b, a?.[k], f?.() give undefined instead of throwing when the left side is null or undefined.
+
+=== lesson js-references | References, copies and equality | 85
+## Two kinds of values
+
+Primitives (numbers, strings, booleans, `null`, `undefined`, bigints and symbols) are **values**: when you assign one to another variable, the variable gets its own copy.
+
+Objects (including arrays and functions) are different. A variable doesn't contain the object itself; it holds a **reference** to it, like an address that says where the object lives in memory. Assigning the variable copies the *reference*, so both names point at the **same** object:
+
+```js
+let a = 5;
+let b = a;
+b += 1;
+console.log(a, b);
+
+const list = [1, 2, 3];
+const other = list;
+other.push(4);
+console.log(list, other);
+```
+
+Changing `b` didn't affect `a`. But `list` and `other` are two names for one array, so the push shows through both. Two names for one object are called **aliases**, and unexpected aliasing is one of the most common sources of bugs in JavaScript.
+
+## const doesn't freeze objects
+
+This explains the puzzle from the arrays lesson: `const` makes the **name** permanent, so it always points at the same object; it doesn't stop the object from changing.
+
+```js
+const team = { name: "Blue", members: ["Ada"] };
+team.members.push("Grace");
+team.name = "Green";
+console.log(team);
+```
+
+If you really need an object that can't change, `Object.freeze(obj)` blocks changes to its own properties (in strict mode, attempts throw a TypeError). But it's **shallow**: objects inside a frozen object can still change.
+
+## Equality compares references
+
+`===` on objects asks "are these the **same object**?", not "do they look alike?":
+
+```js
+const p1 = { x: 1, y: 2 };
+const p2 = { x: 1, y: 2 };
+const p3 = p1;
+console.log(p1 === p2, p1 === p3);
+console.log([1, 2] === [1, 2]);
+```
+
+Two separately created objects are never `===`, even with identical contents. To compare **contents**, you compare property by property (a "deep equality" check, which `assert.deepStrictEqual` does for you in tests). The quick trick `JSON.stringify(a) === JSON.stringify(b)` works for simple data, but it's fooled by different property orders and can't handle values JSON doesn't support (the JSON lesson explains which).
+
+This also affects searching: `[{ id: 1 }].includes({ id: 1 })` is `false`, because the object you're searching for is a new one. Search by a property instead: `items.some((it) => it.id === 1)`.
+
+~~~check
+? What does this print?
+```js
+const a = { n: 1 };
+const b = a;
+b.n = 2;
+const c = { n: 2 };
+console.log(a.n, a === b, b === c);
+```
+- `1 true false`
++ `2 true false`
+- `2 true true`
+- `1 false false`
+> a and b are the same object, so a.n is 2. c is a different object with equal contents, so b === c is false.
+~~~
+
+## Functions receive references too
+
+When you pass an object to a function, the parameter is another alias. If the function changes the object, the caller sees the change:
+
+```js
+function addBonus(scores) {
+  for (let i = 0; i < scores.length; i++) {
+    scores[i] += 10;
+  }
+  return scores;
+}
+const original = [50, 70];
+const boosted = addBonus(original);
+console.log(original, boosted, original === boosted);
+```
+
+The caller probably didn't expect `original` to change. That hidden side effect is the kind of bug that takes hours to find. Professional style: **don't mutate inputs**; return new data instead:
+
+```js
+const addBonus = (scores) => scores.map((s) => s + 10);
+const original = [50, 70];
+const boosted = addBonus(original);
+console.log(original, boosted);
+```
+
+(Reassigning a parameter, `scores = []`, only changes where the local name points; the caller's variable is unaffected.)
+
+## Shallow copies
+
+To get an independent copy, create a new object. These all make **shallow** copies, new at the top level only:
+
+| For | Copy with |
+|---|---|
+| arrays | `[...arr]`, `arr.slice()`, `Array.from(arr)` |
+| objects | `{ ...obj }`, `Object.assign({}, obj)` |
+
+Shallow means nested objects are still **shared**:
+
+```js
+const original = { name: "Ada", skills: ["maths"] };
+const copy = { ...original };
+copy.name = "Grace";
+copy.skills.push("poetry");
+console.log(original);
+```
+
+The `name` change stayed in the copy, but `skills` is one array referenced by both objects.
+
+## Deep copies
+
+`structuredClone(value)` makes a **deep** copy: every nested array and object is copied too. It's built into browsers and Node.js 17+:
+
+```js
+const original = { name: "Ada", skills: ["maths"], meta: { joined: 1843 } };
+const deep = structuredClone(original);
+deep.skills.push("poetry");
+deep.meta.joined = 2026;
+console.log(original);
+console.log(deep);
+```
+
+It handles dates, maps, sets and even circular references, but not functions or class methods. Older code used `JSON.parse(JSON.stringify(obj))` for the same job, which loses dates, `undefined` values and more.
+
+## Immutable updates
+
+Modern front-end frameworks such as React rely on a habit: **never change existing data; create updated copies**. Then "has anything changed?" is just a quick `===` check. The patterns, all with spread, `map` and `filter`:
+
+```js
+const todos = [
+  { id: 1, text: "Learn arrays", done: true },
+  { id: 2, text: "Learn objects", done: false },
+];
+const added = [...todos, { id: 3, text: "Learn Map", done: false }];
+const toggled = added.map((t) => (t.id === 2 ? { ...t, done: !t.done } : t));
+const removed = toggled.filter((t) => t.id !== 1);
+console.log(todos.length, removed);
+console.log(todos[1].done);
+```
+
+Add with spread, change with `map` plus a spread copy of the one item, remove with `filter`. The original `todos` never changed.
+
+📚 **Go deeper:** javascript.info, "Object references and copying"; MDN, "structuredClone()" and "Object.freeze()"; *Eloquent JavaScript* (4th ed.), chapter 4, "Mutability".
+--- goals
+- explain the difference between primitive values and object references
+- spot aliasing bugs where two names share one object
+- explain why `===` on objects compares identity, and compare contents instead
+- avoid mutating function arguments, returning new data instead
+- make shallow copies with spread and deep copies with `structuredClone`
+- update arrays of objects immutably with spread, `map` and `filter`
+--- quiz
+? What does this print?
+```js
+const a = [1, 2];
+const b = a;
+b.push(3);
+console.log(a.length);
+```
+- 2
++ 3
+- 1
+- An error, because a is const
+> a and b refer to the same array.
+? What is `{ id: 1 } === { id: 1 }`?
+- `true`
++ `false`
+- `undefined`
+- An error
+> Two different objects are never ===, even with equal contents.
+? What does this print?
+```js
+const orig = { tags: ["a"] };
+const copy = { ...orig };
+copy.tags.push("b");
+console.log(orig.tags);
+```
+- `[ 'a' ]`
++ `[ 'a', 'b' ]`
+- `[ 'b' ]`
+- `undefined`
+> Spread makes a shallow copy: the tags array is still shared.
+? Which makes a fully independent copy of nested data?
+- `{ ...obj }`
+- `Object.assign({}, obj)`
++ `structuredClone(obj)`
+- `const copy = obj`
+> structuredClone copies every level.
+? What does this print?
+```js
+function reset(arr) {
+  arr = [];
+}
+const nums = [1, 2, 3];
+reset(nums);
+console.log(nums.length);
+```
++ 3
+- 0
+- `undefined`
+- An error
+> Reassigning the parameter only changes the local name. Mutating it (arr.length = 0) would have changed the caller's array.
+? In an immutable update, how do you mark the todo with id 2 as done?
+- `todos[1].done = true`
++ `todos.map((t) => (t.id === 2 ? { ...t, done: true } : t))`
+- `todos.filter((t) => t.id === 2).done = true`
+- `todos.push({ id: 2, done: true })`
+> map creates a new array with a new object for the changed todo and the same objects for the rest.
+--- exercise code javascript
+::prompt
+This `applyDiscount` function has a bug: it **changes** the caller's products. Rewrite it so it returns a **new** array of **new** objects, each with its price reduced by `percent` (rounded to 2 decimals with `Math.round(x * 100) / 100`), and leaves the input untouched.
+::starter
+function applyDiscount(products, percent) {
+  for (const p of products) {
+    p.price = Math.round(p.price * (1 - percent / 100) * 100) / 100;
+  }
+  return products;
+}
+::solution
+function applyDiscount(products, percent) {
+  return products.map((p) => ({ ...p, price: Math.round(p.price * (1 - percent / 100) * 100) / 100 }));
+}
+::tests
+const __items = [{ name: "Pen", price: 2 }, { name: "Lamp", price: 19.99 }];
+const __sale = applyDiscount(__items, 25);
+assert.deepStrictEqual(__sale, [{ name: "Pen", price: 1.5 }, { name: "Lamp", price: 14.99 }]);
+assert.deepStrictEqual(__items, [{ name: "Pen", price: 2 }, { name: "Lamp", price: 19.99 }], "the original products must not change");
+assert.notStrictEqual(__sale, __items, "return a new array");
+assert.notStrictEqual(__sale[0], __items[0], "return new objects, not the same ones");
+assert.deepStrictEqual(applyDiscount([], 10), []);
+::hints
+- `map` returns a new array; inside, create a new object with spread: `{ ...p, price: newPrice }`.
+- Wrap an object literal returned from a concise arrow in parentheses.
+--- exercise code javascript
+::prompt
+Write `deepEqual(a, b)` that compares two values made of numbers, strings, booleans, `null`, arrays and plain objects, **by content**, recursively. Objects are equal if they have the same set of keys (in any order) with deep-equal values; arrays must also have the same length and order. An array is never equal to a plain object.
+::starter
+function deepEqual(a, b) {
+}
+::solution
+function deepEqual(a, b) {
+  if (a === b) return true;
+  if (typeof a !== "object" || typeof b !== "object" || a === null || b === null) return false;
+  if (Array.isArray(a) !== Array.isArray(b)) return false;
+  const keysA = Object.keys(a);
+  const keysB = Object.keys(b);
+  if (keysA.length !== keysB.length) return false;
+  return keysA.every((k) => Object.hasOwn(b, k) && deepEqual(a[k], b[k]));
+}
+::tests
+assert.strictEqual(deepEqual(1, 1), true);
+assert.strictEqual(deepEqual("a", "b"), false);
+assert.strictEqual(deepEqual({ a: 1, b: [1, 2] }, { b: [1, 2], a: 1 }), true);
+assert.strictEqual(deepEqual({ a: 1 }, { a: 2 }), false);
+assert.strictEqual(deepEqual([1, [2, 3]], [1, [2, 3]]), true);
+assert.strictEqual(deepEqual([1, 2], [2, 1]), false);
+assert.strictEqual(deepEqual([1], { 0: 1 }), false);
+assert.strictEqual(deepEqual(null, {}), false);
+assert.strictEqual(deepEqual(null, null), true);
+assert.strictEqual(deepEqual({ a: undefined }, { b: undefined }), false);
+assert.strictEqual(deepEqual({ x: { y: { z: [1] } } }, { x: { y: { z: [1] } } }), true);
+::hints
+- Same reference or same primitive: `a === b` is enough. If either isn't an object (or is null), they're different.
+- Arrays and objects can both be compared through `Object.keys`, but check `Array.isArray` on both first.
+- Recurse on each key's values with `every`.
+--- exercise fill javascript
+::prompt
+Complete the immutable updates of a shopping list: add an item, rename one, remove one. The original list must stay unchanged, which the last line proves.
+::template
+const list = [
+  { id: 1, name: "milk" },
+  { id: 2, name: "bred" },
+];
+const added = [____list, { id: 3, name: "eggs" }];
+const fixed = added.____((it) => (it.id === 2 ? { ...it, name: "bread" } : it));
+const final = fixed.____((it) => it.id !== 1);
+console.log(final.map((it) => it.name).join(", "), "|", list[1].name);
+::answers
+...
+map
+filter
+::expected
+bread, eggs | bred
+::hints
+- Spread the old items into the new array literal.
+- Change one item with `map`; remove one with `filter`.
+--- cards
+Reference :: An object variable holds a reference (address), not the object itself. Assigning copies the reference.
+Aliasing :: Two names for the same object: a change through one is visible through the other.
+=== on objects :: Compares identity (same object?), not contents. {a:1} === {a:1} is false.
+Shallow copy :: [...arr], { ...obj }: a new top level, but nested objects are still shared.
+structuredClone(x) :: A deep copy: every nested array/object is copied. Not for functions.
+Don't mutate inputs :: Functions should return new data rather than change the objects they receive.
+Immutable update :: Add [...a, x]; change a.map(t => t.id === id ? { ...t, done: true } : t); remove a.filter(...).
+
+=== lesson js-map-set | Map and Set | 80
+## Set: a collection of unique values
+
+A **Set** holds values with **no duplicates**. Adding a value that's already there does nothing:
+
+```js
+const tags = new Set();
+tags.add("js");
+tags.add("css");
+tags.add("js");
+console.log(tags, tags.size);
+console.log(tags.has("css"), tags.has("python"));
+tags.delete("css");
+console.log([...tags]);
+```
+
+The most common use is removing duplicates from an array: make a Set from it, then spread it back into an array.
+
+```js
+const visitors = ["ada", "bob", "ada", "cy", "bob", "ada"];
+const unique = [...new Set(visitors)];
+console.log(unique, unique.length);
+```
+
+Sets keep values in the order they were first added, and you can loop over them with `for...of`. The big advantage over an array is speed: `set.has(x)` takes the same tiny time whether the set holds 10 values or 10 million, while `array.includes(x)` has to look through the items one by one.
+
+### Set operations
+
+```js
+const frontEnd = new Set(["html", "css", "js"]);
+const backEnd = new Set(["js", "python", "sql"]);
+const both = [...frontEnd].filter((x) => backEnd.has(x));
+const either = new Set([...frontEnd, ...backEnd]);
+const onlyFront = [...frontEnd].filter((x) => !backEnd.has(x));
+console.log(both, [...either], onlyFront);
+```
+
+Since 2024, sets also have methods for this: `a.intersection(b)`, `a.union(b)`, `a.difference(b)`, `a.isSubsetOf(b)` and friends, in current browsers and Node.js 22+. The `filter` versions work everywhere.
+
+## Map: a dictionary done right
+
+A **Map** stores key-value pairs, like an object used as a lookup table, but designed for the job:
+
+```js
+const stock = new Map();
+stock.set("apples", 12);
+stock.set("pears", 0);
+stock.set("plums", 7);
+console.log(stock.get("apples"), stock.get("kiwis"));
+console.log(stock.has("pears"), stock.size);
+stock.set("apples", stock.get("apples") - 2);
+stock.delete("plums");
+console.log(stock);
+for (const [fruit, qty] of stock) {
+  console.log(`${fruit}: ${qty}`);
+}
+```
+
+## Map or object?
+
+| | Object | Map |
+|---|---|---|
+| Keys | strings (and symbols) only | **any value**: numbers, objects, even functions |
+| Size | `Object.keys(obj).length` | `map.size` |
+| Order | mostly insertion, but number-like keys first | always insertion order |
+| Built-in keys | inherits some, such as `toString` | none: only what you put in |
+| JSON | `JSON.stringify` works | needs converting first |
+
+Use **objects** for records with fixed, known properties (a user, a product). Use a **Map** for a lookup table that grows and shrinks at runtime, especially when keys come from data or users, or aren't strings.
+
+The "built-in keys" row is a real trap with objects:
+
+```js
+const counts = {};
+const word = "constructor";
+console.log(word in counts, counts[word]);
+const safe = new Map();
+console.log(safe.has(word), safe.get(word));
+```
+
+Objects inherit properties like `constructor` and `toString`, so a word-count program built on `{}` gets confused by those words. A Map starts truly empty.
+
+~~~check
+? What does this print?
+```js
+const m = new Map();
+m.set(1, "number one");
+m.set("1", "string one");
+console.log(m.size, m.get(1));
+```
+- `1 string one`
++ `2 number one`
+- `2 string one`
+- `1 number one`
+> Map keys keep their type: the number 1 and the string "1" are different keys. (In a plain object they'd be the same key.)
+~~~
+
+## Converting
+
+```js
+const prices = { tea: 2.5, coffee: 3.2 };
+const map = new Map(Object.entries(prices));
+map.set("juice", 4);
+console.log(map);
+console.log(Object.fromEntries(map));
+console.log([...map.keys()], [...map.values()]);
+```
+
+`new Map(pairs)` takes an array of `[key, value]` pairs, which is exactly what `Object.entries` gives you; `Object.fromEntries(map)` converts back.
+
+## Counting and grouping with a Map
+
+```js
+const words = "the cat and the hat and the bat".split(" ");
+const counts = new Map();
+for (const w of words) {
+  counts.set(w, (counts.get(w) ?? 0) + 1);
+}
+const sorted = [...counts].sort((a, b) => b[1] - a[1]);
+console.log(sorted.slice(0, 2));
+```
+
+For grouping, modern JavaScript (2024+) has `Object.groupBy(items, fn)` and `Map.groupBy(items, fn)`, which call `fn` on each item and group the items by its result:
+
+```js
+const scores = [45, 82, 67, 91, 30];
+console.log(Map.groupBy(scores, (s) => (s >= 50 ? "pass" : "fail")));
+```
+
+## Memoization with a Map
+
+Remember the slow recursive Fibonacci from Module 5? A Map can remember each result so it's computed only once:
+
+```js
+const memo = new Map();
+function fib(n) {
+  if (n < 2) return n;
+  if (memo.has(n)) return memo.get(n);
+  const result = fib(n - 1) + fib(n - 2);
+  memo.set(n, result);
+  return result;
+}
+console.log(fib(90));
+```
+
+`fib(90)` instantly, where the naive version would take longer than you'd live. Trading a little memory for a lot of speed like this is one of the most important ideas in computer science.
+
+## WeakMap and WeakSet
+
+You'll occasionally see `WeakMap` and `WeakSet`. Their keys must be objects, and they don't keep those objects alive: once nothing else refers to an object, it's removed automatically. Libraries use them to attach extra data to objects they don't own, without causing memory leaks. You can safely ignore them for now.
+
+📚 **Go deeper:** javascript.info, "Map and Set" and "WeakMap and WeakSet"; MDN JavaScript Guide, "Keyed collections"; *Eloquent JavaScript* (4th ed.), chapter 6, "Maps".
+--- goals
+- store unique values with a Set and remove duplicates from arrays
+- compute intersections, unions and differences of sets
+- use a Map for lookup tables with `set`, `get`, `has`, `delete` and `size`
+- choose between a Map and a plain object
+- convert between Maps, objects and arrays of pairs
+- count, group and memoize with Maps
+--- quiz
+? What does `new Set([3, 1, 3, 2, 1]).size` give?
+- 5
++ 3
+- 2
+- 1
+> Duplicates are ignored: the set holds 3, 1 and 2.
+? Which gives an array of the unique values of `arr`?
+- `new Set(arr)`
++ `[...new Set(arr)]`
+- `arr.unique()`
+- `Set.from(arr).toArray()`
+> A Set removes duplicates; spreading it into [ ] turns it back into an array.
+? What does `new Map([["a", 1]]).get("b")` give?
+- `null`
+- `0`
++ `undefined`
+- An error
+> Missing keys give undefined, just like missing object properties.
+? Why can `{}` be a risky word counter while `new Map()` isn't?
++ Plain objects inherit properties such as `constructor` and `toString`, which look like existing keys
+- Objects can't store numbers
+- Maps are always faster for everything
+- Objects can only hold 100 keys
+> A Map starts truly empty; an object already "has" some built-in keys.
+? Which is the fastest way to check whether a value is among a million collected values?
+- `array.includes(value)`
+- `array.indexOf(value) !== -1`
++ `set.has(value)` on a Set of them
+- `array.find((x) => x === value)`
+> Set lookups don't look through the items one by one.
+? What does `Object.fromEntries(new Map([["x", 1], ["y", 2]]))` give?
+- `[["x", 1], ["y", 2]]`
++ `{ x: 1, y: 2 }`
+- `Map(2) { 'x' => 1, 'y' => 2 }`
+- `["x", "y"]`
+> fromEntries builds an object from [key, value] pairs, and a Map iterates as pairs.
+--- exercise code javascript
+::prompt
+Two classes have lists of student names (with possible duplicates and different capitalisation). Write `compareClasses(a, b)` that returns an object with three **alphabetically sorted** arrays of lowercase names: `both` (in both classes), `onlyA` and `onlyB`. Use Sets.
+::starter
+function compareClasses(a, b) {
+}
+::solution
+function compareClasses(a, b) {
+  const setA = new Set(a.map((n) => n.toLowerCase()));
+  const setB = new Set(b.map((n) => n.toLowerCase()));
+  const sorted = (arr) => arr.sort((x, y) => x.localeCompare(y));
+  return {
+    both: sorted([...setA].filter((n) => setB.has(n))),
+    onlyA: sorted([...setA].filter((n) => !setB.has(n))),
+    onlyB: sorted([...setB].filter((n) => !setA.has(n))),
+  };
+}
+::tests
+assert.deepStrictEqual(compareClasses(["Ada", "bob", "Cy", "ada"], ["BOB", "dee", "cy"]), { both: ["bob", "cy"], onlyA: ["ada"], onlyB: ["dee"] });
+assert.deepStrictEqual(compareClasses([], ["x"]), { both: [], onlyA: [], onlyB: ["x"] });
+assert.deepStrictEqual(compareClasses(["Zed", "amy"], ["AMY", "zed"]), { both: ["amy", "zed"], onlyA: [], onlyB: [] });
+::hints
+- Lowercase the names with `map` before making each Set.
+- Spread a Set into an array to `filter` it; `setB.has(n)` tests membership.
+--- exercise code javascript
+::prompt
+Write `firstRepeat(items)` that returns the first item that appears for the **second** time while reading the array from left to right, or `undefined` if every item is unique. It must work for any kind of value (numbers, strings, even objects by reference) and look at each item only once: use a Set of the items seen so far.
+::starter
+function firstRepeat(items) {
+}
+::solution
+function firstRepeat(items) {
+  const seen = new Set();
+  for (const item of items) {
+    if (seen.has(item)) return item;
+    seen.add(item);
+  }
+  return undefined;
+}
+::tests
+assert.strictEqual(firstRepeat([3, 1, 4, 1, 5, 3]), 1);
+assert.strictEqual(firstRepeat(["a", "b", "c"]), undefined);
+assert.strictEqual(firstRepeat([]), undefined);
+assert.strictEqual(firstRepeat([1, "1", 1]), 1);
+const __o = { id: 1 };
+assert.strictEqual(firstRepeat([{ id: 1 }, __o, __o]), __o);
+::hints
+- Loop once; before adding an item to the Set, check whether it's already there.
+- A Set compares with the same rules as `===` (except that NaN equals NaN), so 1 and "1" are different.
+--- exercise code javascript
+::prompt
+Write `inventory(events)` that processes a list of stock events like `{ type: "in", item: "apple", qty: 5 }` or `{ type: "out", item: "apple", qty: 2 }`, and returns a **Map** from item to quantity in stock. An `"out"` event for more than is in stock throws an `Error` with the message `"Not enough <item>"`. Items whose quantity drops to exactly 0 are removed from the Map.
+::starter
+function inventory(events) {
+}
+::solution
+function inventory(events) {
+  const stock = new Map();
+  for (const { type, item, qty } of events) {
+    const current = stock.get(item) ?? 0;
+    if (type === "in") {
+      stock.set(item, current + qty);
+    } else {
+      if (qty > current) throw new Error(`Not enough ${item}`);
+      if (current - qty === 0) stock.delete(item);
+      else stock.set(item, current - qty);
+    }
+  }
+  return stock;
+}
+::tests
+const __s = inventory([
+  { type: "in", item: "apple", qty: 5 },
+  { type: "in", item: "pear", qty: 2 },
+  { type: "out", item: "apple", qty: 3 },
+  { type: "out", item: "pear", qty: 2 },
+]);
+assert.ok(__s instanceof Map, "return a Map");
+assert.deepStrictEqual([...__s], [["apple", 2]]);
+assert.strictEqual(inventory([]).size, 0);
+assert.throws(() => inventory([{ type: "out", item: "kiwi", qty: 1 }]), /Not enough kiwi/);
+assert.throws(() => inventory([{ type: "in", item: "fig", qty: 1 }, { type: "out", item: "fig", qty: 2 }]), /Not enough fig/);
+::hints
+- Destructure each event in the loop: `for (const { type, item, qty } of events)`.
+- `stock.get(item) ?? 0` is the current quantity, even for new items.
+- Remove items that reach zero with `stock.delete(item)`.
+--- cards
+Set :: A collection of unique values: add, has, delete, size. Keeps insertion order.
+Removing duplicates :: [...new Set(arr)]
+Set operations :: Intersection: [...a].filter(x => b.has(x)). Union: new Set([...a, ...b]). (Or a.intersection(b) in 2024+.)
+Map :: Key-value pairs with keys of any type: set, get, has, delete, size; iterates as [key, value].
+Map vs object :: Objects for fixed records; Maps for dynamic lookup tables, non-string keys, or keys from user data.
+Object.entries ↔ Map :: new Map(Object.entries(obj)); Object.fromEntries(map).
+Memoization :: Remember results in a Map so each is computed once: if (memo.has(n)) return memo.get(n);
+
+=== lesson js-json | JSON | 75
+## Data that travels
+
+Programs constantly exchange data: a web page asks a server for products, an app saves settings to a file, two services send each other messages. They need a common text format, and the most common by far is **JSON** (JavaScript Object Notation). It looks almost exactly like JavaScript objects and arrays:
+
+```json
+{
+  "name": "Ada Lovelace",
+  "born": 1815,
+  "languages": ["English", "French"],
+  "mathematician": true,
+  "spouse": null
+}
+```
+
+Every language can read and write JSON (Python has its `json` module, for instance), which is why it became the universal language of web APIs.
+
+## JSON's rules
+
+JSON is **stricter** than JavaScript:
+
+- Keys **must** be in **double quotes**: `{"name": "Ada"}`, never `{name: 'Ada'}`.
+- Strings use double quotes only.
+- Values can be strings, numbers, `true`, `false`, `null`, arrays and objects. No `undefined`, functions, dates, `NaN` or `Infinity`.
+- No trailing commas, and no comments.
+
+## JSON.stringify: from values to text
+
+```js
+const user = { name: "Ada", born: 1815, languages: ["English", "French"], admin: false };
+const text = JSON.stringify(user);
+console.log(text);
+console.log(typeof text);
+console.log(JSON.stringify(user, null, 2));
+```
+
+The third argument indents the output, which makes it readable for humans (great for config files and debugging). Watch what happens to values JSON can't represent:
+
+```js
+const tricky = {
+  when: new Date(Date.UTC(2026, 9, 14)),
+  nothing: undefined,
+  greet() { return "hi"; },
+  notANumber: NaN,
+  tags: new Set(["a"]),
+};
+console.log(JSON.stringify(tricky));
+```
+
+- Dates become ISO strings (`"2026-10-14T00:00:00.000Z"`), but they come back as **strings**, not dates.
+- Properties holding `undefined` or functions disappear (in arrays they become `null`).
+- `NaN` and `Infinity` become `null`.
+- Maps and Sets become `{}`: convert them first, e.g. `[...set]` or `Object.fromEntries(map)`.
+
+The second argument can choose which properties to keep: `JSON.stringify(user, ["name", "born"])`.
+
+## JSON.parse: from text to values
+
+```js
+const text = '{"title": "Dune", "year": 1965, "tags": ["sci-fi", "classic"]}';
+const book = JSON.parse(text);
+console.log(book.title, book.tags[1], book.year + 1);
+```
+
+`JSON.parse` gives you real JavaScript objects and arrays. If the text isn't valid JSON, it throws a `SyntaxError` that tells you the position of the problem:
+
+```js
+const broken = "{name: 'Dune'}";
+JSON.parse(broken);
+```
+
+Text from outside your program (a file, a server, a user) can always be broken, so real code wraps `JSON.parse` in `try`/`catch` (Module 7) and checks that the data has the shape it expects:
+
+```js
+function parseConfig(text) {
+  try {
+    return JSON.parse(text);
+  } catch (error) {
+    console.log("Invalid config:", error.message);
+    return {};
+  }
+}
+console.log(parseConfig('{"theme": "dark"}'));
+console.log(parseConfig("{oops}"));
+```
+
+~~~check
+? Which is valid JSON?
+- `{name: "Ada"}`
+- `{'name': 'Ada'}`
++ `{"name": "Ada", "tags": []}`
+- `{"name": "Ada",}`
+> Keys and strings need double quotes, and trailing commas aren't allowed.
+~~~
+
+## Bringing dates back
+
+Because dates turn into strings, parsing gives you strings. The second argument of `JSON.parse`, a **reviver** function, can convert values on the way in:
+
+```js
+const saved = JSON.stringify({ event: "Launch", at: new Date(Date.UTC(2026, 0, 1)) });
+const restored = JSON.parse(saved, (key, value) => (key === "at" ? new Date(value) : value));
+console.log(typeof restored.at, restored.at.getUTCFullYear());
+```
+
+## Where you'll use JSON
+
+- **Web APIs**: `fetch` responses are usually JSON, read with `await response.json()` (Module 10).
+- **Saving data in the browser**: `localStorage` only stores strings, so apps save with `localStorage.setItem("todos", JSON.stringify(todos))` and load with `JSON.parse(localStorage.getItem("todos") ?? "[]")`. DevQuest saves your progress exactly this way.
+- **Configuration files**: `package.json` (Module 11), `tsconfig.json` and countless others.
+- **Copying simple data**: `JSON.parse(JSON.stringify(data))` makes a deep copy, with the losses listed above. Prefer `structuredClone`.
+
+📚 **Go deeper:** json.org (the whole format on one page); javascript.info, "JSON methods, toJSON"; MDN, "Working with JSON".
+--- goals
+- read and write JSON, following its stricter rules
+- convert values to JSON text with `JSON.stringify`, including pretty-printing
+- predict what happens to dates, `undefined`, functions, `NaN`, Maps and Sets
+- parse JSON text with `JSON.parse` and handle invalid input
+- restore dates with a reviver function
+--- quiz
+? What does `JSON.stringify({ a: 1, b: undefined })` give?
+- `'{"a":1,"b":undefined}'`
++ `'{"a":1}'`
+- `'{"a":1,"b":null}'`
+- An error
+> Properties with undefined values are left out.
+? What type is `JSON.parse('{"at": "2026-01-01T00:00:00.000Z"}').at`?
+- a Date
++ a string
+- a number
+- undefined
+> JSON has no date type, so dates travel as strings unless a reviver converts them.
+? What happens with `JSON.parse("{'a': 1}")`?
+- It returns `{ a: 1 }`
++ It throws a SyntaxError
+- It returns `undefined`
+- It returns the string unchanged
+> Single quotes aren't valid JSON.
+? What does `JSON.stringify(new Set([1, 2]))` give?
+- `'[1,2]'`
++ `'{}'`
+- `'Set(2) {1, 2}'`
+- An error
+> Sets and Maps have no JSON form; convert them first, e.g. `JSON.stringify([...set])`.
+? Why do browser apps call `JSON.stringify` before `localStorage.setItem`?
++ localStorage can only store strings
+- It makes the data smaller
+- It encrypts the data
+- localStorage requires double quotes
+> Objects must be turned into text to be stored, and parsed back when loaded.
+--- exercise code javascript
+::prompt
+An app saves a list of tasks in browser storage as JSON. Write `saveTasks(tasks)` that returns the JSON string, and `loadTasks(text)` that turns it back into an array where each task's `due` property is a real `Date` again (use a reviver). If `text` is `null` (nothing saved yet) or invalid JSON, `loadTasks` returns an empty array.
+::starter
+function saveTasks(tasks) {
+}
+
+function loadTasks(text) {
+}
+::solution
+function saveTasks(tasks) {
+  return JSON.stringify(tasks);
+}
+
+function loadTasks(text) {
+  if (text === null) return [];
+  try {
+    return JSON.parse(text, (key, value) => (key === "due" ? new Date(value) : value));
+  } catch {
+    return [];
+  }
+}
+::tests
+const __tasks = [{ title: "Write tests", due: new Date(Date.UTC(2026, 9, 20)) }, { title: "Ship it", due: new Date(Date.UTC(2026, 10, 1)) }];
+const __text = saveTasks(__tasks);
+assert.strictEqual(typeof __text, "string");
+const __back = loadTasks(__text);
+assert.deepStrictEqual(__back, __tasks);
+assert.ok(__back[0].due instanceof Date, "due must be a Date again");
+assert.deepStrictEqual(loadTasks(null), []);
+assert.deepStrictEqual(loadTasks("{not json"), []);
+assert.deepStrictEqual(loadTasks("[]"), []);
+::hints
+- A reviver gets `(key, value)` and returns the value to use: `key === "due" ? new Date(value) : value`.
+- Wrap `JSON.parse` in `try { ... } catch { return []; }` for invalid text.
+--- exercise code javascript
+::prompt
+Write `toJsonSafe(value)` that prepares data for `JSON.stringify` by converting, recursively: **Maps** into plain objects, **Sets** into arrays, and **Dates** into ISO strings (`date.toISOString()`). Arrays and plain objects are copied with their contents converted; other values are returned as they are.
+::starter
+function toJsonSafe(value) {
+}
+::solution
+function toJsonSafe(value) {
+  if (value instanceof Map) return Object.fromEntries([...value].map(([k, v]) => [k, toJsonSafe(v)]));
+  if (value instanceof Set) return [...value].map(toJsonSafe);
+  if (value instanceof Date) return value.toISOString();
+  if (Array.isArray(value)) return value.map(toJsonSafe);
+  if (value !== null && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, toJsonSafe(v)]));
+  }
+  return value;
+}
+::tests
+const __data = { tags: new Set(["a", "b"]), scores: new Map([["ada", 9]]), at: new Date(Date.UTC(2026, 0, 2)), list: [new Set([1])], n: 5, s: "x", nil: null };
+assert.deepStrictEqual(toJsonSafe(__data), { tags: ["a", "b"], scores: { ada: 9 }, at: "2026-01-02T00:00:00.000Z", list: [[1]], n: 5, s: "x", nil: null });
+assert.strictEqual(JSON.stringify(toJsonSafe(new Map([["k", new Set([1, 2])]]))), '{"k":[1,2]}');
+assert.strictEqual(toJsonSafe(7), 7);
+::hints
+- Check the special types first with `instanceof Map`, `instanceof Set` and `instanceof Date`.
+- For arrays, `map` each item through `toJsonSafe`; for plain objects, go through `Object.entries` and back with `Object.fromEntries`.
+- Remember `typeof null` is "object": rule it out before treating a value as an object.
+--- cards
+JSON :: A text format for data: objects, arrays, strings, numbers, true/false, null. Keys in double quotes; no trailing commas or comments.
+JSON.stringify(value, keys?, indent?) :: Value → JSON text. JSON.stringify(obj, null, 2) pretty-prints.
+Lost in JSON :: undefined and functions vanish; NaN/Infinity become null; Dates become strings; Maps/Sets become {}.
+JSON.parse(text, reviver?) :: JSON text → values. Throws SyntaxError on invalid input; the reviver converts values on the way in.
+localStorage + JSON :: setItem(key, JSON.stringify(data)); JSON.parse(getItem(key) ?? "[]").
+
+=== lesson js-m6-test | Module 6 test | 200 | exam
+This test covers Module 6: arrays and their methods, objects, destructuring and spread, references and copies, Map and Set, and JSON. These are the tools you'll use in almost every program you write from now on.
+
+Before you start, check that you can:
+
+- choose between `map`, `filter`, `find`, `some`, `every` and `reduce`, and sort with a comparator;
+- read and update nested data, and loop over objects with `Object.entries`;
+- destructure with defaults, write options objects, and copy with spread;
+- explain why `{ a: 1 } === { a: 1 }` is false, and avoid mutating inputs;
+- pick a Map or a Set when an object or array isn't the right tool;
+- convert data to and from JSON, knowing what gets lost.
+
+## Practise more
+
+- Code Dojo: [Chunk an Array](#/dojo/dojo-js-chunk) and [Deep Equal](#/dojo/dojo-js-deep-equal).
+- Project: [Library Management (JavaScript)](#/projects/library-system) uses Maps, arrays and objects together (it also uses classes, from Module 8).
+--- goals
+- process collections with array methods
+- model data with objects, Maps and Sets
+- copy and update data safely
+- exchange data as JSON
+--- quiz
+? What does this print?
+```js
+const r = [5, 3, 8].map((n, i) => n * i);
+console.log(r);
+```
+- `[ 5, 3, 8 ]`
++ `[ 0, 3, 16 ]`
+- `[ 5, 6, 24 ]`
+- `[ 0, 1, 2 ]`
+> The callback gets each item and its index: 5×0, 3×1, 8×2.
+? What does `[3, 9, 4].reduce((acc, n) => Math.max(acc, n), 0)` return?
+- 16
++ 9
+- 0
+- `[9]`
+> The accumulator keeps the biggest value so far.
+? What does this print?
+```js
+const a = [1, 2, 3];
+const b = a;
+const c = [...a];
+a.push(4);
+console.log(b.length, c.length);
+```
+- `3 3`
++ `4 3`
+- `4 4`
+- `3 4`
+> b is an alias for a; c is a copy made before the push.
+? What does `const { x = 1, y = 2 } = { y: 5 };` give?
++ `x` is 1 and `y` is 5
+- `x` is undefined and `y` is 5
+- `x` is 1 and `y` is 2
+- An error
+> Defaults apply only to missing (or undefined) properties.
+? `const m = new Map(); m.set("a", 1); m.set("a", 2);` What is `m.size`?
++ 1
+- 2
+- 0
+- An error
+> Setting an existing key replaces its value.
+? What does `JSON.stringify({ list: [1, undefined, 3] })` give?
+- `'{"list":[1,3]}'`
++ `'{"list":[1,null,3]}'`
+- `'{"list":[1,undefined,3]}'`
+- An error
+> In arrays, undefined becomes null, so positions are kept.
+? Which line sorts `users` by `name` alphabetically without changing the original array?
+- `users.sort((a, b) => a.name - b.name)`
++ `users.toSorted((a, b) => a.name.localeCompare(b.name))`
+- `users.sort()`
+- `[...users].sort((a, b) => a.name > b.name)`
+> Subtracting strings gives NaN, and a comparator must return a number. toSorted leaves the original alone.
+? What does `user?.address?.city ?? "N/A"` give when `user` is `{ address: { city: "" } }`?
++ `""`
+- `"N/A"`
+- `undefined`
+- An error
+> An empty string is not null or undefined, so ?? keeps it.
+--- exercise code javascript
+::prompt
+You get an array of sales like `{ region: "north", rep: "ada", amount: 120 }`. Write `report(sales)` that returns an array of `{ region, total, best }` objects, one per region, sorted by `total` (highest first). `best` is the rep with the highest total amount **in that region**. Use a Map (or objects) to group by region, and reduce or loops to total.
+::starter
+function report(sales) {
+}
+::solution
+function report(sales) {
+  const regions = new Map();
+  for (const { region, rep, amount } of sales) {
+    if (!regions.has(region)) regions.set(region, new Map());
+    const reps = regions.get(region);
+    reps.set(rep, (reps.get(rep) ?? 0) + amount);
+  }
+  const rows = [];
+  for (const [region, reps] of regions) {
+    let total = 0;
+    let best = null;
+    for (const [rep, amount] of reps) {
+      total += amount;
+      if (best === null || amount > reps.get(best)) best = rep;
+    }
+    rows.push({ region, total, best });
+  }
+  return rows.sort((a, b) => b.total - a.total);
+}
+::tests
+const __sales = [
+  { region: "north", rep: "ada", amount: 120 },
+  { region: "south", rep: "bob", amount: 300 },
+  { region: "north", rep: "cy", amount: 90 },
+  { region: "north", rep: "cy", amount: 50 },
+  { region: "south", rep: "dee", amount: 40 },
+];
+assert.deepStrictEqual(report(__sales), [
+  { region: "south", total: 340, best: "bob" },
+  { region: "north", total: 260, best: "cy" },
+]);
+assert.deepStrictEqual(report([]), []);
+assert.deepStrictEqual(report([{ region: "east", rep: "x", amount: 1 }]), [{ region: "east", total: 1, best: "x" }]);
+::hints
+- A Map from region to a Map from rep to total does the grouping in one loop.
+- For each region, add up its reps' totals and keep the rep with the biggest one.
+- Finally sort the rows with `(a, b) => b.total - a.total`.
+--- exercise code javascript
+::prompt
+Write `flatten(value)` that turns any nesting of arrays into one flat array, **recursively**, without using `.flat()`: `flatten([1, [2, [3, [4]], 5]])` is `[1, 2, 3, 4, 5]`. A value that isn't an array is returned inside an array: `flatten(7)` is `[7]`.
+::starter
+function flatten(value) {
+}
+::solution
+function flatten(value) {
+  if (!Array.isArray(value)) return [value];
+  const result = [];
+  for (const item of value) {
+    result.push(...flatten(item));
+  }
+  return result;
+}
+::tests
+assert.deepStrictEqual(flatten([1, [2, [3, [4]], 5]]), [1, 2, 3, 4, 5]);
+assert.deepStrictEqual(flatten([]), []);
+assert.deepStrictEqual(flatten([[[]]]), []);
+assert.deepStrictEqual(flatten(7), [7]);
+assert.deepStrictEqual(flatten(["a", ["b", ["c"]]]), ["a", "b", "c"]);
+assert.deepStrictEqual(flatten([{ x: [1] }]), [{ x: [1] }]);
+::hints
+- Base case: something that isn't an array becomes a one-item array.
+- For an array, flatten each item and add all of its results: `result.push(...flatten(item))`.
+--- exercise code javascript
+::prompt
+A to-do app keeps its state as `{ todos: [...], filter: "all" }`. Write a function `update(state, action)` that returns a **new** state (never changing the old one) for these actions:
+
+- `{ type: "add", text }`: add `{ id, text, done: false }` where `id` is one more than the highest existing id (1 for an empty list);
+- `{ type: "toggle", id }`: flip `done` for that todo;
+- `{ type: "remove", id }`: remove that todo;
+- `{ type: "filter", value }`: set `filter`;
+- anything else: return the same `state` object unchanged.
+
+(This is exactly how state management works in React apps, with a function called a **reducer**.)
+::starter
+function update(state, action) {
+}
+::solution
+function update(state, action) {
+  switch (action.type) {
+    case "add": {
+      const id = state.todos.reduce((max, t) => Math.max(max, t.id), 0) + 1;
+      return { ...state, todos: [...state.todos, { id, text: action.text, done: false }] };
+    }
+    case "toggle":
+      return { ...state, todos: state.todos.map((t) => (t.id === action.id ? { ...t, done: !t.done } : t)) };
+    case "remove":
+      return { ...state, todos: state.todos.filter((t) => t.id !== action.id) };
+    case "filter":
+      return { ...state, filter: action.value };
+    default:
+      return state;
+  }
+}
+::tests
+const __s0 = { todos: [], filter: "all" };
+const __s1 = update(__s0, { type: "add", text: "Learn Map" });
+const __s2 = update(__s1, { type: "add", text: "Learn JSON" });
+assert.deepStrictEqual(__s2.todos, [{ id: 1, text: "Learn Map", done: false }, { id: 2, text: "Learn JSON", done: false }]);
+assert.deepStrictEqual(__s0, { todos: [], filter: "all" }, "the old state must not change");
+const __s3 = update(__s2, { type: "toggle", id: 1 });
+assert.strictEqual(__s3.todos[0].done, true);
+assert.strictEqual(__s2.todos[0].done, false, "toggle must not change the old todo");
+assert.strictEqual(__s3.todos[1], __s2.todos[1], "unchanged todos can be reused");
+const __s4 = update(__s3, { type: "remove", id: 1 });
+assert.deepStrictEqual(__s4.todos.map((t) => t.id), [2]);
+assert.strictEqual(update(__s4, { type: "add", text: "x" }).todos[1].id, 3);
+assert.strictEqual(update(__s4, { type: "filter", value: "done" }).filter, "done");
+assert.strictEqual(update(__s4, { type: "unknown" }), __s4);
+::hints
+- A `switch` on `action.type`, with each case returning `{ ...state, ... }`.
+- New id: the largest id (with `reduce`, starting from 0) plus 1.
+- Toggle with `map` and a spread copy of the one todo; remove with `filter`.

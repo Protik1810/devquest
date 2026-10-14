@@ -44,7 +44,8 @@ export function parseTrackFile(...files: string[]): Track {
   }
   const lessons: Lesson[] = [];
   let module: string | undefined;
-  for (const block of text.slice(head[0].length).split(/^=== /m).slice(1)) {
+  // Only "=== module" and "=== lesson" lines start blocks, so lesson text may contain lines like "=== Receipt ==="
+  for (const block of text.slice(head[0].length).split(/^=== (?=module |lesson )/m).slice(1)) {
     if (block.startsWith('module ')) module = block.slice(7, block.indexOf('\n')).trim();
     else if (block.startsWith('lesson ')) lessons.push({ ...parseLesson(meta.id, block.slice(7)), ...(module ? { module } : {}) });
     else throw new Error(`${meta.id}: unknown block "=== ${block.slice(0, 30)}"`);
@@ -70,9 +71,13 @@ export function parseTrackFile(...files: string[]): Track {
 function parseLesson(trackId: string, block: string): Lesson {
   const nl = block.indexOf('\n');
   const [id, title, xp, flags = ''] = block.slice(0, nl).split('|').map((s) => s.trim());
-  const [body, ...sections] = block.slice(nl + 1).split(/^--- /m);
+  const [body, ...sections] = block.slice(nl + 1).split(/^--- (?=goals|quiz|cards|exercise )/m);
   const lesson: Lesson = { id, title, xp: Number(xp) || 50, body: body.trim(), ...(flags.split(/\s+/).includes('exam') ? { exam: true } : {}) };
   const where = `${trackId}/${id}`;
+  // A misspelt header would otherwise be silently swallowed by the text before it
+  const texts = [body, ...sections.map((sec) => sec.slice(sec.indexOf('\n') + 1))].join('\n');
+  const typo = texts.match(/^(--- [a-z]+(?: [a-z]+)*|=== [a-z]+ [^\n]*\|[^\n]*)$/m);
+  if (typo) throw new Error(`${where}: "${typo[1]}" looks like a misspelt section or lesson header`);
   // Validate inline checks now, so a typo fails the build instead of a lesson page
   for (const m of lesson.body.matchAll(CHECK_BLOCK)) parseQuestions(where, m[1]);
   const exercises: Exercise[] = [];

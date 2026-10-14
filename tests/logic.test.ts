@@ -133,4 +133,24 @@ Text.
     const q = t.lessons[1].exercise;
     expect(q?.kind === 'quiz' && q.questions[0].answer).toBe(1);
   });
+
+  const header = '+++ track\nid: demo\ntitle: Demo\nicon: x\ntier: 1\ncolor: #000\nkind: core\nblurb: A demo.\n+++\n';
+
+  it('lets lesson text contain lines that start with === or ---', () => {
+    const t = parseTrackFile(`${header}
+=== lesson d1 | First | 40
+=== Receipt ===
+--- a dashed line of text, with punctuation.
+--- cards
+=== vs == :: compare with ===
+`);
+    expect(t.lessons).toHaveLength(1);
+    expect(t.lessons[0].body).toContain('=== Receipt ===');
+    expect(t.lessons[0].cards).toEqual([{ front: '=== vs ==', back: 'compare with ===' }]);
+  });
+
+  it('rejects misspelt section and lesson headers instead of swallowing them', () => {
+    expect(() => parseTrackFile(`${header}\n=== lesson d1 | First | 40\nText.\n--- exercize code python\n`)).toThrow(/misspelt/);
+    expect(() => parseTrackFile(`${header}\n=== lesson d1 | First | 40\nText.\n=== lessson d2 | Second | 40\n`)).toThrow(/misspelt/);
+  });
 });
