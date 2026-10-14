@@ -1,7 +1,7 @@
 import type { Lesson, Tier, Track } from './types';
 import { exercisesOf } from './exercises';
 import { foundations } from './foundations';
-import { javascript, git } from './javascript';
+import { git } from './git';
 import { shell } from './shell';
 import { dsa } from './dsa';
 import { sql } from './sql';
@@ -25,6 +25,9 @@ export const redis = parseTrackFile(redisSrc);
 /** The Python course spans one lesson file per module (tracks/python/NN-*.txt), read in file-name order. */
 const pythonFiles = import.meta.glob<string>('./tracks/python/*.txt', { query: '?raw', import: 'default', eager: true });
 export const python = parseTrackFile(...Object.keys(pythonFiles).sort().map((f) => pythonFiles[f]));
+/** The JavaScript course, likewise one file per module (tracks/javascript/NN-*.txt). */
+const javascriptFiles = import.meta.glob<string>('./tracks/javascript/*.txt', { query: '?raw', import: 'default', eager: true });
+export const javascript = parseTrackFile(...Object.keys(javascriptFiles).sort().map((f) => javascriptFiles[f]));
 import { SKILL_TRACKS } from './skills';
 import { typescript } from './langs/typescript';
 import { go } from './langs/go';

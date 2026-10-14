@@ -1,0 +1,1701 @@
+=== module Module 1 · Getting started
+
+=== lesson js-basics | Your first program | 60
+## What is a program?
+
+A **program** is a list of instructions for a computer, written precisely enough that there is no room for guessing. A recipe can say "add a pinch of salt"; a computer needs "add 0.5 grams of salt". Learning to program is mostly learning to describe what you want *that* precisely, and then letting the machine repeat it a million times without getting bored.
+
+**JavaScript** is the programming language of the web. Every modern browser runs it, which makes it the one language that runs on practically every computer, phone and tablet without installing anything. It long ago escaped the browser too:
+
+- **Websites and web apps**: every interactive page you use (Gmail, YouTube, Google Docs) is driven by JavaScript.
+- **Servers**: **Node.js** runs JavaScript outside the browser, powering the back end of companies such as Netflix, PayPal and LinkedIn.
+- **Desktop and mobile apps**: VS Code, Slack, Discord and this very app (DevQuest) are built with JavaScript.
+- **Tools**: most of the tools web developers use every day are JavaScript programs themselves.
+
+The program that reads your JavaScript and carries it out is a **JavaScript engine**: V8 in Chrome, Edge and Node.js, SpiderMonkey in Firefox, JavaScriptCore in Safari. In DevQuest, your code runs in the engine of the browser or app you are using right now, so there is nothing to install.
+
+> 💡 **JavaScript is not Java.** The similar name was a marketing decision in 1995. The language's official standard is called **ECMAScript**, and a new edition comes out every year. The big modernisation was ECMAScript 2015 (often called "ES6"); this course teaches modern JavaScript from the start.
+
+## console.log(): making the computer say something
+
+```js
+console.log("Hello, World!");
+```
+
+- `console` is the **console**: the place where a program writes text messages. In a browser it's a panel of the developer tools; in Node.js it's the terminal; in DevQuest it's the output box under your code.
+- `.log` picks one of the console's tools. `console.log` is a **function**: a named action that JavaScript already knows how to do.
+- The parentheses **call** the function. What goes inside them is the **argument**: here, what to print.
+- `"Hello, World!"` is a **string**: a piece of text. The quotes mark where the text starts and ends; they are not printed.
+- The `;` ends the instruction, like a full stop ends a sentence.
+
+JavaScript has **three** kinds of quotes for strings. Pick whichever doesn't clash with the text inside:
+
+```js
+console.log("She said 'hi'");
+console.log('It is "fine"');
+console.log(`It's "fine", she said`);
+```
+
+The third kind, with **backticks** (the `` ` `` key, usually left of the 1 key), has a superpower you'll use constantly: `${ }` inside it is replaced by the value of whatever JavaScript you put between the braces.
+
+```js
+console.log(`2 + 3 = ${2 + 3}`);
+console.log(`A day has ${24 * 60} minutes`);
+```
+
+These are called **template literals**. Module 2 covers them in depth.
+
+## Several values in one call
+
+Give `console.log` several arguments separated by commas, and it prints them on one line, **separated by one space**:
+
+```js
+console.log("I am", 12, "years old");
+console.log("Total:", 19.99);
+```
+
+Numbers don't need quotes. `12` is a number; `"12"` is text that happens to contain digits. That difference matters a lot, as you'll see in a few lessons.
+
+Two more useful tricks:
+
+```js
+console.log();                          // an empty line
+console.log("line one\nline two");      // \n starts a new line
+```
+
+`\n` is how you write "new line" inside a string. Each `console.log` call ends with a new line, so the next one starts on a fresh line.
+
+~~~check
+? What does `console.log("Hi", 3, "you");` print?
+- `Hi3you`
++ `Hi 3 you`
+- `"Hi" 3 "you"`
+- An error, because 3 isn't text
+> Values separated by commas are printed with one space between them. The quotes are not printed.
+~~~
+
+## Semicolons
+
+A **statement** is one complete instruction, and in JavaScript statements end with `;`. If you forget one at the end of a line, JavaScript usually inserts it for you (this is called *automatic semicolon insertion*), but there are a few traps where it guesses wrong. Professional style guides differ: most teams write semicolons, and code formatters such as Prettier add them for you. In this course we always write them.
+
+## Comments
+
+Everything after `//` on a line is a **comment**, and so is everything between `/*` and `*/`. JavaScript ignores comments; they're there for the humans reading the code (including future you).
+
+```js
+// Greet the user. This whole line is a comment.
+console.log("Welcome!"); // a comment can also follow code
+
+/* A comment between these markers
+   can span several lines. */
+console.log("Bye!");
+```
+
+Good comments explain **why**, not what. `// prices are stored in cents to avoid rounding errors` helps a reader; `// log welcome` just repeats the code.
+
+## How JavaScript runs your file
+
+JavaScript runs a program **from top to bottom, one statement at a time**. This always prints first, second, third, in that order:
+
+```js
+console.log("first");
+console.log("second");
+console.log("third");
+```
+
+JavaScript is **case-sensitive**: `console.log` works, but `Console.log` and `console.Log` are different names that don't exist. It is also strict about punctuation: every `(` needs its `)`, every `{` its `}`, and every string needs a closing quote of the same kind. Spaces and indentation, on the other hand, are free: JavaScript doesn't care how you indent (unlike Python), but people do, so keep it neat.
+
+## Other console tools
+
+`console.log` has some siblings. `console.error("...")` and `console.warn("...")` print messages that browsers show in red and yellow, and Node.js sends to a separate "error" output. You'll meet `console.table` when you have tables of data. In DevQuest they all print to the same output box.
+
+## Common beginner mistakes
+
+- **Forgetting the quotes**: `console.log(Hello)` makes JavaScript look for something *named* `Hello`, which doesn't exist.
+- **Wrong capitals**: `Console.log(...)` or `console.Log(...)`.
+- **Curly "smart" quotes** copied from a word processor (`“Hello”`) aren't valid JavaScript. Use the plain `"`, `'` or `` ` `` keys.
+- **Mismatched quotes**: `"Hello'` starts with one kind and ends with another.
+- **A missing parenthesis**: `console.log("Hi"`.
+
+Each of these produces an error message. Reading them is the topic of the next lesson.
+
+> 💡 **How to study code**: type the examples yourself instead of pasting them. Press **✎ Edit** on any example, change something, *predict* what will happen, then press **▶ Run**. Being wrong about a prediction is the fastest way to learn.
+
+📚 **Go deeper:** MDN, "JavaScript first steps" (developer.mozilla.org/en-US/docs/Learn/JavaScript/First_steps); javascript.info, "Hello, world!" and "Code structure"; *Eloquent JavaScript* (4th ed.), Introduction.
+--- goals
+- explain what JavaScript, a JavaScript engine and Node.js are
+- display text and numbers with `console.log()`, including several values at once
+- use the three kinds of quotes, and `${ }` inside backticks to show a calculated value
+- write `//` and `/* */` comments that explain *why* code exists
+- recognise the most common beginner mistakes: missing quotes, wrong capitals, unclosed brackets
+--- quiz
+? What does this print?
+```js
+console.log("A", "B", "C");
+```
+- `ABC`
++ `A B C`
+- `A,B,C`
+- `"A" "B" "C"`
+> Each comma-separated value is printed with one space before the next.
+? What does this print?
+```js
+console.log("2 + 3 =", 2 + 3);
+```
+- `2 + 3 = 2 + 3`
++ `2 + 3 = 5`
+- `5 = 5`
+- `"2 + 3 =" 5`
+> The text in quotes is printed as it is; the calculation outside the quotes is worked out first.
+? Which line does NOT print the text Hi?
+- `console.log("Hi");`
+- `console.log('Hi');`
++ `Console.log("Hi");`
+- `` console.log(`Hi`); ``
+> JavaScript is case-sensitive: the console is called `console`, all lowercase.
+? How many lines does this program print?
+```js
+// console.log("one");
+console.log("two");
+console.log();
+/* console.log("three"); */
+console.log("four");
+```
+- 2
++ 3
+- 4
+- 5
+> The commented-out lines are ignored. The rest print "two", an empty line, and "four".
+? What does this print?
+```js
+console.log(`I have ${4 * 2} apples`);
+```
+- `I have ${4 * 2} apples`
+- `I have 4 * 2 apples`
++ `I have 8 apples`
+- `I have ${8} apples`
+> Inside backticks, `${ }` is replaced by the value of the expression between the braces.
+? Which of these runs on a web server rather than in a browser?
+- A JavaScript engine called V8
++ Node.js
+- ECMAScript
+- The console
+> Node.js runs JavaScript outside the browser (it uses the V8 engine). ECMAScript is the name of the language standard.
+--- exercise parsons javascript
+::prompt
+Put the lines in order so the program prints the receipt shown in **Expected output**. One line is broken and doesn't belong.
+::lines
+console.log("*** Receipt ***");
+console.log("Coffee:", 3.5);
+console.log("Muffin:", 2.25);
+console.log("Thank you!");
+::distractors
+Console.log("Thank you!");
+::expected
+*** Receipt ***
+Coffee: 3.5
+Muffin: 2.25
+Thank you!
+::hints
+- JavaScript runs the lines from top to bottom, so put them in the order the output shows.
+- `Console` with a capital C isn't something JavaScript knows.
+--- exercise code javascript
+::prompt
+Write a program that prints exactly these three lines, using one `console.log` per line.
+::starter
+// Write three console.log() calls below
+::solution
+console.log("Hello, World!");
+console.log("My name is JavaScript.");
+console.log("I run programs top to bottom.");
+::expected
+Hello, World!
+My name is JavaScript.
+I run programs top to bottom.
+::hints
+- Each line of output is one `console.log("...");` call.
+- Copy the punctuation exactly: the comma, the full stops and the capital letters all count.
+--- exercise code javascript
+::prompt
+Two small tasks, one `console.log` call each:
+
+1. Print `The answer is 42`, where JavaScript calculates the 42 as `6 * 7` (keep `6 * 7` in your code).
+2. Print the two lines `Roses are red` and `Violets are blue` with a **single** `console.log` call, using `\n`.
+::starter
+// 1. "The answer is" followed by 6 * 7, calculated by JavaScript
+
+// 2. Two lines, one console.log call
+
+::solution
+console.log("The answer is", 6 * 7);
+console.log("Roses are red\nViolets are blue");
+::expected
+The answer is 42
+Roses are red
+Violets are blue
+::variants
+6 * 7 => 6 * 8
+::hints
+- Separate the text and the calculation with a comma: `console.log("text", 6 * 7);`. A template literal works too: `` `The answer is ${6 * 7}` ``.
+- `\n` inside a string starts a new line: `"first line\nsecond line"`.
+--- cards
+console.log() :: Prints its arguments to the console, separated by single spaces, followed by a new line.
+String :: A piece of text in quotes: "hello", 'hello' or `hello`. The quotes aren't part of the text.
+Template literal :: A string in backticks; ${expression} inside it is replaced by the expression's value: `2 + 2 = ${2 + 2}`.
+Comment :: Text after // (to the end of the line) or between /* and */ that JavaScript ignores.
+Node.js :: A program that runs JavaScript outside the browser, on servers and in the terminal.
+
+=== lesson js-reading-errors | Reading error messages | 60
+## Errors are messages, not failures
+
+Every programmer, at every level, sees error messages all day long. An error is not the computer telling you that you're bad at this; it's the computer telling you **exactly what confused it and where**. Learning to read errors calmly is one of the most valuable skills in programming.
+
+## The anatomy of an error
+
+Here is a program with a typo on line 3. Run it and look at the output:
+
+```js
+const name = "Ada";
+console.log("Hello");
+console.log(nme);
+```
+
+Notice that `Hello` was printed first. JavaScript ran the program from the top, and stopped at the line it couldn't do. DevQuest shows the error like this:
+
+```
+ReferenceError: nme is not defined (line 3)
+```
+
+1. **The error type**: `ReferenceError`. It tells you the *category* of problem.
+2. **The message**: `nme is not defined`. It tells you *what* went wrong: JavaScript was asked for something called `nme` and nothing has that name (the variable is called `name`).
+3. **The line**: line 3. Go there first.
+
+On your own computer, Node.js shows more detail for the same program:
+
+```
+/home/ada/hello.js:3
+console.log(nme);
+            ^
+
+ReferenceError: nme is not defined
+    at Object.<anonymous> (/home/ada/hello.js:3:13)
+    at Module._compile (node:internal/modules/cjs/loader:1554:14)
+    ...
+
+Node.js v22.12.0
+```
+
+- The first line names the file and line (`hello.js:3`), then shows that line with a `^` under the spot where things went wrong.
+- Then come the error type and message: the most important part.
+- The `at ...` lines are the **stack trace**: the chain of code that was running. The first one points to your file with `line:column` (`3:13`). Lines that mention `node:internal` are Node's own machinery; skip them.
+
+In a **browser**, errors appear in red in the developer tools' Console as `Uncaught ReferenceError: nme is not defined`, with a link like `app.js:3` on the right. Click it to jump to the line.
+
+## Syntax errors: nothing runs at all
+
+Before running anything, the engine reads (**parses**) the whole program to understand its grammar. If the grammar is broken, you get a **SyntaxError** and *not a single line runs*, not even the correct ones above the mistake:
+
+```js
+console.log("first");
+console.log("second";
+```
+
+The fix is a missing `)`. The line in the message is where the engine *noticed* the problem; sometimes the real mistake is a line or two earlier (an unclosed bracket on line 2 might only be noticed on line 5). Common syntax messages:
+
+| Message | Usual cause |
+|---|---|
+| `missing ) after argument list` | a forgotten `)`, or a missing comma between two values |
+| `Invalid or unexpected token` | a string with no closing quote, or a strange character such as a curly quote |
+| `Unexpected token ')'` | an extra bracket, or brackets that don't pair up |
+| `Unexpected identifier 'y'` | two things side by side with no operator or comma between them |
+| `Unexpected end of input` | a `{` or `(` that is never closed |
+| `Identifier 'x' has already been declared` | the same variable created twice |
+
+## Runtime errors: the program starts, then stops
+
+These happen while the program runs, at the first line that can't be done:
+
+| Error type | What it means | Example |
+|---|---|---|
+| `ReferenceError` | a name that doesn't exist: a typo, or something not created yet | `console.log(scroe)` |
+| `TypeError` | the right name, but the wrong kind of value for what you asked | `console.lg("hi")`: `console.lg is not a function` |
+| `RangeError` | a number outside the allowed range | `(3.14).toFixed(200)` |
+
+You'll meet `TypeError` most often. Its three classic messages are worth memorising:
+
+- `x is not a function`: you tried to call something that isn't a function (often a typo after a dot).
+- `Cannot read properties of undefined (reading 'length')`: you asked a value for one of its parts, but the value was `undefined` (empty). You'll see why in the next lessons.
+- `Assignment to constant variable.`: you tried to change a `const` (next lesson).
+
+~~~check
+? This program runs. What is printed before it stops?
+```js
+console.log("one");
+console.log("two");
+Console.log("three");
+console.log("four");
+```
+- Nothing: the error stops the program before it starts
++ `one` and `two`, then a `ReferenceError`
+- `one`, `two` and `four`
+- `one`, `two`, `three`, then a `ReferenceError`
+> It's a runtime error (the grammar is fine), so lines 1 and 2 run. Line 3 fails because `Console` doesn't exist, and the program stops there.
+~~~
+
+## Bugs that don't cause errors
+
+Here JavaScript is very different from stricter languages: many mistakes **don't** raise an error. They quietly produce a strange value instead:
+
+```js
+console.log("5" * "abc");          // NaN
+console.log(10 / 0);               // Infinity
+console.log("Total: " + 4 + 6);    // Total: 46, not 10!
+```
+
+`NaN` means "Not a Number": the result of maths that makes no sense. These silent bugs are often harder to find than real errors. When output looks wrong but there is no error, print the values along the way with `console.log` to see where things go off course. Later in the course, **tests** and **TypeScript** catch many of these for you.
+
+## A strategy for fixing errors
+
+1. **Read the error type and message.** Say it out loud in plain words: "it doesn't know any `nme`".
+2. **Go to the line.** For syntax errors, also look at the line or two above it.
+3. **Make one change, then run again.** Changing five things at once makes it impossible to learn what fixed it.
+4. **Fix the first error first.** One mistake can cause others further down.
+5. **Search the exact message** (without your own names) if you're stuck. MDN has a page explaining every JavaScript error message.
+
+> 💡 **The console.log trick.** When a result is wrong, add `console.log("price is", price);` lines to see the values as the program runs. It's the oldest debugging technique there is, and professionals use it every day. Remove those lines when you're done.
+
+📚 **Go deeper:** MDN, "JavaScript error reference" (developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Errors); javascript.info, "Debugging in the browser"; *Eloquent JavaScript* (4th ed.), chapter 8, "Bugs and Errors".
+--- goals
+- read an error's type, message and line, in DevQuest, Node.js and the browser
+- tell syntax errors (nothing runs) from runtime errors (the program stops part-way)
+- explain what `ReferenceError`, `TypeError` and `RangeError` mean
+- spot silent bugs that print `NaN`, `Infinity` or a wrongly joined string
+- fix errors one at a time, starting with the first
+--- quiz
+? You run a program and get `ReferenceError: totl is not defined (line 7)`. What is the most likely cause?
+- Line 7 is missing a semicolon
++ A typo: the name on line 7 doesn't match any variable (perhaps it should be `total`)
+- `totl` is a number, not a string
+- Line 7 has a missing bracket
+> A ReferenceError means "nothing has this name". Typos are the number one cause.
+? What does this program print?
+```js
+console.log("Hello");
+console.log("Bye";
+```
+- `Hello`, then an error
++ Nothing, only a SyntaxError
+- `Hello` and `Bye`
+- `Bye`, then an error
+> A syntax error is found before anything runs, so not even the first line prints.
+? What does `TypeError: console.lgo is not a function` tell you?
+- The `console` doesn't exist
++ `console` exists, but it has no function called `lgo`; probably a typo for `log`
+- You forgot the quotes around the text
+- The program has a missing bracket
+> "X is not a function" means you tried to call something that can't be called. Here it's a misspelt `log`.
+? What does this print?
+```js
+console.log("3" * "x");
+```
+- An error
+- `3x`
++ `NaN`
+- `0`
+> JavaScript can't turn "x" into a number, so the multiplication gives NaN ("Not a Number"). No error is raised.
+? In the stack trace line `at Object.<anonymous> (/home/ada/app.js:12:5)`, where did the error happen?
+- At line 5, column 12 of app.js
++ At line 12, column 5 of app.js
+- In Node's internal code
+- At line 12 of every file
+> The numbers after the file name are `line:column`.
+? You get five errors in a row. Which should you fix first?
++ The first one
+- The last one
+- The longest message
+- Any of them; the order doesn't matter
+> One mistake can cause later ones. Fixing the first often makes others disappear.
+--- exercise code javascript
+::prompt
+This little shop program has **three** different bugs: a syntax error, a `ReferenceError` and a `TypeError`. Fix them so it prints the expected output. Run it after each fix and read the next error.
+::starter
+console.log("Welcome to the shop!");
+console.log("Today's offer:", "apples");
+Console.log("Price per kg:", 3);
+console.log("Price for 2 kg:", 3 * 2;
+console.lg("See you soon!");
+::solution
+console.log("Welcome to the shop!");
+console.log("Today's offer:", "apples");
+console.log("Price per kg:", 3);
+console.log("Price for 2 kg:", 3 * 2);
+console.log("See you soon!");
+::expected
+Welcome to the shop!
+Today's offer: apples
+Price per kg: 3
+Price for 2 kg: 6
+See you soon!
+::hints
+- Start with the syntax error: nothing runs until it's fixed. Count the brackets on line 4.
+- `Console` with a capital C doesn't exist.
+- `console.lg` is not a function: what is the function really called?
+--- exercise code javascript
+::prompt
+This program runs without any error, yet it prints `Total: 46 items`. It should add the two numbers first and print `Total: 10 items`. Fix it **without** typing 10 yourself: keep `4 + 6` in the code and make JavaScript do the sum first.
+::starter
+console.log("Total: " + 4 + 6 + " items");
+::solution
+console.log("Total: " + (4 + 6) + " items");
+::expected
+Total: 10 items
+::variants
+4 + 6 => 4 + 7
+::hints
+- JavaScript works from left to right: `"Total: " + 4` is the text `"Total: 4"`, and adding 6 to text just joins it on.
+- Brackets make a part happen first, just like in maths: `(4 + 6)`.
+--- cards
+SyntaxError :: The program's grammar is broken (missing bracket, unclosed quote...). Found before anything runs, so nothing runs.
+ReferenceError :: A name that doesn't exist: usually a typo, or a variable used before it was created.
+TypeError :: The wrong kind of value for the operation, e.g. "x is not a function" or "Cannot read properties of undefined".
+Stack trace :: The "at ..." lines under an error: the chain of code that was running, each with file:line:column.
+NaN :: "Not a Number": the result of maths that makes no sense, like "abc" * 2. JavaScript gives NaN instead of raising an error.
+
+=== lesson js-variables | Variables: let and const | 70
+## Giving values a name
+
+A **variable** is a name that refers to a value, so you can use the value later and change it as the program runs. Think of a labelled box, or better, a **label you stick on a value**.
+
+```js
+let score = 0;
+const playerName = "Ada";
+console.log(playerName, "has", score, "points");
+```
+
+- `let` and `const` are **keywords**: words with a special meaning in JavaScript. They **declare** (create) a variable.
+- `score` is the variable's name.
+- `=` is **assignment**: "make the name on the left refer to the value on the right". It does *not* mean "equals" as in maths.
+- `0` is the value it starts with.
+
+When JavaScript sees a variable's name in an expression, it uses the variable's current value.
+
+## let: a variable that can change
+
+A `let` variable can be given a new value later. You only write `let` once, when you create it:
+
+```js
+let score = 0;
+console.log(score);
+score = 10;
+console.log(score);
+score = score + 5;
+console.log(score);
+```
+
+`score = score + 5` looks impossible in maths, but in programming it's natural: JavaScript first works out the right-hand side using the *current* value (10 + 5), then makes `score` refer to the result (15).
+
+## const: a name that never changes
+
+A `const` (constant) must get its value straight away, and can never be assigned again:
+
+```js
+const daysInWeek = 7;
+console.log(daysInWeek * 52);
+daysInWeek = 8;
+```
+
+Run it: the first `console.log` works, then `TypeError: Assignment to constant variable.`
+
+**Professional rule: use `const` by default, and `let` only when you actually need to reassign.** When a reader sees `const`, they know that name will refer to the same value for the rest of the code, which makes programs much easier to understand. (You'll learn in Module 6 that `const` protects the *name*, not the inside of objects and arrays.)
+
+## Shortcuts for updating a variable
+
+Changing a variable based on its current value is so common that there are shortcuts:
+
+| Shortcut | Means |
+|---|---|
+| `x += 5` | `x = x + 5` |
+| `x -= 2` | `x = x - 2` |
+| `x *= 3` | `x = x * 3` |
+| `x /= 4` | `x = x / 4` |
+| `x++` | `x = x + 1` |
+| `x--` | `x = x - 1` |
+
+```js
+let lives = 3;
+lives -= 1;
+lives++;
+lives *= 10;
+console.log(lives);
+```
+
+> 💡 `x++` and `++x` both add 1, but differ in the value of the *expression itself* (old value versus new value). Using them inside bigger expressions is a classic source of confusion, so write `x++;` as a statement of its own and you'll never have to care.
+
+## Tracing a program by hand
+
+Programmers often follow a program line by line on paper, writing down each variable's value. This is called **tracing**, and it's how you predict what code does before you run it.
+
+```js
+let a = 5;
+let b = a * 2;
+a = 1;
+b = b + a;
+console.log(a, b);
+```
+
+| After line | `a` | `b` |
+|---|---|---|
+| 1 | 5 | (not created yet) |
+| 2 | 5 | 10 |
+| 3 | 1 | 10 |
+| 4 | 1 | 11 |
+
+Changing `a` on line 3 doesn't change `b`: on line 2, `b` got the *value* 10, not a link to the formula `a * 2`.
+
+~~~check
+? What does this print?
+```js
+let x = 4;
+let y = x + 1;
+x = 10;
+console.log(y);
+```
+- 11
++ 5
+- 4
+- 10
+> When line 2 runs, `x` is 4, so `y` becomes 5. Changing `x` afterwards doesn't affect `y`.
+~~~
+
+## Naming rules and style
+
+A name may contain letters, digits, `_` and `$`, but can't start with a digit, can't contain spaces or `-`, and can't be a keyword (`let`, `const`, `if`, `class`, `return`...).
+
+| Name | Valid? |
+|---|---|
+| `score`, `totalPrice`, `_count`, `$el` | ✅ |
+| `2ndPlace` | ❌ starts with a digit |
+| `total-price` | ❌ `-` means minus |
+| `let` | ❌ a keyword |
+
+JavaScript style is **camelCase**: start lowercase, and capitalise each following word: `totalPrice`, `isLoggedIn`, `maxRetryCount`. Names are case-sensitive, so `score` and `Score` are two different variables. Constants that are fixed, well-known settings are sometimes written in `UPPER_SNAKE_CASE` (`const MAX_PLAYERS = 4;`).
+
+**Choose names that say what the value means.** `const secondsPerDay = 86400;` is self-explanatory; `const x = 86400;` makes every reader stop and think. Clear names are the cheapest documentation there is.
+
+## Declare before use, declare once
+
+```js
+console.log(points);
+let points = 50;
+```
+
+`ReferenceError: Cannot access 'points' before initialization`: the variable exists only from its `let` line onwards. And declaring the same name twice is a syntax error (`Identifier 'points' has already been declared`). To change a variable, just assign without `let`.
+
+A `let` with no value starts out as **`undefined`**, JavaScript's "nothing here yet" value:
+
+```js
+let winner;
+console.log(winner);
+winner = "Grace";
+console.log(winner);
+```
+
+## What about var?
+
+Older JavaScript code (and old tutorials) use `var` to declare variables. It still works, but it follows looser, older rules: you can declare the same name twice by accident, and it ignores the `{ }` blocks you'll meet in Module 3. Modern code uses `const` and `let` only. Recognise `var` when you read it; don't write it.
+
+## Swapping two values
+
+A classic puzzle: swap what two variables hold. You need a temporary third variable, just as swapping the contents of two cups needs a third cup:
+
+```js
+let left = "coffee";
+let right = "tea";
+const temp = left;
+left = right;
+right = temp;
+console.log(left, right);
+```
+
+(JavaScript also has a one-line trick, `[left, right] = [right, left];`, that you'll understand in Module 6.)
+
+📚 **Go deeper:** javascript.info, "Variables"; MDN JavaScript Guide, "Grammar and types" (the Declarations section); *Eloquent JavaScript* (4th ed.), chapter 2, "Program Structure".
+--- goals
+- create variables with `const` and `let`, and choose between them (`const` by default)
+- update variables with `=`, `+=`, `-=`, `++` and friends
+- trace a short program by hand, keeping a table of each variable's value
+- name variables in camelCase with names that explain their meaning
+- recognise the errors for using a variable too early, declaring it twice and changing a `const`
+--- quiz
+? What does this print?
+```js
+let coins = 10;
+coins = coins * 2;
+coins -= 5;
+console.log(coins);
+```
+- 10
+- 20
++ 15
+- 5
+> 10 × 2 = 20, then 20 − 5 = 15.
+? What happens here?
+```js
+const city = "Paris";
+city = "Rome";
+console.log(city);
+```
+- It prints `Rome`
+- It prints `Paris`
++ `TypeError: Assignment to constant variable.`
+- `SyntaxError`
+> A `const` can't be assigned again. Use `let` for values that change.
+? Which is a valid variable name?
+- `first-name`
+- `1stPlace`
++ `firstName`
+- `const`
+> `-` means minus, names can't start with a digit, and `const` is a keyword.
+? What does this print?
+```js
+let a = 3;
+let b = a;
+a = 7;
+console.log(a, b);
+```
+- `7 7`
++ `7 3`
+- `3 3`
+- `3 7`
+> `b` got the value 3. Changing `a` later doesn't change `b`.
+? What is printed?
+```js
+let total;
+console.log(total);
+```
+- `0`
+- `null`
++ `undefined`
+- A ReferenceError
+> A `let` declared without a value starts as `undefined`.
+? A value will never be reassigned in your program. What should you use?
++ `const`
+- `let`
+- `var`
+- It doesn't matter
+> Use `const` by default: it tells readers the name won't be reassigned, and JavaScript enforces it.
+--- exercise fill javascript
+::prompt
+Complete the program so it tracks a game: the player starts with 3 lives and 0 points, earns 50 points twice, then loses a life. It must print **Expected output**.
+::template
+____ playerName = "Ada";
+let lives = 3;
+let points = 0;
+points ____ 50;
+points += 50;
+lives____;
+console.log(playerName, "has", points, "points and", lives, "lives");
+::answers
+const
++=
+--
+::expected
+Ada has 100 points and 2 lives
+::hints
+- The player's name never changes, so declare it with `const`.
+- `+=` adds to a variable; `--` subtracts one.
+--- exercise code javascript
+::prompt
+A shop has 12 apples in stock. Create a `let` variable `stock` with that value. Then, in this order: sell 5 apples, receive a delivery of 20, and sell 9. Print the stock after each step exactly as shown. Use `-=` and `+=` to update `stock`.
+::starter
+// create stock, then update it after each step and print it
+::solution
+let stock = 12;
+console.log("Start:", stock);
+stock -= 5;
+console.log("After sale:", stock);
+stock += 20;
+console.log("After delivery:", stock);
+stock -= 9;
+console.log("After sale:", stock);
+::expected
+Start: 12
+After sale: 7
+After delivery: 27
+After sale: 18
+::variants
+let stock = 12 => let stock = 30
+::hints
+- `let stock = 12;` creates the variable.
+- Print with `console.log("After sale:", stock);` after each update.
+--- exercise code javascript
+::prompt
+The starter puts a drink in each hand. Swap them using a temporary variable, so the program prints `Left: tea` and `Right: coffee`. Don't type the drink names again: move the values around.
+::starter
+let left = "coffee";
+let right = "tea";
+// swap them here
+
+console.log("Left:", left);
+console.log("Right:", right);
+::solution
+let left = "coffee";
+let right = "tea";
+const temp = left;
+left = right;
+right = temp;
+console.log("Left:", left);
+console.log("Right:", right);
+::expected
+Left: tea
+Right: coffee
+::variants
+"coffee" => "juice"
+::hints
+- First keep a copy of one value: `const temp = left;`.
+- Then `left = right;` and finally put the copy into `right`.
+--- cards
+let :: Declares a variable that can be reassigned later: let score = 0; score = 10;
+const :: Declares a variable that can never be reassigned. Use it by default.
+Assignment (=) :: Makes the name on the left refer to the value on the right. Not a test for equality.
+undefined :: The value of a variable that has been declared but not given a value yet.
+camelCase :: JavaScript's naming style: totalPrice, isLoggedIn, maxRetryCount.
+x += 5 :: Shortcut for x = x + 5. Also -=, *=, /=; x++ adds 1, x-- subtracts 1.
+
+=== lesson js-types | Values and types | 75
+## Every value has a type
+
+A value's **type** decides what you can do with it: you can multiply numbers, but not sentences; you can make text uppercase, but not numbers. JavaScript has these basic types, called **primitive types**:
+
+| Type | Examples | Used for |
+|---|---|---|
+| `number` | `42`, `-7`, `3.14` | all numbers, whole or decimal |
+| `string` | `"hello"`, `'A'`, `` `Hi ${name}` `` | text |
+| `boolean` | `true`, `false` | yes/no answers |
+| `undefined` | `undefined` | "no value has been given" |
+| `null` | `null` | "deliberately empty" |
+| `bigint` | `9007199254740993n` | whole numbers too big for `number` |
+| `symbol` | `Symbol("id")` | unique keys (advanced, rarely needed) |
+
+Everything else (arrays, objects, functions, dates...) is an **object**, which you'll meet from Module 5 on. The `typeof` operator tells you a value's type, as a string:
+
+```js
+console.log(typeof 42);
+console.log(typeof "42");
+console.log(typeof true);
+console.log(typeof undefined);
+console.log(typeof null);
+```
+
+The last one says `object`, which is wrong: it's a famous bug from JavaScript's first version in 1995 that can never be fixed without breaking old websites. Just remember that `null` is its own type.
+
+**`undefined` versus `null`**: both mean "no value". `undefined` is what JavaScript gives you when nothing was set (a `let` with no value, a missing piece of data). `null` is what *programmers* write to say "empty on purpose", like an empty seat that's been explicitly marked free.
+
+## Numbers and strings are not the same
+
+`7` is a number; `"7"` is a string that contains the character 7. They look alike when printed, but behave differently. The `+` operator is the trap: with two numbers it **adds**, but if either side is a string it **joins** (concatenates) them as text:
+
+```js
+console.log(7 + 7);
+console.log("7" + 7);
+console.log("7" + "7");
+console.log(1 + 2 + "3");
+console.log("1" + 2 + 3);
+```
+
+JavaScript works left to right: `1 + 2` is 3, then `3 + "3"` is `"33"`. But `"1" + 2` is already the string `"12"`, so adding 3 gives `"123"`.
+
+The other maths operators (`-`, `*`, `/`) only work on numbers, so JavaScript quietly converts strings to numbers for them:
+
+```js
+console.log("10" - 3);
+console.log("10" * "2");
+console.log("ten" * 2);
+```
+
+This automatic conversion is called **type coercion**. It sometimes helps and often hides bugs, so professionals convert types **explicitly**, as below.
+
+~~~check
+? What does `console.log("4" + 2 + 1);` print?
+- `7`
+- `43`
++ `421`
+- An error
+> `"4" + 2` joins to the string `"42"`, then `"42" + 1` joins to `"421"`.
+~~~
+
+## Converting between types
+
+| You have | You want | Write | Result |
+|---|---|---|---|
+| `"42"` | a number | `Number("42")` | `42` |
+| `"3.5"` | a number | `Number("3.5")` | `3.5` |
+| `"42px"` | the number at the start | `parseInt("42px")` | `42` |
+| `"9.99 EUR"` | the decimal at the start | `parseFloat("9.99 EUR")` | `9.99` |
+| `42` | a string | `String(42)` | `"42"` |
+| anything | true/false | `Boolean(value)` | see below |
+
+```js
+console.log(Number("42") + 8);
+console.log(Number("  12  "));
+console.log(Number("twelve"));
+console.log(Number(""));
+console.log(parseInt("42px"), parseFloat("9.99 EUR"));
+console.log(String(42) + 8);
+```
+
+Notice the results that are easy to get wrong: `Number("twelve")` is `NaN` (not an error!), and `Number("")` is `0`. When you convert something a user typed, always ask what happens if they typed nothing, or typed nonsense. You'll learn to check for `NaN` with `Number.isNaN(value)` in the next lesson.
+
+## Truthy and falsy
+
+Every value can be treated as `true` or `false` when JavaScript needs a yes/no answer (you'll use this constantly with `if` in Module 3). Only these values count as false, and are called **falsy**:
+
+`false`, `0`, `-0`, `0n`, `""` (the empty string), `null`, `undefined`, `NaN`
+
+**Everything else is truthy**, including `"0"`, `"false"`, `" "` (a space) and empty arrays `[]`.
+
+```js
+console.log(Boolean(0), Boolean(""), Boolean(null), Boolean(NaN));
+console.log(Boolean("0"), Boolean(" "), Boolean(-5), Boolean("false"));
+```
+
+## Comparing: always use ===
+
+`===` asks "are these the same type **and** the same value?"; `!==` is its opposite. There's also an older `==` that converts types first, with rules so strange that most style guides ban it:
+
+```js
+console.log(7 === 7);
+console.log(7 === "7");
+console.log(7 == "7");
+console.log(0 == "");
+console.log(null == undefined);
+```
+
+**Always use `===` and `!==`.** You'll learn all the comparison operators in Module 3.
+
+## Reading what the user types: prompt()
+
+`prompt("question")` asks the user to type something and gives you their answer **as a string**. In a browser it opens a little dialog box. In DevQuest, type your answers in the **⌨️ Typed input** box that appears under the example (one line per `prompt` call); the output then shows each question followed by what was typed, like a terminal would.
+
+```js
+const name = prompt("What's your name?");
+const age = Number(prompt("How old are you?"));
+console.log(`Hi ${name}! Next year you'll be ${age + 1}.`);
+```
+
+Try typing `Ada` and `36` on two lines in the input box, then run it. Then remove the `Number(...)` and run it again to see what goes wrong: `"36" + 1` is `"361"`.
+
+Two facts about `prompt` worth knowing:
+
+- It **always returns a string** (or `null` if the user presses Cancel). Convert numbers with `Number(...)` before doing maths.
+- It exists **in browsers only**. Node.js has no `prompt`; command-line programs read input with a module called `readline`, which you'll use in Module 11. Real web pages rarely use `prompt` either: they read input from forms (Module 11 again). It's simply the shortest way to learn about input.
+
+📚 **Go deeper:** javascript.info, "Data types", "Type Conversions" and "Interaction: alert, prompt, confirm"; MDN JavaScript Guide, "Grammar and types" (Data structures and types); *Eloquent JavaScript* (4th ed.), chapter 1, "Values, Types, and Operators".
+--- goals
+- name JavaScript's primitive types and check a value's type with `typeof`
+- predict what `+` does with numbers and strings, and avoid accidental joining
+- convert values explicitly with `Number()`, `parseInt()`, `parseFloat()` and `String()`
+- list the falsy values and explain truthy and falsy
+- compare with `===` instead of `==`
+- read typed input with `prompt()` and convert it to a number
+--- quiz
+? What does `typeof "3.14"` give?
+- `"number"`
++ `"string"`
+- `"float"`
+- `"decimal"`
+> It's in quotes, so it's a string, even though it looks like a number.
+? What does this print?
+```js
+console.log("5" * 2, "5" + 2);
+```
+- `10 7`
++ `10 52`
+- `52 52`
+- `10 10`
+> `*` only works on numbers, so "5" is converted to 5. `+` with a string joins text.
+? What is `Number("")`?
+- `NaN`
+- `undefined`
++ `0`
+- An error
+> An empty (or all-spaces) string converts to 0, which can hide a missing answer. Watch out for it.
+? Which value is truthy?
+- `0`
+- `""`
++ `"0"`
+- `null`
+> A non-empty string is truthy, even if it contains the character 0.
+? What does `7 === "7"` give?
++ `false`
+- `true`
+- An error
+- `NaN`
+> `===` also compares types: a number is never strictly equal to a string.
+? The user types `20` into `const n = prompt("Number?");`. What is `n + 1`?
+- 21
++ `"201"`
+- `NaN`
+- An error
+> `prompt` always returns a string, so `+` joins. Convert first: `Number(n) + 1`.
+? What is `typeof null`?
+- `"null"`
+- `"undefined"`
++ `"object"`
+- `"boolean"`
+> A historic bug that can't be fixed: `typeof null` says "object", but null is its own primitive type.
+--- exercise code javascript
+::prompt
+Ask for two numbers with `prompt`, then print their sum, exactly as shown. The prompts are part of the output (DevQuest shows each question followed by what was typed).
+```
+First number: 7
+Second number: 35
+7 + 35 = 42
+```
+::starter
+const a = prompt("First number:");
+const b = prompt("Second number:");
+console.log(`${a} + ${b} = ${a + b}`);
+::solution
+const a = Number(prompt("First number:"));
+const b = Number(prompt("Second number:"));
+console.log(`${a} + ${b} = ${a + b}`);
+::stdin
+7
+35
+::expected
+First number: 7
+Second number: 35
+7 + 35 = 42
+::cases
+>>> 1.5
+>>> 2
+First number: 1.5
+Second number: 2
+1.5 + 2 = 3.5
+::hints
+- Run the starter: `7 + 35 = 735`. The answers are strings, so `+` joins them.
+- Wrap each `prompt(...)` in `Number(...)`.
+--- exercise code javascript
+::prompt
+Print the type of each value in the starter with `typeof`, one per line, in this format:
+```
+42 is a number
+"42" is a string
+true is a boolean
+undefined is a undefined
+```
+Use a template literal for each line, and `typeof` to get the type (don't type the type names yourself).
+::starter
+const n = 42;
+const s = "42";
+const yes = true;
+let nothing;
+console.log(`${n} is a ...`);
+::solution
+const n = 42;
+const s = "42";
+const yes = true;
+let nothing;
+console.log(`${n} is a ${typeof n}`);
+console.log(`"${s}" is a ${typeof s}`);
+console.log(`${yes} is a ${typeof yes}`);
+console.log(`${nothing} is a ${typeof nothing}`);
+::expected
+42 is a number
+"42" is a string
+true is a boolean
+undefined is a undefined
+::variants
+const s = "42" => const s = 42
+::hints
+- `${typeof n}` inside the backticks is replaced by `number`.
+- For the second line, put real quote characters around `${s}` inside the template literal.
+--- exercise code javascript
+::prompt
+A form gives you these values as strings. Convert them and print the results exactly as shown:
+
+1. `widthText` is `"120px"`: get the number 120 and print double it.
+2. `priceText` is `"4.75"`: get the number and print the price of 4 items.
+3. `qtyText` is `"three"`: print what `Number(qtyText)` gives, and whether it is `NaN` using `Number.isNaN(...)`.
+```
+Double width: 240
+4 items cost: 19
+three -> NaN true
+```
+::starter
+const widthText = "120px";
+const priceText = "4.75";
+const qtyText = "three";
+// your code here
+::solution
+const widthText = "120px";
+const priceText = "4.75";
+const qtyText = "three";
+const width = parseInt(widthText);
+console.log("Double width:", width * 2);
+const price = Number(priceText);
+console.log("4 items cost:", price * 4);
+const qty = Number(qtyText);
+console.log(qtyText, "->", qty, Number.isNaN(qty));
+::expected
+Double width: 240
+4 items cost: 19
+three -> NaN true
+::variants
+"120px" => "75px"
+"4.75" => "2.5"
+::hints
+- `Number("120px")` is `NaN` because of the letters; `parseInt` reads the digits at the start.
+- `Number.isNaN(x)` gives `true` when `x` is `NaN`.
+--- cards
+typeof :: An operator that gives a value's type as a string: typeof 42 is "number".
+Type coercion :: JavaScript converting a value's type automatically, e.g. "10" * 2 is 20, but "10" + 2 is "102".
+Number() / String() :: Explicit conversions: Number("42") is 42 (NaN if impossible, 0 for ""); String(42) is "42".
+parseInt / parseFloat :: Read the number at the start of a string: parseInt("42px") is 42, parseFloat("9.99 EUR") is 9.99.
+Falsy values :: false, 0, -0, 0n, "", null, undefined, NaN. Everything else is truthy.
+Strict equality (===) :: === compares type and value with no conversion. Always use === and !==; avoid ==.
+prompt() :: Browser function that asks the user a question and returns their answer as a string (null if cancelled).
+
+=== lesson js-numbers | Numbers and arithmetic | 75
+## The arithmetic operators
+
+| Operator | Meaning | Example | Result |
+|---|---|---|---|
+| `+` | add | `7 + 2` | `9` |
+| `-` | subtract | `7 - 2` | `5` |
+| `*` | multiply | `7 * 2` | `14` |
+| `/` | divide | `7 / 2` | `3.5` |
+| `%` | remainder | `7 % 2` | `1` |
+| `**` | power | `7 ** 2` | `49` |
+
+JavaScript has **one** number type for whole and decimal numbers alike, so `7 / 2` is simply `3.5`. The usual maths rules decide the order: `**` first, then `*`, `/` and `%`, then `+` and `-`, left to right within each level. Brackets go first of all.
+
+```js
+console.log(2 + 3 * 4);
+console.log((2 + 3) * 4);
+console.log(2 ** 3 ** 2);
+console.log(100 / 10 / 2);
+```
+
+(`**` is the exception that groups from the right: `2 ** 3 ** 2` is `2 ** 9`.) When in doubt, add brackets: they cost nothing and make your intent clear.
+
+## Whole-number division and remainders
+
+There's no separate "integer division" operator. To divide and drop the decimals, use `Math.floor` (round down) or `Math.trunc` (cut off the decimals):
+
+```js
+const minutes = 135;
+const hours = Math.floor(minutes / 60);
+const rest = minutes % 60;
+console.log(`${minutes} minutes is ${hours}h ${rest}min`);
+```
+
+`%` gives the **remainder** after dividing, and it's more useful than it looks:
+
+- `n % 2 === 0` tests whether `n` is even.
+- `n % 10` is the last digit of `n`.
+- `seconds % 60` is what's left after taking out the whole minutes.
+
+⚠️ With negative numbers, `%` keeps the sign of the left side: `-7 % 3` is `-1` (Python would say 2). And `Math.floor(-3.5)` is `-4`, while `Math.trunc(-3.5)` is `-3`.
+
+## The Math object
+
+`Math` holds common maths functions:
+
+```js
+console.log(Math.round(4.5), Math.round(4.4));
+console.log(Math.floor(4.9), Math.ceil(4.1), Math.trunc(-4.9));
+console.log(Math.max(3, 9, 2), Math.min(3, 9, 2));
+console.log(Math.abs(-12), Math.sqrt(81), Math.PI);
+```
+
+`Math.round` rounds an exact half **up** (towards plus infinity): `Math.round(2.5)` is 3 and `Math.round(-2.5)` is -2. To round to 2 decimal places, multiply, round and divide: `Math.round(x * 100) / 100`.
+
+`Math.random()` gives a random decimal from 0 up to (but not including) 1. To get a whole number from 1 to 6, like a dice:
+
+```js
+const roll = Math.floor(Math.random() * 6) + 1;
+console.log("You rolled", roll);
+```
+
+Run it a few times. `Math.random() * 6` is between 0 and 5.999..., `Math.floor` makes it 0 to 5, and `+ 1` shifts it to 1 to 6.
+
+~~~check
+? What does this print?
+```js
+console.log(17 % 5, Math.floor(17 / 5));
+```
+- `3.4 3`
++ `2 3`
+- `3 2`
+- `2 3.4`
+> 5 goes into 17 three whole times (15), leaving a remainder of 2.
+~~~
+
+## Decimals are not exact
+
+```js
+console.log(0.1 + 0.2);
+console.log(0.1 + 0.2 === 0.3);
+```
+
+This surprises everyone once. Computers store numbers in binary, and just as 1/3 can't be written exactly in decimal (0.3333...), 0.1 can't be stored exactly in binary. The tiny errors usually stay hidden, but sometimes they show. This isn't a JavaScript bug: almost every language (Python, Java, C#...) behaves the same, because they all use the same IEEE 754 standard.
+
+What professionals do about it:
+
+- **For display**, format the number: `(0.1 + 0.2).toFixed(2)` gives the string `"0.30"`. Note that `toFixed` returns a **string**.
+- **For money**, count whole cents (or pence) instead of decimal euros: `1999` cents rather than `19.99`. Whole numbers are exact.
+- **To compare decimals**, check that they're *close*: `Math.abs(a - b) < 1e-9`.
+
+```js
+const priceCents = 1999;
+const quantity = 3;
+const totalCents = priceCents * quantity;
+console.log(`Total: ${(totalCents / 100).toFixed(2)} EUR`);
+```
+
+## Special number values
+
+Where many languages raise an error, JavaScript returns a special value:
+
+```js
+console.log(10 / 0);
+console.log(-10 / 0);
+console.log("abc" * 3);
+console.log(Math.sqrt(-1));
+```
+
+`NaN` ("Not a Number") has a strange property: it is not equal to anything, **not even itself**. So `x === NaN` is always false. Test for it with `Number.isNaN(x)`:
+
+```js
+const age = Number("forty");
+console.log(age === NaN);
+console.log(Number.isNaN(age));
+```
+
+## How big can numbers get?
+
+Numbers are stored with about 15 to 17 significant digits. Whole numbers are exact up to `Number.MAX_SAFE_INTEGER` (9007199254740991, about 9 quadrillion). Beyond that, use **BigInt** by adding an `n`: `2n ** 64n`. BigInts can't be mixed with ordinary numbers in maths (`1n + 1` is a TypeError), so you'll only reach for them when you really need huge whole numbers.
+
+For readability, you can put `_` between digits: `1_000_000` is one million. Big and tiny numbers can be written in scientific notation: `1e6` is 1000000, `2.5e-3` is 0.0025.
+
+## Updating numbers
+
+The shortcuts from the variables lesson work with every operator:
+
+```js
+let balance = 100;
+balance += 50;
+balance *= 1.1;
+balance -= 15;
+console.log(balance.toFixed(2));
+```
+
+📚 **Go deeper:** javascript.info, "Basic operators, maths" and "Numbers"; MDN JavaScript Guide, "Numbers and strings" and the `Math` reference; *Eloquent JavaScript* (4th ed.), chapter 1.
+--- goals
+- calculate with `+ - * / % **` and predict the order of operations
+- divide into whole parts and remainders with `Math.floor()` and `%`
+- round with `Math.round`, `Math.floor`, `Math.ceil`, `Math.trunc` and `toFixed()`
+- make random whole numbers in a range with `Math.random()`
+- explain why `0.1 + 0.2 !== 0.3`, and handle money in whole cents
+- recognise `Infinity` and `NaN`, and test for `NaN` with `Number.isNaN()`
+--- quiz
+? What is `2 + 3 * 2 ** 2`?
+- 100
+- 20
++ 14
+- 36
+> `**` first: 2² = 4. Then 3 × 4 = 12. Then 2 + 12 = 14.
+? What is `19 % 4`?
+- 4.75
+- 4
++ 3
+- 0
+> 4 goes into 19 four times (16), leaving 3.
+? What does `(2.5).toFixed(1)` give?
+- The number 2.5
++ The string `"2.5"`
+- The number 3
+- The string `"3"`
+> `toFixed` returns a string with exactly that many decimals.
+? Which expression gives a random whole number from 1 to 10?
+- `Math.random() * 10`
+- `Math.round(Math.random() * 10)`
++ `Math.floor(Math.random() * 10) + 1`
+- `Math.floor(Math.random() * 11)`
+> `Math.random() * 10` is 0 to 9.99..., floor gives 0 to 9, and + 1 shifts it to 1 to 10.
+? What does `console.log(5 / 0)` print?
+- An error
+- `0`
++ `Infinity`
+- `NaN`
+> Dividing a positive number by zero gives Infinity in JavaScript, not an error.
+? `const x = Number("hello");` Which check correctly finds out that `x` is NaN?
+- `x === NaN`
+- `x == NaN`
++ `Number.isNaN(x)`
+- `typeof x === "NaN"`
+> NaN is never equal to anything, even itself. `typeof NaN` is `"number"`!
+? Why do shops' programs often store prices in cents?
+- Because JavaScript can't store decimals
++ Because whole numbers are exact, while decimals like 0.1 can't be stored exactly
+- Because cents are faster to print
+- Because `toFixed` only works on whole numbers
+> Decimal fractions pick up tiny rounding errors; whole cents never do.
+--- exercise code javascript
+::prompt
+A video is `totalSeconds` long. Print its length in hours, minutes and seconds, using `Math.floor` and `%`:
+```
+4000 seconds = 1h 6min 40s
+```
+::starter
+const totalSeconds = 4000;
+// work out hours, minutes and seconds
+::solution
+const totalSeconds = 4000;
+const hours = Math.floor(totalSeconds / 3600);
+const minutes = Math.floor((totalSeconds % 3600) / 60);
+const seconds = totalSeconds % 60;
+console.log(`${totalSeconds} seconds = ${hours}h ${minutes}min ${seconds}s`);
+::expected
+4000 seconds = 1h 6min 40s
+::variants
+4000 => 9999
+::hints
+- An hour is 3600 seconds: `Math.floor(totalSeconds / 3600)` whole hours.
+- What's left after the hours is `totalSeconds % 3600`; divide that by 60 for the minutes.
+- The seconds are what's left after whole minutes: `totalSeconds % 60`.
+--- exercise code javascript
+::prompt
+Read a temperature in degrees Celsius with `prompt`, convert it to Fahrenheit with `F = C × 9 / 5 + 32`, and print it rounded to **one** decimal place with `toFixed(1)`:
+```
+Celsius: 21.5
+21.5°C is 70.7°F
+```
+::starter
+const celsius = prompt("Celsius:");
+// convert and print
+::solution
+const celsius = Number(prompt("Celsius:"));
+const fahrenheit = celsius * 9 / 5 + 32;
+console.log(`${celsius}°C is ${fahrenheit.toFixed(1)}°F`);
+::stdin
+21.5
+::expected
+Celsius: 21.5
+21.5°C is 70.7°F
+::cases
+>>> -40
+Celsius: -40
+-40°C is -40.0°F
+>>> 100
+Celsius: 100
+100°C is 212.0°F
+::hints
+- Convert the answer with `Number(...)` before doing maths.
+- `fahrenheit.toFixed(1)` gives the value with exactly one decimal.
+--- exercise code javascript
+::prompt
+A café till works in **cents**. The price of one coffee is `priceCents` and a customer buys `quantity` coffees and pays with a 20-euro note (2000 cents). Print the total and the change in euros with two decimals, then how many whole 2-euro coins and leftover cents the change is:
+```
+Total: 13.50 EUR
+Change: 6.50 EUR
+That's 3 two-euro coins and 50 cents
+```
+::starter
+const priceCents = 450;
+const quantity = 3;
+const paidCents = 2000;
+// your code here
+::solution
+const priceCents = 450;
+const quantity = 3;
+const paidCents = 2000;
+const totalCents = priceCents * quantity;
+const changeCents = paidCents - totalCents;
+console.log(`Total: ${(totalCents / 100).toFixed(2)} EUR`);
+console.log(`Change: ${(changeCents / 100).toFixed(2)} EUR`);
+const coins = Math.floor(changeCents / 200);
+const rest = changeCents % 200;
+console.log(`That's ${coins} two-euro coins and ${rest} cents`);
+::expected
+Total: 13.50 EUR
+Change: 6.50 EUR
+That's 3 two-euro coins and 50 cents
+::variants
+const priceCents = 450 => const priceCents = 385
+::hints
+- Work in cents the whole time: `totalCents = priceCents * quantity`, then `changeCents = paidCents - totalCents`.
+- To show cents as euros: `(cents / 100).toFixed(2)`.
+- A two-euro coin is 200 cents: `Math.floor(changeCents / 200)` coins, and `changeCents % 200` left over.
+--- cards
+% (remainder) :: What's left after dividing: 17 % 5 is 2. n % 2 === 0 means n is even.
+Math.floor / Math.ceil / Math.round / Math.trunc :: Round down / up / to nearest (halves go up) / cut off the decimals.
+toFixed(n) :: Formats a number with exactly n decimals and returns a STRING: (3.14159).toFixed(2) is "3.14".
+Math.random() :: A random decimal from 0 up to (not including) 1. Dice: Math.floor(Math.random() * 6) + 1.
+0.1 + 0.2 :: 0.30000000000000004, because decimals can't be stored exactly in binary. Use whole cents for money.
+NaN :: "Not a Number". Not equal to anything, even itself: test with Number.isNaN(x).
+
+=== lesson js-setup | JavaScript on your own computer | 60
+## Two homes for JavaScript
+
+DevQuest runs your JavaScript inside the app, which is perfect for learning. Real projects run in one of two places, and it's worth setting up both:
+
+1. **The browser**, for code that powers web pages.
+2. **Node.js**, for code that runs on its own: servers, scripts and tools.
+
+## The browser's developer tools
+
+Every desktop browser has developer tools with a **Console** where you can type JavaScript and see the result immediately. Open it:
+
+- **Chrome, Edge, Firefox**: press `F12`, or `Ctrl+Shift+J` (`Cmd+Option+J` on a Mac), and pick the **Console** tab.
+- **Safari**: first tick "Show features for web developers" in Settings → Advanced, then press `Cmd+Option+C`.
+
+Type `2 + 2` and press Enter. Then `console.log("Hi from the console")`. The console shows the value of whatever you type, which makes it a great calculator and experiment pad. It works on *any* page you visit: open it on a website and type `document.title` to see the page's title.
+
+## A page with your own script
+
+A web page is an HTML file; JavaScript is attached with a `<script>` tag. Press **▶ Show page** to run this one; it changes the page's text when the script runs:
+
+```html
+<!doctype html>
+<html>
+  <body>
+    <h1 id="title">Waiting for JavaScript...</h1>
+    <script>
+      document.getElementById("title").textContent = "Hello from JavaScript!";
+      console.log("The script ran");
+    </script>
+  </body>
+</html>
+```
+
+In a real project the JavaScript lives in its own file, and the page loads it: `<script src="app.js"></script>`. To try it, create a folder with two files, `index.html` and `app.js`, put the script tag in the HTML, and double-click `index.html` to open it in your browser. Open the developer tools to see what `app.js` logs. You'll build real pages in Module 11.
+
+## Installing Node.js
+
+1. Go to **nodejs.org** and download the **LTS** version ("long-term support": the stable one companies use).
+2. Run the installer and accept the defaults. It also installs **npm**, the tool for adding other people's code to your project (Module 11).
+3. Open a terminal (on Windows: PowerShell or Windows Terminal; on a Mac: Terminal) and check it worked:
+
+```
+node --version
+npm --version
+```
+
+Each should print a version number such as `v22.12.0`. If you get "command not found", close the terminal and open a new one; if it still fails, re-run the installer.
+
+> 💡 Professionals often install Node through a **version manager** such as `nvm` (macOS and Linux), `nvm-windows` or `fnm`, which lets each project use a different Node version. For learning, the installer from nodejs.org is all you need.
+
+## The Node REPL
+
+Type `node` on its own and press Enter. The prompt changes to `>`: you're in the **REPL** (Read, Evaluate, Print, Loop). Type JavaScript and Node prints the result:
+
+```
+> 7 * 6
+42
+> "abc".toUpperCase()
+'ABC'
+> .exit
+```
+
+Type `.exit` (or press `Ctrl+C` twice) to leave. The REPL is perfect for checking a quick idea.
+
+## Running a program file
+
+1. Install a code editor. **Visual Studio Code** (code.visualstudio.com) is free and the most popular choice for JavaScript.
+2. Make a folder for your code, open it in VS Code (File → Open Folder), and create a file called `hello.js`.
+3. Write `console.log("Hello from Node!");` and save.
+4. Open a terminal in that folder (in VS Code: Terminal → New Terminal) and run:
+
+```
+node hello.js
+```
+
+Your program's output appears in the terminal. Change the file, save, and run the command again (press the up arrow to bring back the last command). If a program runs forever, press `Ctrl+C` to stop it.
+
+## Browser versus Node.js
+
+The language is the same everywhere; what differs is what the environment gives you:
+
+| | Browser | Node.js |
+|---|---|---|
+| The page (`document`, `window`) | ✅ | ❌ |
+| `prompt()`, `alert()` | ✅ | ❌ |
+| Files on disk, processes (`fs`, `process`) | ❌ (for safety) | ✅ |
+| `console.log`, `Math`, `setTimeout`, `fetch` | ✅ | ✅ |
+
+So `document.title` fails in Node with `ReferenceError: document is not defined`, and `process.version` fails in a browser. DevQuest gives you the shared parts, plus `prompt()` for typed input.
+
+## Strict mode
+
+Old JavaScript silently accepted some mistakes, such as assigning to a variable you never declared (it would quietly create a global variable). Writing `"use strict";` as the first line of a file switches on **strict mode**, which turns those silent mistakes into errors. DevQuest always runs your code in strict mode, and so do JavaScript **modules** and **classes**, which you'll use later. Modern code is effectively always strict.
+
+📚 **Go deeper:** nodejs.org, "Introduction to Node.js" and "How to install Node.js"; MDN, "What are browser developer tools?"; javascript.info, "Developer console" and "The modern mode, use strict".
+--- goals
+- run JavaScript in a browser's developer console
+- attach a script to a web page with a `<script>` tag
+- install Node.js, check its version, and use the REPL
+- run a program file with `node file.js` and stop a stuck program with Ctrl+C
+- explain which features exist only in browsers or only in Node.js
+--- quiz
+? Which command runs a saved program called `game.js` with Node.js?
+- `run game.js`
++ `node game.js`
+- `npm game.js`
+- `js game.js`
+> `node` followed by the file name runs it.
+? You type `node` in a terminal and now see `>`. Where are you?
++ In the Node REPL, where each line of JavaScript runs as you type it
+- In a broken terminal
+- In npm
+- In the browser console
+> The REPL reads a line, evaluates it, prints the result and loops. Leave with `.exit`.
+? Which of these works in a browser but NOT in Node.js?
+- `console.log("hi")`
+- `Math.max(1, 2)`
++ `document.title`
+- `setTimeout(...)`
+> `document` is the web page, which only exists in a browser.
+? How does a web page load the JavaScript in a file called `app.js`?
+- `<javascript file="app.js">`
++ `<script src="app.js"></script>`
+- `<link src="app.js">`
+- `import app.js`
+> The script tag's `src` attribute names the file to load.
+? A program is stuck in an endless loop in your terminal. What do you press?
+- `Esc`
++ `Ctrl+C`
+- `Ctrl+Z`
+- `.exit`
+> Ctrl+C interrupts the running program.
+? What does strict mode do?
+- Makes JavaScript run faster
++ Turns some silent mistakes, such as assigning to an undeclared variable, into errors
+- Forbids `let`
+- Checks the types of all variables
+> Strict mode makes JavaScript stricter about old, error-prone habits. Modules and classes are always strict.
+--- exercise fill javascript
+::prompt
+These lines come from a terminal session. Fill in the commands the programmer typed: one checks Node's version, one checks npm's version. The program then prints what a beginner should remember about them.
+::template
+const checkNode = "node ____";
+const checkNpm = "____ --version";
+console.log("Check Node with:", checkNode);
+console.log("Check npm with:", checkNpm);
+::answers
+--version
+npm
+::expected
+Check Node with: node --version
+Check npm with: npm --version
+::hints
+- Both tools print their version when given `--version` (two dashes).
+--- cards
+Browser developer tools :: Press F12 (or Ctrl+Shift+J / Cmd+Option+J) to open the Console, where you can type and run JavaScript.
+Node.js :: Runs JavaScript outside the browser. Check it with node --version; run a file with node app.js.
+REPL :: Read, Evaluate, Print, Loop: type node with no file to try JavaScript line by line. Leave with .exit.
+<script src="app.js"> :: How a web page loads a JavaScript file.
+LTS :: Long-term support: the stable Node.js version to install.
+"use strict" :: Strict mode: turns silent mistakes into errors. DevQuest, modules and classes are always strict.
+
+=== lesson js-m1-test | Module 1 test | 150 | exam
+You've learned to print, read errors, use variables, work with types, read input and do arithmetic. This test mixes them all, just as real programs do.
+
+Before you start, check that you can:
+
+- print several values with `console.log`, and use `${ }` inside backticks;
+- read an error's type, message and line, and tell a syntax error from a runtime error;
+- choose between `const` and `let`, and trace a few lines of assignments by hand;
+- predict what `+` does with strings and numbers, and convert with `Number()` and `String()`;
+- read numbers with `Number(prompt(...))`;
+- use `%`, `**`, `Math.floor` and `toFixed()`, and explain why `0.1 + 0.2 !== 0.3`.
+
+If any of these feels shaky, re-read that lesson first; this test isn't timed. Wrong answers cost nothing but a little XP, and every explanation teaches something.
+
+## Practise more
+
+- Playground: open the [Playground](#/playground), pick JavaScript, and rebuild the shop programs from this module from memory.
+--- goals
+- write programs with `console.log`, variables, types, `prompt()` and arithmetic
+- read error messages and fix bugs, including silent ones
+- trace small programs by hand
+--- quiz
+? What does this print?
+```js
+console.log("a", "b" + "c", 1 + 2);
+```
+- `a bc 12`
++ `a bc 3`
+- `abc3`
+- `a b c 3`
+> Commas separate values with a space; `"b" + "c"` joins to `"bc"`; `1 + 2` is 3.
+? Which error does this raise?
+```js
+const total = 10;
+total += 5;
+```
+- `SyntaxError`
+- `ReferenceError`
++ `TypeError`
+- No error: total becomes 15
+> `+=` reassigns, and a `const` can't be reassigned: `TypeError: Assignment to constant variable.`
+? What does this print?
+```js
+let x = 2;
+let y = x ** 3;
+x = y % 5;
+console.log(x, y);
+```
+- `2 8`
++ `3 8`
+- `3 3`
+- `8 3`
+> y is 2³ = 8, then x is 8 % 5 = 3.
+? What is `"8" - 3 + "1"`?
+- `6`
++ `"51"`
+- `"831"`
+- `NaN`
+> `"8" - 3` converts to numbers: 5. Then `5 + "1"` joins: `"51"`.
+? What does `Number("12") + parseInt("3.9")` give?
+- `15.9`
+- `16`
++ `15`
+- `"123"`
+> `Number("12")` is 12 and `parseInt("3.9")` reads only the whole number 3.
+? Which line is a syntax error?
+- `console.log('ok');`
++ `let my-score = 3;`
+- `let score = 3;`
+- `console.log(score, "points");`
+> The `-` is minus, so JavaScript reads `my - score`, which isn't a valid name.
+? What is `25 % 7`?
+- 3
++ 4
+- 3.57
+- 18
+> 7 fits into 25 three times (21), leaving 4.
+? The user types `3`. What does this print?
+```js
+const n = prompt("n?");
+console.log(n + n);
+```
+- 6
++ `33`
+- `n?3 n?3`
+- `NaN`
+> `prompt` returns the string `"3"`, and `+` joins two strings.
+? What is `Math.round(7.5)`?
+- 7
++ 8
+- 7.5
+- `"8"`
+> Math.round rounds an exact half up: 8.
+? Which value is falsy?
+- `"false"`
+- `" "`
++ `0`
+- `-1`
+> Only false, 0, -0, 0n, "", null, undefined and NaN are falsy.
+--- exercise code javascript
+::prompt
+A shop till works in **cents**. Read the price of one item (in cents) and the quantity with `prompt`, then print the subtotal, an 8% tax rounded **down** to a whole cent with `Math.floor`, and the total:
+```
+Price in cents: 425
+Quantity: 3
+Subtotal: 1275 cents
+Tax: 102 cents
+Total: 1377 cents
+```
+::starter
+const price = Number(prompt("Price in cents:"));
+// read the quantity, then compute and print the three lines
+::solution
+const price = Number(prompt("Price in cents:"));
+const quantity = Number(prompt("Quantity:"));
+const subtotal = price * quantity;
+const tax = Math.floor(subtotal * 8 / 100);
+const total = subtotal + tax;
+console.log("Subtotal:", subtotal, "cents");
+console.log("Tax:", tax, "cents");
+console.log("Total:", total, "cents");
+::stdin
+425
+3
+::expected
+Price in cents: 425
+Quantity: 3
+Subtotal: 1275 cents
+Tax: 102 cents
+Total: 1377 cents
+::cases
+>>> 999
+>>> 7
+Price in cents: 999
+Quantity: 7
+Subtotal: 6993 cents
+Tax: 559 cents
+Total: 7552 cents
+::hints
+- Both answers must be converted with `Number(...)`.
+- 8% of the subtotal, rounded down: `Math.floor(subtotal * 8 / 100)`.
+--- exercise code javascript
+::prompt
+This little shop program has **three** different bugs: a syntax error, a `ReferenceError` and a silent bug that prints the wrong total. Fix them so it prints the expected output. Don't change the numbers; the program must still calculate the total.
+::starter
+const item = "notebook";
+const price = 3;
+const quantity = 4;
+const customer = "Ada";
+console.log("Buying", quantity, item + "s");
+const total = price * quantity;
+console.log("Total: " + total + 1 + " dollars (with 1 dollar shipping)");
+console.log("Thank you for shopping with us!);
+console.log("Come back soon,", custmer);
+::solution
+const item = "notebook";
+const price = 3;
+const quantity = 4;
+const customer = "Ada";
+console.log("Buying", quantity, item + "s");
+const total = price * quantity;
+console.log("Total: " + (total + 1) + " dollars (with 1 dollar shipping)");
+console.log("Thank you for shopping with us!");
+console.log("Come back soon,", customer);
+::expected
+Buying 4 notebooks
+Total: 13 dollars (with 1 dollar shipping)
+Thank you for shopping with us!
+Come back soon, Ada
+::variants
+const price = 3 => const price = 5
+::hints
+- Start with the syntax error: one string has no closing quote.
+- `"Total: " + total + 1` joins the 1 on as text. Brackets make the sum happen first.
+- A variable must be spelt the same everywhere it's used.
+--- exercise code javascript
+::prompt
+Without loops (you'll learn those soon), add up the four digits of the four-digit number `n` using `Math.floor` and `%`, and print the result. For 4728 that's 4 + 7 + 2 + 8:
+```
+Digit sum of 4728 is 21
+```
+::starter
+const n = 4728;
+// n % 10 is the last digit; Math.floor(n / 10) drops it
+::solution
+const n = 4728;
+const ones = n % 10;
+const tens = Math.floor(n / 10) % 10;
+const hundreds = Math.floor(n / 100) % 10;
+const thousands = Math.floor(n / 1000);
+console.log(`Digit sum of ${n} is ${ones + tens + hundreds + thousands}`);
+::expected
+Digit sum of 4728 is 21
+::variants
+4728 => 9051
+::hints
+- The last digit is `n % 10`.
+- The tens digit: drop the last digit with `Math.floor(n / 10)`, then take the last digit of that with `% 10`.
+- The thousands digit of a four-digit number is just `Math.floor(n / 1000)`.

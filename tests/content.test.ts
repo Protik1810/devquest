@@ -62,9 +62,9 @@ describe('curriculum integrity', () => {
     }
   });
 
-  it('every Python course lesson states its goals', () => {
-    const python = TRACKS.find((t) => t.id === 'python')!;
-    for (const l of python.lessons) expect(l.goals?.length ?? 0, `${l.id} has no --- goals`).toBeGreaterThan(0);
+  it('every Python and JavaScript course lesson states its goals', () => {
+    for (const id of ['python', 'javascript'])
+      for (const l of TRACKS.find((t) => t.id === id)!.lessons) expect(l.goals?.length ?? 0, `${l.id} has no --- goals`).toBeGreaterThan(0);
   });
 
   it('hints are hints, not lesson text that ran into the last exercise', () => {

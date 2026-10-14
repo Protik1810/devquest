@@ -263,9 +263,9 @@ function devquestJsRuntime(g: any) {
 
   function format(args: any[]) {
     if (!args.length) return '';
-    let first = args[0];
-    let rest = args.slice(1);
-    let head = '';
+    const first = args[0];
+    const rest = args.slice(1);
+    let head: string | null = null; // the first argument with its %s, %d, … filled in
     if (typeof first === 'string' && first.includes('%') && rest.length) {
       head = first.replace(/%([sdifjoOc%])/g, (m, f) => {
         if (f === '%') return '%';
@@ -278,10 +278,9 @@ function devquestJsRuntime(g: any) {
         if (f === 'c') return '';
         return inspect(a);
       });
-      first = undefined;
     }
-    const parts = first === undefined ? [head] : [];
-    for (const a of first === undefined ? rest : args) parts.push(typeof a === 'string' ? a : inspect(a));
+    const parts = head === null ? [] : [head];
+    for (const a of head === null ? args : rest) parts.push(typeof a === 'string' ? a : inspect(a));
     return parts.join(' ');
   }
 
@@ -584,7 +583,18 @@ function devquestJsRuntime(g: any) {
     try {
       fn = new AsyncFunction(body);
     } catch (err) {
-      return { ok: false, output: '', error: describe(err), syntax: true };
+      let error = describe(err);
+      // An unclosed { runs into the wrapper function's closing "})": report it as Node would
+      if (/^SyntaxError: Unexpected token '[)}]'$/.test(error))
+        for (const close of ['}', '}}', '}}}'])
+          try {
+            new AsyncFunction(body + '\n' + close);
+            error = 'SyntaxError: Unexpected end of input';
+            break;
+          } catch {
+            // still broken: try one more brace
+          }
+      return { ok: false, output: '', error, syntax: true };
     }
     clearAll();
     late = null;
@@ -628,3 +638,6 @@ function devquestJsRuntime(g: any) {
 
 /** The runtime's source, to evaluate in a worker or a Node vm context: defines __dqRun, console, prompt and assert. */
 export const JS_RUNTIME = `(${devquestJsRuntime.toString()})(globalThis);`;
+
+/** The runtime installed on another object (`target` is a JS expression), e.g. to borrow its Node-style formatting. */
+export const jsRuntimeOn = (target: string) => `(${devquestJsRuntime.toString()})(${target});`;

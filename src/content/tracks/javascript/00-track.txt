@@ -1,0 +1,9 @@
++++ track
+id: javascript
+title: JavaScript
+icon: 🟨
+tier: 1
+color: #eab308
+kind: language
+blurb: The language of the web, from your very first line of code to professional JavaScript: values and types, logic, loops, functions and closures, arrays and objects, errors and testing, classes and prototypes, async code and promises, modules, Node.js and the DOM, then TypeScript and tooling. Every topic has worked examples you can run, practice exercises and a module test.
++++

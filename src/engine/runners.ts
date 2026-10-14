@@ -8,7 +8,7 @@ import { registerMysql, translateMysql } from './mysql';
 import { RedisEngine } from './redis';
 import { PY_TEST_HELPER } from './pyTestHelper';
 import { sameOutput } from './integrity';
-import { JS_RUNTIME } from './jsRuntime';
+import { JS_RUNTIME, jsRuntimeOn } from './jsRuntime';
 
 /** `expected`: for a failed output check, the output that was expected (shown as a line-by-line comparison). */
 export type RunResult = { ok: boolean; output: string; error?: string; passed?: boolean; message?: string; expected?: string; table?: { columns: string[]; values: unknown[][] } };
@@ -390,14 +390,18 @@ function runRedis(code: string, check?: CodeCheck): RunResult {
 
 // ---------- Web (HTML/CSS/JS) ----------
 // Tests run inside a sandboxed iframe (scripts only, no same-origin access) and report back via postMessage.
-const WEB_EARLY = `<script>window.__dqErrors=[];addEventListener('error',function(e){__dqErrors.push(e.message)});</script>`;
+// Collects the page's errors and console output from the start (so the page's own scripts are included),
+// formatting logged values the way Node and the lessons' JavaScript runner do
+const WEB_EARLY = `<script>window.__dqErrors=[];window.__dqLogs=[];addEventListener('error',function(e){__dqErrors.push(e.message)});
+(function(){var rt={setTimeout:setTimeout.bind(window),clearTimeout:clearTimeout.bind(window),setInterval:setInterval.bind(window),clearInterval:clearInterval.bind(window)};
+${jsRuntimeOn('rt')}
+var show=function(a){return typeof a==='string'?a:rt.__dqInspect(a)};
+['log','info','warn','error','debug'].forEach(function(m){var orig=console[m];console[m]=function(){__dqLogs.push([].map.call(arguments,show).join(' '));return orig.apply(console,arguments)}});})();</script>`;
 
 function webHarness(id: string, tests: string) {
   return `<script>
 (function(){
-  var logs = [];
-  var origLog = console.log;
-  console.log = function(){ logs.push([].map.call(arguments, String).join(' ')); origLog.apply(console, arguments); };
+  var logs = window.__dqLogs || [];
   function report(passed, message){ parent.postMessage({ __dq: '${id}', passed: passed, message: message, logs: logs, errors: window.__dqErrors || [] }, '*'); }
   window.addEventListener('load', async function(){
     var assert = function(c, m){ if (!c) throw new Error(m || 'Assertion failed'); };
