@@ -1358,6 +1358,20 @@ console.log(r2.introduce(), Object.getPrototypeOf(r2) === robotMethods);
 
 Because `Array.prototype` is shared by every array in the program, you *could* add your own methods to it: `Array.prototype.last = function () { ... }`. Don't. This is called **monkey patching**, and it causes clashes when a library does the same thing, or when JavaScript later adds a built-in method with the same name. (This really happened: a library's `Array.prototype.flatten` is why the built-in had to be named `flat`.) Write a normal function instead.
 
+## Symbols: keys that can't clash
+
+Property keys are usually strings, but there's a second kind: **symbols**. `Symbol("description")` creates a brand-new value that is **unique**: no other symbol, and no string, is ever equal to it. That makes symbols safe keys for adding properties that can't accidentally collide with anyone else's:
+
+```js
+const id = Symbol("id");
+const user = { name: "Ada", [id]: 42 };
+console.log(user[id], user.id);
+console.log(Object.keys(user), JSON.stringify(user));
+console.log(Symbol("id") === Symbol("id"));
+```
+
+Symbol-keyed properties are skipped by `Object.keys`, `for...in` and `JSON.stringify`, so they stay out of the way of ordinary data. JavaScript itself uses a set of built-in, **well-known symbols** (`Symbol.iterator`, `Symbol.toPrimitive`, `Symbol.toStringTag`...) as the names of special methods. That's how the language could add new protocols over the years without breaking any existing object that happened to have a method called `iterator`.
+
 ## Special methods: how objects plug into the language
 
 Python has its "dunder" methods; JavaScript has a smaller set of special methods that the language calls for you:
