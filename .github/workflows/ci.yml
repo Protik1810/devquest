@@ -20,6 +20,8 @@ jobs:
         run: npm test
       - name: Build (downloads the offline Python/React runtimes)
         run: npm run build
+      - name: Verify Python exercises in the bundled Pyodide
+        run: npm run verify:python
       - name: Verify native-language exercises with real compilers
         # Exercises for toolchains that aren't installed on the runner are skipped
         run: |

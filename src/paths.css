@@ -175,3 +175,5 @@
 .runtime-note { margin: 0 0 14px; }
 .runtime-note ul { margin: 6px 0 0; padding-left: 18px; }
 .runtime-note li { margin: 3px 0; }
+.module-heading { margin: 18px 0 8px; font-size: 1.02rem; color: var(--accent2); }
+.lesson-list > li.has-module:first-child .module-heading { margin-top: 4px; }

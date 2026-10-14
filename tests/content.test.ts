@@ -6,6 +6,7 @@ import { PATHS, pathTrackIds } from '../src/content/paths';
 import { PROJECTS } from '../src/content/projects';
 import { LANG_META } from '../src/content/langMeta';
 import type { CodeExercise } from '../src/content/types';
+import { exercisesOf } from '../src/content/exercises';
 
 const lessons = TRACKS.flatMap((t) => t.lessons.map((l) => ({ track: t, lesson: l })));
 
@@ -25,7 +26,7 @@ describe('curriculum integrity', () => {
   });
 
   it('every code exercise is complete and uses a known language', () => {
-    const code = [...lessons.map((l) => ({ id: l.lesson.id, ex: l.lesson.exercise })), ...CHALLENGES.map((c) => ({ id: c.id, ex: c.exercise }))].filter(
+    const code = [...lessons.flatMap((l) => exercisesOf(l.lesson).map((ex) => ({ id: l.lesson.id, ex }))), ...CHALLENGES.map((c) => ({ id: c.id, ex: c.exercise }))].filter(
       (x): x is { id: string; ex: CodeExercise } => x.ex?.kind === 'code',
     );
     expect(code.length).toBeGreaterThan(250);
@@ -40,10 +41,22 @@ describe('curriculum integrity', () => {
 
   it('every quiz answer points at one of its options', () => {
     for (const { lesson } of lessons) {
-      if (lesson.exercise?.kind !== 'quiz') continue;
-      for (const q of lesson.exercise.questions) {
+      for (const q of exercisesOf(lesson).flatMap((e) => (e.kind === 'quiz' ? e.questions : []))) {
         expect(q.answer, `${lesson.id}: ${q.q}`).toBeGreaterThanOrEqual(0);
         expect(q.answer, `${lesson.id}: ${q.q}`).toBeLessThan(q.options.length);
+      }
+    }
+  });
+
+  it('every markdown table row has as many cells as its header', () => {
+    // An unescaped | inside `code` in a table cell silently splits the cell (write \| instead)
+    const cells = (row: string) => row.trim().replace(/^\||\|$/g, '').split(/(?<!\\)\|/).length;
+    for (const { lesson } of lessons) {
+      const lines = lesson.body.split('\n');
+      for (let i = 1; i < lines.length; i++) {
+        if (!/^\|[\s:|-]+\|$/.test(lines[i].trim()) || !lines[i - 1].trim().startsWith('|')) continue;
+        const want = cells(lines[i - 1]);
+        for (let j = i + 1; j < lines.length && lines[j].trim().startsWith('|'); j++) expect(cells(lines[j]), `${lesson.id}: ${lines[j]}`).toBe(want);
       }
     }
   });

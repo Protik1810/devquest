@@ -12,8 +12,8 @@ import { Editor, LANG_LABEL, WebPreview } from './Editor';
 import { ResultView } from './ResultView';
 import { AIReview } from './AIReview';
 
-export function CodeExercise({ ex, lessonId, title, onComplete, done, xp }: { ex: CodeEx; lessonId: string; title?: string; onComplete: (o: { hints: number; solution: boolean; scale?: number }) => void; done: boolean; /** Full reward, to show the current (hint-reduced) amount. */ xp?: number }) {
-  const storageKey = `code:${lessonId}`;
+export function CodeExercise({ ex, lessonId, step, title, onComplete, done, xp }: { ex: CodeEx; lessonId: string; /** Position in a multi-exercise lesson (drafts are kept per step) */ step?: number; title?: string; onComplete: (o: { hints: number; solution: boolean; scale?: number }) => void; done: boolean; /** Full reward, to show the current (hint-reduced) amount. */ xp?: number }) {
+  const storageKey = step ? `code:${lessonId}#${step}` : `code:${lessonId}`;
   const [code, setCode] = useState(() => {
     try {
       return localStorage.getItem(storageKey) ?? ex.starter;
@@ -49,6 +49,7 @@ export function CodeExercise({ ex, lessonId, title, onComplete, done, xp }: { ex
     }
   }, [code, storageKey, setCtx]);
 
+  const stdin = 'stdin' in ex.check ? ex.check.stdin : undefined;
   const run = async (submit: boolean) => {
     if (mode === 'self') {
       if (submit) setSelfCheck(true);
@@ -59,7 +60,7 @@ export function CodeExercise({ ex, lessonId, title, onComplete, done, xp }: { ex
     setRunning(true);
     bump('runs');
     try {
-      const r = await execute(ex.lang, code, grade ? ex.check : undefined, ex.prompt, { solution: ex.solution, starter: ex.starter });
+      const r = await execute(ex.lang, code, grade ? ex.check : undefined, ex.prompt, { solution: ex.solution, starter: ex.starter }, stdin);
       if (!submit && ex.lang !== 'sql' && mode !== 'ai') r.passed = undefined;
       setResult(r);
       // Remember failed submissions so the dashboard can suggest weak spots to practise
@@ -94,6 +95,15 @@ export function CodeExercise({ ex, lessonId, title, onComplete, done, xp }: { ex
       <div className="ex-prompt">
         <span className="tag">{LANG_LABEL[ex.lang]}</span>
         <Markdown source={ex.prompt} />
+        {stdin !== undefined && (
+          <div className="stdin-note small">
+            ⌨️ When your program calls <code>input()</code>, these lines are typed in for it, one per call:
+            <pre>{stdin}</pre>
+            {ex.check.type === 'stdout' && !!ex.check.cases?.length && (
+              <div className="muted">🧪 When you submit, it's also run with {ex.check.cases.length} other input{ex.check.cases.length > 1 ? 's' : ''}, so make it work for any input, not just this one.</div>
+            )}
+          </div>
+        )}
         {expected !== undefined && (
           <details className="expected">
             <summary className="small">Expected output</summary>

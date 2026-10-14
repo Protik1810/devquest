@@ -46,6 +46,8 @@ export function Playground() {
   const [code, setCode] = useState<Record<CodeLang, string>>(SAMPLES);
   const [result, setResult] = useState<ExecResult | null>(null);
   const [running, setRunning] = useState(false);
+  /** Lines typed into input() (Python) */
+  const [stdin, setStdin] = useState('');
   const bump = useGame((s) => s.bump);
   const setCtx = useLessonCtx((s) => s.set);
   useTools((s) => s.langs);
@@ -57,7 +59,7 @@ export function Playground() {
     bump('runs');
     setCtx({ title: `Playground (${LANG_META[lang].label})`, prompt: 'Free experimentation', code: code[lang] });
     try {
-      setResult(await execute(lang, code[lang], undefined, ''));
+      setResult(await execute(lang, code[lang], undefined, '', {}, lang === 'python' ? stdin : undefined));
     } catch (e) {
       setResult({ ok: false, output: '', error: (e as Error).message, mode: execMode(lang) });
     }
@@ -88,6 +90,12 @@ export function Playground() {
         <div className="card">
           <Editor lang={lang} value={code[lang]} onChange={(v) => setCode({ ...code, [lang]: v })} height="340px" onRun={run} />
           {lang === 'web' && <WebPreview code={code.web} height={360} />}
+          {lang === 'python' && (
+            <label className="stdin-box small">
+              ⌨️ Typed input: what a user would type into <code>input()</code>, one line per call
+              <textarea rows={2} value={stdin} onChange={(e) => setStdin(e.target.value)} placeholder="e.g. Sam" spellCheck={false} />
+            </label>
+          )}
           <div className="ex-actions">
             {lang !== 'web' && mode !== 'self' && (
               <button className="primary" onClick={run} disabled={running}>

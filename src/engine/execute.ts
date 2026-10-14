@@ -47,9 +47,9 @@ import { applyVariants, looksHardcoded, type Reference } from './integrity';
 const HARDCODED_MSG = '🕵️ Your program prints the expected output as fixed text instead of computing it. Write code that works it out, so it would still be right for other inputs.';
 const VARIANT_MSG = '🕵️ Your program matches the example, but gives different results when the inputs change (hidden test). Make sure it computes the answer from its inputs instead of returning fixed values.';
 
-async function runPlain(lang: CodeLang, mode: ExecMode, code: string): Promise<{ ok: boolean; output: string }> {
+async function runPlain(lang: CodeLang, mode: ExecMode, code: string, stdin?: string): Promise<{ ok: boolean; output: string }> {
   if (mode === 'app') {
-    const r = await runCode(lang, code);
+    const r = await runCode(lang, code, undefined, stdin);
     return { ok: r.ok, output: r.output ?? '' };
   }
   const r = await runLocal(lang as NativeLang, code);
@@ -62,16 +62,17 @@ async function integrity(lang: CodeLang, mode: ExecMode, code: string, check: Co
   if (check.type !== 'stdout' || check.verify) return null;
   if (looksHardcoded(code, check.expected, ref)) return HARDCODED_MSG;
   if (!check.variants?.length || !ref.solution) return null;
-  const mine = await runPlain(lang, mode, applyVariants(code, check.variants));
-  const theirs = await runPlain(lang, mode, applyVariants(ref.solution, check.variants));
+  const mine = await runPlain(lang, mode, applyVariants(code, check.variants), check.stdin);
+  const theirs = await runPlain(lang, mode, applyVariants(ref.solution, check.variants), check.stdin);
   if (!theirs.ok) return null; // the swap didn't fit this reference: don't punish the learner
   return mine.ok && sameOutput(mine.output, theirs.output) ? null : VARIANT_MSG;
 }
 
-export async function execute(lang: CodeLang, code: string, check: CodeCheck | undefined, task: string, ref: Reference = {}): Promise<ExecResult> {
+/** `stdin` is the typed input for input() when running without a check (the check carries its own). */
+export async function execute(lang: CodeLang, code: string, check: CodeCheck | undefined, task: string, ref: Reference = {}, stdin?: string): Promise<ExecResult> {
   const mode = execMode(lang);
   if (mode === 'app') {
-    const r = await runCode(lang, code, check);
+    const r = await runCode(lang, code, check, check && 'stdin' in check ? check.stdin : stdin);
     if (r.passed && check) {
       const problem = await integrity(lang, mode, code, check, ref);
       if (problem) return { ...r, passed: false, message: problem, mode };

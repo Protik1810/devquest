@@ -6,6 +6,7 @@ import mongoShell from './mongoShell.js?raw';
 import { runPostgres } from './postgres';
 import { registerMysql, translateMysql } from './mysql';
 import { RedisEngine } from './redis';
+import { PY_TEST_HELPER } from './pyTestHelper';
 
 export type RunResult = { ok: boolean; output: string; error?: string; passed?: boolean; message?: string; table?: { columns: string[]; values: unknown[][] } };
 
@@ -50,49 +51,7 @@ const localizeVendors = (html: string) => {
 
 // ---------- worker plumbing ----------
 // Each language runs in a Web Worker so an infinite loop can be killed with a timeout.
-/**
- * Runs exercise tests one top-level statement at a time. When a bare `assert` fails (no message), it explains
- * the failure instead of a bare AssertionError: the failing line, and for `assert a == b` the expected and actual values.
- */
-const PY_TEST_HELPER = String.raw`
-import ast as _dq_ast
 
-def __dq_run_tests(src, ns):
-    tree = _dq_ast.parse(src)
-    lines = src.splitlines()
-    for node in tree.body:
-        code = compile(_dq_ast.Module(body=[node], type_ignores=[]), '<tests>', 'exec')
-        try:
-            exec(code, ns)
-        except AssertionError as e:
-            if str(e):
-                raise
-            raise AssertionError(__dq_explain(e, node, lines, ns)) from None
-
-def __dq_explain(e, node, lines, ns):
-    lineno = None
-    tb = e.__traceback__
-    while tb is not None:
-        if tb.tb_frame.f_code.co_filename == '<tests>':
-            lineno = tb.tb_lineno
-        tb = tb.tb_next
-    stmt = None
-    for n in _dq_ast.walk(node):
-        if isinstance(n, _dq_ast.Assert) and getattr(n, 'lineno', None) == lineno:
-            stmt = n
-    text = lines[lineno - 1].strip() if lineno else 'assert'
-    nl = chr(10)
-    detail = ''
-    t = stmt.test if stmt is not None else None
-    if isinstance(t, _dq_ast.Compare) and len(t.ops) == 1 and isinstance(t.ops[0], (_dq_ast.Eq, _dq_ast.Is)):
-        try:
-            got = eval(compile(_dq_ast.Expression(body=t.left), '<tests>', 'eval'), ns)
-            want = eval(compile(_dq_ast.Expression(body=t.comparators[0]), '<tests>', 'eval'), ns)
-            detail = nl + '  expected: ' + repr(want) + nl + '  got:      ' + repr(got)
-        except Exception:
-            pass
-    return 'This check failed: ' + text + detail
-`;
 
 const PY_WORKER = `
 importScripts('${PYODIDE_URL}');
@@ -108,16 +67,21 @@ onmessage = async (e) => {
     try { await py.loadPackage('hashlib'); py.runPython("import sys\\nfor m in ('hashlib', '_hashlib'): sys.modules.pop(m, None)"); self.fullHashlib = true; } catch (err) { /* offline: basic hashlib still works */ }
   }
   let out = '';
-  py.setStdout({ batched: s => { out += s + '\\n'; } });
-  py.setStderr({ batched: s => { out += s + '\\n'; } });
+  // Raw writes keep the output exactly as printed, including a last line without a newline
+  const dec = new TextDecoder();
+  const write = { write: (buf) => { out += dec.decode(buf, { stream: true }); return buf.length; } };
+  py.setStdout(write);
+  py.setStderr(write);
+  const flush = () => { try { py.runPython('import sys\\nsys.stdout.flush()\\nsys.stderr.flush()'); } catch (err) { /* nothing to flush */ } };
   const ns = py.globals.get('dict')();
+  py.globals.get('__dq_set_stdin')(e.data.stdin ?? null);
   try {
-    await py.runPythonAsync(e.data.code, { globals: ns });
+    try { await py.runPythonAsync(e.data.code, { globals: ns }); } finally { flush(); }
     if (e.data.tests) {
       const before = out.length;
       // Run the tests statement by statement, so a bare failing assert can be explained (line + expected/got)
       try { py.globals.get('__dq_run_tests')(e.data.tests, ns); }
-      catch (err) { postMessage({ ok: true, output: out.slice(0, before), testError: testMessage(String(err.message || err)) }); return; }
+      catch (err) { flush(); postMessage({ ok: true, output: out.slice(0, before), testError: testMessage(String(err.message || err)) }); return; }
       out = out.slice(0, before);
     }
     postMessage({ ok: true, output: out });
@@ -127,7 +91,8 @@ onmessage = async (e) => {
 };
 function cleanPy(msg) {
   // Drop pyodide's internal frames and DevQuest's test-runner frames; keep the user's part of the traceback
-  const lines = msg.split('\\n').filter((l, i, all) => !l.includes('File "<devquest>"') && !(i > 0 && all[i - 1].includes('File "<devquest>"')));
+  // (and the source line shown under such a frame, which is indented; the helpers' source usually isn't shown)
+  const lines = msg.split('\\n').filter((l, i, all) => !l.includes('File "<devquest>"') && !(i > 0 && all[i - 1].includes('File "<devquest>"') && /^\\s/.test(l)));
   const i = lines.findIndex(l => l.includes('File "<exec>"') || l.includes('File "<tests>"'));
   return (i >= 0 ? ['Traceback (most recent call last):', ...lines.slice(i)] : lines).join('\\n').trim();
 }
@@ -188,7 +153,7 @@ class Runner {
     return this.readyPromise!;
   }
 
-  async run(code: string, tests?: string, timeoutMs = 8000): Promise<{ ok: boolean; output: string; error?: string; testError?: string }> {
+  async run(code: string, tests?: string, timeoutMs = 8000, stdin?: string): Promise<{ ok: boolean; output: string; error?: string; testError?: string }> {
     await this.warm();
     const w = this.worker!;
     return new Promise((resolve) => {
@@ -204,7 +169,7 @@ class Runner {
         resolve(e.data);
       };
       w.addEventListener('message', onMsg);
-      w.postMessage({ code, tests });
+      w.postMessage({ code, tests, stdin });
     });
   }
 }
@@ -486,7 +451,8 @@ const mongoProgram = (code: string, setup = '') => `${mongoShell}
 ;${setup}
 ;${code}`;
 
-export async function runCode(lang: CodeLang, code: string, check?: CodeCheck): Promise<RunResult> {
+/** `stdin` is what the learner "types" into input() (Python); by default the check's own. */
+export async function runCode(lang: CodeLang, code: string, check?: CodeCheck, stdin = check && 'stdin' in check ? check.stdin : undefined): Promise<RunResult> {
   if (lang === 'sql') return runSql(code, check);
   if (lang === 'postgres') return runPostgres(code, check);
   if (lang === 'mysql') return runSql(code, check, 'mysql');
@@ -512,12 +478,20 @@ ${check.expected}` };
         return { ok: false, output: '', error: `SyntaxError: ${(e as Error).message}`, passed: check ? false : undefined };
       }
     }
-    const r = await runner.run(code, tests, lang === 'python' ? 15000 : 5000);
+    const r = await runner.run(code, tests, lang === 'python' ? 15000 : 5000, stdin);
     if (!r.ok) return { ok: false, output: r.output, error: r.error, passed: check ? false : undefined };
     if (!check) return { ok: true, output: r.output };
     if (check.type === 'stdout') {
       const passed = r.output.trim() === check.expected.trim();
-      return { ok: true, output: r.output, passed, message: passed ? 'Output matches!' : `Expected output:\n${check.expected}` };
+      if (!passed) return { ok: true, output: r.output, passed, message: `Expected output:\n${check.expected}` };
+      // The example passed: run the other inputs too, so every branch of the program gets checked
+      for (const c of check.cases ?? []) {
+        const o = await runner.run(code, undefined, 15000, c.stdin);
+        if (o.ok && o.output.trim() === c.expected.trim()) continue;
+        return { ok: true, output: r.output, passed: false, message: `Right for the example, but not for another input.\n\nTyped in:\n${c.stdin}\n\nExpected output:\n${c.expected}\n\nYour program printed:\n${o.ok ? o.output.trim() : o.error}` };
+      }
+      const n = check.cases?.length ?? 0;
+      return { ok: true, output: r.output, passed, message: n ? `Output matches, for the example and ${n} other input${n > 1 ? 's' : ''}!` : 'Output matches!' };
     }
     if (check.type === 'tests') {
       const passed = !r.testError;

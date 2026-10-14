@@ -1,6 +1,11 @@
 import { useState } from 'react';
 import type { QuizQuestion } from '../content/types';
 
+/** Quiz text with `inline code` shown as code. */
+export function Inline({ text }: { text: string }) {
+  return <>{text.split(/`([^`]+)`/).map((part, i) => (i % 2 ? <code key={i}>{part}</code> : part))}</>;
+}
+
 /** Multiple-choice quiz. Wrong answers explain and let you retry; finishing reports whether every answer was right first time. */
 export function Quiz({ questions, onComplete, done, onMistake }: { questions: QuizQuestion[]; onComplete: (perfect: boolean) => void; done?: boolean; onMistake?: () => void }) {
   const [idx, setIdx] = useState(0);
@@ -50,13 +55,14 @@ export function Quiz({ questions, onComplete, done, onMistake }: { questions: Qu
           <span key={i} className={i < idx ? 'done' : i === idx ? 'cur' : ''} />
         ))}
       </div>
-      <h3 className="quiz-q">{q.q}</h3>
+      <h3 className="quiz-q"><Inline text={q.q} /></h3>
+      {q.code && <pre className="quiz-code"><code>{q.code}</code></pre>}
       <div className="quiz-opts">
         {q.options.map((o, i) => {
           const state = picked === null ? '' : i === q.answer && correct ? 'right' : i === picked ? 'wrong' : tried.includes(i) && !correct ? 'tried' : '';
           return (
             <button key={i} className={`opt ${state}`} onClick={() => pick(i)} disabled={!correct && tried.includes(i) && i !== picked} aria-label={tried.includes(i) && !correct ? `${o} (already tried)` : undefined}>
-              <span className="opt-key">{'ABCD'[i]}</span> {o}
+              <span className="opt-key">{'ABCDEF'[i]}</span> <Inline text={o} />
             </button>
           );
         })}
@@ -64,7 +70,7 @@ export function Quiz({ questions, onComplete, done, onMistake }: { questions: Qu
       {picked !== null && (
         <div className={`feedback ${correct ? 'ok' : 'bad'}`}>
           {correct ? '✅ Correct! ' : '❌ Not quite. Try again. '}
-          {correct && q.explain}
+          {correct && q.explain && <Inline text={q.explain} />}
           {!correct && tried.length >= 2 && (
             <div className="nudge">
               💡 You've ruled out {tried.length} options, so you're getting closer. Skim the lesson above for this topic, then pick from the {q.options.length - tried.length} that are left.

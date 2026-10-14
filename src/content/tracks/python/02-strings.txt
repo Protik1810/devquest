@@ -1,0 +1,850 @@
+=== module Module 2 · Working with text
+
+=== lesson py-strings | Strings in depth | 75
+Text is everywhere in programs: names, messages, file contents, web pages. In Python, text is a **string** (`str`): a **sequence of characters**. This lesson shows how to write strings, reach into them, and cut pieces out of them.
+
+## Writing strings
+
+Single and double quotes make exactly the same kind of string. **Triple quotes** let a string span several lines, keeping the line breaks:
+
+```python
+poem = """Roses are red,
+Violets are blue."""
+print(poem)
+```
+
+Inside a string, a **backslash** `\` gives the next character a special meaning. These are **escape sequences**:
+
+| Escape | Means | Example | Prints |
+|---|---|---|---|
+| `\n` | new line | `"one\ntwo"` | one, then two on the next line |
+| `\t` | tab | `"Name:\tAda"` | Name:    Ada |
+| `\\` | one backslash | `"C:\\Users"` | C:\Users |
+| `\"` and `\'` | a quote that doesn't end the string | `"say \"hi\""` | say "hi" |
+
+A **raw string**, written `r"..."`, switches escapes off, which is handy for Windows paths and the regular expressions of Module 11: `r"C:\new\table"` really contains `\n` and `\t` as two characters each.
+
+## Length and indexing
+
+`len()` counts the characters. Each character has a position called its **index**, and **indexes start at 0**:
+
+```
+  P   y   t   h   o   n
+  0   1   2   3   4   5
+ -6  -5  -4  -3  -2  -1
+```
+
+```python
+word = "Python"
+print(len(word))    # 6
+print(word[0])      # P   the first character
+print(word[5])      # n   the last one is len - 1
+print(word[-1])     # n   negative indexes count from the end
+print(word[-2])     # o
+print(word[6])      # IndexError: string index out of range
+```
+
+Why start at 0? An index is the **distance from the start**: the first character is 0 steps away. Nearly every programming language counts this way, so it's worth getting used to.
+
+## Slicing: cutting out a piece
+
+`word[start:stop]` gives the characters from `start` **up to but not including** `stop`:
+
+```python
+word = "Python"
+word[0:3]    # 'Pyt'
+word[2:]     # 'thon'   (leave out stop: go to the end)
+word[:2]     # 'Py'     (leave out start: begin at 0)
+word[-3:]    # 'hon'    (the last three)
+word[:]      # 'Python' (a full copy)
+```
+
+A third number is the **step**: `word[::2]` takes every second character (`'Pto'`), and a step of `-1` walks backwards, which **reverses** the string: `word[::-1]` is `'nohtyP'`.
+
+A helpful picture: indexes point at the **gaps between characters**, and a slice is everything between two gaps. That's why `word[0:3]` has 3 characters, and why `word[:3] + word[3:]` gives back the whole word. Unlike indexing, slicing never crashes: `word[2:100]` is just `'thon'`.
+
+## Strings can't be changed
+
+Strings are **immutable**: once created, they can't be modified.
+
+```python
+word = "Python"
+word[0] = "J"           # TypeError: 'str' object does not support item assignment
+word = "J" + word[1:]   # build a new string instead, and re-assign the name
+print(word)             # Jython
+```
+
+## Joining, repeating and searching
+
+```python
+"snow" + "ball"           # 'snowball'   concatenation
+"ha" * 3                  # 'hahaha'     repetition
+"th" in "Python"          # True         membership
+"TH" in "Python"          # False        case matters
+"z" not in "Python"       # True
+```
+
+Strings compare **alphabetically, character by character**: `"apple" < "banana"` is `True`. Careful: every uppercase letter comes before every lowercase one, so `"Zoo" < "apple"` is also `True`.
+
+## Characters are numbers underneath
+
+Every character has a number, its **code point**, in the worldwide **Unicode** standard. `ord()` gives a character's number and `chr()` turns a number back into a character:
+
+```python
+ord("A")          # 65
+ord("a")          # 97
+chr(98)           # 'b'
+chr(ord("a") + 1) # 'b'  the next letter
+ord("é")          # 233
+len("🐍")         # 1    one character, even an emoji
+```
+
+Python 3 strings are Unicode, so any language and any emoji just works. When text is saved to a file or sent over a network it's **encoded** into bytes, usually as **UTF-8**; you'll meet that in Module 11.
+
+## Common mistakes
+
+- Off-by-one slices: `word[1:3]` has **two** characters (indexes 1 and 2), not three.
+- Using `word[len(word)]` for the last character: it's `word[len(word) - 1]`, or simply `word[-1]`.
+- Calling something on a string and expecting the string itself to change. It can't; you'll see why that matters with methods next.
+
+📚 **Go deeper:** Python Tutorial, section 3.1.2 "Text"; *Think Python* (3rd ed.), chapter 7 "Iteration and Search" (strings); Python for Everybody, chapter 6 "Strings".
+--- quiz
+? What does this print?
+```python
+word = "DevQuest"
+print(word[3], word[-1])
+```
+- `v t`
++ `Q t`
+- `Q s`
+- `e t`
+> Index 3 is the fourth character, `Q`, and `-1` is the last one, `t`.
+? What does `"banana"[1:4]` give?
+- `'ban'`
++ `'ana'`
+- `'anan'`
+- `'nan'`
+> Indexes 1, 2 and 3: the stop index (4) isn't included.
+? What does `"Python"[::-1]` give?
++ `'nohtyP'`
+- `'Python'`
+- `'n'`
+- An error
+> A step of -1 walks backwards through the whole string.
+? What happens here?
+```python
+s = "cat"
+s[0] = "b"
+```
+- `s` becomes `"bat"`
+- `s` becomes `"bcat"`
++ A `TypeError`, because strings can't be changed
+- Nothing
+> Strings are immutable. Build a new one instead: `s = "b" + s[1:]`.
+? What is `len("Hi\n")`?
+- 4
++ 3
+- 2
+- 5
+> `\n` is written with two symbols but it is a single character, a new line.
+? What does `print(chr(ord("c") + 2))` print?
+- `c2`
+- `99`
++ `e`
+- `101`
+> `ord("c")` is 99, plus 2 is 101, which is the code point of `e`.
+--- exercise code python
+::prompt
+Using indexing, slicing and `len()` on the variable `word`, print these six lines. Don't type the answers: compute each one, so the program works for any word.
+::starter
+word = "programming"
+print("first:", word[0])
+# print the other five lines
+::solution
+word = "programming"
+print("first:", word[0])
+print("last:", word[-1])
+print("first three:", word[:3])
+print("last three:", word[-3:])
+print("reversed:", word[::-1])
+print("length:", len(word))
+::expected
+first: p
+last: g
+first three: pro
+last three: ing
+reversed: gnimmargorp
+length: 11
+::variants
+"programming" => "developer"
+::hints
+- The last character is at index `-1`.
+- `word[:3]` is the first three characters, `word[-3:]` the last three.
+- Reverse with a step of `-1`: `word[::-1]`.
+--- exercise code python
+::prompt
+Read a word with the prompt `Word: ` and print:
+
+- its **middle character**: the one at index `len(word) // 2`;
+- the word with its **first and last letters swapped** (build it from slices);
+- the letter that comes **after its first letter** in the alphabet, using `ord()` and `chr()`.
+::starter
+word = input("Word: ")
+::solution
+word = input("Word: ")
+middle = word[len(word) // 2]
+swapped = word[-1] + word[1:-1] + word[0]
+next_letter = chr(ord(word[0]) + 1)
+print("Middle character:", middle)
+print("Swapped ends:", swapped)
+print("After the first letter:", next_letter)
+::stdin
+rocket
+::expected
+Word: rocket
+Middle character: k
+Swapped ends: tocker
+After the first letter: s
+::hints
+- `word[1:-1]` is everything except the first and last characters.
+- Swapped: the last letter, then the middle part, then the first letter.
+- `chr(ord(word[0]) + 1)`: turn the letter into its number, add one, and turn it back.
+--- cards
+Indexing :: s[0] is the first character, s[-1] the last. Indexes start at 0; going past the end raises IndexError.
+Slicing :: s[start:stop:step] takes characters from start up to, but not including, stop. s[::-1] reverses.
+Immutable strings :: Strings can't be changed in place; build a new string and re-assign the name.
+Escape sequences :: \n new line, \t tab, \\ backslash, \" quote. r"..." makes a raw string where backslashes are literal.
+ord() and chr() :: ord("A") is 65, the character's Unicode code point; chr(65) turns it back into "A".
+
+=== lesson py-string-methods | String methods | 80
+## Methods: actions that belong to a value
+
+A **method** is a function attached to a value. You call it with a dot: `value.method(arguments)`.
+
+```python
+name = "ada lovelace"
+print(name.upper())     # ADA LOVELACE
+print(name.title())     # Ada Lovelace
+```
+
+Because strings are immutable, string methods **never change the original**. They **return a new string**, which you have to use or store:
+
+```python
+name = "ada"
+name.upper()          # makes "ADA", but nothing keeps it
+print(name)           # ada   ← unchanged!
+name = name.upper()   # keep the result by re-assigning
+print(name)           # ADA
+```
+
+Forgetting to store the result is one of the most common beginner bugs.
+
+## Changing case
+
+| Method | `"hello WORLD"` becomes |
+|---|---|
+| `upper()` | `'HELLO WORLD'` |
+| `lower()` | `'hello world'` |
+| `title()` | `'Hello World'` |
+| `capitalize()` | `'Hello world'` |
+| `swapcase()` | `'HELLO world'` |
+
+To compare text without caring about case, lower both sides first: `answer.lower() == "yes"` accepts `Yes`, `YES` and `yes`.
+
+## Removing whitespace
+
+Text typed by users or read from files often has stray spaces or newlines around it. `strip()` removes whitespace from both ends; `lstrip()` and `rstrip()` from the left or right only. Given characters, it strips those instead:
+
+```python
+"   hello  ".strip()          # 'hello'
+"...wow!!!".strip(".!")       # 'wow'
+```
+
+## Searching
+
+```python
+email = "ada@example.com"
+email.find("@")             # 3     the index where it starts
+email.find("#")             # -1    meaning "not found"
+email.index("#")            # ValueError (index() complains instead of returning -1)
+email.count("a")            # 2
+email.startswith("ada")     # True
+email.endswith(".com")      # True
+email[email.find("@") + 1:] # 'example.com'   find + slicing work well together
+```
+
+## Replacing
+
+`replace(old, new)` replaces every occurrence; an optional third argument limits how many:
+
+```python
+"I like cats. cats are great".replace("cats", "dogs")   # 'I like dogs. dogs are great'
+"a-b-c".replace("-", "", 1)                              # 'ab-c'
+```
+
+## Splitting and joining
+
+`split()` breaks a string into a **list** of strings. (A list is an ordered collection written with square brackets; Module 6 covers lists fully. For now: `len()` and indexing work on lists just as on strings.)
+
+```python
+"the quick  brown fox".split()     # ['the', 'quick', 'brown', 'fox']   any whitespace, no empties
+"2026-10-14".split("-")            # ['2026', '10', '14']
+"a,b,,c".split(",")                # ['a', 'b', '', 'c']   an exact separator keeps empty parts
+"key=value=x".split("=", 1)        # ['key', 'value=x']   split only once
+```
+
+`join()` does the opposite. It's called **on the separator**, with a list of strings:
+
+```python
+words = ["the", "quick", "fox"]
+" ".join(words)        # 'the quick fox'
+", ".join(words)       # 'the, quick, fox'
+"".join(words)         # 'thequickfox'
+```
+
+A neat trick: `" ".join(text.split())` collapses any run of spaces into single spaces.
+
+## Checking what a string contains
+
+| Method | True when every character is... | Example |
+|---|---|---|
+| `isdigit()` | a digit | `"2026".isdigit()` is True, `"-5".isdigit()` and `"3.5".isdigit()` are False |
+| `isalpha()` | a letter | `"abc".isalpha()` |
+| `isalnum()` | a letter or digit | `"abc123".isalnum()` |
+| `isspace()` | whitespace | `"  ".isspace()` |
+| `isupper()` / `islower()` | cased letters all upper / lower | `"ABC".isupper()` |
+
+These are handy for checking input before converting it, as you'll do in Module 3.
+
+## Padding and alignment
+
+```python
+"7".zfill(3)           # '007'
+"hi".center(10, "*")   # '****hi****'
+"hi".ljust(5) + "|"    # 'hi   |'
+"hi".rjust(5)          # '   hi'
+```
+
+## Chaining
+
+Each method returns a string, so you can call another method on the result, reading left to right:
+
+```python
+answer = "  YES please \n"
+clean = answer.strip().lower().replace(" please", "")
+print(clean)     # yes
+```
+
+## Finding methods yourself
+
+There are over 40 string methods. Nobody memorises them all: `dir(str)` lists them, `help(str.split)` explains one, and the Python docs page "String Methods" describes each with examples. Looking things up is a normal, professional habit.
+
+📚 **Go deeper:** Python Library Reference, "String Methods"; *Automate the Boring Stuff with Python*, chapter 8 "Strings and Text Editing"; CS50P lecture 0.
+--- quiz
+? What does this print?
+```python
+s = "  Hi  "
+s.strip()
+print(len(s))
+```
+- 2
++ 6
+- 4
+- An error
+> `strip()` returned a new string, but it was never stored, so `s` is still `"  Hi  "` (6 characters).
+? What does `"a,b,,c".split(",")` give?
+- `['a', 'b', 'c']`
++ `['a', 'b', '', 'c']`
+- `['a,b,,c']`
+- `['a', 'b', ',', 'c']`
+> With an explicit separator, two commas in a row produce an empty string between them.
+? What does `"-".join(["2026", "10", "14"])` give?
++ `'2026-10-14'`
+- `'-2026-10-14-'`
+- `['2026-10-14']`
+- `'20261014'`
+> The separator goes **between** the items.
+? What are `"banana".find("n")` and `"banana".find("x")`?
+- `3` and `0`
++ `2` and `-1`
+- `2` and a `ValueError`
+- `3` and `-1`
+> `find` returns the index of the first match, or -1 when there's none. (`index` would raise `ValueError` instead.)
+? Which of these is True?
+- `"3.5".isdigit()`
+- `"-7".isdigit()`
++ `"007".isdigit()`
+- `"12 34".isdigit()`
+> Only digit characters count: a dot, a minus sign or a space makes it False.
+? What does `"Hello World".lower().count("o")` give?
+- 1
++ 2
+- 0
+- `'o'`
+> After lowering, `"hello world"` contains two o's.
+--- exercise code python
+::prompt
+Users type their names messily. Read a full name with the prompt `Full name: `, then print:
+
+- the clean name: extra spaces removed (single spaces between words) and each word capitalised with `title()`;
+- the initials of the first two words, like `A.L.`;
+- how many letters the name has (not counting spaces).
+::starter
+raw = input("Full name: ")
+::solution
+raw = input("Full name: ")
+clean = " ".join(raw.split()).title()
+parts = clean.split()
+initials = parts[0][0] + "." + parts[1][0] + "."
+letters = len(clean.replace(" ", ""))
+print("Clean:", clean)
+print("Initials:", initials)
+print("Letters:", letters)
+::stdin
+   aDA   lOVELACE
+::expected
+Full name:    aDA   lOVELACE
+Clean: Ada Lovelace
+Initials: A.L.
+Letters: 11
+::hints
+- `" ".join(raw.split())` removes the extra spaces; then call `.title()` on the result.
+- `clean.split()` gives a list of words; `parts[0][0]` is the first letter of the first word.
+- Count letters by removing the spaces first: `len(clean.replace(" ", ""))`.
+--- exercise code python
+::prompt
+A blog post's tags were typed with inconsistent spacing. Using `replace`, `split` and `join` (no loops needed), print how many tags there are and the tags as hashtags:
+```
+4 tags
+#python #beginners #coding #tips
+```
+::starter
+tags = "python, beginners ,  coding,  tips"
+::solution
+tags = "python, beginners ,  coding,  tips"
+names = tags.replace(" ", "").split(",")
+print(len(names), "tags")
+print("#" + " #".join(names))
+::expected
+4 tags
+#python #beginners #coding #tips
+::variants
+"python, beginners ,  coding,  tips" => "art,  design , ui"
+::hints
+- First remove all the spaces with `replace(" ", "")`, then `split(",")`.
+- `" #".join(names)` puts `" #"` between the tags; add one more `"#"` at the front.
+--- exercise code python
+::prompt
+Split the email address into its user and domain parts with `find` and slicing, and print a **masked** version that keeps only the first character of the user part:
+```
+user: ada.lovelace
+domain: example.com
+masked: a***@example.com
+```
+::starter
+email = "ada.lovelace@example.com"
+at = email.find("@")
+::solution
+email = "ada.lovelace@example.com"
+at = email.find("@")
+user = email[:at]
+domain = email[at + 1:]
+print("user:", user)
+print("domain:", domain)
+print("masked:", user[0] + "***@" + domain)
+::expected
+user: ada.lovelace
+domain: example.com
+masked: a***@example.com
+::variants
+"ada.lovelace@example.com" => "grace.hopper@navy.mil"
+::hints
+- Everything before the `@` is `email[:at]`.
+- The domain starts one character after the `@`: `email[at + 1:]`.
+--- cards
+String methods return new strings :: s.upper() doesn't change s. Store the result: s = s.upper().
+strip() :: Removes whitespace (or given characters) from both ends. lstrip()/rstrip() do one side.
+split() and join() :: "a b".split() gives ['a', 'b']; " ".join(['a', 'b']) gives "a b". join is called on the separator.
+find() vs index() :: Both give the position of a substring; find returns -1 when missing, index raises ValueError.
+isdigit() :: True only if every character is a digit: "42" yes; "-4" and "3.5" no.
+
+=== lesson py-fstrings | Formatting output with f-strings | 80
+## Why formatting matters
+
+Gluing text together with `+` and `str()` gets messy fast:
+
+```python
+print("Total: " + str(total) + " EUR for " + str(count) + " items")
+```
+
+An **f-string** (formatted string literal) is cleaner. Put an `f` before the opening quote, and write any expression inside **curly braces**; Python evaluates it and inserts the result:
+
+```python
+name = "Ada"
+age = 36
+print(f"{name} is {age} years old.")          # Ada is 36 years old.
+print(f"Next year {name} turns {age + 1}.")   # maths inside the braces
+print(f"{name.upper()} has {len(name)} letters")
+```
+
+## Format specifiers
+
+After the expression, a colon starts a **format specifier** that controls how the value looks:
+
+| Spec | Meaning | Example | Result |
+|---|---|---|---|
+| `.2f` | exactly 2 decimal places | `f"{3.14159:.2f}"` | `3.14` |
+| `,` | thousands separators | `f"{1234567:,}"` | `1,234,567` |
+| `,.2f` | both at once | `f"{1234.5:,.2f}"` | `1,234.50` |
+| `.1%` | as a percentage | `f"{0.256:.1%}"` | `25.6%` |
+| `>8` | right-align in 8 characters | `f"{42:>8}"` | `      42` |
+| `<8` | left-align | `f"{'hi':<8}\|"` | `hi      \|` |
+| `^8` | centre | `f"{'hi':^8}\|"` | `   hi   \|` |
+| `03` | pad with zeros to 3 digits | `f"{7:03}"` | `007` |
+| `*^9` | centre, filling with `*` | `f"{'go':*^9}"` | `***go****` |
+
+The pattern is `[fill][align][width][,][.precision][type]`, and you can combine parts: `f"{price:>10,.2f}"` right-aligns a price with separators and 2 decimals in 10 characters. The width can even come from a variable: `f"{name:<{width}}"`.
+
+## Lining up a table
+
+Alignment and width make tidy columns:
+
+```python
+print(f"{'Item':<10}{'Price':>8}")
+print(f"{'Coffee':<10}{3.5:>8.2f}")
+print(f"{'Sandwich':<10}{6.25:>8.2f}")
+```
+
+```
+Item         Price
+Coffee        3.50
+Sandwich      6.25
+```
+
+## Debugging with =
+
+Writing `=` after an expression prints the expression *and* its value, a quick way to look inside a program:
+
+```python
+total = 42
+print(f"{total=}")         # total=42
+print(f"{total * 2=}")     # total * 2=84
+```
+
+## Braces and quotes inside f-strings
+
+- To print a literal brace, double it: `f"{{not a variable}}"` prints `{not a variable}`.
+- Inside the braces, use the *other* kind of quote from the one around the f-string: `f"{'hi':>5}"`. (Python 3.12 relaxed this rule, but older versions are everywhere, so it's a good habit.)
+
+## str() versus repr()
+
+`print` shows a value's friendly form, `str()`. `repr()` shows its **developer** form, which for strings includes the quotes, so you can see stray spaces:
+
+```python
+word = "hi "
+print(f"[{word}]")      # [hi ]
+print(f"{word!r}")      # 'hi '    !r uses repr()
+```
+
+## Older styles you'll still meet
+
+Before f-strings (Python 3.6) people wrote `"{} is {}".format(name, age)` or `"%s is %d" % (name, age)`. You'll see them in older code and tutorials; they work, but prefer f-strings in new code.
+
+## Formatting vs rounding
+
+`round(x, 2)` changes the **number**; `f"{x:.2f}"` only changes how it's **displayed**, and always shows exactly two decimals (`3.5` appears as `3.50`; `round(3.5, 2)` would print `3.5`). For showing prices and measurements, formatting is usually what you want.
+
+📚 **Go deeper:** Python Tutorial, section 7.1 "Fancier Output Formatting"; Python Library Reference, "Format Specification Mini-Language"; *Python Crash Course* (3rd ed.), chapter 2.
+--- quiz
+? What does this print?
+```python
+price = 4.5
+print(f"{price:.2f}")
+```
+- `4.5`
++ `4.50`
+- `4.500`
+- `5`
+> `.2f` always shows exactly two decimal places.
+? What does `f"{1500000:,}"` give?
+- `1500000`
++ `1,500,000`
+- `1.500.000`
+- `1,500,000.00`
+> The comma option adds thousands separators.
+? What does this print? (The `|` marks where the text ends.)
+```python
+print(f"{'ab':>4}|")
+```
+- `ab  |`
++ `  ab|`
+- ` ab |`
+- `ab|`
+> `>4` right-aligns in a field 4 characters wide, padding on the left.
+? What does this print?
+```python
+x = 7
+print(f"{x=}")
+```
+- `7`
+- `x`
++ `x=7`
+- `{x=}`
+> The `=` specifier prints the expression's text and its value.
+? What does `f"{0.5:.0%}"` give?
+- `0.5%`
++ `50%`
+- `0%`
+- `50.0%`
+> `%` multiplies by 100 and adds a percent sign; `.0` means no decimals.
+? What does `f"{{x}}"` give?
+- the value of `x`
++ `{x}`
+- `{{x}}`
+- a `SyntaxError`
+> Doubled braces print one literal brace each.
+--- exercise code python
+::prompt
+Print this receipt with f-strings. Item names are **left-aligned in 12 characters**, prices **right-aligned in 6 characters with 2 decimals**, and the total is computed:
+```
+Coffee        3.50
+Croissant     2.75
+Orange juice  4.20
+Total        10.45
+```
+::starter
+coffee = 3.5
+croissant = 2.75
+juice = 4.2
+print(f"{'Coffee':<12}{coffee:>6.2f}")
+# print the other three lines
+::solution
+coffee = 3.5
+croissant = 2.75
+juice = 4.2
+print(f"{'Coffee':<12}{coffee:>6.2f}")
+print(f"{'Croissant':<12}{croissant:>6.2f}")
+print(f"{'Orange juice':<12}{juice:>6.2f}")
+total = coffee + croissant + juice
+print(f"{'Total':<12}{total:>6.2f}")
+::expected
+Coffee        3.50
+Croissant     2.75
+Orange juice  4.20
+Total        10.45
+::variants
+coffee = 3.5 => coffee = 3.95
+::hints
+- Copy the first line's pattern: `{'Name':<12}` for the label, `{value:>6.2f}` for the price.
+- Add the three prices into a `total` variable before printing the last line.
+--- exercise code python
+::prompt
+Build a tip calculator. Read the bill amount, the tip percentage and the number of people (prompts as shown), then print the tip, the total and each person's share, all with **2 decimal places**:
+```
+Bill: 84.6
+Tip %: 15
+People: 3
+Tip: 12.69
+Total: 97.29
+Each pays: 32.43
+```
+::starter
+bill = float(input("Bill: "))
+::solution
+bill = float(input("Bill: "))
+percent = int(input("Tip %: "))
+people = int(input("People: "))
+tip = bill * percent / 100
+total = bill + tip
+print(f"Tip: {tip:.2f}")
+print(f"Total: {total:.2f}")
+print(f"Each pays: {total / people:.2f}")
+::stdin
+84.6
+15
+3
+::expected
+Bill: 84.6
+Tip %: 15
+People: 3
+Tip: 12.69
+Total: 97.29
+Each pays: 32.43
+::hints
+- Read the percentage and the number of people with `int(input(...))`.
+- The tip is `bill * percent / 100`.
+- `f"{value:.2f}"` shows two decimals; you can even divide inside the braces.
+--- exercise code python
+::prompt
+Draw a text progress bar 20 characters wide. The number of `#` characters is `done * 20 // total`; fill the rest with `-`. After the bar, show the percentage with one decimal using the `%` format:
+```
+[######--------------] 30.8%
+```
+::starter
+done = 37
+total = 120
+::solution
+done = 37
+total = 120
+filled = done * 20 // total
+bar = "#" * filled + "-" * (20 - filled)
+print(f"[{bar}] {done / total:.1%}")
+::expected
+[######--------------] 30.8%
+::variants
+done = 37 => done = 95
+::hints
+- Repeat a string with `*`: `"#" * filled`.
+- The dashes fill the remaining `20 - filled` characters.
+- `f"{done / total:.1%}"` shows a fraction as a percentage with one decimal.
+--- cards
+f-string :: f"..." with {expressions} inside; Python evaluates each expression and inserts it: f"{name} is {age + 1}".
+Format specifier :: After a colon in the braces: {x:.2f} two decimals, {n:,} separators, {p:.1%} percent, {s:>8} right-align.
+{x=} :: Prints the expression and its value, e.g. total=42. Handy for debugging.
+str() vs repr() :: str is the friendly form print shows; repr is the developer form (strings get quotes). f"{s!r}" uses repr.
+
+=== lesson py-m2-test | Module 2 test | 150
+This test covers everything about text: writing strings and escapes, indexing and slicing, immutability, string methods, splitting and joining, and formatting with f-strings.
+
+Check that you can:
+
+- predict any index or slice of a string, including negative ones and a step;
+- explain why `s.upper()` on its own does nothing to `s`;
+- clean up messy input with `strip`, `split`, `join`, `replace` and the case methods;
+- find a substring with `find` and use the position to slice;
+- format numbers with decimals, separators, percentages and alignment.
+--- quiz
+? What does `"Hello, World"[7:]` give?
+- `' World'`
++ `'World'`
+- `'Hello, '`
+- `'W'`
+> Index 7 is the `W` (H=0, e=1, l=2, l=3, o=4, ,=5, space=6).
+? What does `"Hello, World"[-5:-1]` give?
+- `'World'`
++ `'Worl'`
+- `'orld'`
+- `'dlro'`
+> From the fifth-last character up to, but not including, the last one.
+? What does this print?
+```python
+name = "bob"
+name.capitalize()
+print(name)
+```
++ `bob`
+- `Bob`
+- `BOB`
+- `None`
+> The new string returned by `capitalize()` was thrown away; `name` itself never changes.
+? What does `len("a-b-c".split("-"))` give?
+- 5
++ 3
+- 2
+- 1
+> The split gives `['a', 'b', 'c']`.
+? What does `f"{3.14159:.3f}"` give?
+- `3.14`
++ `3.142`
+- `3.141`
+- `3.14159`
+> Three decimals, rounded: 3.14159 becomes 3.142.
+? What does `"Py" * 2 + "!"` give?
+- `Py2!`
++ `PyPy!`
+- `Py!Py!`
+- An error
+> Repetition happens first (`*` before `+`), then the `!` is added.
+? Which of these raises an error?
+- `"abc"[1:10]`
++ `"abc"[3]`
+- `"abc"[-1]`
+- `"abc"[::-1]`
+> Index 3 doesn't exist in a 3-character string. Slices never raise errors; they just stop at the end.
+? What does `"  x ".strip() == "x"` give?
++ `True`
+- `False`
+- `"x"`
+- An error
+> `strip()` removes the spaces around the `x`.
+--- exercise code python
+::prompt
+Read a 10-digit phone number with the prompt `Phone digits: ` and print it formatted with slices and an f-string, plus whether it really is 10 digits (a `True`/`False` from `isdigit()` and `len()`):
+```
+Phone digits: 5551234567
+Formatted: (555) 123-4567
+Valid: True
+```
+::starter
+digits = input("Phone digits: ").strip()
+::solution
+digits = input("Phone digits: ").strip()
+print(f"Formatted: ({digits[:3]}) {digits[3:6]}-{digits[6:]}")
+print("Valid:", digits.isdigit() and len(digits) == 10)
+::stdin
+5551234567
+::expected
+Phone digits: 5551234567
+Formatted: (555) 123-4567
+Valid: True
+::hints
+- The area code is `digits[:3]`, then `digits[3:6]`, then `digits[6:]`.
+- `digits.isdigit() and len(digits) == 10` is `True` only when both are true.
+--- exercise code python
+::prompt
+Print a name card. The name is the first and last name in title case, and both lines are **centred in 20 characters** between `|` borders:
+```
++--------------------+
+|    Grace Hopper    |
+|     born 1906      |
++--------------------+
+```
+::starter
+first = "grace"
+last = "HOPPER"
+year = 1906
+::solution
+first = "grace"
+last = "HOPPER"
+year = 1906
+full = f"{first} {last}".title()
+border = "+" + "-" * 20 + "+"
+print(border)
+print(f"|{full:^20}|")
+print(f"|{'born ' + str(year):^20}|")
+print(border)
+::expected
++--------------------+
+|    Grace Hopper    |
+|     born 1906      |
++--------------------+
+::variants
+"grace" => "alan"
+"HOPPER" => "TURING"
+1906 => 1912
+::hints
+- `"-" * 20` makes the dashes; add a `+` at each end.
+- `f"|{full:^20}|"` centres the name in 20 characters.
+- For the second line, build the text first: `"born " + str(year)`, or a nested f-string.
+--- exercise code python
+::prompt
+Websites turn titles into **slugs** for their addresses. Turn `title` into a slug: remove the spaces around it, make it lowercase, remove the `!`, and join the words with `-`. Print the slug and its length:
+```
+Slug: learn-python-the-hard-way
+Length: 25
+```
+::starter
+title = "  Learn Python The Hard Way!  "
+::solution
+title = "  Learn Python The Hard Way!  "
+slug = "-".join(title.strip().lower().replace("!", "").split())
+print("Slug:", slug)
+print("Length:", len(slug))
+::expected
+Slug: learn-python-the-hard-way
+Length: 25
+::variants
+"  Learn Python The Hard Way!  " => " Automate   The Boring Stuff! "
+::hints
+- Chain the methods: `title.strip().lower().replace("!", "")`.
+- `.split()` breaks it into words (and drops extra spaces); `"-".join(...)` glues them back.

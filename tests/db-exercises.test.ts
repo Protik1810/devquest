@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import initSqlJs, { type Database, type SqlJsStatic } from 'sql.js';
 import { TRACKS } from '../src/content';
+import { exercisesOf } from '../src/content/exercises';
 import { registerMysql, translateMysql } from '../src/engine/mysql';
 import { RedisEngine } from '../src/engine/redis';
 import type { CodeCheck, CodeExercise } from '../src/content/types';
@@ -56,7 +57,7 @@ for (const id of ['mysql', 'redis']) {
   describe(`${track.title} exercises`, () => {
     it('has 8 lessons', () => expect(track.lessons.length).toBe(8));
     for (const lesson of track.lessons) {
-      const ex = lesson.exercise;
+      const ex = exercisesOf(lesson)[0];
       if (ex?.kind !== 'code') continue;
       const code = ex as CodeExercise;
       const passes = id === 'mysql' ? mysqlPasses : redisPasses;

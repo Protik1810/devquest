@@ -3,13 +3,15 @@ import { Link, useParams } from 'react-router-dom';
 import { hasLabs, lessonXp, trackArt, trackById } from '../content';
 import { isUnlocked, trackProgress } from '../content/progress';
 import type { QuizQuestion, Track } from '../content/types';
+import { exercisesOf } from '../content/exercises';
 import { useGame } from '../engine/store';
 import { toast } from '../engine/toast';
 import { Ring } from '../components/Ring';
+import { Inline } from '../components/Quiz';
 
 /** Build a placement test from the track's quiz questions plus its flashcards turned into multiple choice. */
 function placementQuestions(t: Track): QuizQuestion[] {
-  const qs: QuizQuestion[] = t.lessons.flatMap((l) => (l.exercise?.kind === 'quiz' ? l.exercise.questions : []));
+  const qs: QuizQuestion[] = t.lessons.flatMap((l) => exercisesOf(l).flatMap((e) => (e.kind === 'quiz' ? e.questions : [])));
   const cards = t.lessons.flatMap((l) => l.cards ?? []);
   for (const c of cards) {
     const wrong = cards.filter((x) => x.back !== c.back).sort(() => Math.random() - 0.5).slice(0, 3).map((x) => x.back);
@@ -79,11 +81,12 @@ function PlacementQuiz({ questions, onAnswer, onDone }: { questions: QuizQuestio
   return (
     <div className="quiz">
       <div className="muted small">Question {idx + 1} / {questions.length}</div>
-      <h3 className="quiz-q">{q.q}</h3>
+      <h3 className="quiz-q"><Inline text={q.q} /></h3>
+      {q.code && <pre className="quiz-code"><code>{q.code}</code></pre>}
       <div className="quiz-opts">
         {q.options.map((o, i) => (
           <button key={i} className={`opt ${picked === null ? '' : i === q.answer ? 'right' : i === picked ? 'wrong' : ''}`} onClick={() => pick(i)}>
-            <span className="opt-key">{'ABCD'[i]}</span> {o}
+            <span className="opt-key">{'ABCDEF'[i]}</span> <Inline text={o} />
           </button>
         ))}
       </div>
@@ -126,22 +129,30 @@ export function TrackPage() {
         {track.lessons.map((l, i) => {
           const done = !!completed[l.id];
           const open = isUnlocked(track, i, completed);
-          const kind = l.exercise?.kind;
-          const kindIcon = kind === 'code' ? '💻' : kind === 'terminal' ? '🐚' : kind === 'quiz' ? '❓' : '📖';
+          const exs = exercisesOf(l);
+          const count = (k: string) => exs.filter((e) => e.kind === k).length;
+          const parts = [
+            count('quiz') && `❓ ${count('quiz') > 1 ? `${count('quiz')} quizzes` : 'quiz'}`,
+            count('code') && `💻 ${count('code') > 1 ? `${count('code')} coding exercises` : 'coding exercise'}`,
+            count('terminal') && '🐚 terminal missions',
+          ].filter(Boolean);
+          // A module heading whenever the module changes
+          const heading = l.module && l.module !== track.lessons[i - 1]?.module ? l.module : null;
           const inner = (
             <>
               <span className={`lesson-dot ${done ? 'done' : open ? 'open' : ''}`}>{done ? '✓' : open ? i + 1 : '🔒'}</span>
               <div className="grow">
                 <b>{l.title}</b>
                 <div className="muted small">
-                  {kindIcon} {kind === 'code' ? 'coding exercise' : kind === 'terminal' ? 'terminal missions' : kind === 'quiz' ? 'quiz' : 'reading'} · {lessonXp(l)} XP
+                  {parts.length ? parts.join(' · ') : '📖 reading'} · {lessonXp(l)} XP
                   {done && ` · earned ${completed[l.id].xp} XP`}
                 </div>
               </div>
             </>
           );
           return (
-            <li key={l.id}>
+            <li key={l.id} className={heading ? 'has-module' : undefined}>
+              {heading && <h3 className="module-heading">{heading}</h3>}
               {open ? <Link to={`/lesson/${l.id}`} className="lesson-row">{inner}</Link> : <div className="lesson-row locked" title="Finish the previous lesson to unlock">{inner}</div>}
             </li>
           );

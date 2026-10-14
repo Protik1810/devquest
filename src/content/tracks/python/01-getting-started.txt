@@ -1,0 +1,1084 @@
+=== module Module 1 · Getting started
+
+=== lesson py-hello | Your first program | 60
+## What is a program?
+
+A **program** is a list of instructions for a computer, written precisely enough that there is no room for guessing. A recipe can say "add a pinch of salt"; a computer needs "add 0.5 grams of salt". Learning to program is mostly learning to describe what you want *that* precisely, and then letting the machine repeat it a million times without getting bored.
+
+**Python** is a programming language designed to be easy to read. It runs website backends (Instagram, Spotify), data science and AI, scientific research, and countless scripts that automate boring tasks. The program that reads your Python code and carries it out is the **Python interpreter**. In DevQuest the interpreter runs inside the app (it is the real CPython, compiled to WebAssembly), so there is nothing to install.
+
+## print(): making the computer say something
+
+```python
+print("Hello, World!")
+```
+
+- `print` is a **function**: a named action Python already knows how to do.
+- The parentheses **call** the function. What goes inside them is the **argument**: here, what to print.
+- `"Hello, World!"` is a **string**: a piece of text. The quotes mark where the text starts and ends; they are not printed.
+
+Single quotes work too. That's handy when the text itself contains a quote:
+
+```python
+print('She said "hi"')
+print("It's raining")
+```
+
+## Several values in one print
+
+Give `print` several arguments separated by commas, and it prints them **separated by one space**:
+
+```python
+print("I am", 12, "years old")    # I am 12 years old
+```
+
+Numbers don't need quotes. `12` is a number; `"12"` is text that happens to contain digits. You'll see why that difference matters in a few lessons.
+
+`print` also has two optional settings, called **keyword arguments**:
+
+| Setting | Default | What it controls |
+|---|---|---|
+| `sep=` | `" "` (one space) | what goes **between** the values |
+| `end=` | `"\n"` (a new line) | what goes **after** the last value |
+
+```python
+print("2026", "10", "14", sep="-")   # 2026-10-14
+print("Loading", end="...")
+print("done")                        # Loading...done
+print()                              # just an empty line
+```
+
+`\n` is how you write "start a new line" inside a string. Because `end` is normally `"\n"`, each `print` starts a fresh line; change `end` and the next print continues on the same line.
+
+## Comments
+
+Everything after a `#` on a line is a **comment**. Python ignores it; it's there for the humans reading the code (including future you).
+
+```python
+# Greet the user. This whole line is a comment.
+print("Welcome!")  # a comment can also follow code
+```
+
+Good comments explain **why**, not what. `# prices are stored in cents to avoid rounding errors` helps a reader; `# print welcome` just repeats the code.
+
+## How Python runs your file
+
+Python runs a program **from top to bottom, one line at a time**. Each line is normally one **statement** (one instruction), so this always prints first, second, third, in that order:
+
+```python
+print("first")
+print("second")
+print("third")
+```
+
+Python is **case-sensitive**: `print` works, but `Print` and `PRINT` are different names that Python doesn't know. It is also strict about punctuation: every `(` needs its `)`, and every string needs a closing quote of the same kind.
+
+## Common beginner mistakes
+
+- **Forgetting the quotes**: `print(Hello)` makes Python look for something *named* `Hello`, which doesn't exist.
+- **Curly "smart" quotes** copied from a word processor (`“Hello”`) aren't valid Python. Use the plain `"` or `'` keys.
+- **Mismatched quotes**: `"Hello'` starts with one kind and ends with the other.
+- **A missing parenthesis**: `print("Hi"`.
+
+Each of these produces an error message. Reading them is the topic of the next lesson.
+
+> 💡 **How to study code**: type the examples yourself instead of pasting them. Change something, *predict* what will happen, then run it. Being wrong about a prediction is the fastest way to learn.
+
+📚 **Go deeper:** the official Python Tutorial, section 3 "An Informal Introduction to Python" (docs.python.org/3/tutorial); *Think Python* (3rd ed.), chapter 1.
+--- quiz
+? What does this print?
+```python
+print("A", "B", "C", sep="")
+```
+- `A B C`
++ `ABC`
+- `A,B,C`
+- `"A" "B" "C"`
+> `sep=""` puts nothing at all between the values.
+? What does this print?
+```python
+print("Ready", end=" ")
+print("set", end=" ")
+print("go!")
+```
+- Three lines: `Ready`, `set`, `go!`
++ One line: `Ready set go!`
+- `Ready set go!` followed by two empty lines
+- An error, because `end` must be a new line
+> The first two prints end with a space instead of a new line, so everything lands on the same line.
+? Which line does NOT print the text Hi?
+- `print("Hi")`
+- `print('Hi')`
++ `Print("Hi")`
+- `print("Hi")  # greet`
+> Python is case-sensitive: the function is called `print`, all lowercase.
+? How many lines does this program print?
+```python
+# print("one")
+print("two")
+print()
+print("three")
+```
+- 2
++ 3
+- 4
+- 1
+> The first line is a comment, so it's ignored. The rest print "two", an empty line, and "three".
+--- exercise code python
+::prompt
+Write a program that prints exactly these three lines, using one `print` per line.
+::starter
+# Write three print() calls below
+::solution
+print("Hello, World!")
+print("My name is Python.")
+print("I run programs top to bottom.")
+::expected
+Hello, World!
+My name is Python.
+I run programs top to bottom.
+::hints
+- Each line of output is one `print("...")` call.
+- Copy the punctuation exactly: the comma, the full stops and the capital letters all count.
+--- exercise code python
+::prompt
+Fix the starter so it prints the two lines shown in **Expected output**, without changing the values:
+
+1. Print the date as `14/10/2026` with the **one** `print` call that's there, by adding the `sep=` setting.
+2. Make the two last `print` calls produce `Loading...done` on a **single** line, by adding `end=` to the first of them.
+::starter
+print(14, 10, 2026)
+print("Loading")
+print("done")
+::solution
+print(14, 10, 2026, sep="/")
+print("Loading", end="...")
+print("done")
+::expected
+14/10/2026
+Loading...done
+::hints
+- `sep="/"` goes inside the parentheses, after the last value: `print(a, b, c, sep="/")`.
+- `end="..."` replaces the new line at the end of a print, so the next print continues on the same line.
+--- cards
+print() :: A built-in function that displays its arguments, separated by sep (default " ") and followed by end (default "\n").
+String :: A piece of text in quotes, like "hello" or 'hello'. The quotes aren't part of the text.
+Comment :: Text after # that Python ignores. Use it to explain why the code does something.
+Argument :: A value you pass to a function inside its parentheses, e.g. "Hi" in print("Hi").
+
+=== lesson py-reading-errors | Reading error messages | 60
+Everybody's code breaks, constantly, including professionals'. What separates a beginner from an experienced developer isn't fewer errors; it's that the experienced one **reads** the error message, because it says *what* went wrong and *where*.
+
+## Two kinds of errors
+
+1. **Syntax errors.** The code isn't valid Python, like a sentence with missing punctuation. Python checks the whole file before running it, so with a syntax error **nothing runs at all**.
+2. **Runtime errors**, also called **exceptions**. The code is valid, but something goes wrong while it runs, such as dividing by zero. Everything *before* the failing line has already happened; the program stops at that line.
+
+## Anatomy of a traceback
+
+When a program crashes, Python prints a **traceback**:
+
+```
+Traceback (most recent call last):
+  File "main.py", line 3, in <module>
+    print("Total: " + 5)
+          ~~~~~~~~~~^~~
+TypeError: can only concatenate str (not "int") to str
+```
+
+Read it **from the bottom up**:
+
+1. **The last line** names the error **type** (`TypeError`) and gives a **message** explaining it. Start here.
+2. **The line above** shows the code that failed, with `^` and `~` marks under the exact part that caused it.
+3. **`File "main.py", line 3`** says where. In DevQuest your program's file is called `<exec>`.
+
+## The errors you'll meet most
+
+| Error | Usual cause | Example |
+|---|---|---|
+| `SyntaxError` | a missing `)` or quote, a misspelled keyword, a stray character | `print("hi"` |
+| `IndentationError` | spaces at the start of a line where none belong (or missing where needed) | ` print("hi")` |
+| `NameError` | a name Python doesn't know: a typo, a variable used before it's created, or text without quotes | `pritn("hi")`, `print(hello)` |
+| `TypeError` | an operation on the wrong kind of value | `"Age: " + 30` |
+| `ValueError` | the right type of value, but an unusable one | `int("ten")` |
+| `ZeroDivisionError` | dividing by zero | `10 / 0` |
+
+Modern Python often suggests the fix for you:
+
+```
+NameError: name 'pritn' is not defined. Did you mean: 'print'?
+```
+
+## A debugging routine that works
+
+1. Read the **last line**. What type of error? What does the message say?
+2. Go to the **line number**. Look at that line *and the line above it*: a missing `)` on line 2 is often only noticed on line 3.
+3. Make a guess about the cause, change **one thing**, and run again.
+4. Still stuck? Explain the code out loud, line by line, as if to a rubber duck. You'll often *hear* the mistake as you describe what the line is supposed to do. (Programmers really do call this **rubber duck debugging**.)
+
+> 💡 If you get several errors, they're rarely several problems. Fix the **first** one and run again; the rest often disappear with it.
+
+DevQuest's checks work the same way: when you submit and a check fails, you see what was expected and what your program produced. Compare them calmly, line by line.
+
+📚 **Go deeper:** Python Tutorial, section 8.1–8.2 "Syntax Errors" and "Exceptions"; *Automate the Boring Stuff with Python* (3rd ed.), chapter 1.
+--- quiz
+? Which error does this produce?
+```python
+print("Welcome to DevQuest)
+```
+- `NameError`
++ `SyntaxError`
+- `TypeError`
+- No error
+> The string never ends because the closing quote is missing, so the line isn't valid Python ("unterminated string literal").
+? Which error does this produce?
+```python
+score = 10
+print(Score)
+```
+- `SyntaxError`
++ `NameError`
+- `TypeError`
+- No error: it prints 10
+> Names are case-sensitive. `score` exists, but `Score` doesn't.
+? Which error does this produce?
+```python
+print("Level " + 3)
+```
+- `SyntaxError`
+- `NameError`
++ `TypeError`
+- No error: it prints `Level 3`
+> `+` can join two strings or add two numbers, but it can't combine a string with a number.
+? A program prints two lines and then crashes on line 3 with a `ZeroDivisionError`. What about lines 1 and 2?
++ They ran normally; the crash happened when line 3 ran
+- Nothing ran, because the file contains an error
+- Their output is erased
+- Python skipped line 3 and carried on
+> A runtime error stops the program at the failing line, after everything before it has run. A *syntax* error, by contrast, stops the whole file from running.
+? Where should you start reading a traceback?
+- The first line, "Traceback (most recent call last)"
++ The last line, with the error type and message
+- Somewhere in the middle
+- You shouldn't; just re-type the code
+> The last line names the error and explains it; the lines above show where it happened.
+--- exercise code python
+::prompt
+This program has **three** bugs. Run it, read the error, fix it, and repeat until it prints the expected output. (Fix the bugs; don't rewrite the messages.)
+::starter
+print("Debugging practice)
+Print("Errors are clues")
+print("Fix one bug at a time"
+::solution
+print("Debugging practice")
+print("Errors are clues")
+print("Fix one bug at a time")
+::expected
+Debugging practice
+Errors are clues
+Fix one bug at a time
+::hints
+- The first error is a `SyntaxError` on line 1: a string that never ends.
+- `Print` with a capital P isn't a function Python knows.
+- The last line is missing something at the very end.
+--- exercise code python
+::prompt
+This program crashes with a `TypeError`. Fix both `print` lines so the output matches. Either pass the values to `print` separated by commas (watch out for double spaces!), or convert the numbers to text with `str()`.
+::starter
+level = 3
+print("You reached level " + level)
+coins = 120
+print("Coins: " + coins)
+::solution
+level = 3
+print("You reached level", level)
+coins = 120
+print("Coins:", coins)
+::expected
+You reached level 3
+Coins: 120
+::variants
+level = 3 => level = 7
+coins = 120 => coins = 45
+::hints
+- `print("Coins:", coins)` prints the two values with one space between them.
+- If you use a comma, remove the space at the end of the text, or you'll get two spaces.
+- Alternatively: `print("Coins: " + str(coins))` turns the number into text first.
+--- cards
+Traceback :: The report Python prints when a program crashes. Read it bottom-up: the last line has the error type and message, the lines above show where.
+Syntax error vs exception :: A syntax error means the code isn't valid Python, so nothing runs. An exception happens while running, after earlier lines have run.
+NameError :: Python doesn't know that name: a typo, wrong capitalisation, a variable used before it's assigned, or text missing its quotes.
+TypeError :: An operation was given the wrong type of value, like adding a string and a number.
+
+=== lesson py-vars | Variables & assignment | 70
+## Giving values a name
+
+Programs need to remember things: a score, a user's name, a price. A **variable** is a **name** that refers to a **value**.
+
+```python
+score = 0
+player = "Ada"
+print(player, "has", score, "points")    # Ada has 0 points
+```
+
+Picture a variable as a **name tag** stuck onto a value. `score = 0` means "put the tag `score` on the value 0". Afterwards, writing `score` gives you whatever value that tag is currently on.
+
+## = means "assign", not "equals"
+
+In maths, `x = x + 1` is nonsense. In Python it's an **instruction** carried out in two steps:
+
+1. Work out the **right-hand side** first, using the *current* values (`x + 1`).
+2. Then make the name on the **left** refer to the result.
+
+```python
+x = 5
+x = x + 1     # right side: 5 + 1 is 6; then x refers to 6
+print(x)      # 6
+```
+
+Updating a variable based on its own value is so common that it has a shortcut: `x += 1` means `x = x + 1`. The same works for other operators: `-=`, `*=`, `/=`.
+
+Assignment takes the value at that moment; it doesn't create a permanent link. Changing `x` later does **not** change `y`:
+
+```python
+x = 10
+y = x       # y refers to 10
+x = 20      # x now refers to 20; y still refers to 10
+print(y)    # 10
+```
+
+## Tracing: be the computer
+
+The single most useful skill for a beginner is **tracing**: walking through the code line by line and writing down every variable's value after each line.
+
+```python
+a = 3
+b = a * 2
+a = a + b
+b = b - 1
+```
+
+| After line | a | b |
+|---|---|---|
+| 1 | 3 | (doesn't exist yet) |
+| 2 | 3 | 6 |
+| 3 | 9 | 6 |
+| 4 | 9 | 5 |
+
+Whenever code surprises you, trace it on paper. Most "mysterious" bugs turn out to be a variable holding a different value than you assumed.
+
+## Naming rules, and good names
+
+- Use letters, digits and underscores only, and **don't start with a digit**: `player2` is fine, `2player` is not.
+- Names are **case-sensitive**: `Score` and `score` are two different variables.
+- You can't use a **keyword** (a word reserved by Python), such as `if`, `for`, `class`, `True` or `None`.
+- Python's style guide (**PEP 8**) recommends lowercase words joined by underscores, called **snake_case**: `total_price`, `user_name`.
+- Values meant never to change (**constants**) are written in CAPITALS: `MAX_LIVES = 3`. Python doesn't enforce this; it's a signal to other programmers.
+- Choose names that say what the value *means*. `seconds_per_day = 86400` explains itself; `x = 86400` doesn't.
+
+## Handy assignment forms
+
+```python
+a, b = 1, 2       # assign two names at once
+a, b = b, a       # swap: now a is 2 and b is 1
+x = y = 0         # both names refer to 0
+```
+
+The swap works because Python evaluates the *whole* right side (`b, a`) before assigning anything. In many other languages you'd need a temporary variable: `temp = a`, `a = b`, `b = temp`.
+
+## Variables don't have types; values do
+
+The same name can refer to a number now and some text later. Python is **dynamically typed**:
+
+```python
+thing = 42
+thing = "forty-two"   # allowed, though usually confusing
+print(type(thing))    # <class 'str'>
+```
+
+`type()` tells you what type a value is. The next lesson covers types properly.
+
+## Common mistakes
+
+- Using a variable before giving it a value: `NameError`.
+- Writing it backwards, `5 = x`: the name must be on the left (`SyntaxError`).
+- Expecting `y = x` to keep `y` "linked" to `x` forever.
+
+📚 **Go deeper:** *Think Python* (3rd ed.), chapter 2 "Variables and Statements"; PEP 8, "Naming Conventions"; CS50's Introduction to Programming with Python, lecture 0.
+--- quiz
+? What does this print?
+```python
+x = 4
+x = x * 3
+x -= 2
+print(x)
+```
+- 4
+- 12
++ 10
+- 8
+> 4, then 4 × 3 = 12, then 12 − 2 = 10.
+? What does this print?
+```python
+a = 5
+b = a
+a = 7
+print(b)
+```
++ 5
+- 7
+- 12
+- An error
+> `b = a` made `b` refer to 5. Re-assigning `a` afterwards doesn't affect `b`.
+? Which is a valid variable name?
+- `2nd_place`
+- `total-price`
++ `total_price`
+- `class`
+> Names can't start with a digit or contain `-` (that's minus), and `class` is a keyword.
+? What does this print?
+```python
+a, b = 1, 2
+a, b = b, a + b
+print(a, b)
+```
+- 2 4
++ 2 3
+- 1 3
+- 2 2
+> The right side `b, a + b` is worked out first with the old values: `2, 1 + 2`. Only then are both names updated.
+--- exercise code python
+::prompt
+Two variables were filled the wrong way round. **Swap** their values in a single line, without typing the food names again, so the program prints the expected output.
+::starter
+main = "ice cream"
+dessert = "pizza"
+
+# swap the two values here
+
+print("main:", main)
+print("dessert:", dessert)
+::solution
+main = "ice cream"
+dessert = "pizza"
+
+main, dessert = dessert, main
+
+print("main:", main)
+print("dessert:", dessert)
+::expected
+main: pizza
+dessert: ice cream
+::hints
+- Python can assign two names at once: `a, b = 1, 2`.
+- The right-hand side is evaluated before anything is assigned, so `a, b = b, a` swaps.
+--- exercise code python
+::prompt
+A café till keeps a running **total** in cents. Starting from `total = 0`, use `+=` to add each item's price, and print the total after each item:
+```
+after coffee: 350
+after muffin: 625
+after juice: 1045
+```
+Use the variables, not the numbers, so the program still works if a price changes.
+::starter
+coffee = 350
+muffin = 275
+juice = 420
+total = 0
+# add each price to total with +=, printing the total after each item
+::solution
+coffee = 350
+muffin = 275
+juice = 420
+total = 0
+total += coffee
+print("after coffee:", total)
+total += muffin
+print("after muffin:", total)
+total += juice
+print("after juice:", total)
+::expected
+after coffee: 350
+after muffin: 625
+after juice: 1045
+::variants
+coffee = 350 => coffee = 410
+muffin = 275 => muffin = 199
+::hints
+- `total += coffee` means `total = total + coffee`.
+- After each `+=`, print with `print("after coffee:", total)`.
+--- cards
+Variable :: A name that refers to a value, created by assignment: score = 0.
+Assignment (=) :: Evaluate the right side first, then make the name on the left refer to the result. It is not a statement of equality.
+x += 1 :: Shorthand for x = x + 1. Also -=, *=, /=, //=.
+snake_case :: The Python convention for variable names: lowercase words joined by underscores, e.g. total_price.
+Tracing :: Stepping through code by hand and writing down each variable's value after every line.
+
+=== lesson py-types | Types, conversions & input() | 75
+## Every value has a type
+
+A value's **type** decides what it is and what you can do with it. These are the basic ones:
+
+| Type | What it is | Examples |
+|---|---|---|
+| `int` | an integer (whole number) | `0`, `42`, `-7`, `1_000_000` |
+| `float` | a number with a fractional part | `3.14`, `-0.5`, `2.0`, `1e6` |
+| `str` | a string (text) | `"hi"`, `'42'`, `""` (the empty string) |
+| `bool` | a truth value | `True`, `False` |
+| `NoneType` | "no value here" | `None` |
+
+```python
+print(type(42))      # <class 'int'>
+print(type(4.2))     # <class 'float'>
+print(type("42"))    # <class 'str'>
+print(type(True))    # <class 'bool'>
+```
+
+Underscores inside numbers are only there to help you read them: `1_000_000` is one million. `2.0` is a float even though it's a whole number, and `1e6` means 1 × 10⁶ (also a float).
+
+## Same digits, different meaning
+
+```python
+print(5 + 3)        # 8      numbers add
+print("5" + "3")    # 53     strings join end to end ("concatenation")
+print("5" * 3)      # 555    a string repeated 3 times
+```
+
+This difference causes a huge share of beginner bugs, so always ask yourself: *is this a number or text?*
+
+## Converting between types
+
+Use the type's name like a function:
+
+```python
+int("42")       # 42
+float("3.5")    # 3.5
+str(99)         # '99'
+int(3.99)       # 3    (drops the fraction; it does NOT round)
+float(7)        # 7.0
+```
+
+A conversion that makes no sense raises a `ValueError`:
+
+```python
+int("ten")      # ValueError: invalid literal for int() with base 10: 'ten'
+int("3.5")      # ValueError too; use float("3.5") instead
+```
+
+## True, False and "truthiness"
+
+`bool()` turns any value into `True` or `False`. These values are **falsy** (count as False): `0`, `0.0`, `""` (empty string), `None`, and empty collections you'll meet later. Nearly everything else is **truthy**:
+
+```python
+print(bool(0), bool(""), bool(None))    # False False False
+print(bool(7), bool("0"), bool(" "))    # True True True
+```
+
+Note that `"0"` and `" "` are truthy: they're non-empty strings. This becomes important with `if` statements in Module 3.
+
+## None
+
+`None` means "nothing" or "no value yet". It isn't 0 and it isn't an empty string; it's its own thing. You'll see it when a function has nothing to return.
+
+## Reading what the user types: input()
+
+`input()` pauses the program, waits for the user to type a line and press Enter, and **returns that line as a string**:
+
+```python
+name = input("What is your name? ")
+print("Nice to meet you,", name)
+```
+
+The text inside `input(...)` is the **prompt** shown to the user. The space at the end of it stops the answer touching the question.
+
+Because `input()` always returns a **string**, convert it before doing maths with it:
+
+```python
+age = input("Age? ")         # the user types 30, and age is "30", a string
+print(age + 1)               # TypeError: can only concatenate str (not "int") to str
+
+age = int(input("Age? "))    # now age is 30, an int
+print(age + 1)               # 31
+```
+
+Read `int(input("Age? "))` from the inside out: show the prompt and get the text, then convert that text to an int.
+
+> ⌨️ **In DevQuest**, exercises that use `input()` type their lines in for you; they're shown above the editor. The output shows each prompt followed by what was typed, just like a terminal does.
+
+## Common mistakes
+
+- Forgetting to convert `input()` before arithmetic (a `TypeError`).
+- Comparing numbers stored as strings: `"10" < "9"` is `True`, because strings are compared character by character and `"1"` comes before `"9"`.
+- Expecting `int(3.99)` to be 4. Use `round()` to round (next lesson).
+
+📚 **Go deeper:** Python Tutorial, section 3.1; CS50's Introduction to Programming with Python, lecture 0 "Functions, Variables"; *Automate the Boring Stuff with Python*, chapter 1 (str, int, float and input).
+--- quiz
+? What is `type("3.0")`?
+- `float`
+- `int`
++ `str`
+- `bool`
+> The quotes make it a string, whatever is inside them.
+? What does this print?
+```python
+print("2" + "2", 2 + 2)
+```
++ `22 4`
+- `4 4`
+- `22 22`
+- A `TypeError`
+> Strings join and numbers add. The comma puts a space between the two results.
+? What is `int(7.9)`?
+- 8
++ 7
+- 7.9
+- A `ValueError`
+> `int()` drops the fractional part (it truncates towards zero); it doesn't round.
+? Which of these values is truthy?
+- `0`
+- `""`
+- `None`
++ `"0"`
+> `"0"` is a non-empty string, so it's truthy. Only the empty string `""` is falsy.
+? The user types `25` at this prompt. What happens?
+```python
+age = input("Age? ")
+print(age * 2)
+```
+- It prints 50
++ It prints 2525
+- A `TypeError`
+- It prints `25 25`
+> `input()` returns the string `"25"`, and multiplying a string by 2 repeats it.
+--- exercise code python
+::prompt
+Ask the user for their name and their birth year, then print how old they turn in 2026. The prompts must be exactly `What is your name? ` and `What year were you born? `. Compute the age; don't type it in.
+::starter
+name = input("What is your name? ")
+# ask for the year, convert it to an int, then print the message
+::solution
+name = input("What is your name? ")
+year = int(input("What year were you born? "))
+age = 2026 - year
+print(name, "turns", age, "in 2026.")
+::stdin
+Sam
+2001
+::expected
+What is your name? Sam
+What year were you born? 2001
+Sam turns 25 in 2026.
+::hints
+- `int(input("What year were you born? "))` asks and converts in one go.
+- The age is `2026 - year`.
+- `print(name, "turns", age, "in 2026.")` puts single spaces between the parts.
+--- exercise code python
+::prompt
+Write a temperature converter. Ask `Temperature in Celsius: ` (the answer may have decimals, so use `float`), convert it with **F = C × 9 / 5 + 32**, and print the result **rounded to 1 decimal place** with `round(value, 1)`.
+::starter
+celsius = input("Temperature in Celsius: ")
+# convert to a number, calculate Fahrenheit and print it
+::solution
+celsius = float(input("Temperature in Celsius: "))
+fahrenheit = celsius * 9 / 5 + 32
+print("That is", round(fahrenheit, 1), "degrees Fahrenheit.")
+::stdin
+21.5
+::expected
+Temperature in Celsius: 21.5
+That is 70.7 degrees Fahrenheit.
+::hints
+- `float(input(...))` turns the typed text into a number that can have decimals.
+- `round(fahrenheit, 1)` rounds to one decimal place.
+--- cards
+int, float, str, bool, None :: Whole numbers, numbers with fractions, text, True/False, and "no value".
+input() :: Shows a prompt, waits for a line of typed text, and returns it as a str (always a string).
+Type conversion :: int("42"), float("3.5"), str(7), bool(x). int() truncates: int(3.99) is 3.
+Falsy values :: 0, 0.0, "", None and empty collections count as False. Everything else is truthy.
+
+=== lesson py-math | Numbers & arithmetic | 75
+## The arithmetic operators
+
+| Operator | Meaning | Example | Result |
+|---|---|---|---|
+| `+` `-` `*` | add, subtract, multiply | `7 * 3` | `21` |
+| `/` | division (always gives a float) | `7 / 2` and `6 / 3` | `3.5` and `2.0` |
+| `//` | floor division (divide, then round down) | `7 // 2` | `3` |
+| `%` | modulo: the remainder after dividing | `7 % 2` | `1` |
+| `**` | to the power of | `2 ** 10` | `1024` |
+
+`//` and `%` work as a pair: `//` tells you how many times something fits, `%` what's left over. They solve many everyday problems:
+
+- **Even or odd?** `n % 2` is `0` for even numbers and `1` for odd ones.
+- **Last digit:** `1234 % 10` is `4`. **Remove the last digit:** `1234 // 10` is `123`.
+- **Splitting units:** 135 minutes is `135 // 60` = 2 hours and `135 % 60` = 15 minutes.
+- **Wrapping around**, like a clock: 5 hours after 10 o'clock is `(10 + 5) % 12` = 3 o'clock.
+- `divmod(135, 60)` gives both at once: `(2, 15)`.
+
+## Order of operations
+
+Python follows the usual maths rules: parentheses first, then `**`, then `*`, `/`, `//` and `%` (left to right), then `+` and `-` (left to right).
+
+```python
+print(2 + 3 * 4)      # 14
+print((2 + 3) * 4)    # 20
+print(2 ** 3 ** 2)    # 512, because ** groups from the right: 3 ** 2 first
+print(-2 ** 2)        # -4, because the power happens before the minus sign
+```
+
+When in doubt, add parentheses. They cost nothing and make your intent obvious to the reader.
+
+## Negative numbers with // and %
+
+`//` always rounds **down** (towards minus infinity), not towards zero, and the result of `%` takes the sign of the number you divide by:
+
+```python
+print(-7 // 2)    # -4, not -3
+print(-7 % 2)     # 1
+```
+
+## Integers are exact; floats are approximations
+
+Python's integers are exact and can be as large as you like: `2 ** 100` is no problem. Floats are stored in binary with about 15–17 significant digits, so most decimal fractions are stored *approximately*:
+
+```python
+print(0.1 + 0.2)           # 0.30000000000000004
+print(0.1 + 0.2 == 0.3)    # False
+```
+
+This isn't a Python bug. Almost every computer stores fractions this way (the IEEE 754 standard), just as 1/3 can't be written exactly in decimal. What it means for you:
+
+- Don't compare floats with `==`. Use `math.isclose(a, b)`.
+- For money, count **whole cents** with integers, or use the `decimal` module.
+- Mixing an int and a float gives a float: `3 + 2.0` is `5.0`.
+
+## Rounding
+
+```python
+round(3.14159, 2)    # 3.14
+round(3.5)           # 4
+round(2.5)           # 2    (!)
+```
+
+`round()` uses **banker's rounding**: a value exactly halfway goes to the nearest **even** number. Over many values, that avoids always nudging totals upward.
+
+## Built-in helpers and the math module
+
+```python
+abs(-5)          # 5
+min(3, 9, 1)     # 1
+max(3, 9, 1)     # 9
+
+import math
+math.sqrt(16)    # 4.0
+math.floor(3.7)  # 3   (round down)
+math.ceil(3.2)   # 4   (round up)
+math.pi          # 3.141592653589793
+```
+
+`import math` loads Python's maths **module**: a library of extra tools that ships with Python. Module 11 covers modules properly.
+
+## A peek at other number systems
+
+Computers store numbers in **binary** (base 2). Python can write and read other bases:
+
+```python
+bin(10)          # '0b1010'
+hex(255)         # '0xff'
+int("ff", 16)    # 255
+0b1010           # 10, written directly in binary
+```
+
+**Bitwise operators** work on those binary digits: `&` (and), `|` (or), `^` (exclusive or), `~` (not), and `<<`, `>>` (shift left and right). For example, `6 & 3` is `2` because `110 & 011` = `010`. You'll rarely need them at first, but they appear in certification exams (such as PCEP) and in low-level code.
+
+📚 **Go deeper:** Python Tutorial, section 3.1.1 "Numbers"; the Python docs page "Floating-Point Arithmetic: Issues and Limitations"; *Think Python* (3rd ed.), chapter 1.
+--- quiz
+? What does this print?
+```python
+print(17 // 5, 17 % 5)
+```
+- `3.4 2`
++ `3 2`
+- `3 3`
+- `4 2`
+> 5 fits into 17 three times (15), leaving 2.
+? What does `print(10 / 5)` print?
+- `2`
++ `2.0`
+- `2.5`
+- `0`
+> `/` always produces a float, even when the division comes out exact.
+? What does this print?
+```python
+print(2 + 3 * 2 ** 2)
+```
+- 100
+- 20
++ 14
+- 36
+> `2 ** 2` first (4), then `3 * 4` (12), then `2 + 12`.
+? What is `round(4.5)`?
++ `4`
+- `5`
+- `4.0`
+- `5.0`
+> An exact half rounds to the nearest even number (banker's rounding).
+? Why is `0.1 + 0.2 == 0.3` False?
+- Python has a bug in its addition
+- `==` doesn't work on floats
++ 0.1 and 0.2 can't be stored exactly in binary, so their sum is very slightly off
+- 0.3 is rounded up when it's stored
+> Floats are binary approximations. Compare floats with `math.isclose()`, and use integers (cents) for money.
+? What is `-9 // 2`?
+- `-4`
++ `-5`
+- `-4.5`
+- `4`
+> `//` rounds down, towards minus infinity, so -4.5 becomes -5.
+--- exercise code python
+::prompt
+A bill of `total_cents` is split equally between `people`. Everyone pays the same whole number of cents, and the cents that can't be split go into the tip jar. Compute both numbers with `//` and `%` and print them as shown. It should work for any total and any number of people.
+::starter
+total_cents = 2397
+people = 7
+# work out each share and the leftover, then print them
+::solution
+total_cents = 2397
+people = 7
+share = total_cents // people
+leftover = total_cents % people
+print("Each person pays", share, "cents")
+print("Tip jar gets", leftover, "cents")
+::expected
+Each person pays 342 cents
+Tip jar gets 3 cents
+::variants
+2397 => 5000
+people = 7 => people = 6
+::hints
+- `total_cents // people` is how many whole cents each person pays.
+- `total_cents % people` is what's left over.
+--- exercise code python
+::prompt
+Convert `total_seconds` into hours, minutes and seconds, and print them in this format:
+```
+7384 seconds is 2 h 3 min 4 s
+```
+::starter
+total_seconds = 7384
+# hours, then the minutes left over, then the seconds left over
+::solution
+total_seconds = 7384
+hours = total_seconds // 3600
+minutes = total_seconds % 3600 // 60
+seconds = total_seconds % 60
+print(total_seconds, "seconds is", hours, "h", minutes, "min", seconds, "s")
+::expected
+7384 seconds is 2 h 3 min 4 s
+::variants
+7384 => 100000
+::hints
+- An hour has 3600 seconds: `total_seconds // 3600` is the hours.
+- `total_seconds % 3600` is what's left after the whole hours; divide that by 60 (with `//`) for the minutes.
+- The seconds left over are `total_seconds % 60`.
+--- exercise code python
+::prompt
+A round pizza has a diameter of `diameter_cm`. Using `math.pi`, print its area (π × radius²) rounded to 1 decimal place.
+::starter
+import math
+diameter_cm = 30
+# the radius is half the diameter
+::solution
+import math
+diameter_cm = 30
+radius = diameter_cm / 2
+area = math.pi * radius ** 2
+print("Area:", round(area, 1), "cm²")
+::expected
+Area: 706.9 cm²
+::variants
+diameter_cm = 30 => diameter_cm = 45
+::hints
+- `radius = diameter_cm / 2`
+- Squared is `** 2`: `math.pi * radius ** 2`.
+- `round(area, 1)` keeps one decimal place.
+--- cards
+// and % :: Floor division (how many whole times it fits, rounded down) and remainder. 17 // 5 is 3, 17 % 5 is 2.
+/ always gives a float :: 6 / 3 is 2.0. Use // for a whole-number result.
+Float precision :: 0.1 + 0.2 is 0.30000000000000004. Compare floats with math.isclose(); count money in integer cents.
+round() :: Rounds to n decimals; exact halves go to the nearest even number: round(2.5) is 2, round(3.5) is 4.
+Operator precedence :: Parentheses, then **, then * / // %, then + -. -2 ** 2 is -4.
+
+=== lesson py-m1-test | Module 1 test | 150
+You've learned to print, read errors, use variables, work with types, read input and do arithmetic. This test mixes them all, just as real programs do.
+
+Before you start, check that you can:
+
+- write a program with `print`, including `sep=` and `end=`;
+- read a traceback from the bottom up and name the common error types;
+- trace a few lines of assignments by hand;
+- explain the difference between `5`, `5.0`, `"5"` and `True`, and convert between them;
+- read numbers with `int(input(...))` and `float(input(...))`;
+- use `//`, `%`, `**` and `round()`, and explain why `0.1 + 0.2 != 0.3`.
+
+If any of these feels shaky, re-read that lesson first; this test isn't timed. Wrong answers cost nothing but a little XP, and every explanation teaches something.
+--- quiz
+? What does this print?
+```python
+print("a", "b", sep="-", end="!")
+print("c")
+```
+- `a-b!` and then `c` on the next line
++ `a-b!c`
+- `a b-!c`
+- `a-b-!c`
+> `sep` goes between the values, `end` replaces the new line, so `c` continues on the same line.
+? Which error does `total = 5 + "5"` raise?
+- `SyntaxError`
+- `ValueError`
++ `TypeError`
+- `NameError`
+> You can't add a number and a string; the types don't support it.
+? What does this print?
+```python
+x = 2
+y = x ** 3
+x = y % 5
+print(x, y)
+```
+- `2 8`
++ `3 8`
+- `3 3`
+- `8 3`
+> y is 2³ = 8, then x is 8 % 5 = 3.
+? What is the type of `7 / 7`?
+- `int`
++ `float`
+- `str`
+- `bool`
+> `/` always gives a float: `1.0`.
+? What is `int("12") + int(3.9)`?
+- `15.9`
+- `16`
++ `15`
+- `"123"`
+> `int("12")` is 12 and `int(3.9)` is 3 (it truncates).
+? Which line is a syntax error?
+- `print('ok')`
++ `my-score = 3`
+- `score = 3`
+- `print(score, 'points')`
+> The `-` is minus, so Python reads `my - score = 3`, and you can't assign to a calculation.
+? What is `25 % 7`?
+- 3
++ 4
+- 3.57
+- 18
+> 7 fits into 25 three times (21), leaving 4.
+? The user types `3`. What does this print?
+```python
+n = input()
+print(n * 3)
+```
+- 9
++ 333
+- `3 3 3`
+- A `TypeError`
+> `n` is the string `"3"`, and a string times 3 repeats it.
+? What is `round(7.5)`?
+- 7
++ 8
+- 7.0
+- 8.0
+> An exact half goes to the nearest even number, and 8 is even.
+--- exercise code python
+::prompt
+A shop till works in **cents**. Read the price of one item (in cents) and the quantity, then print the subtotal, an 8% tax rounded **down** to a whole cent with `//`, and the total:
+```
+Price in cents: 425
+Quantity: 3
+Subtotal: 1275 cents
+Tax: 102 cents
+Total: 1377 cents
+```
+::starter
+price = int(input("Price in cents: "))
+# read the quantity, then compute and print the three lines
+::solution
+price = int(input("Price in cents: "))
+quantity = int(input("Quantity: "))
+subtotal = price * quantity
+tax = subtotal * 8 // 100
+total = subtotal + tax
+print("Subtotal:", subtotal, "cents")
+print("Tax:", tax, "cents")
+print("Total:", total, "cents")
+::stdin
+425
+3
+::expected
+Price in cents: 425
+Quantity: 3
+Subtotal: 1275 cents
+Tax: 102 cents
+Total: 1377 cents
+::hints
+- Both answers must be converted with `int(...)`.
+- 8% of the subtotal, rounded down: `subtotal * 8 // 100`.
+--- exercise code python
+::prompt
+This little shop program has **three** different bugs: a syntax error, a type error and a name error. Fix them so it prints the expected output. Don't change the numbers; the program must still calculate the total.
+::starter
+item = "notebook"
+price = 3
+quantity = 4
+print("Buying", quantity, item + "s")
+total = price * quantity
+print("Total: " + total + " dollars")
+print("Thank you for shopping with us!)
+Print("Come back soon")
+::solution
+item = "notebook"
+price = 3
+quantity = 4
+print("Buying", quantity, item + "s")
+total = price * quantity
+print("Total:", total, "dollars")
+print("Thank you for shopping with us!")
+print("Come back soon")
+::expected
+Buying 4 notebooks
+Total: 12 dollars
+Thank you for shopping with us!
+Come back soon
+::variants
+price = 3 => price = 5
+::hints
+- Start with the syntax error: Python won't run anything until it's fixed.
+- A number can't be joined to a string with `+`: use commas, or `str(total)`.
+- Python's print function is all lowercase.
+--- exercise code python
+::prompt
+Without loops (you'll learn those soon), add up the four digits of the four-digit number `n` using `//` and `%`, and print the result. For 4728 that's 4 + 7 + 2 + 8:
+```
+Digit sum of 4728 is 21
+```
+::starter
+n = 4728
+# n % 10 is the last digit; n // 10 drops it
+::solution
+n = 4728
+ones = n % 10
+tens = n // 10 % 10
+hundreds = n // 100 % 10
+thousands = n // 1000
+print("Digit sum of", n, "is", ones + tens + hundreds + thousands)
+::expected
+Digit sum of 4728 is 21
+::variants
+4728 => 9051
+::hints
+- The last digit is `n % 10`.
+- The tens digit: drop the last digit with `n // 10`, then take the last digit of that with `% 10`.
+- The thousands digit of a four-digit number is just `n // 1000`.

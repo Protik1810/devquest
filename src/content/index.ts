@@ -1,6 +1,6 @@
 import type { Lesson, Tier, Track } from './types';
+import { exercisesOf } from './exercises';
 import { foundations } from './foundations';
-import { python } from './python';
 import { javascript, git } from './javascript';
 import { shell } from './shell';
 import { dsa } from './dsa';
@@ -22,6 +22,9 @@ export const postgresql = parseTrackFile(postgresqlSrc);
 export const mongodb = parseTrackFile(mongodbSrc);
 export const mysql = parseTrackFile(mysqlSrc);
 export const redis = parseTrackFile(redisSrc);
+/** The Python course spans one lesson file per module (tracks/python/NN-*.txt), read in file-name order. */
+const pythonFiles = import.meta.glob<string>('./tracks/python/*.txt', { query: '?raw', import: 'default', eager: true });
+export const python = parseTrackFile(...Object.keys(pythonFiles).sort().map((f) => pythonFiles[f]));
 import { SKILL_TRACKS } from './skills';
 import { typescript } from './langs/typescript';
 import { go } from './langs/go';
@@ -96,7 +99,7 @@ export const ALL_CARDS = ALL_LESSONS.flatMap(({ track, lesson }) =>
 );
 
 /** Tracks that mix illustrated lessons with some hands-on labs. */
-export const hasLabs = (t: Track) => t.lessons.some((l) => l.exercise?.kind === 'code' || l.exercise?.kind === 'terminal');
+export const hasLabs = (t: Track) => t.lessons.some((l) => exercisesOf(l).some((e) => e.kind === 'code' || e.kind === 'terminal'));
 
 export const trackArt = (id: string) => `./art/track-${id}.webp`;
 

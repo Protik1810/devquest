@@ -9,8 +9,13 @@ const server = await createServer({ root, configFile: path.join(root, 'vite.conf
 try {
   const { TRACKS } = await server.ssrLoadModule('/src/content/index.ts');
   const { CHALLENGES } = await server.ssrLoadModule('/src/content/dojo.ts');
+  const { exercisesOf } = await server.ssrLoadModule('/src/content/exercises.ts');
   const out = [];
-  for (const t of TRACKS) for (const l of t.lessons) if (l.exercise?.kind === 'code') out.push({ id: l.id, track: t.id, ...pick(l.exercise) });
+  for (const t of TRACKS)
+    for (const l of t.lessons)
+      exercisesOf(l)
+        .filter((e) => e.kind === 'code')
+        .forEach((e, i, all) => out.push({ id: all.length > 1 ? `${l.id}#${i + 1}` : l.id, track: t.id, ...pick(e) }));
   for (const c of CHALLENGES) out.push({ id: c.id, track: 'dojo', ...pick(c.exercise) });
   fs.mkdirSync(path.join(root, '.cache'), { recursive: true });
   fs.writeFileSync(path.join(root, '.cache', 'exercises.json'), JSON.stringify(out, null, 1));

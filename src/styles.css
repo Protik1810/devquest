@@ -432,3 +432,13 @@ p a:not(.primary-btn):not(.chip), li a:not(.primary-btn), .md a, .small > a, .ag
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 .opt.tried { opacity: 0.55; text-decoration: line-through; }
 .feedback .nudge { margin-top: 6px; font-weight: 400; }
+.quiz-code { margin: 0 0 12px; padding: 10px 12px; background: var(--card2); border-radius: 8px; overflow-x: auto; font-size: 0.9rem; }
+.step-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+.step-tab { padding: 5px 10px; font-size: 0.85rem; border-radius: 99px; background: var(--card2); }
+.step-tab.cur { outline: 2px solid var(--accent); }
+.step-tab.done { color: var(--good); }
+.step-count { margin-bottom: 8px; }
+.stdin-note { margin: 8px 0; }
+.stdin-note pre { margin: 4px 0 0; padding: 6px 10px; background: var(--card2); border-radius: 6px; }
+.stdin-box { display: block; margin: 8px 0; }
+.stdin-box textarea { width: 100%; margin-top: 6px; font-family: var(--mono, monospace); background: var(--card2); color: inherit; border: 1px solid var(--border, #333); border-radius: 6px; padding: 6px 8px; resize: vertical; }

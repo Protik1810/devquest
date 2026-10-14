@@ -1,0 +1,922 @@
+=== module Module 3 · Making decisions
+
+=== lesson py-if | if, elif and else | 85
+So far, every line of every program has run, in order. Real programs **decide**: if the password is right, log in, otherwise show an error; if the cart is empty, hide the checkout button. This lesson teaches your programs to choose.
+
+## Comparisons give True or False
+
+A **comparison** asks a yes/no question and produces a **boolean** (`True` or `False`):
+
+| Operator | Meaning | Example | Result |
+|---|---|---|---|
+| `==` | equal to | `3 == 3` | `True` |
+| `!=` | not equal to | `3 != 4` | `True` |
+| `<` and `>` | less than, greater than | `2 > 5` | `False` |
+| `<=` and `>=` | at most, at least | `5 <= 5` | `True` |
+
+- `=` **assigns** a value; `==` **compares** two values. Mixing them up is a classic slip.
+- Strings compare too: `"cat" == "Cat"` is `False` (case matters), and `"apple" < "banana"` is `True`.
+- You can chain comparisons like in maths: `0 <= age < 18` means `0 <= age and age < 18`.
+- Different types are never equal: `5 == "5"` is `False`, and `5 < "5"` is a `TypeError`.
+
+## The if statement
+
+```python
+temperature = 31
+if temperature > 30:
+    print("It's hot!")
+    print("Drink some water.")
+print("Have a nice day.")
+```
+
+The parts:
+
+1. the keyword `if`;
+2. a **condition**, any expression that is true or false;
+3. a **colon** `:`;
+4. an **indented block**: the lines that run only when the condition is true.
+
+The block ends where the indentation ends, so `Have a nice day.` prints whatever the temperature is.
+
+In Python, **indentation is part of the syntax**. Many other languages mark blocks with `{ }`; Python uses the indentation itself. The standard is **4 spaces** per level (editors insert them when you press Tab). Get it wrong and Python tells you:
+
+```
+IndentationError: expected an indented block after 'if' statement on line 2
+```
+
+## else: otherwise
+
+```python
+age = 15
+if age >= 18:
+    print("You can vote.")
+else:
+    print("Not yet: in", 18 - age, "years.")
+```
+
+With `if`/`else`, **exactly one** of the two blocks runs.
+
+## elif: choosing between many options
+
+`elif` ("else if") adds more conditions:
+
+```python
+score = 72
+if score >= 90:
+    grade = "A"
+elif score >= 80:
+    grade = "B"
+elif score >= 70:
+    grade = "C"
+else:
+    grade = "F"
+print(grade)    # C
+```
+
+Python checks the conditions **from top to bottom** and runs the **first** branch whose condition is true. Then it skips the rest of the chain. Trace it for 72: `72 >= 90`? No. `72 >= 80`? No. `72 >= 70`? Yes: grade C, and the `else` is skipped.
+
+That's why **order matters**. If the `score >= 70` test came first, a score of 95 would get a C, because it would match that branch first.
+
+## A chain of elifs is not the same as several ifs
+
+```python
+score = 95
+if score >= 90:
+    print("A")
+if score >= 80:      # a separate if: it's checked too
+    print("B")
+```
+
+This prints **both** A and B: each `if` is an independent question. Use `elif` when the options are mutually exclusive.
+
+## Nesting
+
+A block can contain another `if`, indented one more level:
+
+```python
+if logged_in:
+    if is_admin:
+        print("Admin panel")
+    else:
+        print("Your dashboard")
+else:
+    print("Please log in")
+```
+
+Deep nesting gets hard to read; the next lesson's `and`/`or` often flattens it.
+
+## pass: an empty block
+
+A block can't be empty. When you need a placeholder (say, a branch you'll write later), use `pass`, a statement that does nothing.
+
+## Testing decisions: think about boundaries
+
+When you test code that decides, try **one value per branch**, plus the **boundaries** between them. For the grade example, test 95, 90, 89, 80, 79, 70, 69. Most decision bugs are at a boundary: `>` written where `>=` was meant.
+
+## Common mistakes
+
+- Forgetting the colon: `SyntaxError: expected ':'`.
+- Writing `if x = 5:`. Python replies `SyntaxError: invalid syntax. Maybe you meant '==' or ':=' instead of '='?`
+- Indenting inconsistently, or not indenting the block at all.
+- Ordering an `elif` chain so that a broad condition catches values meant for a later branch.
+
+📚 **Go deeper:** Python Tutorial, section 4.1 "if Statements"; *Think Python* (3rd ed.), chapter 5 "Conditionals and Recursion"; Python for Everybody, chapter 3.
+--- quiz
+? What does this print?
+```python
+x = 7
+if x > 5:
+    print("big")
+else:
+    print("small")
+print("done")
+```
+- `big`
+- `small` and `done`
++ `big` and `done`
+- `done`
+> 7 > 5, so the `if` block runs and the `else` block is skipped. `done` isn't indented, so it always runs.
+? What does this print?
+```python
+score = 85
+if score >= 70:
+    print("C")
+elif score >= 80:
+    print("B")
+else:
+    print("F")
+```
++ `C`
+- `B`
+- `B` and `C`
+- `F`
+> Only the first true branch runs, and `85 >= 70` comes first. The chain is ordered wrongly for grading.
+? How many lines does this print?
+```python
+n = 95
+if n > 10:
+    print("more than 10")
+if n > 50:
+    print("more than 50")
+if n > 100:
+    print("more than 100")
+```
+- 1
++ 2
+- 3
+- 0
+> Three separate `if`s are three separate questions; the first two are true.
+? What is `5 == "5"`?
+- `True`
++ `False`
+- A `TypeError`
+- `"5"`
+> A number and a string are never equal. (Ordering them with `<` would be a `TypeError`.)
+? What is `1 < 3 < 2`?
+- `True`
++ `False`
+- A `SyntaxError`
+- `2`
+> It means `1 < 3 and 3 < 2`, and the second part is false.
+--- exercise code python
+::prompt
+Write a grade calculator. Read a score (a whole number) with the prompt `Score: ` and print its grade:
+
+| Score | Grade |
+|---|---|
+| 90 or more | A |
+| 80 to 89 | B |
+| 70 to 79 | C |
+| 60 to 69 | D |
+| below 60 | F |
+
+When you submit, your program also runs with other scores, including the boundaries, so every branch must be right.
+::starter
+score = int(input("Score: "))
+::solution
+score = int(input("Score: "))
+if score >= 90:
+    grade = "A"
+elif score >= 80:
+    grade = "B"
+elif score >= 70:
+    grade = "C"
+elif score >= 60:
+    grade = "D"
+else:
+    grade = "F"
+print("Grade:", grade)
+::stdin
+85
+::expected
+Score: 85
+Grade: B
+::cases
+>>> 90
+Score: 90
+Grade: A
+>>> 89
+Score: 89
+Grade: B
+>>> 70
+Score: 70
+Grade: C
+>>> 60
+Score: 60
+Grade: D
+>>> 59
+Score: 59
+Grade: F
+>>> 100
+Score: 100
+Grade: A
+::hints
+- Check the highest grade first: `if score >= 90:`, then `elif score >= 80:` and so on.
+- The final `else` catches everything below 60.
+- Store the letter in a variable and print it once at the end, or print in each branch.
+--- exercise code python
+::prompt
+Read a whole number with the prompt `Number: ` and describe it. Zero is just `0 is zero`; other numbers say whether they're positive or negative, and even or odd:
+```
+Number: -7
+-7 is negative and odd
+```
+::starter
+n = int(input("Number: "))
+::solution
+n = int(input("Number: "))
+if n == 0:
+    print(n, "is zero")
+else:
+    if n > 0:
+        sign = "positive"
+    else:
+        sign = "negative"
+    if n % 2 == 0:
+        parity = "even"
+    else:
+        parity = "odd"
+    print(n, "is", sign, "and", parity)
+::stdin
+-7
+::expected
+Number: -7
+-7 is negative and odd
+::cases
+>>> 0
+Number: 0
+0 is zero
+>>> 12
+Number: 12
+12 is positive and even
+>>> 3
+Number: 3
+3 is positive and odd
+>>> -4
+Number: -4
+-4 is negative and even
+::hints
+- Handle zero first, then everything else in the `else` block.
+- Work out the sign and the parity in two separate if/else statements, storing words in variables.
+- `n % 2 == 0` is true for even numbers, including negative ones.
+--- exercise code python
+::prompt
+A cinema prices tickets by age. Read the age with the prompt `Age: ` and print the price:
+
+| Age | Ticket |
+|---|---|
+| under 12 | $5 |
+| 12 to 17 | $8 |
+| 18 to 64 | $12 |
+| 65 and over | $6 |
+::starter
+age = int(input("Age: "))
+::solution
+age = int(input("Age: "))
+if age < 12:
+    price = 5
+elif age < 18:
+    price = 8
+elif age < 65:
+    price = 12
+else:
+    price = 6
+print(f"Ticket: ${price}")
+::stdin
+30
+::expected
+Age: 30
+Ticket: $12
+::cases
+>>> 11
+Age: 11
+Ticket: $5
+>>> 12
+Age: 12
+Ticket: $8
+>>> 17
+Age: 17
+Ticket: $8
+>>> 18
+Age: 18
+Ticket: $12
+>>> 64
+Age: 64
+Ticket: $12
+>>> 65
+Age: 65
+Ticket: $6
+::hints
+- Go from youngest to oldest: `if age < 12`, then `elif age < 18`, then `elif age < 65`, then `else`.
+- In an f-string, `$` is an ordinary character: `f"Ticket: ${price}"`.
+--- cards
+Comparison operators :: == != < > <= >= produce True or False. = assigns; == compares.
+if / elif / else :: Conditions are checked top to bottom; only the first true branch runs. else runs when none matched.
+Indentation :: Python marks blocks by indentation (4 spaces). The block ends where the indentation ends.
+Boundary testing :: Test one value per branch plus the values at each boundary (e.g. 89, 90), where > vs >= bugs hide.
+
+=== lesson py-logic | Logic: and, or, not, and match | 85
+## Combining conditions
+
+Real decisions often depend on several facts at once. Three **logical operators** combine booleans:
+
+| A | B | `A and B` | `A or B` |
+|---|---|---|---|
+| True | True | True | True |
+| True | False | False | True |
+| False | True | False | True |
+| False | False | False | False |
+
+- `and` is true only when **both** sides are true.
+- `or` is true when **at least one** side is true.
+- `not` flips a value: `not True` is `False`.
+
+```python
+age = 15
+has_ticket = True
+if age >= 13 and age <= 19:
+    print("teenager")
+if day == "Sat" or day == "Sun":
+    print("weekend")
+if not has_ticket:
+    print("Please buy a ticket")
+```
+
+## A trap: comparing to several values
+
+```python
+day = "Mon"
+if day == "Sat" or "Sun":      # BUG: always true!
+    print("weekend")
+```
+
+This reads naturally in English but means `(day == "Sat") or ("Sun")`. The right side is just the string `"Sun"`, which is **truthy**, so the whole condition is always true. Write the comparison twice, or use membership:
+
+```python
+if day == "Sat" or day == "Sun":
+if day in ("Sat", "Sun"):          # neater
+```
+
+## Precedence
+
+`not` binds tightest, then `and`, then `or`. So `a or b and c` means `a or (b and c)`. Parentheses make your intent clear; use them whenever you mix `and` and `or`.
+
+## Short-circuit evaluation
+
+Python stops evaluating as soon as the answer is known:
+
+- `A and B`: if A is false, B is never evaluated.
+- `A or B`: if A is true, B is never evaluated.
+
+This is often used to guard against errors:
+
+```python
+if count > 0 and total / count > 10:    # no ZeroDivisionError when count is 0
+    print("big average")
+```
+
+`and` and `or` actually return one of their operands (not necessarily `True`/`False`), which gives a handy idiom for defaults:
+
+```python
+name = input("Name: ") or "Guest"    # an empty answer is falsy, so "Guest" is used
+```
+
+## Truthiness in conditions
+
+Any value can be a condition; Python uses its truthiness (Module 1). So `if name:` means "if `name` isn't empty", and `if not items:` means "if the collection is empty". It's shorter and very common in Python code.
+
+## Conditional expressions
+
+For a choice between two values, there's a one-line form:
+
+```python
+label = "even" if n % 2 == 0 else "odd"
+print("Welcome back!" if returning else "Welcome!")
+```
+
+Read it as: *value-if-true* `if` *condition* `else` *value-if-false*. Keep it for short, simple choices.
+
+## Checking against None
+
+To test whether something is `None`, use `is`: `if result is None:`. (`is` checks whether two names refer to the very same object; Module 8 explains the difference from `==`.)
+
+## Validating input
+
+`int(input())` crashes if the user types letters. You can check first:
+
+```python
+text = input("Age: ")
+if text.isdigit():
+    age = int(text)
+    print("Next year you'll be", age + 1)
+else:
+    print("Please type a whole number.")
+```
+
+Checking data before using it is called **defensive programming**. (Module 7 shows the other approach: trying it and handling the error with `try`/`except`.)
+
+## match: choosing by value (Python 3.10+)
+
+When you compare one value against many options, `match` can read more clearly than a long `elif` chain:
+
+```python
+command = input("> ").strip().lower()
+match command:
+    case "start":
+        print("Starting")
+    case "stop" | "quit":          # | means "or" in a pattern
+        print("Stopping")
+    case "":
+        print("Type a command")
+    case _:                        # _ matches anything else
+        print("Unknown command:", command)
+```
+
+The first matching `case` runs. `case _:` plays the role of `else`. A case can also have a **guard**: `case n if n < 0:`. `match` can do much more (taking apart lists and objects), which you'll meet later; for now, think of it as a tidy multi-way choice.
+
+## Simplifying conditions: De Morgan's laws
+
+Two rules for negations: `not (a and b)` is the same as `(not a) or (not b)`, and `not (a or b)` is the same as `(not a) and (not b)`. They help turn a confusing `not (...)` into something readable.
+
+📚 **Go deeper:** Python Tutorial, sections 4.1 and 4.7 "match Statements"; PEP 636 "Structural Pattern Matching: Tutorial"; CS50P lecture 1 "Conditionals".
+--- quiz
+? What is `True and False or True`?
++ `True`
+- `False`
+- `None`
+- An error
+> `and` comes first: `True and False` is False, then `False or True` is True.
+? What does this print?
+```python
+day = "Mon"
+if day == "Sat" or "Sun":
+    print("weekend")
+else:
+    print("weekday")
+```
++ `weekend`
+- `weekday`
+- Nothing
+- A `SyntaxError`
+> The condition is `(day == "Sat") or "Sun"`, and the non-empty string `"Sun"` is truthy. Use `day in ("Sat", "Sun")`.
+? What is `not (3 > 2 and 2 > 3)`?
++ `True`
+- `False`
+- `3`
+- An error
+> `3 > 2 and 2 > 3` is False, and `not False` is True.
+? What happens when this runs?
+```python
+x = 0
+if x != 0 and 10 / x > 1:
+    print("big")
+print("ok")
+```
+- A `ZeroDivisionError`
++ It prints only `ok`
+- It prints `big` and `ok`
+- It prints nothing
+> `x != 0` is False, so `and` stops there and the division never happens.
+? What is the value of `"" or "Guest"`?
+- `""`
++ `"Guest"`
+- `True`
+- `False`
+> The empty string is falsy, so `or` returns its right-hand side.
+? Which is the same as `not (a or b)`?
+- `not a or not b`
++ `not a and not b`
+- `a and b`
+- `not a or b`
+> De Morgan's law: "not (a or b)" means "neither a nor b".
+--- exercise code python
+::prompt
+A year is a **leap year** if it's divisible by 4, except years divisible by 100, which are leap years only if they're also divisible by 400. Read a year with the prompt `Year: ` and say whether it's a leap year, using `and`, `or` and `%` in **one** condition:
+```
+Year: 2024
+2024 is a leap year
+```
+or `2023 is not a leap year`.
+::starter
+year = int(input("Year: "))
+::solution
+year = int(input("Year: "))
+if year % 4 == 0 and (year % 100 != 0 or year % 400 == 0):
+    print(year, "is a leap year")
+else:
+    print(year, "is not a leap year")
+::stdin
+2024
+::expected
+Year: 2024
+2024 is a leap year
+::cases
+>>> 2023
+Year: 2023
+2023 is not a leap year
+>>> 1900
+Year: 1900
+1900 is not a leap year
+>>> 2000
+Year: 2000
+2000 is a leap year
+>>> 2100
+Year: 2100
+2100 is not a leap year
+::hints
+- "Divisible by 4" is `year % 4 == 0`.
+- The exception, in words: "not divisible by 100, or divisible by 400". Put that part in parentheses.
+- Combine: `year % 4 == 0 and (year % 100 != 0 or year % 400 == 0)`.
+--- exercise code python
+::prompt
+Write a login check. Read a username and a password (prompts `Username: ` and `Password: `). The only account is username `admin` with password `s3cret!`. The username should be accepted whatever its case and surrounding spaces; the password must match exactly. Print one of:
+
+- `Welcome, admin!` when both are right;
+- `Wrong password.` when the username is right but the password isn't;
+- `Unknown user.` otherwise.
+::starter
+username = input("Username: ")
+password = input("Password: ")
+::solution
+username = input("Username: ")
+password = input("Password: ")
+if username.strip().lower() != "admin":
+    print("Unknown user.")
+elif password == "s3cret!":
+    print("Welcome, admin!")
+else:
+    print("Wrong password.")
+::stdin
+admin
+s3cret!
+::expected
+Username: admin
+Password: s3cret!
+Welcome, admin!
+::cases
+>>>   ADMIN
+>>> s3cret!
+Username:   ADMIN
+Password: s3cret!
+Welcome, admin!
+>>> admin
+>>> S3CRET!
+Username: admin
+Password: S3CRET!
+Wrong password.
+>>> guest
+>>> s3cret!
+Username: guest
+Password: s3cret!
+Unknown user.
+::hints
+- Normalise the username first: `username.strip().lower()`.
+- Check the username before the password, so a wrong username always gives `Unknown user.`
+--- exercise code python
+::prompt
+Build a tiny command interpreter with `match`. Read a command (prompt `Command: `), ignoring case and surrounding spaces, and respond:
+
+| Command | Response |
+|---|---|
+| `start` | `Engine started` |
+| `stop` or `halt` | `Engine stopped` |
+| `status` | `All systems normal` |
+| anything else | `Unknown command: <the cleaned command>` |
+::starter
+command = input("Command: ").strip().lower()
+::solution
+command = input("Command: ").strip().lower()
+match command:
+    case "start":
+        print("Engine started")
+    case "stop" | "halt":
+        print("Engine stopped")
+    case "status":
+        print("All systems normal")
+    case _:
+        print("Unknown command:", command)
+::stdin
+start
+::expected
+Command: start
+Engine started
+::cases
+>>>  HALT
+Command:  HALT
+Engine stopped
+>>> stop
+Command: stop
+Engine stopped
+>>> Status
+Command: Status
+All systems normal
+>>> Launch
+Command: Launch
+Unknown command: launch
+::hints
+- `match command:` then one `case` per option, each with its own indented block.
+- `case "stop" | "halt":` matches either word.
+- `case _:` catches everything else.
+--- cards
+and / or / not :: and: both true. or: at least one true. not: flips. Precedence: not, then and, then or.
+x == "a" or "b" :: A bug: "b" is truthy, so it's always true. Write x == "a" or x == "b", or x in ("a", "b").
+Short-circuit evaluation :: and stops at the first falsy value, or at the first truthy one. Guards like count > 0 and total / count rely on it.
+Conditional expression :: a if condition else b, e.g. "even" if n % 2 == 0 else "odd".
+match / case :: Compares a value against patterns; the first matching case runs. "a" | "b" means either; case _ matches anything.
+
+=== lesson py-m3-test | Module 3 test | 160
+This test checks that you can make programs decide. You'll need comparisons, `if`/`elif`/`else`, `and`/`or`/`not`, truthiness and `match`.
+
+Before you start, make sure you can:
+
+- predict which branch of an `if`/`elif`/`else` chain runs, and why order matters;
+- explain the difference between a chain of `elif`s and several separate `if`s;
+- combine conditions with `and`, `or` and `not`, and avoid the `x == "a" or "b"` trap;
+- use short-circuiting to avoid errors, and `or` for default values;
+- choose good test values, including boundaries.
+
+The coding problems are checked with several inputs each, so think through every case before you submit.
+--- quiz
+? What does this print?
+```python
+temp = 18
+if temp > 25:
+    print("hot")
+elif temp > 15:
+    print("warm")
+elif temp > 5:
+    print("cool")
+else:
+    print("cold")
+```
+- `cool`
++ `warm`
+- `warm` and `cool`
+- `cold`
+> 18 > 25 is false; 18 > 15 is true, so `warm` prints and the rest is skipped.
+? What does `print(4 > 3 and not 2 > 1)` print?
+- `True`
++ `False`
+- `None`
+- An error
+> `not 2 > 1` is `not True`, which is False; `True and False` is False.
+? Which condition is true exactly when `n` is between 1 and 10, inclusive?
+- `1 < n < 10`
++ `1 <= n <= 10`
+- `n >= 1 or n <= 10`
+- `n in 1..10`
+> Inclusive means `<=` on both sides. With `or`, every number would pass.
+? What is printed when the user just presses Enter?
+```python
+name = input("Name: ") or "friend"
+print("Hi", name)
+```
+- `Hi `
++ `Hi friend`
+- `Hi None`
+- An error
+> An empty string is falsy, so `or` gives `"friend"`.
+? What does `"even" if 7 % 2 == 0 else "odd"` give?
+- `"even"`
++ `"odd"`
+- `True`
+- `1`
+> 7 % 2 is 1, so the condition is false and the `else` value is chosen.
+? Why does this crash for `x = 0`, and how do you fix it?
+```python
+if 10 / x > 1 and x != 0:
+    print("ok")
+```
+- It doesn't crash
++ The division runs first; swap the two conditions so `x != 0` is checked first
+- `and` can't combine comparisons
+- Use `or` instead of `and`
+> Short-circuiting only helps if the guard comes first.
+? How many lines does this print when `n = 10`?
+```python
+if n > 5:
+    print("a")
+elif n > 8:
+    print("b")
+if n > 9:
+    print("c")
+```
+- 1
++ 2
+- 3
+- 0
+> `a` from the first chain (the `elif` is skipped), and `c` from the separate `if`.
+? In `match command:`, what does `case _:` do?
+- Matches only the underscore character
++ Matches anything not matched by an earlier case
+- Matches an empty string
+- It's a syntax error
+> `_` is the wildcard pattern, like `else` in an `if` chain.
+--- exercise code python
+::prompt
+Classify a triangle from its three side lengths (whole numbers, read with the prompts `a: `, `b: `, `c: `). Print exactly one of:
+
+- `not a triangle` if any side is at least as long as the other two together;
+- `equilateral` if all three sides are equal;
+- `isosceles` if exactly two are equal;
+- `scalene` if all differ.
+::starter
+a = int(input("a: "))
+b = int(input("b: "))
+c = int(input("c: "))
+::solution
+a = int(input("a: "))
+b = int(input("b: "))
+c = int(input("c: "))
+if a >= b + c or b >= a + c or c >= a + b:
+    print("not a triangle")
+elif a == b == c:
+    print("equilateral")
+elif a == b or b == c or a == c:
+    print("isosceles")
+else:
+    print("scalene")
+::stdin
+3
+4
+5
+::expected
+a: 3
+b: 4
+c: 5
+scalene
+::cases
+>>> 2
+>>> 2
+>>> 2
+a: 2
+b: 2
+c: 2
+equilateral
+>>> 5
+>>> 5
+>>> 8
+a: 5
+b: 5
+c: 8
+isosceles
+>>> 7
+>>> 3
+>>> 7
+a: 7
+b: 3
+c: 7
+isosceles
+>>> 1
+>>> 2
+>>> 3
+a: 1
+b: 2
+c: 3
+not a triangle
+>>> 10
+>>> 2
+>>> 3
+a: 10
+b: 2
+c: 3
+not a triangle
+::hints
+- Check "not a triangle" first, since the other answers only make sense for real triangles.
+- A side that is at least the sum of the other two: `a >= b + c`, and the same for `b` and `c`.
+- `a == b == c` checks all three at once.
+--- exercise code python
+::prompt
+Work out a shipping cost. Read the parcel weight in kg (it may have decimals) and the destination (`domestic` or `international`, any case). Domestic prices: up to 1 kg costs $5, up to 5 kg $10, heavier $20. International shipping costs **double**. Print the cost with two decimals:
+```
+Weight (kg): 3.5
+Destination: International
+Shipping: $20.00
+```
+::starter
+weight = float(input("Weight (kg): "))
+destination = input("Destination: ").strip().lower()
+::solution
+weight = float(input("Weight (kg): "))
+destination = input("Destination: ").strip().lower()
+if weight <= 1:
+    cost = 5
+elif weight <= 5:
+    cost = 10
+else:
+    cost = 20
+if destination == "international":
+    cost = cost * 2
+print(f"Shipping: ${cost:.2f}")
+::stdin
+3.5
+International
+::expected
+Weight (kg): 3.5
+Destination: International
+Shipping: $20.00
+::cases
+>>> 1
+>>> domestic
+Weight (kg): 1
+Destination: domestic
+Shipping: $5.00
+>>> 1.2
+>>> domestic
+Weight (kg): 1.2
+Destination: domestic
+Shipping: $10.00
+>>> 5
+>>> DOMESTIC
+Weight (kg): 5
+Destination: DOMESTIC
+Shipping: $10.00
+>>> 12
+>>> international
+Weight (kg): 12
+Destination: international
+Shipping: $40.00
+>>> 0.4
+>>> international
+Weight (kg): 0.4
+Destination: international
+Shipping: $10.00
+::hints
+- First choose the domestic price with an `if`/`elif`/`else` on the weight.
+- Then, in a separate `if`, double it for international parcels.
+- `f"${cost:.2f}"` prints the cost with two decimals after a dollar sign.
+--- exercise code python
+::prompt
+Decide a game of rock, paper, scissors. Read two moves (prompts `Player 1: ` and `Player 2: `, any case). Print `Draw`, `Player 1 wins` or `Player 2 wins`. Rock beats scissors, scissors beat paper, paper beats rock. If either move isn't one of the three, print `Invalid move`.
+::starter
+p1 = input("Player 1: ").strip().lower()
+p2 = input("Player 2: ").strip().lower()
+::solution
+p1 = input("Player 1: ").strip().lower()
+p2 = input("Player 2: ").strip().lower()
+moves = ("rock", "paper", "scissors")
+if p1 not in moves or p2 not in moves:
+    print("Invalid move")
+elif p1 == p2:
+    print("Draw")
+elif (p1 == "rock" and p2 == "scissors") or (p1 == "scissors" and p2 == "paper") or (p1 == "paper" and p2 == "rock"):
+    print("Player 1 wins")
+else:
+    print("Player 2 wins")
+::stdin
+rock
+scissors
+::expected
+Player 1: rock
+Player 2: scissors
+Player 1 wins
+::cases
+>>> paper
+>>> scissors
+Player 1: paper
+Player 2: scissors
+Player 2 wins
+>>> Paper
+>>> rock
+Player 1: Paper
+Player 2: rock
+Player 1 wins
+>>> rock
+>>> ROCK
+Player 1: rock
+Player 2: ROCK
+Draw
+>>> scissors
+>>> rock
+Player 1: scissors
+Player 2: rock
+Player 2 wins
+>>> rock
+>>> lizard
+Player 1: rock
+Player 2: lizard
+Invalid move
+::hints
+- Check for invalid moves first: `p1 not in ("rock", "paper", "scissors")`.
+- Then a draw. Then list the three ways player 1 can win, joined with `or`.
+- If it's valid, not a draw, and player 1 didn't win, player 2 won.

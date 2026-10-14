@@ -1,0 +1,9 @@
++++ track
+id: python
+title: Python
+icon: 🐍
+tier: 1
+color: #3b82f6
+kind: language
+blurb: A complete first language, from your very first line of code to professional object-oriented Python: variables, logic, loops, functions, data structures, errors and testing, classes and design, files, the standard library and modern tooling. Every topic has worked examples, practice exercises and a module test.
++++

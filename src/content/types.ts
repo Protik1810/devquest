@@ -8,18 +8,23 @@ export type CodeLang = BrowserLang | NativeLang;
 
 export type QuizQuestion = {
   q: string;
+  /** Optional code shown with the question (e.g. "What does this print?"). */
+  code?: string;
   options: string[];
   answer: number;
   explain?: string;
 };
+
+/** One extra run of a program: what is typed in, and what it must print. */
+export type StdinCase = { stdin: string; expected: string };
 
 export type CodeCheck =
   /**
    * Exact program output. `variants` are hidden-input swaps (find → replace on the whole program, applied to the
    * learner's code and to the reference solution); after a pass, both must print the same thing with the swaps.
    */
-  | { type: 'stdout'; expected: string; variants?: [string, string][]; /** Hidden code run before the learner's (e.g. MongoDB seed data). */ setup?: string; /** Hidden checking commands run after the learner's code; their output must equal `expected` (Redis). */ verify?: string }
-  | { type: 'tests'; code: string }
+  | { type: 'stdout'; expected: string; variants?: [string, string][]; /** Hidden code run before the learner's (e.g. MongoDB seed data). */ setup?: string; /** Hidden checking commands run after the learner's code; their output must equal `expected` (Redis). */ verify?: string; /** Lines typed into input() (Python). */ stdin?: string; /** More runs with other typed input; each must print its own expected output. */ cases?: StdinCase[] }
+  | { type: 'tests'; code: string; /** Lines typed into input() (Python). */ stdin?: string }
   /** SQL: compare the last result with the reference query (`expected`). With `verify`, compare that query's result after each script instead. */
   | { type: 'sql'; setup: string; expected: string; ordered?: boolean; verify?: string }
   /** JS run inside the learner's page after it loads. Use assert(cond, msg). */
@@ -57,6 +62,10 @@ export type Flashcard = { front: string; back: string };
 export type Lesson = {
   id: string;
   title: string;
+  /** Module heading this lesson belongs to (shown on the track page). */
+  module?: string;
+  /** Several exercises, done in order (e.g. a predict-the-output check, practice, a challenge). Takes precedence over `exercise`. */
+  exercises?: Exercise[];
   /** Markdown. `{{ill:name}}` on its own line embeds an illustration, `{{viz:name}}` a visualizer. */
   body: string;
   exercise?: Exercise;
