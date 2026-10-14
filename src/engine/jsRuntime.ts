@@ -726,7 +726,12 @@ function devquestJsRuntime(g: any) {
 
   function demoResponse(status: number, body: any) {
     const text = JSON.stringify(body);
-    if (typeof g.Response === 'function') return new g.Response(text, { status, statusText: STATUS[status] ?? '', headers: { 'content-type': 'application/json' } });
+    if (typeof g.Response === 'function') {
+      const response = new g.Response(text, { status, statusText: STATUS[status] ?? '', headers: { 'content-type': 'application/json' } });
+      // Parse in this realm, so objects have this realm's prototypes even when Response comes from a host (Node's vm)
+      Object.defineProperty(response, 'json', { value: async () => JSON.parse(await response.text()) });
+      return response;
+    }
     return { ok: status >= 200 && status < 300, status, statusText: STATUS[status] ?? '', headers: { get: (h: string) => (h.toLowerCase() === 'content-type' ? 'application/json' : null) }, json: async () => JSON.parse(text), text: async () => text };
   }
 
