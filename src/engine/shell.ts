@@ -215,6 +215,7 @@ export class Shell {
         if (!args.length) throw new Error('rm: missing operand');
         for (const a of args) {
           const abs = this.resolve(a);
+          if (abs === '/') throw new Error("rm: it is dangerous to operate recursively on '/'\nrm: use --no-preserve-root to override this failsafe");
           const n = this.get(abs);
           if (!n) throw new Error(`rm: cannot remove '${a}': No such file or directory`);
           if (n.type === 'dir' && !flags.has('r')) throw new Error(`rm: cannot remove '${a}': Is a directory`);
@@ -267,10 +268,14 @@ export class Shell {
         return out.join('\n');
       }
       case 'wc': {
-        const t = textOf(args);
+        let t = textOf(args);
+        // Command output arrives here without its final newline; a real terminal pipe includes it
+        if (!args.length && t && !t.endsWith('\n')) t += '\n';
         const lines = t ? t.split('\n').length - (t.endsWith('\n') ? 1 : 0) : 0;
-        if (flags.has('l')) return String(lines);
-        return `${lines} ${t.split(/\s+/).filter(Boolean).length} ${t.length}`;
+        const words = t.split(/\s+/).filter(Boolean).length;
+        const bytes = new TextEncoder().encode(t).length;
+        const picked = [flags.has('l') && lines, flags.has('w') && words, flags.has('c') && bytes, flags.has('m') && [...t].length].filter((x) => x !== false);
+        return (picked.length ? picked : [lines, words, bytes]).join(' ');
       }
       case 'head':
       case 'tail': {

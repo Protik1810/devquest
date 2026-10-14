@@ -50,10 +50,55 @@ const localizeVendors = (html: string) => {
 
 // ---------- worker plumbing ----------
 // Each language runs in a Web Worker so an infinite loop can be killed with a timeout.
+/**
+ * Runs exercise tests one top-level statement at a time. When a bare `assert` fails (no message), it explains
+ * the failure instead of a bare AssertionError: the failing line, and for `assert a == b` the expected and actual values.
+ */
+const PY_TEST_HELPER = String.raw`
+import ast as _dq_ast
+
+def __dq_run_tests(src, ns):
+    tree = _dq_ast.parse(src)
+    lines = src.splitlines()
+    for node in tree.body:
+        code = compile(_dq_ast.Module(body=[node], type_ignores=[]), '<tests>', 'exec')
+        try:
+            exec(code, ns)
+        except AssertionError as e:
+            if str(e):
+                raise
+            raise AssertionError(__dq_explain(e, node, lines, ns)) from None
+
+def __dq_explain(e, node, lines, ns):
+    lineno = None
+    tb = e.__traceback__
+    while tb is not None:
+        if tb.tb_frame.f_code.co_filename == '<tests>':
+            lineno = tb.tb_lineno
+        tb = tb.tb_next
+    stmt = None
+    for n in _dq_ast.walk(node):
+        if isinstance(n, _dq_ast.Assert) and getattr(n, 'lineno', None) == lineno:
+            stmt = n
+    text = lines[lineno - 1].strip() if lineno else 'assert'
+    nl = chr(10)
+    detail = ''
+    t = stmt.test if stmt is not None else None
+    if isinstance(t, _dq_ast.Compare) and len(t.ops) == 1 and isinstance(t.ops[0], (_dq_ast.Eq, _dq_ast.Is)):
+        try:
+            got = eval(compile(_dq_ast.Expression(body=t.left), '<tests>', 'eval'), ns)
+            want = eval(compile(_dq_ast.Expression(body=t.comparators[0]), '<tests>', 'eval'), ns)
+            detail = nl + '  expected: ' + repr(want) + nl + '  got:      ' + repr(got)
+        except Exception:
+            pass
+    return 'This check failed: ' + text + detail
+`;
+
 const PY_WORKER = `
 importScripts('${PYODIDE_URL}');
 let py;
-const ready = loadPyodide({ indexURL: '${PYODIDE_BASE}' }).then(p => { py = p; postMessage({ ready: true }); });
+const TEST_HELPER = ${JSON.stringify(PY_TEST_HELPER)};
+const ready = loadPyodide({ indexURL: '${PYODIDE_BASE}' }).then(p => { py = p; py.runPython(TEST_HELPER, { filename: '<devquest>' }); postMessage({ ready: true }); });
 onmessage = async (e) => {
   await ready;
   const src = e.data.code + '\\n' + (e.data.tests || '');
@@ -70,8 +115,9 @@ onmessage = async (e) => {
     await py.runPythonAsync(e.data.code, { globals: ns });
     if (e.data.tests) {
       const before = out.length;
-      try { await py.runPythonAsync(e.data.tests, { globals: ns }); }
-      catch (err) { postMessage({ ok: true, output: out.slice(0, before), testError: cleanPy(String(err.message || err)) }); return; }
+      // Run the tests statement by statement, so a bare failing assert can be explained (line + expected/got)
+      try { py.globals.get('__dq_run_tests')(e.data.tests, ns); }
+      catch (err) { postMessage({ ok: true, output: out.slice(0, before), testError: testMessage(String(err.message || err)) }); return; }
       out = out.slice(0, before);
     }
     postMessage({ ok: true, output: out });
@@ -80,10 +126,15 @@ onmessage = async (e) => {
   } finally { ns.destroy(); }
 };
 function cleanPy(msg) {
-  // Drop pyodide's internal frames and keep the user's part of the traceback
-  const lines = msg.split('\\n');
-  const i = lines.findIndex(l => l.includes('File "<exec>"'));
+  // Drop pyodide's internal frames and DevQuest's test-runner frames; keep the user's part of the traceback
+  const lines = msg.split('\\n').filter((l, i, all) => !l.includes('File "<devquest>"') && !(i > 0 && all[i - 1].includes('File "<devquest>"')));
+  const i = lines.findIndex(l => l.includes('File "<exec>"') || l.includes('File "<tests>"'));
   return (i >= 0 ? ['Traceback (most recent call last):', ...lines.slice(i)] : lines).join('\\n').trim();
+}
+function testMessage(msg) {
+  // A failed check explained by the runner: show just its explanation
+  const a = msg.lastIndexOf('AssertionError: ');
+  return a >= 0 ? msg.slice(a + 'AssertionError: '.length).trim() : cleanPy(msg);
 }
 `;
 

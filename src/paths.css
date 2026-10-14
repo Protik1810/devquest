@@ -172,3 +172,6 @@
 }
 .sync-box { display: flex; flex-direction: column; gap: 6px; padding-top: 8px; margin-top: 4px; border-top: 1px dashed var(--border); }
 .page-loading { padding: 24px; }
+.runtime-note { margin: 0 0 14px; }
+.runtime-note ul { margin: 6px 0 0; padding-left: 18px; }
+.runtime-note li { margin: 3px 0; }

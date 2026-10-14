@@ -17,7 +17,7 @@ const PY: Explainer[] = [
   { match: /ZeroDivisionError/, title: 'ZeroDivisionError', explain: 'Something was divided by zero.', fix: 'Check the divisor before dividing (for example, an empty list has `len() == 0`).' },
   { match: /AttributeError: '(\w+)' object has no attribute '(\w+)'/, title: 'AttributeError', explain: 'Values of type `$1` don\'t have `.$2`.', fix: 'Check spelling, and check the variable really holds the type you expect (it may be `None`).' },
   { match: /RecursionError/, title: 'RecursionError', explain: 'A function kept calling itself and never stopped, so the call stack overflowed.', fix: 'Make sure there\'s a base case, and that each call moves closer to it.' },
-  { match: /AssertionError/, title: 'A test failed', explain: 'Your code ran, but produced a result the test didn\'t expect.', fix: 'Read the message after the error for the expected and actual values, then trace your code by hand with that input.' },
+  { match: /AssertionError/, title: 'A test failed', explain: 'Your code ran, but produced a result the test didn\'t expect.', fix: 'The result panel shows which check failed (and, for comparisons, the expected and actual values). Trace your code by hand with that input to see where it goes a different way.' },
 ];
 
 const JS: Explainer[] = [

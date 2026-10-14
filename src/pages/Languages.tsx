@@ -56,6 +56,14 @@ export function Languages() {
       <p className="muted">
         {LANGUAGE_TRACKS.length} languages, each with hands-on lessons and a mini project. Filter by the field you're interested in. <Link to="/paths">Career paths</Link> pick the right ones for you.
       </p>
+      <div className="card small runtime-note">
+        <b>Where your code runs</b>
+        <ul>
+          <li>⚡ <b>Everywhere, offline:</b> Python, JavaScript, TypeScript, SQL, Lua, HTML/CSS, plus the PostgreSQL, MySQL, MongoDB and Redis tracks.</li>
+          <li>⚙️ <b>Compiled languages</b> (Go, Rust, Java, C#, C, C++, Kotlin, Swift, Dart, Ruby, PHP, R, Bash, PowerShell, Solidity) run for real in the <Link to="/download">desktop app</Link> with the compiler installed.</li>
+          <li>🤖 On the web or on Android, those are checked by an AI provider you connect in <Link to="/settings">Settings</Link>, or with 📝 self-check (half XP) if you have none.</li>
+        </ul>
+      </div>
       <div className="tabs">
         {AREAS.map(([f]) => (
           <button key={f} className={field === f ? 'active' : ''} onClick={() => setField(f)}>{f}</button>

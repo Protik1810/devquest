@@ -59,7 +59,7 @@ function App() {
 
 JSX rules: one root element, \`className\` instead of \`class\`, close every tag, and **curly braces** for JavaScript expressions.
 
-> 🌐 React loads from a CDN, so these lessons need internet.
+> 📦 React and Babel ship inside DevQuest, so these lessons work offline.
 `,
       exercise: {
         kind: 'code',
@@ -373,7 +373,7 @@ Principles: **least privilege**, **defence in depth**, **secure defaults**, **ne
 
 Do this instead:
 1. Generate a random **salt** per user (defeats precomputed "rainbow tables").
-2. Use a **slow, memory-hard key-derivation function**: Argon2id (best), scrypt, bcrypt, or PBKDF2 with many iterations.
+2. Use a **slow, salted password-hashing function**: **Argon2id** (best) or **scrypt**, which are also *memory-hard* (they need lots of RAM, so GPU cracking rigs gain little); **bcrypt**, or **PBKDF2** with many iterations, are slow but not memory-hard, and are acceptable where Argon2id isn't available.
 3. Compare hashes in **constant time** (\`hmac.compare_digest\`) to avoid timing attacks.
 
 ~~~python

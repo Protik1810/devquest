@@ -64,7 +64,7 @@ export function LessonPage() {
       <div className={`lesson-grid ${ex && ex.kind !== 'quiz' ? 'split' : ''}`}>
         <article className="lesson-body card">
           <h1>{lesson.title}</h1>
-          <div className="muted small">⭐ {xp} XP{lesson.cards?.length ? ` · 🃏 ${lesson.cards.length} flashcards unlock on completion` : ''}</div>
+          <div className="muted small">⭐ {xp} XP{lesson.cards?.length ? ` · 🃏 ${lesson.cards.length} flashcard${lesson.cards.length === 1 ? '' : 's'} unlock${lesson.cards.length === 1 ? 's' : ''} on completion` : ''}</div>
           <Markdown source={lesson.body} />
           {ex?.kind === 'quiz' && (
             <div className="card inset">
