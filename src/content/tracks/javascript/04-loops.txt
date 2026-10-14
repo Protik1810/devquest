@@ -1,0 +1,1302 @@
+=== module Module 4 · Loops
+
+=== lesson js-while | while loops | 75
+## Repeating work
+
+Computers are brilliant at doing the same thing many times without getting bored or making mistakes. A **loop** repeats a block of code. The simplest is `while`: "while this condition is true, keep running the block".
+
+```js
+let count = 1;
+while (count <= 5) {
+  console.log("Lap", count);
+  count++;
+}
+console.log("Finished!");
+```
+
+Step by step:
+
+1. Check the condition. `1 <= 5` is true, so run the block: print "Lap 1", then add 1.
+2. Back to the top: check again. `2 <= 5`: run the block again.
+3. ...until `count` is 6. Now `6 <= 5` is false, so skip the block and continue after it.
+
+Each run of the block is called an **iteration**. The variable that changes each time (`count`) is the **loop variable**.
+
+## The three parts of a counting loop
+
+Almost every counting loop has:
+
+1. **Initialise** a variable before the loop: `let count = 1;`
+2. **Test** it in the condition: `count <= 5`
+3. **Update** it inside the block: `count++;`
+
+Forget the update and the condition never becomes false: an **infinite loop**. The program hangs forever (DevQuest stops it after a few seconds; in a terminal, press `Ctrl+C`; in a browser, the tab freezes until you close it).
+
+```js
+let n = 10;
+while (n > 0) {
+  console.log(n);
+  n -= 3;
+}
+```
+
+Trace it: 10, 7, 4, 1, then `n` becomes -2 and the loop ends. Tracing loops in a table, one row per iteration, is the best way to understand them.
+
+~~~check
+? How many times does "hi" print?
+```js
+let k = 0;
+while (k < 3) {
+  console.log("hi");
+  k++;
+}
+```
+- 2
++ 3
+- 4
+- Forever
+> k takes the values 0, 1 and 2 inside the loop; when it reaches 3 the test fails.
+~~~
+
+## Accumulators: building up a result
+
+A very common pattern is to **accumulate** a result as you loop: start with a neutral value and update it every iteration.
+
+```js
+let total = 0;
+let n = 1;
+while (n <= 100) {
+  total += n;
+  n++;
+}
+console.log("1 + 2 + ... + 100 =", total);
+```
+
+`total` starts at 0 (adding 0 changes nothing). To multiply things together, start at 1 instead. To build text, start with `""`.
+
+## Loops that wait for the user
+
+`while` shines when you don't know in advance how many iterations you need. A **sentinel** value (here, the word `done`) tells the loop to stop:
+
+```js
+let total = 0;
+let line = prompt("Number (or done):");
+while (line !== "done" && line !== null) {
+  total += Number(line);
+  line = prompt("Number (or done):");
+}
+console.log("Total:", total);
+```
+
+Type `5`, `7` and `done` on three lines in the input box, then run it. `prompt` returns `null` when there's no more input (or when someone presses Cancel in a browser), and the loop stops then too, so it can't loop forever.
+
+## break and continue
+
+- `break` leaves the loop immediately.
+- `continue` skips the rest of this iteration and jumps back to the condition.
+
+A loop of the form `while (true) { ... break; }` runs "forever" until a `break` fires. It's often the clearest way to write "ask until the answer is valid":
+
+```js
+let tries = 0;
+while (true) {
+  const answer = prompt("What is 6 x 7?");
+  tries++;
+  if (answer === null) {
+    console.log("Giving up.");
+    break;
+  }
+  if (Number(answer) === 42) {
+    console.log(`Correct after ${tries} tries!`);
+    break;
+  }
+  console.log("Not quite, try again.");
+}
+```
+
+Try typing `40`, `41`, `42` on three lines. With `while (true)`, make sure every path eventually reaches a `break`.
+
+`continue` is useful for skipping items you don't care about:
+
+```js
+let n = 0;
+while (n < 10) {
+  n++;
+  if (n % 3 !== 0) {
+    continue;
+  }
+  console.log(n, "is a multiple of 3");
+}
+```
+
+Notice that `n++` comes *before* the `continue`: if the update came after it, `continue` would skip the update and the loop would never end.
+
+## do...while: run at least once
+
+A `do...while` loop checks its condition **after** each iteration, so the block always runs at least once:
+
+```js
+let i = 100;
+do {
+  console.log("This runs once, even though i is not < 5:", i);
+  i++;
+} while (i < 5);
+```
+
+It's rare in practice (`while (true)` with `break` usually reads better), but you'll meet it.
+
+## Don't loop on exact decimals
+
+```js
+let x = 0.1;
+let steps = 0;
+while (x !== 1 && steps < 20) {
+  x += 0.1;
+  steps++;
+}
+console.log(x, steps);
+```
+
+Because 0.1 isn't stored exactly (Module 1), `x` jumps from 0.9999999999999999 to 1.0999999999999999 and is **never** exactly 1. The `steps < 20` safety limit is the only thing that stops this loop. Count with whole numbers, or test with `<` / `>` rather than `!==`.
+
+📚 **Go deeper:** javascript.info, "Loops: while and for"; MDN JavaScript Guide, "Loops and iteration"; *Eloquent JavaScript* (4th ed.), chapter 2, "while and do loops".
+--- goals
+- repeat code with `while`, identifying the initialise, test and update parts
+- trace a loop iteration by iteration, and spot infinite loops
+- accumulate totals, products and strings in a loop
+- loop until a sentinel value or until input runs out (`prompt` returns `null`)
+- leave or skip iterations with `break` and `continue`, and use `do...while`
+--- quiz
+? What does this print?
+```js
+let n = 1;
+while (n < 20) {
+  n *= 3;
+}
+console.log(n);
+```
+- 9
+- 20
++ 27
+- 18
+> n goes 1, 3, 9, 27. When it's 27, the test fails and the loop ends.
+? Why does this loop never end?
+```js
+let i = 0;
+while (i < 5) {
+  console.log(i);
+}
+```
+- `i < 5` is a syntax error
++ `i` is never updated, so `i < 5` stays true
+- `console.log` restarts the loop
+- It does end after 5 iterations
+> Without `i++` the condition never changes.
+? What does `break` do inside a loop?
+- Skips to the next iteration
++ Leaves the loop immediately
+- Stops the whole program
+- Restarts the loop from the beginning
+> `break` exits the loop; the program continues after it. `continue` is the one that skips to the next iteration.
+? What does this print?
+```js
+let s = "";
+let i = 0;
+while (i < 4) {
+  i++;
+  if (i === 2) continue;
+  s += i;
+}
+console.log(s);
+```
+- `1234`
++ `134`
+- `13`
+- `234`
+> When i is 2, `continue` skips the `s += i` line.
+? How many times does the body of a `do...while` loop run if the condition is false from the start?
+- 0
++ 1
+- 2
+- Forever
+> do...while checks the condition after the body, so the body always runs at least once.
+? What starting value should an accumulator for a product (multiplying numbers together) have?
+- 0
++ 1
+- `""`
+- `null`
+> Multiplying by 1 changes nothing; starting at 0 would make the product always 0.
+--- exercise code javascript
+::prompt
+Print a countdown from `start` down to 1, then `Liftoff!`, using a `while` loop:
+```
+5
+4
+3
+2
+1
+Liftoff!
+```
+::starter
+const start = 5;
+// while loop here
+::solution
+const start = 5;
+let n = start;
+while (n >= 1) {
+  console.log(n);
+  n--;
+}
+console.log("Liftoff!");
+::expected
+5
+4
+3
+2
+1
+Liftoff!
+::variants
+const start = 5 => const start = 8
+::hints
+- `start` is a `const`, so copy it into a `let` variable you can count down.
+- Loop while the number is at least 1, and subtract 1 at the end of each iteration.
+--- exercise code javascript
+::prompt
+Read numbers with `prompt` until the user types `done` (or the input runs out, when `prompt` gives `null`). Then print how many numbers there were, their total and their average with one decimal. If no numbers were typed, print `No numbers` instead.
+```
+Number: 4
+Number: 10
+Number: 7
+Number: done
+Count: 3
+Total: 21
+Average: 7.0
+```
+::starter
+let count = 0;
+let total = 0;
+// loop, then print
+::solution
+let count = 0;
+let total = 0;
+while (true) {
+  const line = prompt("Number:");
+  if (line === null || line === "done") {
+    break;
+  }
+  total += Number(line);
+  count++;
+}
+if (count === 0) {
+  console.log("No numbers");
+} else {
+  console.log("Count:", count);
+  console.log("Total:", total);
+  console.log("Average:", (total / count).toFixed(1));
+}
+::stdin
+4
+10
+7
+done
+::expected
+Number: 4
+Number: 10
+Number: 7
+Number: done
+Count: 3
+Total: 21
+Average: 7.0
+::cases
+>>> done
+Number: done
+No numbers
+>>> 2.5
+>>> 3
+>>> done
+Number: 2.5
+Number: 3
+Number: done
+Count: 2
+Total: 5.5
+Average: 2.8
+::hints
+- `while (true)` with a `break` when the answer is `"done"` or `null`.
+- Keep two accumulators: one counts, one adds.
+- Guard against dividing by zero: handle `count === 0` before printing the average.
+--- exercise code javascript
+::prompt
+The **Collatz sequence** starts with any positive whole number: if it's even, halve it; if it's odd, multiply by 3 and add 1. Mathematicians believe it always reaches 1, but nobody has proved it! Print the sequence for `start` on one line, and the number of steps it took:
+```
+6 3 10 5 16 8 4 2 1
+Steps: 8
+```
+Build the line as a string in the loop, adding each number and a space, then `trim()` the end.
+::starter
+const start = 6;
+// your code here
+::solution
+const start = 6;
+let n = start;
+let line = String(n);
+let steps = 0;
+while (n !== 1) {
+  if (n % 2 === 0) {
+    n = n / 2;
+  } else {
+    n = n * 3 + 1;
+  }
+  line += " " + n;
+  steps++;
+}
+console.log(line);
+console.log("Steps:", steps);
+::expected
+6 3 10 5 16 8 4 2 1
+Steps: 8
+::variants
+const start = 6 => const start = 7
+::hints
+- Loop `while (n !== 1)`; inside, use `if`/`else` to choose halve or triple-plus-one.
+- Start the line with the first number, then add `" " + n` after each step.
+--- cards
+while loop :: Repeats its block as long as the condition is truthy. Checks before each iteration.
+Infinite loop :: A loop whose condition never becomes false, usually a missing update. Stop it with Ctrl+C.
+Accumulator :: A variable that builds a result across iterations: start a sum at 0, a product at 1, text at "".
+Sentinel value :: A special input (like "done") that tells a loop to stop.
+break / continue :: break leaves the loop; continue skips to the next iteration.
+do...while :: Runs the block first, then checks the condition: always at least one iteration.
+
+=== lesson js-for | for loops | 75
+## The counting loop, in one line
+
+Counting loops are so common that JavaScript has a compact form that puts all three parts (initialise, test, update) on one line:
+
+```js
+for (let i = 1; i <= 5; i++) {
+  console.log("Lap", i);
+}
+```
+
+Read the header as: "start with `i = 1`; while `i <= 5`, run the block; after each iteration, do `i++`". It does exactly the same as the `while` version from the last lesson, but you can see the whole loop's behaviour at a glance, and you can't forget the update.
+
+The loop variable, declared with `let` in the header, exists only inside the loop.
+
+## Counting patterns
+
+Change the three parts to count however you need:
+
+```js
+for (let i = 0; i < 5; i++) {
+  console.log("zero-based:", i);
+}
+for (let i = 10; i >= 0; i -= 5) {
+  console.log("down in fives:", i);
+}
+for (let i = 2; i <= 20; i *= 2) {
+  console.log("doubling:", i);
+}
+```
+
+Programmers usually count **from 0, while `i < n`**: that runs exactly `n` times and matches how positions are numbered in strings (and arrays). So `for (let i = 0; i < 5; i++)` is "do this 5 times".
+
+~~~check
+? How many times does this loop run?
+```js
+for (let i = 0; i < 10; i += 2) {
+  console.log(i);
+}
+```
+- 10
++ 5
+- 4
+- 6
+> i takes the values 0, 2, 4, 6 and 8.
+~~~
+
+## Looping over a string with an index
+
+With a `for` loop counting from 0 to `length - 1`, you can visit every character:
+
+```js
+const word = "loop";
+for (let i = 0; i < word.length; i++) {
+  console.log(i, word[i]);
+}
+```
+
+The test is `i < word.length`, not `<=`: the last index is `length - 1`. Writing `<=` is the famous **off-by-one error**, and here it would visit index 4, which gives `undefined`.
+
+## for...of: when you don't need the index
+
+When you just want each character in turn, `for...of` is shorter and can't go off by one:
+
+```js
+for (const ch of "hello") {
+  console.log(ch.toUpperCase());
+}
+```
+
+- `const ch` is a fresh variable for each iteration, holding the next character.
+- `for...of` works on anything that can be iterated: strings now, and arrays, maps and sets in Module 6.
+- It also handles emoji correctly: `for (const ch of "hi😀")` gives three characters.
+
+Use `for...of` when you need the items, and a counting `for` when you need the positions (or need to count without any string at all).
+
+## Counting things with a loop
+
+Combine a loop with `if` and an accumulator to count matches:
+
+```js
+const text = "Programming in JavaScript is fun";
+let vowels = 0;
+for (const ch of text.toLowerCase()) {
+  if ("aeiou".includes(ch)) {
+    vowels++;
+  }
+}
+console.log("Vowels:", vowels);
+```
+
+`"aeiou".includes(ch)` is a neat trick: "is this character one of these?".
+
+## Building a new string
+
+Strings can't be changed, but you can build a new one character by character:
+
+```js
+const message = "attack at dawn";
+let result = "";
+for (const ch of message) {
+  result += ch === " " ? "_" : ch.toUpperCase();
+}
+console.log(result);
+```
+
+And here's how to reverse a string: put each character in **front** of what you have so far.
+
+```js
+let reversed = "";
+for (const ch of "stressed") {
+  reversed = ch + reversed;
+}
+console.log(reversed);
+```
+
+## break and continue work here too
+
+```js
+const code = "AB12-XY";
+for (let i = 0; i < code.length; i++) {
+  if (code[i] === "-") {
+    console.log("Dash found at position", i);
+    break;
+  }
+}
+```
+
+A loop that stops at the first match is called a **search**. Note that if there's no dash, nothing is printed; the next lesson shows how to report "not found" properly.
+
+## Which loop should I use?
+
+| Situation | Loop |
+|---|---|
+| Visit each character (or array item) | `for...of` |
+| Need the position, or count a fixed number of times | `for (let i = 0; i < n; i++)` |
+| Repeat until something happens (input, a condition) | `while` |
+
+You'll also see `for...in` in older code; it loops over an object's property *names* and is covered with objects in Module 6. Don't use it on strings or arrays.
+
+📚 **Go deeper:** javascript.info, "Loops: while and for"; MDN, "for", "for...of" and the JavaScript Guide's "Loops and iteration"; *Eloquent JavaScript* (4th ed.), chapter 2, "for loops".
+--- goals
+- write `for` loops that count up, down and in steps
+- loop over a string by index, avoiding off-by-one errors
+- loop over characters with `for...of`
+- count matches and build new strings inside a loop
+- choose between `for`, `for...of` and `while`
+--- quiz
+? What does this print?
+```js
+let s = "";
+for (let i = 3; i > 0; i--) {
+  s += i;
+}
+console.log(s);
+```
+- `123`
++ `321`
+- `3210`
+- `6`
+> i is 3, 2, 1, and each is joined onto the string.
+? Which loop header visits every index of `word` exactly once?
+- `for (let i = 1; i <= word.length; i++)`
+- `for (let i = 0; i <= word.length; i++)`
++ `for (let i = 0; i < word.length; i++)`
+- `for (let i = 0; i < word.length - 1; i++)`
+> Indexes run from 0 to length - 1, so start at 0 and stop before length.
+? What does this print?
+```js
+for (const c of "abc") {
+  console.log(c + c);
+}
+```
+- `abcabc`
++ `aa`, `bb`, `cc` on three lines
+- `a`, `b`, `c` on three lines
+- `0`, `1`, `2` on three lines
+> `for...of` gives each character in turn.
+? What is the value of `count` at the end?
+```js
+let count = 0;
+for (let i = 0; i < 20; i++) {
+  if (i % 5 === 0) count++;
+}
+```
+- 3
++ 4
+- 5
+- 20
+> 0, 5, 10 and 15 are multiples of 5 below 20.
+? What does this print?
+```js
+let out = "";
+for (const ch of "dog") {
+  out = ch + out;
+}
+console.log(out);
+```
+- `dog`
++ `god`
+- `ddoogg`
+- `gdo`
+> Each character is put in front of the previous ones, which reverses the word.
+? You want to keep asking for a password until it is correct. Which loop fits best?
+- `for (let i = 0; i < 3; i++)`
+- `for...of`
++ `while`
+- `do...while` is impossible here
+> You don't know the number of iterations in advance, so loop with `while` (or `do...while`).
+--- exercise code javascript
+::prompt
+Print the multiplication table for `n`, from 1 to 10, with a `for` loop, right-aligning the results in a column 3 wide:
+```
+7 x 1 =   7
+7 x 2 =  14
+...
+7 x 10 =  70
+```
+(Each line is `` `${n} x ${i} = ${String(n * i).padStart(3)}` ``.)
+::starter
+const n = 7;
+// for loop here
+::solution
+const n = 7;
+for (let i = 1; i <= 10; i++) {
+  console.log(`${n} x ${i} = ${String(n * i).padStart(3)}`);
+}
+::expected
+7 x 1 =   7
+7 x 2 =  14
+7 x 3 =  21
+7 x 4 =  28
+7 x 5 =  35
+7 x 6 =  42
+7 x 7 =  49
+7 x 8 =  56
+7 x 9 =  63
+7 x 10 =  70
+::variants
+const n = 7 => const n = 12
+::hints
+- Count `i` from 1 to 10 inclusive: `for (let i = 1; i <= 10; i++)`.
+- The template for each line is given in the prompt.
+--- exercise code javascript
+::prompt
+Read a sentence with `prompt` and count its letters, digits, spaces and other characters, using `for...of`. A character is a letter if it changes when made uppercase or lowercase (`ch.toUpperCase() !== ch.toLowerCase()`), and a digit if `"0123456789".includes(ch)`.
+```
+Sentence: Hello World 2026!
+Letters: 10
+Digits: 4
+Spaces: 2
+Other: 1
+```
+::starter
+const sentence = prompt("Sentence:");
+let letters = 0;
+let digits = 0;
+let spaces = 0;
+let other = 0;
+// loop over the characters
+::solution
+const sentence = prompt("Sentence:");
+let letters = 0;
+let digits = 0;
+let spaces = 0;
+let other = 0;
+for (const ch of sentence) {
+  if (ch.toUpperCase() !== ch.toLowerCase()) {
+    letters++;
+  } else if ("0123456789".includes(ch)) {
+    digits++;
+  } else if (ch === " ") {
+    spaces++;
+  } else {
+    other++;
+  }
+}
+console.log("Letters:", letters);
+console.log("Digits:", digits);
+console.log("Spaces:", spaces);
+console.log("Other:", other);
+::stdin
+Hello World 2026!
+::expected
+Sentence: Hello World 2026!
+Letters: 10
+Digits: 4
+Spaces: 2
+Other: 1
+::cases
+>>> Ça va? Oui, très bien.
+Sentence: Ça va? Oui, très bien.
+Letters: 15
+Digits: 0
+Spaces: 4
+Other: 3
+::hints
+- One `if` / `else if` chain inside the loop decides which counter to increase.
+- The letter test works for accented letters too, which a test like `ch >= "a"` would get wrong.
+--- exercise code javascript
+::prompt
+A **palindrome** reads the same forwards and backwards, ignoring spaces and capitals ("Never odd or even"). Read a phrase with `prompt`, build a cleaned version with a loop (lowercase, spaces removed), build its reverse with another loop, and print the result:
+```
+Phrase: Never odd or even
+"neveroddoreven" is a palindrome
+```
+Otherwise print `"..." is not a palindrome`.
+::starter
+const phrase = prompt("Phrase:");
+let clean = "";
+// build clean, then reversed, then compare
+::solution
+const phrase = prompt("Phrase:");
+let clean = "";
+for (const ch of phrase.toLowerCase()) {
+  if (ch !== " ") {
+    clean += ch;
+  }
+}
+let reversed = "";
+for (const ch of clean) {
+  reversed = ch + reversed;
+}
+const verdict = clean === reversed ? "is" : "is not";
+console.log(`"${clean}" ${verdict} a palindrome`);
+::stdin
+Never odd or even
+::expected
+Phrase: Never odd or even
+"neveroddoreven" is a palindrome
+::cases
+>>> JavaScript
+Phrase: JavaScript
+"javascript" is not a palindrome
+>>> Was it a car or a cat I saw
+Phrase: Was it a car or a cat I saw
+"wasitacaroracatisaw" is a palindrome
+::hints
+- First loop: add each character to `clean` unless it's a space.
+- Second loop: `reversed = ch + reversed` builds the reverse.
+--- cards
+for loop :: for (init; test; update) { ... } puts a counting loop's three parts on one line.
+Counting n times :: for (let i = 0; i < n; i++) runs exactly n times, with i from 0 to n - 1.
+Off-by-one error :: Looping one time too many or too few, e.g. i <= s.length instead of i < s.length.
+for...of :: for (const ch of text) { ... } visits each item (here, each character) without an index.
+Reversing a string :: let r = ""; for (const ch of s) r = ch + r;
+
+=== lesson js-loop-patterns | Loop patterns and nested loops | 80
+## Patterns you'll write a thousand times
+
+Most loops you'll ever write are variations of a handful of patterns. Recognising them means you don't solve each problem from scratch.
+
+## Sum and count
+
+You've met these already: an accumulator that starts at 0.
+
+```js
+let sum = 0;
+let count = 0;
+for (let n = 1; n <= 50; n++) {
+  if (n % 7 === 0) {
+    sum += n;
+    count++;
+  }
+}
+console.log(`${count} multiples of 7, adding up to ${sum}`);
+```
+
+## Maximum and minimum
+
+To find the largest value, keep "the best so far" and replace it whenever you see something bigger. Start with the **first** value (or `-Infinity`, which everything beats):
+
+```js
+const digits = "3819275";
+let max = -Infinity;
+let min = Infinity;
+for (const ch of digits) {
+  const d = Number(ch);
+  if (d > max) max = d;
+  if (d < min) min = d;
+}
+console.log("max", max, "min", min);
+```
+
+(For a one-statement `if`, you may leave out the braces, as here. Many teams require braces always, to avoid bugs when someone adds a second line later; follow your team's style.)
+
+## Search with a flag
+
+A **search** loop looks for something and stops when it finds it. Use a variable, a **flag**, to remember whether it was found, so you can report "not found" after the loop:
+
+```js
+const password = "sunshine";
+let hasDigit = false;
+for (const ch of password) {
+  if ("0123456789".includes(ch)) {
+    hasDigit = true;
+    break;
+  }
+}
+console.log(hasDigit ? "Contains a digit" : "No digit found");
+```
+
+To remember *where* it was found, use a position variable that starts at -1 (like `indexOf` does).
+
+## "All" and "any"
+
+Two variants of the flag pattern answer common questions:
+
+- **Any**: start with `false`; set it to `true` (and `break`) when one item matches.
+- **All**: start with `true`; set it to `false` (and `break`) when one item *fails*.
+
+```js
+const pin = "4096";
+let allDigits = true;
+for (const ch of pin) {
+  if (!"0123456789".includes(ch)) {
+    allDigits = false;
+    break;
+  }
+}
+console.log(pin.length === 4 && allDigits ? "Valid PIN" : "Invalid PIN");
+```
+
+~~~check
+? You want to check that **every** character of a string is a capital letter. What should the flag start as?
++ `true`, set to `false` on the first character that isn't a capital
+- `false`, set to `true` on the first capital
+- `0`, increased for each capital
+- `null`
+> For "all", assume yes until one item proves otherwise.
+~~~
+
+## Nested loops
+
+A loop inside another loop: for **each** iteration of the outer loop, the inner loop runs **completely**.
+
+```js
+for (let row = 1; row <= 3; row++) {
+  let line = "";
+  for (let col = 1; col <= 4; col++) {
+    line += `(${row},${col}) `;
+  }
+  console.log(line);
+}
+```
+
+3 rows × 4 columns = 12 inner iterations. Nested loops are how you handle anything two-dimensional: grids, tables, game boards, pixels, comparing every item with every other item.
+
+The inner loop can depend on the outer loop's variable. Here each row is as long as its row number:
+
+```js
+for (let row = 1; row <= 5; row++) {
+  let line = "";
+  for (let i = 1; i <= row; i++) {
+    line += "*";
+  }
+  console.log(line);
+}
+```
+
+## A full multiplication grid
+
+```js
+const size = 5;
+let header = "   |";
+for (let c = 1; c <= size; c++) header += String(c).padStart(4);
+console.log(header);
+console.log("-".repeat(header.length));
+for (let r = 1; r <= size; r++) {
+  let line = String(r).padStart(2) + " |";
+  for (let c = 1; c <= size; c++) {
+    line += String(r * c).padStart(4);
+  }
+  console.log(line);
+}
+```
+
+## break only leaves the inner loop
+
+`break` exits the loop it's directly in. To stop *both* loops when you've found something, use a flag and check it in the outer loop too (or put the loops in a function and `return`, Module 5):
+
+```js
+const target = 12;
+let found = false;
+for (let a = 1; a <= 10 && !found; a++) {
+  for (let b = a; b <= 10; b++) {
+    if (a * b === target && a + b === 7) {
+      console.log(`Found: ${a} x ${b}`);
+      found = true;
+      break;
+    }
+  }
+}
+```
+
+(JavaScript also has *labelled* breaks, `outer: for (...) { ... break outer; }`, but they're rare and many style guides discourage them.)
+
+## How much work is a loop?
+
+A loop over `n` items does about `n` steps. Two nested loops over `n` items each do about `n × n` steps: for 1,000 items that's a million, for 100,000 items ten billion, which takes minutes, not milliseconds. Computer scientists write this as **O(n)** and **O(n²)** ("big O" notation). You don't need the theory yet, but get into the habit of asking "how many times will this run?" before nesting loops over big data. The [Data Structures & Algorithms](#/track/dsa) track covers it properly.
+
+📚 **Go deeper:** *Eloquent JavaScript* (4th ed.), chapter 2, exercises "Looping a triangle", "FizzBuzz" and "Chessboard"; javascript.info, "Loops: while and for" (labels); MDN JavaScript Guide, "Loops and iteration".
+--- goals
+- write sum, count, maximum and minimum loops
+- search with a flag (or position), and report "not found" after the loop
+- answer "any" and "all" questions with a flag and an early `break`
+- write nested loops for grids and triangles, and predict how many times they run
+- stop nested loops early with a flag
+- estimate the work a loop does as O(n) or O(n²)
+--- quiz
+? How many times does the inner `console.log` run?
+```js
+for (let i = 0; i < 4; i++) {
+  for (let j = 0; j < 3; j++) {
+    console.log(i, j);
+  }
+}
+```
+- 7
++ 12
+- 3
+- 4
+> The inner loop runs 3 times for each of the 4 outer iterations.
+? To find the smallest number in a sequence, what should `min` start as?
+- `0`
+- `-Infinity`
++ `Infinity` (or the first value)
+- `null`
+> Every number is smaller than Infinity, so the first comparison always replaces it. Starting at 0 would be wrong for all-positive data.
+? What does this print?
+```js
+let found = -1;
+const s = "hello";
+for (let i = 0; i < s.length; i++) {
+  if (s[i] === "l") {
+    found = i;
+    break;
+  }
+}
+console.log(found);
+```
+- 3
++ 2
+- -1
+- `l`
+> The first "l" is at index 2, and `break` stops the search there.
+? What does this print?
+```js
+for (let r = 1; r <= 3; r++) {
+  let line = "";
+  for (let c = 1; c <= r; c++) line += c;
+  console.log(line);
+}
+```
+- `1`, `12`, `123`
+- `123`, `123`, `123`
++ `1`, `12`, `123` on three lines
+- `111`, `222`, `333`
+> The inner loop counts up to the row number, building "1", then "12", then "123".
+? Inside two nested loops, what does `break` in the inner loop do?
+- Stops both loops
++ Leaves only the inner loop; the outer loop continues
+- Restarts the outer loop
+- Stops the program
+> `break` exits the innermost loop it's in.
+? A function compares every pair of items in a list of n items with two nested loops. Roughly how does its work grow?
+- Like n
++ Like n²
+- Like 2n
+- It doesn't grow
+> n iterations of a loop that itself runs n times: about n × n steps, O(n²).
+--- exercise code javascript
+::prompt
+Draw a right-aligned triangle of `#` characters of height `h`, like the steps in Super Mario. Row `r` (from 1 to `h`) has `h - r` spaces and then `r` hashes. Use nested loops (or `repeat` for the spaces and a loop for the hashes):
+```
+   #
+  ##
+ ###
+####
+```
+::starter
+const h = 4;
+// your code here
+::solution
+const h = 4;
+for (let r = 1; r <= h; r++) {
+  let line = " ".repeat(h - r);
+  for (let i = 0; i < r; i++) {
+    line += "#";
+  }
+  console.log(line);
+}
+::expected
+   #
+  ##
+ ###
+####
+::variants
+const h = 4 => const h = 6
+::hints
+- One outer iteration per row, building a `line` string and printing it at the end.
+- Row r starts with `h - r` spaces.
+--- exercise code javascript
+::prompt
+Read a list of temperatures typed as one line separated by commas, e.g. `12,18,7,21,15`. Loop over them with `for...of` on `line.split(",")` (you met `split` in Module 2), and print the highest, the lowest, the average (one decimal) and whether **any** day went below freezing (below 0):
+```
+Temperatures: 12,18,7,21,15
+Highest: 21
+Lowest: 7
+Average: 14.6
+Frost: no
+```
+::starter
+const line = prompt("Temperatures:");
+// loop over line.split(",")
+::solution
+const line = prompt("Temperatures:");
+let highest = -Infinity;
+let lowest = Infinity;
+let sum = 0;
+let count = 0;
+let frost = false;
+for (const part of line.split(",")) {
+  const t = Number(part);
+  if (t > highest) highest = t;
+  if (t < lowest) lowest = t;
+  if (t < 0) frost = true;
+  sum += t;
+  count++;
+}
+console.log("Highest:", highest);
+console.log("Lowest:", lowest);
+console.log("Average:", (sum / count).toFixed(1));
+console.log("Frost:", frost ? "yes" : "no");
+::stdin
+12,18,7,21,15
+::expected
+Temperatures: 12,18,7,21,15
+Highest: 21
+Lowest: 7
+Average: 14.6
+Frost: no
+::cases
+>>> -3,2,-8,5
+Temperatures: -3,2,-8,5
+Highest: 5
+Lowest: -8
+Average: -1.0
+Frost: yes
+>>> 30
+Temperatures: 30
+Highest: 30
+Lowest: 30
+Average: 30.0
+Frost: no
+::hints
+- `for (const part of line.split(","))` gives each temperature as a string; convert with `Number(part)`.
+- Keep five accumulators: highest (start `-Infinity`), lowest (start `Infinity`), sum, count and a `frost` flag.
+--- exercise code javascript
+::prompt
+Find all **prime numbers** up to `limit` and print them on one line. A prime is a whole number greater than 1 that can only be divided evenly by 1 and itself. For each candidate `n`, use an inner loop to look for a divisor from 2 up to the square root of `n` (`d * d <= n`), with a flag:
+```
+Primes up to 30: 2 3 5 7 11 13 17 19 23 29
+```
+::starter
+const limit = 30;
+let primes = "";
+// outer loop over candidates, inner loop over divisors
+::solution
+const limit = 30;
+let primes = "";
+for (let n = 2; n <= limit; n++) {
+  let isPrime = true;
+  for (let d = 2; d * d <= n; d++) {
+    if (n % d === 0) {
+      isPrime = false;
+      break;
+    }
+  }
+  if (isPrime) {
+    primes += " " + n;
+  }
+}
+console.log(`Primes up to ${limit}:${primes}`);
+::expected
+Primes up to 30: 2 3 5 7 11 13 17 19 23 29
+::variants
+const limit = 30 => const limit = 60
+::hints
+- The flag starts `true` for each candidate (an "all" check: no divisor found yet).
+- If `n % d === 0`, `d` divides `n` evenly: not prime, so set the flag to `false` and `break`.
+- Checking divisors only while `d * d <= n` is enough: a bigger divisor would pair with a smaller one you've already tried.
+--- cards
+Max / min pattern :: Keep the best so far: start max at -Infinity (min at Infinity) and replace it when a value beats it.
+Flag variable :: A boolean that records whether something happened in a loop (found, valid...), checked after the loop.
+"Any" vs "all" :: Any: start false, set true on a match. All: start true, set false on a failure. Break early in both.
+Nested loops :: The inner loop runs completely for each iteration of the outer loop: rows × columns iterations.
+O(n²) :: Two nested loops over n items do about n × n steps. Fine for 100 items, slow for 100,000.
+
+=== lesson js-m4-test | Module 4 test | 160 | exam
+This test covers Module 4: `while`, `do...while`, `for` and `for...of` loops, `break` and `continue`, the classic loop patterns and nested loops, together with everything from Modules 1 to 3.
+
+Before you start, check that you can:
+
+- trace a loop by hand, writing each variable's value per iteration;
+- choose the right kind of loop for a job;
+- write sum, count, max/min and search loops, including "not found";
+- write nested loops and predict how many times the inner code runs;
+- read input in a loop until a sentinel or `null`.
+
+## Practise more
+
+- Code Dojo: [FizzBuzz Array](#/dojo/dojo-js-fizzbuzz) and [Chunk an Array](#/dojo/dojo-js-chunk) (the second uses arrays, coming in Module 6).
+--- goals
+- repeat work with the right kind of loop
+- combine loops with decisions to count, search and build results
+- trace loops and nested loops by hand
+--- quiz
+? What does this print?
+```js
+let total = 0;
+for (let i = 1; i <= 4; i++) {
+  total += i * i;
+}
+console.log(total);
+```
+- 10
++ 30
+- 16
+- 20
+> 1 + 4 + 9 + 16 = 30.
+? What does this print?
+```js
+let n = 0;
+while (n < 10) {
+  n += 4;
+}
+console.log(n);
+```
+- 8
+- 10
++ 12
+- 4
+> n goes 0, 4, 8, 12. At 12 the test fails.
+? Which loop runs its body at least once even if the condition is false at the start?
+- `while`
+- `for`
++ `do...while`
+- `for...of`
+> do...while checks the condition after the body.
+? What does this print?
+```js
+let out = "";
+for (const ch of "a1b2c3") {
+  if ("0123456789".includes(ch)) continue;
+  out += ch;
+}
+console.log(out);
+```
++ `abc`
+- `123`
+- `a1b2c3`
+- `a`
+> Digits are skipped with `continue`; letters are added.
+? How many stars are printed in total?
+```js
+for (let r = 0; r < 3; r++) {
+  for (let c = 0; c < r; c++) {
+    console.log("*");
+  }
+}
+```
+- 9
+- 6
++ 3
+- 0
+> Row 0 prints 0 stars, row 1 prints 1, row 2 prints 2: 0 + 1 + 2 = 3.
+? What's wrong with this loop?
+```js
+for (let i = 0; i <= text.length; i++) {
+  console.log(text[i].toUpperCase());
+}
+```
+- Nothing
++ It's off by one: on the last iteration `text[i]` is undefined, so `.toUpperCase()` throws a TypeError
+- `for` loops can't use `.length`
+- `i++` should be `i--`
+> The last valid index is length - 1. `undefined.toUpperCase()` gives "Cannot read properties of undefined".
+? In a loop that reads input with `prompt` until the user types "done", why also check for `null`?
+- `prompt` returns `null` when the user typed "null"
++ `prompt` returns `null` when input runs out or the user cancels, and the loop must stop then too
+- `null` is the same as "done"
+- It isn't necessary
+> Without the null check, a cancelled prompt would keep the loop running forever.
+--- exercise code javascript
+::prompt
+Write a number-guessing game. The secret number is given (in a real game it would be random). Ask for guesses with `prompt` until the player guesses it, printing `Too low` or `Too high` after each wrong guess, and at the end `Got it in N guesses!`. If the input runs out (`null`), print `The number was S` and stop.
+```
+Guess: 50
+Too high
+Guess: 25
+Too low
+Guess: 37
+Got it in 3 guesses!
+```
+::starter
+const secret = 37;
+let guesses = 0;
+// loop until the guess is right
+::solution
+const secret = 37;
+let guesses = 0;
+while (true) {
+  const answer = prompt("Guess:");
+  if (answer === null) {
+    console.log(`The number was ${secret}`);
+    break;
+  }
+  const guess = Number(answer);
+  guesses++;
+  if (guess < secret) {
+    console.log("Too low");
+  } else if (guess > secret) {
+    console.log("Too high");
+  } else {
+    console.log(`Got it in ${guesses} ${guesses === 1 ? "guess" : "guesses"}!`);
+    break;
+  }
+}
+::stdin
+50
+25
+37
+::expected
+Guess: 50
+Too high
+Guess: 25
+Too low
+Guess: 37
+Got it in 3 guesses!
+::cases
+>>> 37
+Guess: 37
+Got it in 1 guess!
+>>> 10
+>>> 90
+Guess: 10
+Too low
+Guess: 90
+Too high
+Guess:
+The number was 37
+::hints
+- `while (true)` with a `break` when the guess is right or the answer is `null`.
+- Count a guess only when there is one (after the `null` check).
+- One guess, several guesses: choose the word with `guesses === 1 ? "guess" : "guesses"`.
+--- exercise code javascript
+::prompt
+**FizzBuzz**, the full version: print the numbers from 1 to `n`, one per line, but print `Fizz` instead of multiples of 3, `Buzz` instead of multiples of 5, and `FizzBuzz` instead of multiples of both.
+::starter
+const n = 15;
+// your loop here
+::solution
+const n = 15;
+for (let i = 1; i <= n; i++) {
+  if (i % 15 === 0) {
+    console.log("FizzBuzz");
+  } else if (i % 3 === 0) {
+    console.log("Fizz");
+  } else if (i % 5 === 0) {
+    console.log("Buzz");
+  } else {
+    console.log(i);
+  }
+}
+::expected
+1
+2
+Fizz
+4
+Buzz
+Fizz
+7
+8
+Fizz
+Buzz
+11
+Fizz
+13
+14
+FizzBuzz
+::variants
+const n = 15 => const n = 20
+::hints
+- Test for "both" (divisible by 15) first.
+- A `for` loop from 1 to n inclusive.
+--- exercise code javascript
+::prompt
+Draw a **chessboard** pattern of size `size` × `size` with nested loops: `#` where the row number plus the column number is even, and a space where it's odd (count rows and columns from 0). Build each row as a string and print it. For `size = 7` the board is 7 rows of 7 characters (trailing spaces count, though you can't see them):
+```
+# # # #
+ # # #
+# # # #
+ # # #
+# # # #
+ # # #
+# # # #
+```
+::starter
+const size = 7;
+// nested loops
+::solution
+const size = 7;
+for (let r = 0; r < size; r++) {
+  let line = "";
+  for (let c = 0; c < size; c++) {
+    line += (r + c) % 2 === 0 ? "#" : " ";
+  }
+  console.log(line);
+}
+::expected
+# # # #
+ # # #
+# # # #
+ # # #
+# # # #
+ # # #
+# # # #
+::variants
+const size = 7 => const size = 5
+::hints
+- The outer loop counts rows from 0; the inner loop counts columns from 0.
+- `(r + c) % 2 === 0` decides between `"#"` and `" "`.
