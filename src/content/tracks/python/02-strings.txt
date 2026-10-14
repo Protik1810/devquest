@@ -267,7 +267,7 @@ email = "ada@example.com"
 email.find("@")             # 3     the index where it starts
 email.find("#")             # -1    meaning "not found"
 email.index("#")            # ValueError (index() complains instead of returning -1)
-email.count("a")            # 2
+email.count("a")            # 3
 email.startswith("ada")     # True
 email.endswith(".com")      # True
 email[email.find("@") + 1:] # 'example.com'   find + slicing work well together
