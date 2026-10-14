@@ -77,6 +77,24 @@ Python checks the conditions **from top to bottom** and runs the **first** branc
 
 That's why **order matters**. If the `score >= 70` test came first, a score of 95 would get a C, because it would match that branch first.
 
+~~~check
+? What does this print?
+```python
+temp = 20
+if temp > 25:
+    print("hot")
+elif temp > 15:
+    print("warm")
+else:
+    print("cold")
+```
+- `hot`
++ `warm`
+- `warm` and `cold`
+- `cold`
+> 20 isn't above 25, but it is above 15, so the second branch runs and the rest is skipped.
+~~~
+
 ## A chain of elifs is not the same as several ifs
 
 ```python
@@ -121,6 +139,11 @@ When you test code that decides, try **one value per branch**, plus the **bounda
 - Ordering an `elif` chain so that a broad condition catches values meant for a later branch.
 
 📚 **Go deeper:** Python Tutorial, section 4.1 "if Statements"; *Think Python* (3rd ed.), chapter 5 "Conditionals and Recursion"; Python for Everybody, chapter 3.
+--- goals
+- compare values with `==`, `!=`, `<`, `>`, `<=` and `>=`
+- write `if`, `elif` and `else` blocks with correct indentation
+- predict which branch runs, and why the order of an `elif` chain matters
+- choose test values at the boundaries between branches
 --- quiz
 ? What does this print?
 ```python
@@ -178,6 +201,24 @@ if n > 100:
 - A `SyntaxError`
 - `2`
 > It means `1 < 3 and 3 < 2`, and the second part is false.
+--- exercise parsons python
+::prompt
+Arrange the lines into a grading program that prints `B` for a score of 72 (A for 90 and above, B for 70 and above, C otherwise). Indentation is part of each line. One line isn't valid Python.
+::lines
+score = 72
+if score >= 90:
+    print("A")
+elif score >= 70:
+    print("B")
+else:
+    print("C")
+::distractors
+else if score >= 70:
+::expected
+B
+::hints
+- The variable must exist before the first `if`.
+- Python writes "else if" as one word: `elif`.
 --- exercise code python
 ::prompt
 Write a grade calculator. Read a score (a whole number) with the prompt `Score: ` and print its grade:
@@ -377,6 +418,19 @@ if day == "Sat" or day == "Sun":
 if day in ("Sat", "Sun"):          # neater
 ```
 
+~~~check
+? What does this print?
+```python
+x = 5
+print(x > 3 and x < 10, not x == 5)
+```
++ `True False`
+- `True True`
+- `False False`
+- `5 False`
+> 5 is between 3 and 10, so the first is True; `x == 5` is True, so `not` makes it False.
+~~~
+
 ## Precedence
 
 `not` binds tightest, then `and`, then `or`. So `a or b and c` means `a or (b and c)`. Parentheses make your intent clear; use them whenever you mix `and` and `or`.
@@ -459,6 +513,11 @@ The first matching `case` runs. `case _:` plays the role of `else`. A case can a
 Two rules for negations: `not (a and b)` is the same as `(not a) or (not b)`, and `not (a or b)` is the same as `(not a) and (not b)`. They help turn a confusing `not (...)` into something readable.
 
 📚 **Go deeper:** Python Tutorial, sections 4.1 and 4.7 "match Statements"; PEP 636 "Structural Pattern Matching: Tutorial"; CS50P lecture 1 "Conditionals".
+--- goals
+- combine conditions with `and`, `or` and `not`, and know their precedence
+- avoid the `x == "a" or "b"` trap
+- use short-circuiting and truthiness in conditions
+- choose between values with a conditional expression and with `match`
 --- quiz
 ? What is `True and False or True`?
 + `True`
@@ -509,6 +568,36 @@ print("ok")
 - `a and b`
 - `not a or b`
 > De Morgan's law: "not (a or b)" means "neither a nor b".
+--- exercise fill python
+::prompt
+Complete the leap-year condition with `and` / `or`: a leap year is divisible by 4, except years divisible by 100 that aren't also divisible by 400.
+::template
+year = int(input("Year: "))
+if year % 4 == 0 ____ (year % 100 != 0 ____ year % 400 == 0):
+    print("leap year")
+else:
+    print("not a leap year")
+::answers
+and
+or
+::stdin
+2024
+::expected
+Year: 2024
+leap year
+::cases
+>>> 1900
+Year: 1900
+not a leap year
+>>> 2000
+Year: 2000
+leap year
+>>> 2023
+Year: 2023
+not a leap year
+::hints
+- Both parts must be true: divisible by 4, and the exception rule.
+- Inside the parentheses, either part is enough.
 --- exercise code python
 ::prompt
 A year is a **leap year** if it's divisible by 4, except years divisible by 100, which are leap years only if they're also divisible by 400. Read a year with the prompt `Year: ` and say whether it's a leap year, using `and`, `or` and `%` in **one** condition:
@@ -656,6 +745,10 @@ Before you start, make sure you can:
 - choose good test values, including boundaries.
 
 The coding problems are checked with several inputs each, so think through every case before you submit.
+--- goals
+- write programs that choose between several branches
+- combine conditions correctly and avoid the common traps
+- test decisions with values at every boundary
 --- quiz
 ? What does this print?
 ```python
@@ -920,3 +1013,8 @@ Invalid move
 - Check for invalid moves first: `p1 not in ("rock", "paper", "scissors")`.
 - Then a draw. Then list the three ways player 1 can win, joined with `or`.
 - If it's valid, not a draw, and player 1 didn't win, player 2 won.
+
+## Practise more
+
+- Code Dojo: [Palindrome Checker](#/dojo/dojo-palindrome).
+- The Playground: write a rock-paper-scissors referee that also handles typos politely, or a shipping calculator with your own rules.

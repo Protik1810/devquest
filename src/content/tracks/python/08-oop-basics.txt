@@ -54,6 +54,15 @@ Let's take it apart:
 
 `bark` reads `self.name`; `birthday` changes `self.age`. Because each object has its own attributes, `rex.birthday()` doesn't affect `fido`. Methods can also call other methods of the same object with `self.method()`.
 
+~~~check
+? In `rex.birthday()`, what is `self` inside `birthday`?
+- The `Dog` class
++ The object `rex`
+- The word "birthday"
+- Every dog
+> Python passes the object before the dot as `self`.
+~~~
+
 ## The classic mistakes
 
 - Forgetting `self` in the method definition: `def bark():` gives `TypeError: Dog.bark() takes 0 positional arguments but 1 was given` when called, because Python always passes the object.
@@ -98,6 +107,11 @@ Notice how the class **protects its own rules**: code using the account calls `w
 Use a class when some data and the operations on it belong together, especially when you need several objects of the same shape. Not everything needs one: if a "class" has only `__init__` and one other method, a plain function is usually simpler.
 
 📚 **Go deeper:** Python Tutorial, chapter 9 "Classes" (9.3 "A First Look at Classes"); *Python Crash Course* (3rd ed.), chapter 9; *Think Python* (3rd ed.), chapters 14–15.
+--- goals
+- explain classes, instances, attributes and methods
+- write a class with `__init__` and methods that use `self`
+- design a class from a problem description (nouns and verbs)
+- protect an invariant inside a class
 --- quiz
 ? In `rex = Dog("Rex", 3)`, what are `Dog` and `rex`?
 + `Dog` is a class; `rex` is an instance (object) of it
@@ -158,6 +172,29 @@ print(tom.name)
 - `SyntaxError`
 - No error
 > Python always passes the object as the first argument, so the method needs `self`.
+--- exercise fill python
+::prompt
+Fill in the blanks so the class stores its starting count and `click()` adds one to **this** counter's own count.
+::template
+class Counter:
+    def __init__(self, start):
+        ____.count = start
+
+    def click(____):
+        self.count += 1
+
+c = Counter(10)
+c.click()
+c.click()
+print(c.count)
+::answers
+self
+self
+::expected
+12
+::hints
+- Attributes are set on the object being created.
+- Every method's first parameter is the object it works on.
 --- exercise code python
 ::prompt
 Write a `Rectangle` class:
@@ -340,6 +377,25 @@ print(x == x)     # True
 
 If two objects with the same data should count as equal (two points at the same coordinates, two amounts of money), you define `__eq__`, as you'll see in the special methods lesson.
 
+~~~check
+? What does this print?
+```python
+class Box:
+    def __init__(self, v):
+        self.v = v
+
+a = Box(1)
+b = Box(1)
+c = a
+print(a == b, a == c)
+```
++ `False True`
+- `True True`
+- `True False`
+- `False False`
+> Without `__eq__`, `==` compares identity: `a` and `b` are different objects, `c` is `a`.
+~~~
+
 ## Where attributes live
 
 Each object keeps its attributes in its own dictionary, which `vars()` shows:
@@ -420,6 +476,11 @@ query = Query("users").where("age > 18").order_by("name").limit(10)
 ```
 
 📚 **Go deeper:** Python Tutorial, sections 9.1 "A Word About Names and Objects" and 9.3; *Think Python* (3rd ed.), chapter 14 "Classes and Functions"; Python Library Reference, `getattr`, `vars`, `operator.attrgetter`.
+--- goals
+- reason about objects shared between names
+- tell identity (`is`) from equality (`==`) for your own objects
+- inspect and set attributes, including by name
+- design objects that work together, mutating or returning new objects
 --- quiz
 ? What does this print?
 ```python
@@ -683,6 +744,25 @@ print(b.inventory)            # ['sword']  ← b has a's sword!
 
 `self.inventory.append` doesn't assign, it mutates the shared list. The fix: create the list in `__init__` (`self.inventory = []`), so each player gets their own. It's the same idea as the mutable default argument trap.
 
+~~~check
+? What does this print?
+```python
+class Bag:
+    items = []
+    def add(self, x):
+        self.items.append(x)
+
+a, b = Bag(), Bag()
+a.add(1)
+print(b.items)
+```
+- `[]`
++ `[1]`
+- An error
+- `None`
+> Both bags share the single list defined on the class. Create it in `__init__` instead.
+~~~
+
 ## Class methods: methods of the class itself
 
 Decorating a method with `@classmethod` makes Python pass the **class** (named `cls` by convention) instead of an instance. The most common use is **alternative constructors**: other ways to create objects.
@@ -732,6 +812,10 @@ Date.is_leap(2024)    # True
 The `@` lines are **decorators**: they modify the function defined below them. Module 12 shows how they work and how to write your own.
 
 📚 **Go deeper:** Python Tutorial, section 9.3.5 "Class and Instance Variables"; Python Library Reference, `classmethod` and `staticmethod`; Real Python, "Python's Instance, Class, and Static Methods Demystified".
+--- goals
+- share data between instances with class attributes, and change them correctly
+- avoid the shared mutable class attribute trap
+- write alternative constructors with `@classmethod` and helpers with `@staticmethod`
 --- quiz
 ? What does this print?
 ```python
@@ -969,6 +1053,15 @@ t.fahrenheit = 100      # AttributeError: property 'fahrenheit' of 'Temperature'
 
 The real value is stored in `self._celsius` (with the underscore); `celsius` is the public face. Callers write natural code (`t.celsius = 25`), and the class keeps control.
 
+~~~check
+? `area` is a `@property` with no setter. What happens on `rect.area = 50`?
+- The area changes to 50
+- The width is adjusted to fit
++ `AttributeError`
+- Nothing; it's ignored
+> A property without a setter is read-only.
+~~~
+
 ## Why not get_x() and set_x() methods?
 
 In some languages, every attribute gets getter and setter methods "just in case". In Python, **start with plain public attributes**. If you later need validation or a computed value, turn the attribute into a property, and every caller's code keeps working unchanged. That's exactly why properties exist.
@@ -994,6 +1087,11 @@ account.withdraw(50)
 ```
 
 📚 **Go deeper:** Python Library Reference, `property`; Python Tutorial, section 9.6 "Private Variables"; *Fluent Python* (2nd ed.), chapter 22 "Dynamic Attributes and Properties"; Martin Fowler, "TellDontAsk".
+--- goals
+- separate a class's interface from its internals with naming conventions
+- turn attributes into properties with getters and validating setters
+- make read-only and computed properties
+- apply "tell, don't ask"
 --- quiz
 ? What does a single leading underscore, as in `self._cache`, mean?
 - Python makes the attribute private and blocks access
@@ -1301,6 +1399,15 @@ class Version:
 
 Comparing tuples of fields is a neat trick: tuples compare item by item.
 
+~~~check
+? A class defines `__eq__` but not `__hash__`. What happens with `{obj}`?
+- It works as before
++ `TypeError: unhashable type`
+- The set is empty
+- Python calls `__eq__` instead
+> Defining `__eq__` turns off the default hash; add `__hash__` over the same fields.
+~~~
+
 ## Containers: __len__, __getitem__, __contains__, __iter__
 
 ```python
@@ -1352,6 +1459,11 @@ Operators should return **new** objects and leave the operands unchanged, like n
 `vector + vector` and `money + money` read naturally. `user + user` doesn't: what would it mean? Overloading operators with surprising meanings makes code harder to read, so prefer a well-named method in that case.
 
 📚 **Go deeper:** Python Language Reference, "Data model" (section 3.3 "Special method names"); *Fluent Python* (2nd ed.), chapter 1 "The Python Data Model"; Python Library Reference, `functools.total_ordering`.
+--- goals
+- hook classes into Python's syntax with special methods
+- write `__repr__` and `__str__` for clear output
+- define equality, hashing and ordering consistently
+- make container-like and number-like classes
 --- quiz
 ? Which method does `print(obj)` use?
 - `__repr__` only
@@ -1610,6 +1722,10 @@ Make sure you can:
 - use `@classmethod` for alternative constructors and `@staticmethod` for helpers;
 - protect invariants with properties;
 - give a class `__repr__`, `__eq__`, `__hash__`, ordering and container behaviour.
+--- goals
+- design classes with attributes, methods and invariants
+- use class and static methods and properties appropriately
+- give classes Pythonic behaviour with special methods
 --- quiz
 ? What does this print?
 ```python
@@ -1834,3 +1950,8 @@ else:
 - Move a negative sign to the numerator, then divide both by `math.gcd(n, d)`.
 - a/b + c/d = (a·d + c·b) / (b·d); a/b × c/d = (a·c) / (b·d). The constructor reduces the result for you.
 - Hash the same `(numerator, denominator)` tuple that `__eq__` compares.
+
+## Practise more
+
+- Project: [Banking System](#/projects/bank-system), a classic object-oriented design exercise.
+- Code Dojo: [LRU Cache](#/dojo/dojo-lru), a class that combines a dictionary with ordering.

@@ -33,6 +33,21 @@ Every `while` loop needs three things:
 
 Forget the update and the condition never changes: an **infinite loop**. In DevQuest a run stops itself after a few seconds ("Timed out... Is there an infinite loop?"); in a terminal, press **Ctrl+C** to stop a runaway program.
 
+~~~check
+? What does this print?
+```python
+n = 3
+while n > 0:
+    print(n, end=" ")
+    n -= 1
+```
++ `3 2 1`
+- `3 2 1 0`
+- `2 1 0`
+- It never stops
+> When n reaches 0, `n > 0` is false and the loop ends before printing 0.
+~~~
+
 ## Accumulating a result
 
 A very common pattern: a variable created **before** the loop, updated **in** it, and used **after** it.
@@ -127,6 +142,11 @@ else:
 - **Resetting the accumulator inside the loop** (`total = 0` in the body), so it starts over every time.
 
 📚 **Go deeper:** Python Tutorial, section 3.2 "First Steps Towards Programming" and 4.4 "break and continue"; *Think Python* (3rd ed.), chapter 7; Python for Everybody, chapter 5 "Loops and Iteration".
+--- goals
+- repeat code with `while`, and make sure the loop ends
+- accumulate results across iterations
+- read input until a sentinel, and validate input in a loop
+- use `break`, `continue` and a loop's `else`
 --- quiz
 ? What does this print?
 ```python
@@ -188,6 +208,24 @@ while n < 5:
 + When n becomes 1, the update is skipped, so n stays 1 forever
 - It does end, after 5 iterations
 > The update only happens for even n. Put `n += 1` outside the `if`.
+--- exercise parsons python
+::prompt
+Arrange the lines so the program adds up the numbers 1 to 5 with a `while` loop and prints `15`. The order of the two lines inside the loop matters. One line doesn't belong.
+::lines
+total = 0
+n = 1
+while n <= 5:
+    total += n
+    n += 1
+print(total)
+::distractors
+    print(total)
+::expected
+15
+::hints
+- Set up both variables before the loop.
+- Add the current number first, then move on to the next one.
+- Print once, after the loop (no indentation).
 --- exercise code python
 ::prompt
 Write a countdown with a `while` loop: count down from `start` to 1, printing each number, then print `Liftoff!`.
@@ -393,6 +431,15 @@ print(total)    # 22.75
 
 Python has built-ins for the common cases: `sum(prices)`, `max(prices)`, `min(prices)`, `len(prices)`. Use them in real code, but learn the pattern: you'll need it for everything the built-ins don't cover.
 
+~~~check
+? What is `list(range(5, 0, -2))`?
++ `[5, 3, 1]`
+- `[5, 3, 1, -1]`
+- `[5, 4, 3, 2, 1]`
+- `[]`
+> Start at 5, step by -2, and stop before reaching 0.
+~~~
+
 ## enumerate: the position and the item
 
 When you need to know *where* you are, `enumerate` gives you pairs of (position, item):
@@ -444,6 +491,11 @@ Adding or removing items of the list you're looping over makes the loop skip or 
 After a `for` loop ends, the loop variable still holds the **last** item. And if the sequence was empty, the variable is never created at all.
 
 📚 **Go deeper:** Python Tutorial, sections 4.2–4.5 "for Statements", "The range() Function", "break and continue"; Python Library Reference, `enumerate` and `zip`; *Python Crash Course* (3rd ed.), chapter 4.
+--- goals
+- loop over strings and lists with `for`
+- count with `range(start, stop, step)`
+- get positions with `enumerate` and walk two lists together with `zip`
+- decide when to use `for` and when to use `while`
 --- quiz
 ? What is `list(range(2, 10, 3))`?
 + `[2, 5, 8]`
@@ -500,6 +552,28 @@ else:
 - `4`
 - An error
 > The loop never hit `break`, so the `else` block runs.
+--- exercise fill python
+::prompt
+Fill in the blanks so the loop numbers the names from 1:
+```
+1. Ada
+2. Alan
+3. Grace
+```
+::template
+names = ["Ada", "Alan", "Grace"]
+for ____, name in ____(names, start=1):
+    print(f"{i}. {name}")
+::answers
+i
+enumerate
+::expected
+1. Ada
+2. Alan
+3. Grace
+::hints
+- The f-string uses a variable called `i` for the number.
+- Which built-in gives (position, item) pairs?
 --- exercise code python
 ::prompt
 Print the times table for `n`, from 1 to 10, using a `for` loop over `range`:
@@ -744,11 +818,29 @@ Two things to know:
 - `break` only leaves the **innermost** loop it's in.
 - The work multiplies: an outer loop of 1,000 with an inner loop of 1,000 runs the body **a million** times. That's why nested loops over big data can be slow, a topic you'll study as "Big-O" in the algorithms track.
 
+~~~check
+? How many lines does this print?
+```python
+for a in range(2):
+    for b in range(3):
+        print(a, b)
+```
+- 5
++ 6
+- 3
+- 2
+> The inner loop runs 3 times for each of the 2 outer iterations.
+~~~
+
 ## Reading a loop
 
 When you meet an unfamiliar loop, try to describe it in **one sentence**: "it counts the words longer than five letters", "it finds the hottest day". If you can't, trace a few iterations on paper until you can.
 
 📚 **Go deeper:** *Think Python* (3rd ed.), chapter 7 "Iteration and Search"; Python for Everybody, chapter 5 ("Loop patterns"); *Automate the Boring Stuff with Python*, chapter 3.
+--- goals
+- recognise and use the counting, summing, maximum, search, filter and string-building patterns
+- write nested loops for grids and patterns
+- trace a nested loop and count how many times its body runs
 --- quiz
 ? How many times does `print` run?
 ```python
@@ -802,6 +894,29 @@ for x in data:
 + Filtering into a new list
 - Accumulating a sum
 > It keeps only the items that pass a test, collecting them in a new list.
+--- exercise parsons python
+::prompt
+Arrange the lines to print this triangle with a nested loop. Watch the indentation: each line's depth shows which loop it belongs to.
+```
+1
+12
+123
+```
+::lines
+for row in range(1, 4):
+    line = ""
+    for col in range(1, row + 1):
+        line += str(col)
+    print(line)
+::distractors
+        print(line)
+::expected
+1
+12
+123
+::hints
+- Start a new empty `line` for each row, before the inner loop.
+- Print the line once the inner loop has finished building it.
 --- exercise code python
 ::prompt
 Without using `max()` or `min()`, find the hottest and coldest days in `temps` (days are numbered from 1). If two days tie, report the first one.
@@ -937,6 +1052,10 @@ Check that you can:
 - choose between `for` and `while`;
 - use the counting, summing, maximum, search, filter and string-building patterns;
 - write and trace nested loops.
+--- goals
+- write `while` and `for` loops that end correctly
+- use `range`, `enumerate`, `zip` and the loop patterns
+- trace nested loops
 --- quiz
 ? What does this print?
 ```python
@@ -1127,3 +1246,8 @@ n = 90215 => n = 3074
 - `n % 10` is the last digit, and `n //= 10` removes it. Loop while `n > 0`.
 - To build the reversed number, shift what you have one place left and add the digit: `rev = rev * 10 + last`.
 - Save the original value before the loop changes `n`.
+
+## Practise more
+
+- Code Dojo: [Temperature Table](#/dojo/dojo-temperature) and [Count the Vowels](#/dojo/dojo-vowels).
+- Project: [Number Guessing Game](#/projects/guess-game), a complete small game with tests.

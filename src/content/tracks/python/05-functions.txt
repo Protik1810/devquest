@@ -67,6 +67,22 @@ print(x + 1)         # TypeError: unsupported operand type(s) for +: 'NoneType' 
 
 A function without a `return` (or with a bare `return`) returns **`None`**. The rule of thumb: functions that **compute** should **return**; let the code that calls them decide what to print.
 
+~~~check
+? How many times is `A` printed?
+```python
+def f():
+    print("A")
+    return 1
+
+x = f() + f()
+```
+- 0
+- 1
++ 2
+- 3
+> Each call runs the body once, so two calls print twice. `x` ends up as 2.
+~~~
+
 ## Several exits
 
 `return` can appear in several places, and the first one reached wins. Returning early often makes code simpler:
@@ -129,6 +145,11 @@ From now on, many DevQuest exercises ask for a **function** and check it with hi
 - It gets its inputs from **parameters** and gives its result with **return**, rather than reading `input()` or printing in the middle of a calculation.
 
 📚 **Go deeper:** Python Tutorial, section 4.8 "Defining Functions"; *Think Python* (3rd ed.), chapters 3 and 6 "Functions" and "Return Values"; CS50P lecture 0.
+--- goals
+- define functions with parameters and call them
+- return values with `return`, and explain the difference from `print`
+- use early returns and return several values
+- check a function with `assert`
 --- quiz
 ? What does this print?
 ```python
@@ -188,6 +209,23 @@ def say_hi():
 - A `SyntaxError`
 - Nothing
 > Python runs top to bottom; the `def` hasn't run yet when `say_hi()` is called.
+--- exercise parsons python
+::prompt
+Arrange the lines so the program defines `area`, then prints `10` and `12`. A function must be defined before it's called. One line doesn't belong.
+::lines
+def area(width, height):
+    return width * height
+room = area(5, 2)
+print(room)
+print(area(3, 4))
+::distractors
+    print(width * height)
+::expected
+10
+12
+::hints
+- The `def` line and its indented body come first.
+- A function that prints instead of returning would make `room` `None`.
 --- exercise code python
 ::prompt
 Write two functions that **return** (not print) their results:
@@ -360,6 +398,21 @@ def add_item(item, items=None):
 
 This is one of Python's most famous gotchas, and a favourite interview question.
 
+~~~check
+? What does this print?
+```python
+def scale(x, factor=2):
+    return x * factor
+
+print(scale(3), scale(3, factor=5))
+```
+- `6 6`
++ `6 15`
+- `3 15`
+- An error
+> The first call uses the default factor 2; the second passes 5 by keyword.
+~~~
+
 ## *args: any number of positional arguments
 
 A parameter with one star collects all the extra positional arguments into a **tuple**:
@@ -432,6 +485,11 @@ def area(width: float, height: float) -> float:
 Python doesn't enforce them, but editors and tools use them to catch mistakes. Module 12 covers them.
 
 📚 **Go deeper:** Python Tutorial, section 4.9 "More on Defining Functions" (defaults, keyword arguments, special parameters, arbitrary argument lists, unpacking); *Python Crash Course* (3rd ed.), chapter 8.
+--- goals
+- pass arguments by position and by keyword
+- give parameters default values, and avoid the mutable default trap
+- accept any number of arguments with `*args` and `**kwargs`
+- use keyword-only parameters and unpack arguments with `*` and `**`
 --- quiz
 ? What do these calls return?
 ```python
@@ -483,6 +541,22 @@ print(add_item(2))
 - `*[1, 2, 3]`
 - `1 2 3`
 > The star unpacks the list into three separate arguments.
+--- exercise fill python
+::prompt
+Fill in the blank so `total` accepts **any number** of numbers.
+::template
+def total(____numbers):
+    return sum(numbers)
+
+print(total(1, 2, 3))
+print(total())
+::answers
+*
+::expected
+6
+0
+::hints
+- One symbol in front of the parameter name collects all the positional arguments into a tuple.
 --- exercise code python
 ::prompt
 Write `make_greeting(name, greeting="Hello", punctuation="!")` that returns strings like `Hello, Ada!`. Callers may change the greeting and the punctuation, by position or by name.
@@ -645,6 +719,23 @@ print(sum([4, 5]))       # TypeError: 'int' object is not callable
 
 Avoid naming variables `list`, `dict`, `str`, `sum`, `max`, `min`, `input`, `id` or `type`. Use `total`, `items`, `largest` and so on.
 
+~~~check
+? What does this print?
+```python
+rate = 5
+
+def double_rate():
+    return rate * 2
+
+print(double_rate())
+```
++ `10`
+- `5`
+- An `UnboundLocalError`
+- A `NameError`
+> Reading a global inside a function is fine. Only assigning to it would make it local.
+~~~
+
 ## The call stack
 
 Each function call gets a **frame** holding its local variables. Frames pile up on the **call stack**: when `main` calls `report` and `report` calls `average`, there are three frames. When `average` returns, its frame is removed and `report` continues.
@@ -700,6 +791,11 @@ main()
 ```
 
 📚 **Go deeper:** Python Tutorial, section 9.2 "Python Scopes and Namespaces"; *Think Python* (3rd ed.), chapter 3 (stack diagrams); Real Python, "Python Scope & the LEGB Rule".
+--- goals
+- tell local from global variables, and explain the LEGB lookup order
+- avoid `UnboundLocalError` and shadowing built-ins
+- read a traceback that spans several function calls
+- write pure functions and pass functions as values
 --- quiz
 ? What does this print?
 ```python
@@ -891,6 +987,21 @@ factorial(4) = 4 * factorial(3)
 factorial(4) = 4 * 6 = 24
 ```
 
+~~~check
+? What does `f(4)` return?
+```python
+def f(n):
+    if n == 0:
+        return 0
+    return n + f(n - 1)
+```
+- 4
++ 10
+- 24
+- 0
+> 4 + 3 + 2 + 1 + 0.
+~~~
+
 ## The leap of faith
 
 Tracing every call quickly gets confusing. Instead, experienced programmers take a **leap of faith**: assume the recursive call already works for the smaller problem, and only ask "how do I use that answer to solve the bigger one?" If `total(rest)` correctly adds up the rest of a list, then the total of the whole list is the first item plus `total(rest)`:
@@ -961,6 +1072,11 @@ def fib(n):
 `fib(35)` makes about 30 million calls, because it recomputes the same values again and again. Remembering results you've already computed (**memoization**) makes it instant; you'll do that with `functools.lru_cache` in Module 12.
 
 📚 **Go deeper:** *Think Python* (3rd ed.), chapters 5–6 (recursion and "leap of faith"); CS50P / CS50x lectures on recursion; Python for Everybody has a good visual of the stack.
+--- goals
+- write recursive functions with a base case and a recursive case
+- trace recursive calls on the call stack
+- use the "leap of faith" to design recursion
+- decide when recursion beats a loop, and spot repeated work
 --- quiz
 ? What is the base case in `factorial`?
 + `if n <= 1: return 1`
@@ -1000,6 +1116,22 @@ mystery(345)
 - 543
 - 3
 > It adds the last digit to the digit sum of the rest: 5 + 4 + 3.
+--- exercise parsons python
+::prompt
+Arrange the lines into a recursive `total(items)` that adds up a list: an empty list adds up to 0; otherwise it's the first item plus the total of the rest. One line would recurse forever.
+::lines
+def total(items):
+    if not items:
+        return 0
+    return items[0] + total(items[1:])
+print(total([4, 5, 6]))
+::distractors
+    return items[0] + total(items)
+::expected
+15
+::hints
+- The base case (the empty list) must be checked before recursing.
+- Each recursive call must get a smaller list: `items[1:]`.
 --- exercise code python
 ::prompt
 Write two recursive functions (no loops):
@@ -1100,6 +1232,10 @@ Make sure you can:
 - write a recursive function with a correct base case.
 
 The coding problems are checked with hidden tests that call your functions with many inputs, including edge cases.
+--- goals
+- write and call functions with every kind of parameter
+- reason about scope and the call stack
+- solve problems recursively
 --- quiz
 ? What does this print?
 ```python
@@ -1279,3 +1415,8 @@ assert hanoi(1, "X", "Y", "Z") == ["X->Y"]
 - Base case: zero discs need no moves, so return an empty list.
 - First the moves for `n - 1` discs from source to spare (with target as the helper).
 - Then the single move `f"{source}->{target}"`, then the moves for `n - 1` discs from spare to target.
+
+## Practise more
+
+- Code Dojo: [Caesar Cipher](#/dojo/dojo-caesar), [Roman Numerals](#/dojo/dojo-roman) and, for recursion, [Flatten a List](#/dojo/dojo-flatten).
+- Project: [Password Strength Checker](#/projects/password-checker).

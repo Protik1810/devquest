@@ -43,6 +43,25 @@ except (TypeError, ValueError):          # a tuple catches any of these
 
 Python checks the `except` clauses top to bottom and runs the **first** one that matches.
 
+~~~check
+? What does this print?
+```python
+try:
+    n = int("4x")
+    print("A")
+except ValueError:
+    print("B")
+else:
+    print("C")
+print("D")
+```
+- `A`, `C`, `D`
++ `B`, `D`
+- `B`, `C`, `D`
+- `A`, `D`
+> The conversion fails, so the rest of the `try` block and the `else` are skipped; `D` is after the whole statement.
+~~~
+
 ## Looking at the exception
 
 `as` gives you the exception object, whose text is the error message:
@@ -117,6 +136,11 @@ Python code often prefers EAFP, and for conversions it's more correct: `"-5".isd
 If a function doesn't handle an exception, it passes up to the function that called it, then to *its* caller, and so on. Handle an exception at the level where you can **do something sensible** about it: ask the user again, use a default, skip a record. Often that's not where it happened.
 
 📚 **Go deeper:** Python Tutorial, chapter 8 "Errors and Exceptions"; Python Library Reference, "Built-in Exceptions" (with the full hierarchy); *Automate the Boring Stuff with Python*, chapter 4.
+--- goals
+- handle exceptions with `try`/`except`, catching only the ones you expect
+- use `else` and `finally`, and the exception object (`as e`)
+- navigate the exception hierarchy to catch families of errors
+- write robust input loops, and choose between EAFP and LBYL
 --- quiz
 ? What does this print?
 ```python
@@ -170,6 +194,23 @@ except ZeroDivisionError:
 - `text.isnumeric()`
 - `len(text) > 0`
 > `"-5".isdigit()` is False, but `int("-5")` works. Letting `int` decide is EAFP.
+--- exercise parsons python
+::prompt
+Arrange the lines into a function that returns the number in `text`, or `0` if it isn't a whole number. One line catches far too much.
+::lines
+def to_number(text):
+    try:
+        return int(text)
+    except ValueError:
+        return 0
+print(to_number("42"), to_number("forty-two"))
+::distractors
+    except:
+::expected
+42 0
+::hints
+- The risky line goes inside `try`.
+- Catch only the error you expect: converting bad text raises `ValueError`.
 --- exercise code python
 ::prompt
 Ask for a whole number (prompt `Number: `) until the user types a valid one, which may be negative. For each invalid attempt print `Not a whole number, try again.` Then print the number squared.
@@ -321,6 +362,15 @@ Use the built-in type whose meaning fits:
 
 And write a **helpful message**: what was wrong, and what was expected. `ValueError("percent must be between 0 and 100, got 150")` beats `ValueError("bad input")`.
 
+~~~check
+? Which is the best way for `set_speed(-5)` to report that speeds can't be negative?
+- `return -1`
+- `print("bad speed")`
++ `raise ValueError("speed can't be negative, got -5")`
+- `assert speed >= 0`
+> Raising can't be silently ignored, and the message says what was wrong. Asserts can be switched off.
+~~~
+
 ## Re-raising
 
 Sometimes you want to note an error and still let it continue upwards. A bare `raise` inside an `except` block re-raises the same exception:
@@ -399,6 +449,11 @@ else:
 Testing frameworks have shortcuts for this (`self.assertRaises` in unittest, `pytest.raises` in pytest), which you'll meet in the testing lesson.
 
 📚 **Go deeper:** Python Tutorial, sections 8.4–8.6 "Raising Exceptions", "Exception Chaining", "User-defined Exceptions"; *Effective Python* (3rd ed.), items on exceptions; PEP 3134 (exception chaining).
+--- goals
+- raise built-in exceptions with clear messages when input is invalid
+- choose between `ValueError`, `TypeError` and others
+- re-raise and chain exceptions with `raise ... from`
+- define simple custom exceptions, and use `assert` only for internal checks
 --- quiz
 ? What happens when `raise ValueError("bad")` runs inside a function?
 - The function returns `"bad"`
@@ -430,6 +485,27 @@ Testing frameworks have shortcuts for this (`self.assertRaises` in unittest, `py
 - Printed and then deleted
 - In `e.args`
 > Chaining keeps the original error attached, and the traceback shows both.
+--- exercise fill python
+::prompt
+Fill in the blanks so `check_age` refuses negative ages with a `ValueError`.
+::template
+def check_age(age):
+    if age < 0:
+        ____ ____(f"age can't be negative, got {age}")
+    return age
+
+try:
+    check_age(-3)
+except ValueError as e:
+    print("Refused:", e)
+::answers
+raise
+ValueError
+::expected
+Refused: age can't be negative, got -3
+::hints
+- The keyword that sends an exception is `raise`.
+- Then name the exception type and give it the message.
 --- exercise code python
 ::prompt
 Write `parse_percent(text)` that turns strings like `"45%"` or `" 7.5 % "` into a fraction (`0.45`, `0.075`). Raise a `ValueError` with a helpful message if the text doesn't end with `%`, if the number part isn't a number, or if the value isn't between 0 and 100.
@@ -597,6 +673,15 @@ Explaining your code line by line, out loud, to someone (or a rubber duck) force
 | wrong only at the edges | `<` vs `<=`, empty input, a single item |
 | two floats "should" be equal | binary floats: use `math.isclose` |
 
+~~~check
+? A function returns the wrong total only for empty lists. What's the best first step?
+- Add `try`/`except` around the whole function
++ Reproduce it with `[]` and look at the values involved
+- Rewrite the function from scratch
+- Ask someone else to fix it
+> Reproduce with the smallest failing input, then look inside. Most bugs live at the edges.
+~~~
+
 ## Logging: print statements for grown-up programs
 
 `print` mixes debugging output with the program's real output. The `logging` module separates them and lets you choose how much detail to see:
@@ -628,6 +713,11 @@ Notice the `%s`/`%d` placeholders with separate arguments: the message is only f
 A **debugger** pauses a running program so you can step through it line by line and inspect every variable. Python has one built in: put `breakpoint()` in your code and run it in a terminal to drop into `pdb`. Editors like VS Code and PyCharm have friendly graphical debuggers: click beside a line number to set a breakpoint, run in debug mode, and step. In DevQuest, use `print`/`f"{x=}"`, the tracebacks, and the 🦉 tutor.
 
 📚 **Go deeper:** Python "Logging HOWTO" (docs.python.org/3/howto/logging.html); *Automate the Boring Stuff with Python*, chapter 5 "Debugging"; Julia Evans, "The Pocket Guide to Debugging".
+--- goals
+- debug methodically: reproduce, observe, locate, hypothesise, fix, test
+- inspect values with `f"{x=}"` and `repr()`
+- recognise the most common bug patterns from their symptoms
+- replace debugging prints with `logging` and its levels
 --- quiz
 ? Your function returns the right answer for most inputs but crashes on an empty list. What's the best next step?
 - Rewrite the whole function
@@ -845,6 +935,15 @@ if __name__ == "__main__":
 
 Run it with `python -m unittest`. pytest can run unittest tests too.
 
+~~~check
+? Which test name tells you most when it fails?
+- `test_1`
+- `test_function`
++ `test_rejects_empty_password`
+- `check`
+> A good name states the behaviour being checked.
+~~~
+
 ## What to test
 
 For each function, think in three groups:
@@ -870,6 +969,11 @@ Even if you don't always work this way, writing a test first forces you to decid
 A test suite that never fails is useless. One way to check it: deliberately put a bug in the code (a **mutant**). If no test fails, your tests have a gap. Tools like `mutmut` do this automatically. The exercises below work exactly like that: your tests are run against the correct code (they must pass) and against several buggy versions (each must make at least one test fail).
 
 📚 **Go deeper:** pytest documentation, "Get started"; Python Library Reference, `unittest`; *Python Testing with pytest* (2nd ed.) by Brian Okken; Kent Beck, *Test-Driven Development by Example*.
+--- goals
+- write tests in the arrange–act–assert shape, one behaviour per test
+- recognise pytest and unittest tests
+- choose typical, edge and error cases
+- explain TDD and check that tests actually catch bugs
 --- quiz
 ? What are the three parts of a well-structured test?
 + Arrange, act, assert
@@ -1121,6 +1225,10 @@ Make sure you can:
 - debug methodically and recognise the common bug patterns;
 - use logging levels;
 - write tests that cover typical, edge and error cases.
+--- goals
+- handle and raise exceptions well
+- debug methodically and use logging
+- write tests that catch real bugs
 --- quiz
 ? What does this print?
 ```python
@@ -1314,3 +1422,8 @@ for _bug, _what in [(_no_sort, "forgets to sort the numbers"), (_upper_middle, "
 - Include an even-length list.
 - Keep a reference to your input list and check it's unchanged after the call.
 - Check that `median([])` raises `ValueError` with `try`/`except`/`else`.
+
+## Practise more
+
+- Code Dojo: [Valid Parentheses Depth](#/dojo/dojo-brackets-score) and [Word Wrap](#/dojo/dojo-word-wrap). Write your own tests for them first.
+- Project: [Expense Tracker Report](#/projects/expense-report).

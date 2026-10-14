@@ -65,6 +65,15 @@ class OrderService:
 
 The same `OrderService` works with a real database in production and an in-memory fake in tests.
 
+~~~check
+? A new shipping method means editing `if method == ...` branches in five different functions. Which principle points to a better design?
+- Single responsibility
++ Open/closed
+- Interface segregation
+- YAGNI
+> Put each method behind a common interface so new methods are new classes, not edits.
+~~~
+
 ## Cohesion and coupling
 
 Two words you'll hear in every design discussion:
@@ -83,6 +92,10 @@ High cohesion and low coupling are what SOLID is ultimately trying to achieve.
 Principles conflict sometimes, and over-applying them produces needless layers of tiny classes. Use them to **explain and improve** a design, not as a checklist to satisfy.
 
 📚 **Go deeper:** Robert C. Martin, *Clean Architecture* (part III, "Design Principles"); Brandon Rhodes, python-patterns.guide; "SOLID principles in Python" talks (PyCon); Andrew Hunt & David Thomas, *The Pragmatic Programmer* (DRY).
+--- goals
+- explain the five SOLID principles with examples
+- spot violations: classes with several responsibilities, `if` chains on types, hard-wired dependencies
+- aim for high cohesion and low coupling, and apply DRY, KISS and YAGNI sensibly
 --- quiz
 ? A `User` class validates passwords, formats profile pages and sends emails. Which principle does it break most clearly?
 + Single responsibility
@@ -389,6 +402,15 @@ for n in Countdown(3):
 
 `for x in obj` calls `iter(obj)` once, then `next(...)` repeatedly until `StopIteration`. Note the subtlety: an object that is **its own iterator** can only be looped over **once**. To be re-iterable (like a list), `__iter__` must return a **fresh** iterator each time. Module 12's **generators** make writing iterators much easier.
 
+~~~check
+? `sorted(people, key=by_age)` is an example of which pattern?
++ Strategy: the sorting algorithm uses a function you pass in
+- Singleton
+- Observer
+- Factory
+> The key function is a swappable strategy.
+~~~
+
 ## Adapter: making interfaces fit
 
 An **adapter** wraps an object to give it the interface other code expects, like a travel plug adapter:
@@ -417,6 +439,10 @@ class CelsiusAdapter:
 Patterns are tools, not goals. Introduce one when the problem it solves actually shows up (the second or third time you'd otherwise edit an `if` chain), not "just in case".
 
 📚 **Go deeper:** Brandon Rhodes, python-patterns.guide (an excellent, free guide to the Gang of Four patterns in Python); Gamma et al., *Design Patterns*; Python Library Reference, "Iterator Types"; Peter Norvig, "Design Patterns in Dynamic Languages".
+--- goals
+- implement the strategy, factory, observer, iterator and adapter patterns in Pythonic form
+- explain which classic patterns Python mostly doesn't need
+- introduce a pattern only when its problem appears
 --- quiz
 ? In Python, what is the simplest way to implement the strategy pattern?
 + Pass a function (the strategy) to the code that uses it
@@ -672,6 +698,15 @@ def load_user(db, user_id):
 
 If the store later moves to a real database, callers still catch `UserNotFound`, and nothing else changes.
 
+~~~check
+? Your module raises `PaymentError(Exception)`, with subclasses `CardDeclined` and `GatewayDown`. A caller wants to handle all of them the same way. What should it catch?
+- `Exception`
++ `PaymentError`
+- `CardDeclined` and `GatewayDown` separately
+- `BaseException`
+> Catching the root catches every subclass, including ones added later, without swallowing unrelated errors.
+~~~
+
 ## Context managers: setup and cleanup, guaranteed
 
 Many resources must be **released** after use: files closed, locks released, database transactions committed or rolled back. Forgetting, or skipping it because an exception happened, causes leaks and corrupted data. The `with` statement guarantees it:
@@ -710,6 +745,11 @@ with Transaction(account) as acc:
 Module 12 shows a shorter way to write context managers with a generator and `contextlib.contextmanager`.
 
 📚 **Go deeper:** Python Tutorial, section 8.6 "User-defined Exceptions"; Python Language Reference, "With Statement Context Managers"; Python Library Reference, `contextlib`; *Effective Python* (3rd ed.), "Define a root exception to insulate callers from APIs".
+--- goals
+- design an exception hierarchy with a root exception and specific subclasses
+- give exceptions useful attributes and messages
+- translate low-level errors at module boundaries
+- write context managers with `__enter__` and `__exit__`
 --- quiz
 ? Why define one base exception (like `BankError`) for a module?
 + Callers can catch every error from the module with one `except`, including ones added later
@@ -960,6 +1000,11 @@ To save, convert the course to plain dictionaries and lists (which the `json` mo
 Each exercise below is one step. Each starter contains a working solution of the previous steps, so you can always continue even if you used a hint.
 
 📚 **Go deeper:** Kent Beck & Ward Cunningham, "A Laboratory For Teaching Object-Oriented Thinking" (the CRC card paper); Martin Fowler, *Refactoring* (2nd ed.); *Python Crash Course* (3rd ed.), the projects in part II for more step-by-step builds.
+--- goals
+- turn a problem description into classes with CRC cards
+- build a program in small, tested vertical slices
+- add pluggable behaviour with the strategy pattern
+- save and load objects through plain data, checked with a round-trip test
 --- exercise code python
 ::prompt
 **Step 1: the core model.** Write:
@@ -1360,6 +1405,10 @@ Make sure you can:
 - design an exception hierarchy with a root exception and translate errors at boundaries;
 - write a context manager with `__enter__` and `__exit__`;
 - plan classes from a problem description.
+--- goals
+- apply SOLID and design patterns to real code
+- design exception hierarchies and context managers
+- plan and build a program step by step
 --- quiz
 ? A `ReportGenerator` class both queries the database and renders HTML. What's the main design problem?
 + It has more than one responsibility (two reasons to change)
@@ -1564,3 +1613,8 @@ assert inv.quantity("kiwi") == 0
 - `OutOfStock.__init__` builds the message, passes it to `super().__init__`, and stores the three values.
 - In `remove`, check availability **before** changing the stock.
 - After a successful removal, if the remaining amount is `<= self.low_stock_level`, call every subscriber.
+
+## Practise more
+
+- Project: [Markdown → HTML Converter](#/projects/markdown-converter): design small classes for each kind of block.
+- Project: [Maze Solver](#/projects/maze-solver).

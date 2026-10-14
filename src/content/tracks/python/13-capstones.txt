@@ -22,6 +22,11 @@ Bank exports write amounts like `-12.50`. Converting with `float` risks errors l
 Each step's starter contains a working solution to the previous steps, so you can always continue. When you're done, you'll have written about 150 lines of clean, tested, object-oriented Python, the size of a real small tool.
 
 📚 **Go deeper:** Python Library Reference, `decimal`; *Python Crash Course* (3rd ed.), part II projects; Martin Fowler's "Money" pattern (*Patterns of Enterprise Application Architecture*).
+--- goals
+- turn requirements into user stories and a small design
+- build a real program in four tested vertical slices
+- handle money exactly with integer cents and `Decimal`
+- import, report on and persist data robustly
 --- exercise code python
 ::prompt
 **Step 1: the model.**
@@ -536,6 +541,10 @@ Passing the argument list explicitly (`main(argv)`) makes the whole program test
 Conventions worth following: normal output goes to **stdout**, errors and warnings to **stderr** (`print(..., file=sys.stderr)`), and the program ends with `sys.exit(main(sys.argv[1:]))` so the shell sees the exit code.
 
 📚 **Go deeper:** Python "Argparse Tutorial" (docs.python.org/3/howto/argparse.html); Gary Bernhardt, "Functional Core, Imperative Shell"; *The Art of Unix Programming* (rules of modularity and silence).
+--- goals
+- separate a functional core from an imperative shell
+- stream text through generator-based tokenising
+- build a command-line interface with `argparse`, stdout/stderr and exit codes
 --- exercise code python
 ::prompt
 **Step 1: tokenising.** Write two functions:
@@ -812,6 +821,9 @@ You've completed a full Python course: from your first `print` to classes, desig
 DevQuest's **career paths** turn each of these into a sequence of tracks and projects, and the **SQL**, **Git**, **Linux shell** and **Data structures & algorithms** tracks are valuable whichever direction you choose. When you're ready for a second language, **JavaScript** (for the web) or a compiled language like **Go** or **Java** will feel familiar: variables, loops, functions and classes work much the same way, and your understanding of how programs are designed transfers completely.
 
 📚 **Go deeper:** *Fluent Python* (2nd ed.) by Luciano Ramalho, for idiomatic, advanced Python; *Effective Python* (3rd ed.) by Brett Slatkin; *Architecture Patterns with Python* by Percival & Gregory; the Python documentation's "What's New" pages, to keep up with each release.
+--- goals
+- plan how to keep practising after the course
+- choose a direction and what to learn next
 --- quiz
 ? You want to keep improving after this course. What's the most effective next step?
 + Build projects you care about, using the professional tools from Module 12

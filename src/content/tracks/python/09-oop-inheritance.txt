@@ -61,6 +61,15 @@ print(rex.describe())    # Rex says ... (a beagle)
 
 If a subclass defines its own `__init__`, the parent's `__init__` does **not** run automatically. Forgetting `super().__init__(...)` is a classic bug: attributes the parent sets up (like `name`) never get created.
 
+~~~check
+? `class B(A)` overrides `__init__` and never calls `super().__init__()`. What happens to attributes `A.__init__` sets?
+- Python sets them anyway
++ They're never created
+- They're copied from the class
+- It's a syntax error
+> Overriding replaces the parent's method; only `super().__init__(...)` would run it.
+~~~
+
 ## isinstance and issubclass
 
 ```python
@@ -83,6 +92,11 @@ Use it for a genuine **"is a"** relationship, where a subclass object can be use
 Keep hierarchies **shallow**: one or two levels are easy to follow; five levels of subclasses make it hard to know where any method comes from.
 
 📚 **Go deeper:** Python Tutorial, section 9.5 "Inheritance"; *Python Crash Course* (3rd ed.), chapter 9 (inheritance); *Think Python* (3rd ed.), chapter 17 "Inheritance".
+--- goals
+- create subclasses that inherit, override and extend methods
+- call the parent's version with `super()`
+- check types with `isinstance` and `issubclass`
+- decide when inheritance is the right tool
 --- quiz
 ? What does this print?
 ```python
@@ -137,6 +151,29 @@ print(Circle().describe())
 - `class Logger(list)`, to reuse `append`
 - `class Customer(Address)`, because customers have addresses
 > Inheritance models "is a". "Has a" relationships call for composition.
+--- exercise fill python
+::prompt
+Fill in the blanks so `Student` reuses `Person`'s initialiser and then adds its own attribute.
+::template
+class Person:
+    def __init__(self, name):
+        self.name = name
+
+class Student(____):
+    def __init__(self, name, school):
+        ____().__init__(name)
+        self.school = school
+
+s = Student("Ada", "DevQuest Academy")
+print(s.name, "studies at", s.school)
+::answers
+Person
+super
+::expected
+Ada studies at DevQuest Academy
+::hints
+- The base class goes in the parentheses after the class name.
+- One built-in gives access to the parent's methods.
 --- exercise code python
 ::prompt
 Build a small class hierarchy:
@@ -350,6 +387,15 @@ The built-ins work this way. `len()` works on anything with `__len__`; a `for` l
 
 Duck typing fits with EAFP from Module 7: just call the method, and handle `AttributeError` if something might not have it. When you really need to check, `hasattr(obj, "speak")` asks about the **behaviour**, which is better than checking the exact type.
 
+~~~check
+? `def report(x): return x.summary()`. Which argument works?
+- Only instances of a class called `Report`
++ Any object that has a `summary()` method
+- Only strings
+- Only subclasses of `ABC`
+> Duck typing: behaviour matters, not the class.
+~~~
+
 ## Abstract base classes: enforcing an interface
 
 Duck typing is flexible but relies on everyone remembering which methods to write. When you design a family of classes, an **abstract base class** (ABC) makes the required interface explicit and enforced:
@@ -405,6 +451,10 @@ elif isinstance(shape, Rectangle):
 Every new shape means editing this chain (and all the others like it). Moving `area()` into each class puts the knowledge where it belongs.
 
 📚 **Go deeper:** Python Library Reference, `abc` — Abstract Base Classes; Python Glossary, "duck-typing"; *Fluent Python* (2nd ed.), chapter 13 "Interfaces, Protocols, and ABCs".
+--- goals
+- write code that works with any object offering the right methods (polymorphism and duck typing)
+- define and enforce interfaces with abstract base classes
+- replace type-checking chains with polymorphic methods
 --- quiz
 ? What does polymorphism let this loop do?
 ```python
@@ -724,6 +774,15 @@ print(D().hello())      # ['D', 'B', 'C', 'A']
 
 Inside `B.hello`, for a `D` object, `super()` is `C` (the next class in D's MRO), not `A`. If `B` and `C` had called `A.hello(self)` directly instead, `A` would run twice. The rule: in a hierarchy that might be combined, **always use `super()`**, and keep method signatures compatible.
 
+~~~check
+? For `class C(A, B)` where A and B both define `hello()` (and neither inherits from the other), which `hello` does `C()` use?
++ `A`'s, because bases are searched left to right
+- `B`'s
+- Both, one after another
+- Neither: it's an error
+> The MRO is C, A, B, object.
+~~~
+
 ## Mixins: small reusable abilities
 
 The most practical use of multiple inheritance is the **mixin**: a small class that adds **one ability** to any class that includes it, and isn't meant to be used on its own:
@@ -770,6 +829,11 @@ dir(u)                      # every attribute and method name, inherited ones in
 Multiple inheritance is powerful but can make code hard to follow. Mixins that add independent abilities are a good use. Deep diamonds of "real" classes are usually a sign that **composition** (next lesson) would be simpler.
 
 📚 **Go deeper:** Python Tutorial, section 9.5.1 "Multiple Inheritance"; "The Python 2.3 Method Resolution Order" (python.org/download/releases/2.3/mro); Raymond Hettinger, "Python's super() considered super!".
+--- goals
+- predict the method resolution order (MRO) of a class
+- explain what `super()` refers to in multiple inheritance
+- add reusable abilities with mixins
+- inspect classes with introspection tools
 --- quiz
 ? With `class D(B, C)` where B and C both inherit from A, what is D's MRO?
 + D, B, C, A, object
@@ -989,6 +1053,15 @@ Because parts are just attributes, you can give an object **different** parts, e
 car = Car("Mini", ElectricMotor(180))     # any object with start() will do: duck typing
 ```
 
+~~~check
+? Which design makes `Report` easiest to test?
+- `Report` creates a real `EmailServer()` inside `__init__`
++ `Report(sender)` receives any object with a `send()` method
+- `Report` uses a global `server` variable
+- `Report` inherits from `EmailServer`
+> Passing collaborators in lets tests pass a fake.
+~~~
+
 ## Dependency injection
 
 When an object **receives** its collaborators instead of creating them itself, that's **dependency injection**. It sounds grand, but it's just passing objects in:
@@ -1013,6 +1086,10 @@ In the real program you pass a clock that reads the system time. In a **test** y
 - Inheritance is great for frameworks' extension points and families of closely related types (exceptions, shapes behind an ABC).
 
 📚 **Go deeper:** Gamma, Helm, Johnson & Vlissides, *Design Patterns* (1994), chapter 1 ("Favor object composition over class inheritance"); Brandon Rhodes, python-patterns.guide, "The Composition Over Inheritance Principle"; Martin Fowler, "Inversion of Control Containers and the Dependency Injection pattern".
+--- goals
+- model "has a" relationships with composition and delegation
+- explain the classic problems of inheriting to reuse code
+- inject dependencies to make classes flexible and testable
 --- quiz
 ? Which relationship calls for composition?
 - A sparrow is a bird
@@ -1276,6 +1353,15 @@ sorted([Version(2, 0), Version(1, 9)])   # order=True compares field by field
 - `order=True` generates `<`, `<=`, `>`, `>=` comparing the fields as a tuple, in order.
 - `dataclasses.replace(v, minor=5)` returns a **copy** with some fields changed: the way to "modify" frozen objects.
 
+~~~check
+? What's wrong with `tags: list = []` in a dataclass?
+- Nothing
++ A mutable default would be shared by every instance, so dataclasses refuse it; use `field(default_factory=list)`
+- Lists can't be dataclass fields
+- It must be written `tags = list`
+> It's the mutable default trap again, and dataclasses protect you from it.
+~~~
+
 ## Enums: named constants
 
 "Magic strings" are fragile: `status = "shiped"` (typo) silently never matches `"shipped"`. An **enumeration** defines a fixed set of named values:
@@ -1325,6 +1411,10 @@ class Light(Enum):
 | behaviour-heavy objects with invariants | a regular class (properties, methods) |
 
 📚 **Go deeper:** Python Library Reference, `dataclasses` and `enum`; Python "Enum HOWTO" (docs.python.org/3/howto/enum.html); PEP 557 (Data Classes); *Fluent Python* (2nd ed.), chapter 5 "Data Class Builders".
+--- goals
+- replace boilerplate with `@dataclass`, defaults and `__post_init__`
+- make immutable, hashable, ordered value objects with `frozen` and `order`
+- replace magic strings with `Enum`
 --- quiz
 ? Which methods does `@dataclass` generate by default?
 + `__init__`, `__repr__` and `__eq__`
@@ -1517,6 +1607,10 @@ Make sure you can:
 - predict an MRO and explain what `super()` really refers to;
 - choose between inheritance and composition, with reasons;
 - replace boilerplate with dataclasses and magic strings with enums.
+--- goals
+- build class hierarchies with inheritance and polymorphism
+- choose between inheritance and composition
+- use dataclasses and enums
 --- quiz
 ? What does this print?
 ```python
@@ -1742,3 +1836,7 @@ assert [s.name for s in Status] == ["PENDING", "PAID", "SHIPPED", "DELIVERED"]
 - `items: dict = field(default_factory=dict)` and `status: Status = Status.PENDING`.
 - `list(Status)` gives the members in order; find the current one's index to get the next.
 - Check the two error cases before changing `self.status`.
+
+## Practise more
+
+- Project: [Tic-Tac-Toe with an Unbeatable AI](#/projects/tic-tac-toe): model the board, the players and the game as classes.

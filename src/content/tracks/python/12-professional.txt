@@ -32,6 +32,15 @@ list(filter(lambda n: n % 2, range(6)))       # [1, 3, 5]: keep items that pass 
 
 Both return **lazy iterators** (hence the `list(...)`). In Python, a comprehension is usually clearer: `[s.upper() for s in items]`, `[n for n in nums if n % 2]`. Use `map` when you already have a named function.
 
+~~~check
+? What does `sorted(["pear", "fig", "apple"], key=lambda w: (len(w), w))` give?
++ `['fig', 'pear', 'apple']`
+- `['apple', 'fig', 'pear']`
+- `['apple', 'pear', 'fig']`
+- `['fig', 'apple', 'pear']`
+> Sorted by length first, then alphabetically among equal lengths.
+~~~
+
 ## The operator module
 
 `operator` provides ready-made functions for operators and lookups, often clearer than a lambda:
@@ -84,6 +93,10 @@ for letter, group in groupby(words, key=lambda w: w[0]):
 Small **pure** functions and data transformations are easy to test, easy to combine, and safe to run in parallel. The goal isn't to avoid loops and classes, but to reach for a transformation when it says clearly what you mean.
 
 📚 **Go deeper:** Python "Functional Programming HOWTO" and "Sorting Techniques"; Python Library Reference, `itertools`, `functools`, `operator`; *Fluent Python* (2nd ed.), chapter 7 "Functions as First-Class Objects".
+--- goals
+- write lambdas and use them as key functions
+- use `map`, `filter`, `functools.reduce` and `partial` where they help
+- pick the right `itertools` tool for a job
 --- quiz
 ? What is `(lambda a, b: a * b)(3, 4)`?
 + `12`
@@ -330,6 +343,15 @@ Three details make decorators correct and reusable:
 2. The wrapper must **return** the original's result, or the decorated function returns `None`.
 3. `@functools.wraps(func)` copies the name and docstring, so `slow_sum.__name__` is still `"slow_sum"` (and help, debuggers and logs stay sensible).
 
+~~~check
+? A decorator's wrapper calls `func(*args, **kwargs)` but has no `return`. What do decorated functions return?
+- Their normal result
++ Always `None`
+- The wrapper function
+- An error
+> The wrapper must `return func(*args, **kwargs)`.
+~~~
+
 ## Decorators with arguments
 
 `@retry(times=3)` needs one more layer: a function that takes the arguments and **returns a decorator**:
@@ -374,6 +396,11 @@ Remember Module 5's exponentially slow `fib`? One line fixes it. Only cache **pu
 `@property`, `@classmethod`, `@staticmethod`, `@dataclass` and `@abstractmethod` are all decorators. Web frameworks register URL handlers with them (`@app.get("/users")` in FastAPI, `@app.route` in Flask), and pytest uses `@pytest.fixture` and `@pytest.mark.parametrize`. Decorators can stack; the one nearest the function is applied first.
 
 📚 **Go deeper:** Python Glossary, "decorator" and "closure"; PEP 318 (decorators) and PEP 3104 (nonlocal); Real Python, "Primer on Python Decorators"; Python Library Reference, `functools.wraps`, `lru_cache`.
+--- goals
+- write closures, and change enclosing variables with `nonlocal`
+- write decorators that forward arguments, return results and use `functools.wraps`
+- write decorators that take arguments
+- speed up pure recursive functions with `lru_cache`
 --- quiz
 ? What does this print?
 ```python
@@ -421,6 +448,33 @@ print(f())
 - Functions taking lists
 - Any function
 > Caching side effects or unhashable arguments doesn't work.
+--- exercise fill python
+::prompt
+Fill in the blanks to finish a decorator that prints the name of the function before every call.
+::template
+import functools
+
+def announce(func):
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        print("calling", func.__name__)
+        ____ func(*args, **kwargs)
+    ____ wrapper
+
+@announce
+def add(a, b):
+    return a + b
+
+print(add(2, 3))
+::answers
+return
+return
+::expected
+calling add
+5
+::hints
+- The wrapper must hand back the original function's result.
+- The decorator must hand back the wrapper.
 --- exercise code python
 ::prompt
 Write three **closures**:
@@ -667,6 +721,25 @@ from itertools import islice
 list(islice(naturals(), 5))     # [1, 2, 3, 4, 5]: take only what you need
 ```
 
+~~~check
+? What does this print?
+```python
+def gen():
+    print("start")
+    yield 1
+    yield 2
+
+g = gen()
+print("made")
+print(next(g))
+```
++ `made`, then `start`, then `1`
+- `start`, then `made`, then `1`
+- `made`, then `1`
+- `start`, `1`, `2`
+> Calling a generator function runs nothing; the body starts at the first `next()`.
+~~~
+
 ## Pipelines
 
 Generators chain into **pipelines**, where each stage pulls items from the previous one, one at a time. This is how you process a 50 GB log file on a laptop:
@@ -735,6 +808,11 @@ with changed_directory("/tmp"):
 That's usually much shorter than writing a class with `__enter__` and `__exit__`.
 
 📚 **Go deeper:** Python Tutorial, sections 9.9–9.10 "Generators" and "Generator Expressions"; David Beazley, "Generator Tricks for Systems Programmers"; PEP 255 (simple generators) and PEP 380 (yield from); Python Library Reference, `contextlib`.
+--- goals
+- write generator functions with `yield`, and generator expressions
+- explain lazy evaluation and build generator pipelines
+- use `yield from` and `itertools.islice`
+- write context managers with `@contextmanager`
 --- quiz
 ? What does calling a generator function, `countdown(3)`, do?
 - Runs the whole function and returns a list
@@ -998,6 +1076,15 @@ def maybe(x: int | str) -> str: ...                                # either type
 
 The older `List[int]`, `Optional[int]` and `Union[...]` from the `typing` module mean the same things; you'll see them in code written before Python 3.9/3.10.
 
+~~~check
+? Which hint fits a function that may return a `User` or nothing?
+- `-> User`
++ `-> User | None`
+- `-> None`
+- `-> list[User]`
+> `X | None` (or `Optional[X]`) means "an X or None".
+~~~
+
 ## Accept general, return specific
 
 For parameters, prefer **abstract** types that describe only what you need: `Iterable[str]` if you just loop, `Sequence[str]` if you index. Then callers can pass lists, tuples, sets or generators. For return values, be **specific** (`list[str]`) so callers know exactly what they get.
@@ -1038,6 +1125,11 @@ Annotations are stored on the function (`func.__annotations__`), and `typing.get
 Typing is **gradual**: annotate the important functions first (public APIs, tricky data), run `mypy yourfile.py` or let your editor's pyright check as you type, and add more over time. Unannotated code is simply not checked.
 
 📚 **Go deeper:** Python Library Reference, `typing`; mypy documentation, "Type hints cheat sheet"; PEP 484 (type hints), PEP 604 (`X | Y`), PEP 695 (generic syntax); *Fluent Python* (2nd ed.), chapter 8.
+--- goals
+- annotate parameters, return values and variables
+- use the common hints: containers, `X | None`, `Callable`, `Iterable`
+- describe data with `TypedDict` and interfaces with `Protocol`
+- write generic functions, and know what type checkers do
 --- quiz
 ? What happens when you call `def f(x: int) -> int: return x * 2` as `f("ab")`?
 + It returns `"abab"`: Python doesn't enforce hints at runtime
@@ -1269,6 +1361,15 @@ asyncio.run(main())           # takes about 4 seconds, not 9
 
 All three start immediately; each finishes when its wait is over. `gather` returns the results **in the order you passed** the coroutines.
 
+~~~check
+? Two coroutines each `await asyncio.sleep(1)`. How long does `await a(); await b()` take, compared with `await asyncio.gather(a(), b())`?
++ About 2 seconds versus about 1 second
+- About 1 second both ways
+- About 2 seconds both ways
+- About 0 seconds both ways
+> Awaiting one after the other is sequential; `gather` runs them concurrently.
+~~~
+
 ## Tasks
 
 `asyncio.create_task(coro)` schedules a coroutine to start running **now**, in the background, and gives you a `Task` to `await` later:
@@ -1306,6 +1407,11 @@ The event loop can only switch tasks at an `await`. A **blocking** call like `ti
 Async web frameworks like **FastAPI** are built on exactly these ideas.
 
 📚 **Go deeper:** Python Library Reference, `asyncio` ("Coroutines and Tasks"); Real Python, "Async IO in Python: A Complete Walkthrough"; PEP 492 (async/await syntax).
+--- goals
+- explain concurrency for I/O-bound work and how the event loop switches tasks
+- write coroutines with `async def` and `await`, and run them with `asyncio.run`
+- run coroutines concurrently with `gather` and `create_task`, with timeouts
+- avoid blocking the event loop
 --- quiz
 ? What does calling `make_tea()` (an `async def` function) return?
 - `"tea"`
@@ -1525,6 +1631,15 @@ Never install project packages into your system Python, and don't commit `.venv`
 - Modern projects describe themselves in **`pyproject.toml`**: name, version, Python version, dependencies, and tool settings, in one standard file.
 - Newer tools such as **uv** and **Poetry** manage environments, dependencies and lock files in one place (`uv add requests`); `uv` in particular is very fast and increasingly popular.
 
+~~~check
+? Where should a project's virtual environment folder `.venv` end up?
+- Committed to Git, so teammates get it
++ On each developer's machine, listed in `.gitignore`; teammates recreate it from the declared dependencies
+- Inside the standard library
+- On PyPI
+> Environments are rebuilt from `requirements.txt` or `pyproject.toml`, never shared as files.
+~~~
+
 ## Project layout
 
 ```
@@ -1586,6 +1701,10 @@ Settings that differ between environments (database addresses, API keys) come fr
 Packages are built from `pyproject.toml` (`python -m build`) and published to PyPI (with `twine` or `uv publish`), after which anyone can `pip install` them.
 
 📚 **Go deeper:** Python Packaging User Guide (packaging.python.org); PEP 8; the documentation of Ruff, Black, mypy, pytest, pre-commit and uv; *Hypermodern Python* (Claudio Jolowicz's article series).
+--- goals
+- set up a project with a virtual environment and declared dependencies
+- describe what formatters, linters, type checkers and CI each catch
+- document code with docstrings, and keep secrets out of code
 --- quiz
 ? Why use a virtual environment for each project?
 + To keep each project's packages and versions isolated from other projects and the system
@@ -1746,6 +1865,11 @@ Make sure you can:
 - annotate functions with modern type hints;
 - run coroutines concurrently with `gather` and tasks, without blocking the loop;
 - describe virtual environments, formatters, linters, type checkers and CI.
+--- goals
+- use functional tools, closures, decorators and generators
+- annotate code with type hints
+- write concurrent code with asyncio
+- describe a professional project setup
 --- quiz
 ? What does `sorted(["b2", "a10", "a2"], key=lambda s: (s[0], int(s[1:])))` return?
 + `['a2', 'a10', 'b2']`
@@ -1927,3 +2051,8 @@ total: 55
 ::hints
 - `batches` collects items and yields each full list, then the leftover.
 - `asyncio.gather(*(process(b) for b in batches(items, size)))` runs one coroutine per batch concurrently; the star unpacks them as separate arguments.
+
+## Practise more
+
+- Project: [Expression Calculator (no eval!)](#/projects/calculator).
+- Code Dojo, for algorithms practice: [Merge Intervals](#/dojo/dojo-merge-intervals), [Coin Change](#/dojo/dojo-coins), [Longest Common Subsequence](#/dojo/dojo-lcs), [Number of Islands](#/dojo/dojo-islands) and [Build Order](#/dojo/dojo-topo).

@@ -82,6 +82,15 @@ if __name__ == "__main__":
 
 It lets one file be both a reusable module and a runnable script, and it stops imports from accidentally running a program's main code. DevQuest runs your code as `__main__`, just like `python file.py`.
 
+~~~check
+? `helpers.py` ends with `print("ready")` (not inside any `if`). What happens when another file does `import helpers` twice?
+- `ready` is printed twice
++ `ready` is printed once: a module runs on its first import and is then cached
+- Nothing is printed
+- An error
+> Imports are cached in `sys.modules`. Code meant only for running the file directly belongs under `if __name__ == "__main__":`.
+~~~
+
 ## Packages: folders of modules
 
 A **package** is a folder of modules, usually with an `__init__.py` file:
@@ -106,6 +115,11 @@ You import with dots: `from shop.cart import Cart`, `import shop.payments.card`.
 Beyond the standard library, the **Python Package Index** (PyPI, pypi.org) hosts over half a million packages: `requests` for HTTP, `pandas` for data, `pytest` for testing, `fastapi` and `django` for web apps. You install them with `pip`, ideally inside a **virtual environment**; Module 12 shows the professional setup.
 
 📚 **Go deeper:** Python Tutorial, chapter 6 "Modules" and chapter 10 "Brief Tour of the Standard Library"; Python Module of the Week (pymotw.com); *Automate the Boring Stuff with Python*, chapter 3.
+--- goals
+- import modules, names and aliases, and use the standard library
+- write your own modules and guard script code with `if __name__ == "__main__":`
+- explain packages and how Python finds modules
+- make code that uses randomness testable
 --- quiz
 ? After `from math import sqrt`, how do you call the square root function?
 + `sqrt(16)`
@@ -319,6 +333,15 @@ with open("notes.txt", encoding="utf-8") as f:
 
 `f.readline()` reads a single line and `f.readlines()` a list of lines (with their `\n`). Looping over the file is memory-friendly: a 10 GB log file can be processed line by line.
 
+~~~check
+? Which mode adds to the end of an existing log file without erasing it?
+- `"w"`
++ `"a"`
+- `"r"`
+- `"x"`
+> `"w"` truncates the file; `"x"` fails if it exists; `"a"` appends.
+~~~
+
 ## pathlib: paths as objects
 
 The modern way to work with paths is `pathlib.Path`:
@@ -369,6 +392,11 @@ A `UnicodeDecodeError` means the bytes weren't in the encoding you claimed.
 - `tempfile.TemporaryDirectory()` gives a scratch folder that's deleted afterwards, perfect for tests.
 
 📚 **Go deeper:** Python Tutorial, section 7.2 "Reading and Writing Files"; Python Library Reference, `pathlib`; *Automate the Boring Stuff with Python*, chapters 9–10 "Reading and Writing Files", "Organizing Files".
+--- goals
+- read and write text files safely with `with`, the right mode and UTF-8
+- work with paths and folders using `pathlib`
+- handle missing files and other `OSError`s
+- tell text from bytes
 --- quiz
 ? What happens when you `open("data.txt", "w")` on an existing file?
 - New text is added at the end
@@ -563,6 +591,15 @@ Two surprises: JSON object keys are **always strings** (`{1: "a"}` comes back as
 
 Invalid JSON raises `json.JSONDecodeError`, a subclass of `ValueError`, which tells you the line and column of the problem.
 
+~~~check
+? What does `json.loads(json.dumps({"tags": ("a", "b")}))` give?
+- `{'tags': ('a', 'b')}`
++ `{'tags': ['a', 'b']}`
+- An error
+- `{"tags": "ab"}`
+> JSON has no tuples, so the tuple comes back as a list.
+~~~
+
 ## CSV: rows and columns
 
 A CSV (comma-separated values) file is a table in plain text:
@@ -609,6 +646,11 @@ rows = list(csv.DictReader(io.StringIO(text)))
 That's duck typing at work: `csv` only needs something with the methods of a file.
 
 📚 **Go deeper:** Python Library Reference, `json` and `csv`; json.org (the whole JSON format on one page); *Automate the Boring Stuff with Python*, chapter 18 "CSV Files and JSON Data".
+--- goals
+- convert between Python data and JSON text and files
+- read and write CSV with `csv.DictReader` and `DictWriter`
+- use `io.StringIO` for in-memory files
+- know which values JSON can't store directly
 --- quiz
 ? What does `json.loads('{"a": [1, true, null]}')` return?
 + `{'a': [1, True, None]}`
@@ -840,6 +882,15 @@ if m:
 
 `re.match` checks only at the **start** of the text, a common source of confusion; prefer `search` or `fullmatch`.
 
+~~~check
+? Which strings does `re.fullmatch(r"[A-Z]\d{3}", s)` accept?
+- `"a123"`
++ `"B704"`
+- `"B70"`
+- `"B7045"`
+> One capital letter followed by exactly three digits, and nothing else.
+~~~
+
 ## Groups
 
 Parentheses create **groups**: they capture parts of a match, and let quantifiers apply to several characters. When a pattern has groups, `findall` returns the groups instead of whole matches. **Named groups** make complex patterns readable:
@@ -873,6 +924,11 @@ Regexes are powerful but hard to read. For simple jobs, string methods are clear
 Tools like regex101.com explain a pattern piece by piece and let you test it, which is very useful while learning.
 
 📚 **Go deeper:** Python "Regular Expression HOWTO" (docs.python.org/3/howto/regex.html); Python Library Reference, `re`; *Automate the Boring Stuff with Python*, chapter 8 (pattern matching); regex101.com.
+--- goals
+- write patterns with character classes, quantifiers and anchors
+- search, extract, validate, split and replace text with `re`
+- capture parts of a match with (named) groups
+- recognise when a regex is the wrong tool
 --- quiz
 ? What does `re.findall(r"\d+", "a1b22c333")` return?
 + `['1', '22', '333']`
@@ -904,6 +960,23 @@ Tools like regex101.com explain a pattern piece by piece and let you test it, wh
 - Raw strings are required by the `re` module
 - To make them case-insensitive
 > Without `r`, sequences like `\b` mean something else to Python (a backspace).
+--- exercise fill python
+::prompt
+Fill in the pattern so it finds every price written like `$12.50` and captures just the number.
+::template
+import re
+
+text = "Coffee $3.50, cake $4.25 and a tip of $1.00"
+prices = re.findall(r"____", text)
+print(prices)
+::answers
+\$(\d+\.\d{2})
+::expected
+['3.50', '4.25', '1.00']
+::hints
+- `$` and `.` are special in regexes; escape them with a backslash.
+- Put parentheses around the part you want `findall` to return.
+- Digits are `\d`; two of them is `\d{2}`.
 --- exercise code python
 ::prompt
 Write two extractors with `re`:
@@ -1062,6 +1135,15 @@ dt.strftime("%A %d %B %Y, %H:%M")                               # format: 'Wedne
 | `%A` / `%a` | weekday name / short | Wednesday / Wed |
 | `%B` / `%b` | month name / short | October / Oct |
 
+~~~check
+? What is `(date(2026, 1, 1) - date(2025, 12, 25)).days`?
+- 6
++ 7
+- 8
+- -7
+> From Christmas to New Year's Day is a week.
+~~~
+
 ## ISO 8601: the format to use for data
 
 For files, APIs and databases, use the international standard **ISO 8601**: `2026-10-14` and `2026-10-14T18:05:00`. It's unambiguous (is `04/05` April 5th or May 4th?) and sorts correctly even as text.
@@ -1100,6 +1182,11 @@ Use `perf_counter` (not the wall clock) for timing, since the system clock can j
 Code that calls `date.today()` inside gives different results every day, which makes it hard to test. Pass the date in as a parameter, with "today" as the default only at the edge of the program; it's the dependency-injection idea again.
 
 📚 **Go deeper:** Python Library Reference, `datetime` (including "strftime() and strptime() Format Codes") and `zoneinfo`; *Automate the Boring Stuff with Python*, chapter 19 "Keeping Time"; xkcd 1179 on ISO 8601.
+--- goals
+- create and compare dates, times and datetimes
+- calculate with `timedelta`
+- parse and format dates with `strptime` and `strftime`, and prefer ISO 8601
+- explain naive versus aware datetimes, and make date code testable
 --- quiz
 ? What is `(date(2026, 3, 1) - date(2026, 2, 1)).days`?
 + `28`
@@ -1248,6 +1335,10 @@ Make sure you can:
 - convert between Python data and JSON/CSV, including what can't be converted directly;
 - write regexes with character classes, quantifiers and groups;
 - calculate with dates and convert them to and from text.
+--- goals
+- use modules and the standard library confidently
+- move data between files, JSON and CSV
+- process text with regular expressions and dates with `datetime`
 --- quiz
 ? Which line appends to a log file without erasing it?
 - `open("app.log", "w")`
@@ -1400,3 +1491,7 @@ assert _json.loads(sales_report("date,category,amount\n")) == {"total": 0, "by_c
 - Read all rows with `csv.DictReader(io.StringIO(csv_text))` and convert amounts with `float`.
 - ISO dates sort correctly as text, so `sorted(...)` gives the first and last.
 - Build the dict, then `json.dumps(report, indent=2)`.
+
+## Practise more
+
+- Project: [Mini Search Engine](#/projects/search-engine): files, text processing and data structures together.

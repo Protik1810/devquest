@@ -63,6 +63,15 @@ A third number is the **step**: `word[::2]` takes every second character (`'Pto'
 
 A helpful picture: indexes point at the **gaps between characters**, and a slice is everything between two gaps. That's why `word[0:3]` has 3 characters, and why `word[:3] + word[3:]` gives back the whole word. Unlike indexing, slicing never crashes: `word[2:100]` is just `'thon'`.
 
+~~~check
+? What is `"Python"[1:4]`?
+- `'Pyt'`
++ `'yth'`
+- `'ytho'`
+- `'yt'`
+> Indexes 1, 2 and 3: the slice stops before index 4.
+~~~
+
 ## Strings can't be changed
 
 Strings are **immutable**: once created, they can't be modified.
@@ -108,6 +117,11 @@ Python 3 strings are Unicode, so any language and any emoji just works. When tex
 - Calling something on a string and expecting the string itself to change. It can't; you'll see why that matters with methods next.
 
 📚 **Go deeper:** Python Tutorial, section 3.1.2 "Text"; *Think Python* (3rd ed.), chapter 7 "Iteration and Search" (strings); Python for Everybody, chapter 6 "Strings".
+--- goals
+- write strings with quotes, triple quotes, escape sequences and raw strings
+- read characters with indexes (including negative ones) and cut out slices
+- explain why strings can't be changed, and build new strings instead
+- use `ord()` and `chr()`, and describe what Unicode is
 --- quiz
 ? What does this print?
 ```python
@@ -153,6 +167,26 @@ s[0] = "b"
 + `e`
 - `101`
 > `ord("c")` is 99, plus 2 is 101, which is the code point of `e`.
+--- exercise fill python
+::prompt
+Fill in the indexes and slices so the program prints the first letter, the last letter and the first three letters of `word`.
+::template
+word = "keyboard"
+print(word[____])
+print(word[____])
+print(word[____])
+::answers
+0
+-1
+:3
+::expected
+k
+d
+key
+::hints
+- Counting starts at 0.
+- A negative index counts from the end.
+- A slice with no start begins at index 0: `[:3]`.
 --- exercise code python
 ::prompt
 Using indexing, slicing and `len()` on the variable `word`, print these six lines. Don't type the answers: compute each one, so the program works for any word.
@@ -282,6 +316,15 @@ email[email.find("@") + 1:] # 'example.com'   find + slicing work well together
 "a-b-c".replace("-", "", 1)                              # 'ab-c'
 ```
 
+~~~check
+? What is `"  Hello World  ".strip().lower()`?
+- `'  hello world  '`
++ `'hello world'`
+- `'helloworld'`
+- `'Hello World'`
+> Each method returns a new string, so they can be chained: first the spaces go, then the capitals.
+~~~
+
 ## Splitting and joining
 
 `split()` breaks a string into a **list** of strings. (A list is an ordered collection written with square brackets; Module 6 covers lists fully. For now: `len()` and indexing work on lists just as on strings.)
@@ -340,6 +383,11 @@ print(clean)     # yes
 There are over 40 string methods. Nobody memorises them all: `dir(str)` lists them, `help(str.split)` explains one, and the Python docs page "String Methods" describes each with examples. Looking things up is a normal, professional habit.
 
 📚 **Go deeper:** Python Library Reference, "String Methods"; *Automate the Boring Stuff with Python*, chapter 8 "Strings and Text Editing"; CS50P lecture 0.
+--- goals
+- call string methods and remember that they return new strings
+- clean text with `strip`, the case methods and `replace`
+- search with `find`, `count`, `startswith` and `in`
+- split text into lists and join lists back into text
 --- quiz
 ? What does this print?
 ```python
@@ -382,6 +430,23 @@ print(len(s))
 - 0
 - `'o'`
 > After lowering, `"hello world"` contains two o's.
+--- exercise parsons python
+::prompt
+Arrange the lines to clean up a messy email address and print its user and domain parts. One line has a bug and doesn't belong.
+::lines
+raw = "  Ada@Example.COM "
+email = raw.strip().lower()
+user, domain = email.split("@")
+print(user)
+print(domain)
+::distractors
+email = raw.lower
+::expected
+ada
+example.com
+::hints
+- Clean the text before splitting it.
+- A method is only called when it has parentheses.
 --- exercise code python
 ::prompt
 Users type their names messily. Read a full name with the prompt `Full name: `, then print:
@@ -505,6 +570,15 @@ After the expression, a colon starts a **format specifier** that controls how th
 
 The pattern is `[fill][align][width][,][.precision][type]`, and you can combine parts: `f"{price:>10,.2f}"` right-aligns a price with separators and 2 decimals in 10 characters. The width can even come from a variable: `f"{name:<{width}}"`.
 
+~~~check
+? What does `print(f"[{7:>3}]")` print?
+- `[7  ]`
++ `[  7]`
+- `[ 7 ]`
+- `[007]`
+> `>3` right-aligns the value in a field 3 characters wide.
+~~~
+
 ## Lining up a table
 
 Alignment and width make tidy columns:
@@ -555,6 +629,11 @@ Before f-strings (Python 3.6) people wrote `"{} is {}".format(name, age)` or `"%
 `round(x, 2)` changes the **number**; `f"{x:.2f}"` only changes how it's **displayed**, and always shows exactly two decimals (`3.5` appears as `3.50`; `round(3.5, 2)` would print `3.5`). For showing prices and measurements, formatting is usually what you want.
 
 📚 **Go deeper:** Python Tutorial, section 7.1 "Fancier Output Formatting"; Python Library Reference, "Format Specification Mini-Language"; *Python Crash Course* (3rd ed.), chapter 2.
+--- goals
+- insert values and expressions into text with f-strings
+- format numbers with decimals, thousands separators and percentages
+- align values in columns with width and alignment specifiers
+- use `{x=}` and `!r` while debugging
 --- quiz
 ? What does this print?
 ```python
@@ -603,6 +682,20 @@ print(f"{x=}")
 - `{{x}}`
 - a `SyntaxError`
 > Doubled braces print one literal brace each.
+--- exercise fill python
+::prompt
+Fill in the format specifier so the total always shows exactly two decimals: `Total: 13.50`.
+::template
+price = 4.5
+quantity = 3
+print(f"Total: {price * quantity:____}")
+::answers
+.2f
+::expected
+Total: 13.50
+::hints
+- The specifier goes after the colon inside the braces.
+- "f" means a fixed number of decimals; put the number of decimals after a dot.
 --- exercise code python
 ::prompt
 Print this receipt with f-strings. Item names are **left-aligned in 12 characters**, prices **right-aligned in 6 characters with 2 decimals**, and the total is computed:
@@ -713,6 +806,10 @@ Check that you can:
 - clean up messy input with `strip`, `split`, `join`, `replace` and the case methods;
 - find a substring with `find` and use the position to slice;
 - format numbers with decimals, separators, percentages and alignment.
+--- goals
+- index, slice and transform strings
+- clean and split messy text with string methods
+- format output with f-strings
 --- quiz
 ? What does `"Hello, World"[7:]` give?
 - `' World'`
@@ -848,3 +945,10 @@ Length: 25
 ::hints
 - Chain the methods: `title.strip().lower().replace("!", "")`.
 - `.split()` breaks it into words (and drops extra spaces); `"-".join(...)` glues them back.
+
+## Practise more
+
+Want more practice before moving on? These use only what you know so far:
+
+- Code Dojo: [Reverse the Words](#/dojo/dojo-reverse-words) and [Palindrome Checker](#/dojo/dojo-palindrome).
+- The Playground: write a program that turns a sentence into "title case" without using `title()`.
