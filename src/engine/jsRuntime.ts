@@ -476,6 +476,77 @@ function devquestJsRuntime(g: any) {
   assert.strict = assert;
   g.assert = assert;
 
+  // ---------------- timers: like Node, a program ends when no timers are left ----------------
+  const host = { set: g.setTimeout.bind(g), clear: g.clearTimeout.bind(g), every: g.setInterval.bind(g), stop: g.clearInterval.bind(g) };
+  const pending = new Map<any, boolean>(); // timer id → is it an interval?
+  let late: { err: any } | null = null; // an error thrown inside a timer callback
+  let wake: (() => void) | null = null;
+  const settle = () => {
+    if (wake && (!pending.size || late)) {
+      const w = wake;
+      wake = null;
+      w();
+    }
+  };
+  const guarded = (fn: any, args: any[]) => {
+    try {
+      if (typeof fn === 'function') fn(...args);
+    } catch (err) {
+      if (!late) late = { err };
+    }
+  };
+  g.setTimeout = (fn: any, ms?: number, ...args: any[]) => {
+    const id = host.set(() => {
+      pending.delete(id);
+      guarded(fn, args);
+      settle();
+    }, ms);
+    pending.set(id, false);
+    return id;
+  };
+  g.setInterval = (fn: any, ms?: number, ...args: any[]) => {
+    const id = host.every(() => {
+      guarded(fn, args);
+      settle();
+    }, ms);
+    pending.set(id, true);
+    return id;
+  };
+  g.clearTimeout = g.clearInterval = (id: any) => {
+    if (pending.has(id)) (pending.get(id) ? host.stop : host.clear)(id);
+    pending.delete(id);
+    settle();
+  };
+  const clearAll = () => {
+    for (const [id, every] of pending) (every ? host.stop : host.clear)(id);
+    pending.clear();
+  };
+  if (typeof g.addEventListener === 'function')
+    g.addEventListener('unhandledrejection', (e: any) => {
+      e.preventDefault();
+      if (!late) late = { err: e.reason };
+      settle();
+    });
+  /** After the code finishes, wait (up to `limitMs`) until its timers have all run, as Node does before exiting. */
+  async function idle(limitMs: number): Promise<boolean> {
+    const deadline = Date.now() + limitMs;
+    for (;;) {
+      await new Promise((r) => host.set(r, 0));
+      if (late || !pending.size) return true;
+      const left = deadline - Date.now();
+      if (left <= 0) return false;
+      await new Promise<void>((r) => {
+        wake = r;
+        host.set(() => {
+          if (wake === r) {
+            wake = null;
+            r();
+          }
+        }, left);
+      });
+    }
+  }
+
   // ---------------- running learner code ----------------
   /** The line (in the given source) where an error was raised, from its stack. */
   function errorLine(err: any): number | null {
@@ -515,10 +586,24 @@ function devquestJsRuntime(g: any) {
     } catch (err) {
       return { ok: false, output: '', error: describe(err), syntax: true };
     }
+    clearAll();
+    late = null;
+    wake = null;
     try {
       await fn();
-      return { ok: true, output: o.tests ? out.slice(0, testStart) : out };
+      const end = out.length;
+      const finished = await idle(3000);
+      const failure = late as { err: any } | null; // set by timer callbacks while idle() waited
+      if (failure) throw failure.err;
+      // Timer output comes after the checks ran: keep it, but not anything the checks printed
+      const output = o.tests ? out.slice(0, testStart) + out.slice(end) : out;
+      if (!finished) {
+        clearAll();
+        return { ok: false, output, error: 'The program was still waiting for timers after 3 seconds. A setInterval that is never cleared with clearInterval keeps a program running forever.' };
+      }
+      return { ok: true, output };
     } catch (err: any) {
+      clearAll();
       const line = errorLine(err);
       if (phase === 'tests') {
         const testSrc = o.tests!.split('\n');

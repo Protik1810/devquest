@@ -2,16 +2,17 @@ import { useState } from 'react';
 import type { CodeLang, QuizQuestion } from '../content/types';
 import { runExample, tracePython, type RunResult, type TraceResult } from '../engine/runners';
 import { useGame } from '../engine/store';
-import { Editor } from './Editor';
+import { Editor, WebPreview } from './Editor';
 import { ResultView } from './ResultView';
 import { TraceViewer } from './TraceViewer';
 import { Inline, shuffleOptions } from './Quiz';
 
 /** Fence languages whose examples can run inside a lesson. */
-export const RUNNABLE: Record<string, CodeLang> = { python: 'python', py: 'python', javascript: 'javascript', js: 'javascript', typescript: 'typescript', ts: 'typescript', lua: 'lua' };
+export const RUNNABLE: Record<string, CodeLang> = { python: 'python', py: 'python', javascript: 'javascript', js: 'javascript', typescript: 'typescript', ts: 'typescript', lua: 'lua', html: 'web' };
 
 /**
  * A code example in lesson text that the learner can run, edit and (for Python) step through.
+ * An HTML example (`web`) runs as a live page preview, with anything it logs shown underneath.
  * `earlier` holds the page's previous examples in the same language, for examples that build on them.
  */
 export function RunnableCode({ lang, code, earlier }: { lang: CodeLang; code: string; earlier: string[] }) {
@@ -22,8 +23,10 @@ export function RunnableCode({ lang, code, earlier }: { lang: CodeLang; code: st
   const [running, setRunning] = useState(false);
   const [withEarlier, setWithEarlier] = useState(false);
   const [stdin, setStdin] = useState('');
+  const [page, setPage] = useState<string | null>(null);
   const bump = useGame((s) => s.bump);
   const python = lang === 'python';
+  const web = lang === 'web';
   const usesInput = (python && /\binput\(/.test(src)) || (lang === 'javascript' && /\bprompt\(/.test(src));
   const prelude = (on: boolean) => (on && earlier.length ? earlier : undefined);
 
@@ -31,6 +34,7 @@ export function RunnableCode({ lang, code, earlier }: { lang: CodeLang; code: st
     setRunning(true);
     setTrace(null);
     bump('runs');
+    if (web) setPage(src);
     try {
       setResult(await runExample(lang, src, prelude(on), usesInput ? stdin : undefined));
     } catch (e) {
@@ -65,13 +69,13 @@ export function RunnableCode({ lang, code, earlier }: { lang: CodeLang; code: st
         </pre>
       )}
       <div className="runnable-bar">
-        <button className="small" onClick={() => run()} disabled={running} title="Run this example">{running ? '⏳ Running…' : '▶ Run'}</button>
+        <button className="small" onClick={() => run()} disabled={running} title={web ? 'Open this page in a preview' : 'Run this example'}>{running ? '⏳ Running…' : web ? '▶ Show page' : '▶ Run'}</button>
         {python && (
           <button className="ghost small" onClick={() => stepThrough()} disabled={running} title="Watch it run one line at a time">👣 Step through</button>
         )}
         <button className="ghost small" onClick={() => setEditing(!editing)}>{editing ? '✓ Done' : '✎ Edit'}</button>
         {src !== code.replace(/\n$/, '') && (
-          <button className="ghost small" onClick={() => { setSrc(code.replace(/\n$/, '')); setResult(null); setTrace(null); }}>↺ Reset</button>
+          <button className="ghost small" onClick={() => { setSrc(code.replace(/\n$/, '')); setResult(null); setTrace(null); setPage(null); }}>↺ Reset</button>
         )}
         {withEarlier && <span className="muted small">runs after this page's earlier examples</span>}
       </div>
@@ -89,7 +93,8 @@ export function RunnableCode({ lang, code, earlier }: { lang: CodeLang; code: st
           </button>
         </div>
       )}
-      {result && <ResultView result={result} lang={lang} code={src} />}
+      {web && page !== null && <WebPreview code={editing ? src : page} height={220} />}
+      {result && !(web && result.ok && !result.output) && <ResultView result={result} lang={lang} code={src} />}
       {sandboxLimit(result?.error ?? trace?.error ?? '') && (
         <div className="runnable-hint small muted">💻 {sandboxLimit(result?.error ?? trace?.error ?? '')}</div>
       )}

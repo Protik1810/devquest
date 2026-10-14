@@ -1607,6 +1607,10 @@ Make sure you can:
 - predict an MRO and explain what `super()` really refers to;
 - choose between inheritance and composition, with reasons;
 - replace boilerplate with dataclasses and magic strings with enums.
+
+## Practise more
+
+- Project: [Tic-Tac-Toe with an Unbeatable AI](#/projects/tic-tac-toe): model the board, the players and the game as classes.
 --- goals
 - build class hierarchies with inheritance and polymorphism
 - choose between inheritance and composition
@@ -1837,6 +1841,3 @@ assert [s.name for s in Status] == ["PENDING", "PAID", "SHIPPED", "DELIVERED"]
 - `list(Status)` gives the members in order; find the current one's index to get the next.
 - Check the two error cases before changing `self.status`.
 
-## Practise more
-
-- Project: [Tic-Tac-Toe with an Unbeatable AI](#/projects/tic-tac-toe): model the board, the players and the game as classes.

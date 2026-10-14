@@ -1232,6 +1232,11 @@ Make sure you can:
 - write a recursive function with a correct base case.
 
 The coding problems are checked with hidden tests that call your functions with many inputs, including edge cases.
+
+## Practise more
+
+- Code Dojo: [Caesar Cipher](#/dojo/dojo-caesar), [Roman Numerals](#/dojo/dojo-roman) and, for recursion, [Flatten a List](#/dojo/dojo-flatten).
+- Project: [Password Strength Checker](#/projects/password-checker).
 --- goals
 - write and call functions with every kind of parameter
 - reason about scope and the call stack
@@ -1416,7 +1421,3 @@ assert hanoi(1, "X", "Y", "Z") == ["X->Y"]
 - First the moves for `n - 1` discs from source to spare (with target as the helper).
 - Then the single move `f"{source}->{target}"`, then the moves for `n - 1` discs from spare to target.
 
-## Practise more
-
-- Code Dojo: [Caesar Cipher](#/dojo/dojo-caesar), [Roman Numerals](#/dojo/dojo-roman) and, for recursion, [Flatten a List](#/dojo/dojo-flatten).
-- Project: [Password Strength Checker](#/projects/password-checker).

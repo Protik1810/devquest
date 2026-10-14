@@ -67,6 +67,26 @@ describe('curriculum integrity', () => {
     for (const l of python.lessons) expect(l.goals?.length ?? 0, `${l.id} has no --- goals`).toBeGreaterThan(0);
   });
 
+  it('hints are hints, not lesson text that ran into the last exercise', () => {
+    for (const { lesson } of lessons)
+      for (const ex of exercisesOf(lesson))
+        for (const h of 'hints' in ex ? ex.hints : []) expect(h, `${lesson.id}: a hint looks like lesson text (move it above the first --- section)`).not.toMatch(/^#|\]\(#\//);
+  });
+
+  it('links inside lessons point at lessons, tracks, Dojo challenges and projects that exist', () => {
+    const exists: Record<string, Set<string>> = {
+      lesson: new Set(lessons.map((l) => l.lesson.id)),
+      track: new Set(TRACKS.map((t) => t.id)),
+      dojo: new Set(CHALLENGES.map((c) => c.id)),
+      projects: new Set(PROJECTS.map((p) => p.id)),
+    };
+    for (const { lesson } of lessons)
+      for (const [, kind, id] of lesson.body.matchAll(/\]\(#\/(\w+)\/([\w-]+)\)/g)) {
+        expect(exists[kind], `${lesson.id}: unknown link kind ${kind}`).toBeTruthy();
+        expect(exists[kind].has(id), `${lesson.id}: link to missing ${kind} ${id}`).toBe(true);
+      }
+  });
+
   it('every markdown table row has as many cells as its header', () => {
     // An unescaped | inside `code` in a table cell silently splits the cell (write \| instead)
     const cells = (row: string) => row.trim().replace(/^\||\|$/g, '').split(/(?<!\\)\|/).length;

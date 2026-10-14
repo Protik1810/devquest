@@ -745,6 +745,11 @@ Before you start, make sure you can:
 - choose good test values, including boundaries.
 
 The coding problems are checked with several inputs each, so think through every case before you submit.
+
+## Practise more
+
+- Code Dojo: [Palindrome Checker](#/dojo/dojo-palindrome).
+- The Playground: write a rock-paper-scissors referee that also handles typos politely, or a shipping calculator with your own rules.
 --- goals
 - write programs that choose between several branches
 - combine conditions correctly and avoid the common traps
@@ -1014,7 +1019,3 @@ Invalid move
 - Then a draw. Then list the three ways player 1 can win, joined with `or`.
 - If it's valid, not a draw, and player 1 didn't win, player 2 won.
 
-## Practise more
-
-- Code Dojo: [Palindrome Checker](#/dojo/dojo-palindrome).
-- The Playground: write a rock-paper-scissors referee that also handles typos politely, or a shipping calculator with your own rules.

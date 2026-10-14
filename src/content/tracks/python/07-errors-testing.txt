@@ -1479,6 +1479,11 @@ Make sure you can:
 - debug methodically and recognise the common bug patterns;
 - use logging levels;
 - write tests that cover typical, edge and error cases.
+
+## Practise more
+
+- Code Dojo: [Valid Parentheses Depth](#/dojo/dojo-brackets-score) and [Word Wrap](#/dojo/dojo-word-wrap). Write your own tests for them first.
+- Project: [Expense Tracker Report](#/projects/expense-report).
 --- goals
 - handle and raise exceptions well
 - debug methodically and use logging
@@ -1677,7 +1682,3 @@ for _bug, _what in [(_no_sort, "forgets to sort the numbers"), (_upper_middle, "
 - Keep a reference to your input list and check it's unchanged after the call.
 - Check that `median([])` raises `ValueError` with `try`/`except`/`else`.
 
-## Practise more
-
-- Code Dojo: [Valid Parentheses Depth](#/dojo/dojo-brackets-score) and [Word Wrap](#/dojo/dojo-word-wrap). Write your own tests for them first.
-- Project: [Expense Tracker Report](#/projects/expense-report).

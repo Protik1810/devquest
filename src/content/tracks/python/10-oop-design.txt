@@ -1813,6 +1813,11 @@ Make sure you can:
 - design an exception hierarchy with a root exception and translate errors at boundaries;
 - write a context manager with `__enter__` and `__exit__`;
 - plan classes from a problem description.
+
+## Practise more
+
+- Project: [Markdown → HTML Converter](#/projects/markdown-converter): design small classes for each kind of block.
+- Project: [Maze Solver](#/projects/maze-solver).
 --- goals
 - apply SOLID and design patterns to real code
 - design exception hierarchies and context managers
@@ -2022,7 +2027,3 @@ assert inv.quantity("kiwi") == 0
 - In `remove`, check availability **before** changing the stock.
 - After a successful removal, if the remaining amount is `<= self.low_stock_level`, call every subscriber.
 
-## Practise more
-
-- Project: [Markdown → HTML Converter](#/projects/markdown-converter): design small classes for each kind of block.
-- Project: [Maze Solver](#/projects/maze-solver).

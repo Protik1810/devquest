@@ -1052,6 +1052,11 @@ Check that you can:
 - choose between `for` and `while`;
 - use the counting, summing, maximum, search, filter and string-building patterns;
 - write and trace nested loops.
+
+## Practise more
+
+- Code Dojo: [Temperature Table](#/dojo/dojo-temperature) and [Count the Vowels](#/dojo/dojo-vowels).
+- Project: [Number Guessing Game](#/projects/guess-game), a complete small game with tests.
 --- goals
 - write `while` and `for` loops that end correctly
 - use `range`, `enumerate`, `zip` and the loop patterns
@@ -1247,7 +1252,3 @@ n = 90215 => n = 3074
 - To build the reversed number, shift what you have one place left and add the digit: `rev = rev * 10 + last`.
 - Save the original value before the loop changes `n`.
 
-## Practise more
-
-- Code Dojo: [Temperature Table](#/dojo/dojo-temperature) and [Count the Vowels](#/dojo/dojo-vowels).
-- Project: [Number Guessing Game](#/projects/guess-game), a complete small game with tests.

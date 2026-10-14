@@ -2555,6 +2555,11 @@ Make sure you can:
 - annotate functions with modern type hints;
 - run coroutines concurrently with `gather` and tasks, without blocking the loop;
 - describe virtual environments, formatters, linters, type checkers and CI.
+
+## Practise more
+
+- Project: [Expression Calculator (no eval!)](#/projects/calculator).
+- Code Dojo, for algorithms practice: [Merge Intervals](#/dojo/dojo-merge-intervals), [Coin Change](#/dojo/dojo-coins), [Longest Common Subsequence](#/dojo/dojo-lcs), [Number of Islands](#/dojo/dojo-islands) and [Build Order](#/dojo/dojo-topo).
 --- goals
 - use functional tools, closures, decorators and generators
 - annotate code with type hints
@@ -2742,7 +2747,3 @@ total: 55
 - `batches` collects items and yields each full list, then the leftover.
 - `asyncio.gather(*(process(b) for b in batches(items, size)))` runs one coroutine per batch concurrently; the star unpacks them as separate arguments.
 
-## Practise more
-
-- Project: [Expression Calculator (no eval!)](#/projects/calculator).
-- Code Dojo, for algorithms practice: [Merge Intervals](#/dojo/dojo-merge-intervals), [Coin Change](#/dojo/dojo-coins), [Longest Common Subsequence](#/dojo/dojo-lcs), [Number of Islands](#/dojo/dojo-islands) and [Build Order](#/dojo/dojo-topo).

@@ -2164,6 +2164,10 @@ Make sure you can:
 - convert between Python data and JSON/CSV, including what can't be converted directly;
 - write regexes with character classes, quantifiers and groups;
 - calculate with dates and convert them to and from text.
+
+## Practise more
+
+- Project: [Mini Search Engine](#/projects/search-engine): files, text processing and data structures together.
 --- goals
 - use modules and the standard library confidently
 - move data between files, JSON and CSV
@@ -2321,6 +2325,3 @@ assert _json.loads(sales_report("date,category,amount\n")) == {"total": 0, "by_c
 - ISO dates sort correctly as text, so `sorted(...)` gives the first and last.
 - Build the dict, then `json.dumps(report, indent=2)`.
 
-## Practise more
-
-- Project: [Mini Search Engine](#/projects/search-engine): files, text processing and data structures together.

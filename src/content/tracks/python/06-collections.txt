@@ -1896,6 +1896,11 @@ Make sure you can:
 - write list, set and dict comprehensions, with filters;
 - sort with `key=` and `reverse=`;
 - pick the right structure for a job, and use the counting and grouping patterns.
+
+## Practise more
+
+- Code Dojo: [Second Largest](#/dojo/dojo-second-largest), [Anagram Detector](#/dojo/dojo-anagram), [Group Anagrams](#/dojo/dojo-group-anagrams), [Run-Length Encoding](#/dojo/dojo-rle) and [Rotate a Matrix](#/dojo/dojo-matrix).
+- Project: [To-Do List Manager](#/projects/todo-manager).
 --- goals
 - choose and use lists, tuples, sets and dictionaries
 - avoid aliasing bugs with copies
@@ -2035,7 +2040,3 @@ assert top_students([], 2) == []
 - Then sort that by score with a key function returning `record[1]`, `reverse=True`. Stability keeps equal scores alphabetical.
 - Finally take the first `n` and keep just the names.
 
-## Practise more
-
-- Code Dojo: [Second Largest](#/dojo/dojo-second-largest), [Anagram Detector](#/dojo/dojo-anagram), [Group Anagrams](#/dojo/dojo-group-anagrams), [Run-Length Encoding](#/dojo/dojo-rle) and [Rotate a Matrix](#/dojo/dojo-matrix).
-- Project: [To-Do List Manager](#/projects/todo-manager).

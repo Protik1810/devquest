@@ -1722,6 +1722,11 @@ Make sure you can:
 - use `@classmethod` for alternative constructors and `@staticmethod` for helpers;
 - protect invariants with properties;
 - give a class `__repr__`, `__eq__`, `__hash__`, ordering and container behaviour.
+
+## Practise more
+
+- Project: [Banking System](#/projects/bank-system), a classic object-oriented design exercise.
+- Code Dojo: [LRU Cache](#/dojo/dojo-lru), a class that combines a dictionary with ordering.
 --- goals
 - design classes with attributes, methods and invariants
 - use class and static methods and properties appropriately
@@ -1951,7 +1956,3 @@ else:
 - a/b + c/d = (a·d + c·b) / (b·d); a/b × c/d = (a·c) / (b·d). The constructor reduces the result for you.
 - Hash the same `(numerator, denominator)` tuple that `__eq__` compares.
 
-## Practise more
-
-- Project: [Banking System](#/projects/bank-system), a classic object-oriented design exercise.
-- Code Dojo: [LRU Cache](#/dojo/dojo-lru), a class that combines a dictionary with ordering.

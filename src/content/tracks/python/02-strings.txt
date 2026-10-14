@@ -806,6 +806,13 @@ Check that you can:
 - clean up messy input with `strip`, `split`, `join`, `replace` and the case methods;
 - find a substring with `find` and use the position to slice;
 - format numbers with decimals, separators, percentages and alignment.
+
+## Practise more
+
+Want more practice before moving on? These use only what you know so far:
+
+- Code Dojo: [Reverse the Words](#/dojo/dojo-reverse-words) and [Palindrome Checker](#/dojo/dojo-palindrome).
+- The Playground: write a program that turns a sentence into "title case" without using `title()`.
 --- goals
 - index, slice and transform strings
 - clean and split messy text with string methods
@@ -946,9 +953,3 @@ Length: 25
 - Chain the methods: `title.strip().lower().replace("!", "")`.
 - `.split()` breaks it into words (and drops extra spaces); `"-".join(...)` glues them back.
 
-## Practise more
-
-Want more practice before moving on? These use only what you know so far:
-
-- Code Dojo: [Reverse the Words](#/dojo/dojo-reverse-words) and [Palindrome Checker](#/dojo/dojo-palindrome).
-- The Playground: write a program that turns a sentence into "title case" without using `title()`.
