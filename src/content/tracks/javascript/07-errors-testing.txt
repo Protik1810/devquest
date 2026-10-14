@@ -1,0 +1,1337 @@
+=== module Module 7 · Errors, debugging and testing
+
+=== lesson js-errors | Handling errors: try, catch and throw | 85
+## When things go wrong
+
+Some problems aren't bugs in your code but facts of life: the user types "abc" where you wanted a number, a file is missing, the network is down, a server sends broken JSON. A program that crashes on the first surprise isn't professional; it should **detect** the problem, **report** it clearly and, where possible, **recover**.
+
+When JavaScript hits a problem it can't handle, it **throws** an *exception*: an error object that interrupts normal execution and travels **up the call stack**, from the function where it happened to its caller, and its caller's caller, until some code **catches** it. If nothing catches it, the program stops (in Node.js) or the error is reported in the console (in a browser).
+
+## try and catch
+
+```js
+try {
+  console.log("Parsing...");
+  const settings = JSON.parse("{broken json");
+  console.log("This line is skipped");
+} catch (error) {
+  console.log("Could not read the settings:", error.message);
+}
+console.log("The program carries on.");
+```
+
+- The code in `try` runs normally until something throws.
+- At that moment, the rest of the `try` block is **skipped** and the `catch` block runs, with the error object in the variable you named (`error`, or `err`, or `e`).
+- If nothing throws, the `catch` block is skipped entirely.
+- Either way, the program continues after the whole `try`/`catch`.
+
+If you don't need the error object, you can leave out the variable: `catch { ... }`.
+
+## The error object
+
+Errors are objects with useful properties:
+
+```js
+try {
+  const user = null;
+  console.log(user.name);
+} catch (error) {
+  console.log(error.name);
+  console.log(error.message);
+  console.log(error instanceof TypeError, error instanceof Error);
+  console.log(String(error));
+}
+```
+
+- `name`: the kind of error (`TypeError`, `RangeError`...).
+- `message`: what went wrong, in words.
+- `stack`: the call stack at the moment the error was created, as text (what you see printed under uncaught errors). Log it when you need to know where an error came from.
+
+`instanceof` checks the error's type, which lets you handle different problems differently.
+
+## finally: code that always runs
+
+A `finally` block runs **whether or not** an error happened, and even if the `try` block `return`s. Use it for clean-up that must never be skipped: closing a file, hiding a "loading..." spinner, releasing a lock.
+
+```js
+function loadData(text) {
+  console.log("Show spinner");
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  } finally {
+    console.log("Hide spinner");
+  }
+}
+console.log(loadData('{"ok": true}'));
+console.log(loadData("nope"));
+```
+
+## Throwing your own errors
+
+Your functions should throw when they're asked to do something impossible or invalid. Use `throw` with an `Error` object:
+
+```js
+function withdraw(balance, amount) {
+  if (typeof amount !== "number" || Number.isNaN(amount)) {
+    throw new TypeError(`Amount must be a number, got ${amount}`);
+  }
+  if (amount <= 0) {
+    throw new RangeError(`Amount must be positive, got ${amount}`);
+  }
+  if (amount > balance) {
+    throw new Error(`Insufficient funds: balance ${balance}, requested ${amount}`);
+  }
+  return balance - amount;
+}
+
+for (const amount of [30, -5, 500, "ten"]) {
+  try {
+    console.log("New balance:", withdraw(100, amount));
+  } catch (error) {
+    console.log(`${error.name}: ${error.message}`);
+  }
+}
+```
+
+Good habits:
+
+- **Throw `Error` objects**, never plain strings: `throw "oops"` works, but has no `name`, no `stack`, and breaks code that reads `error.message`.
+- **Pick a fitting type**: `TypeError` for a value of the wrong type, `RangeError` for a number outside the allowed range, `Error` for everything else (or your own error classes, below).
+- **Write messages that help**: say what was expected and include the bad value. "Invalid input" helps nobody; `Amount must be positive, got -5` points straight at the problem.
+- **Fail fast**: check inputs at the start of a function (guard clauses that throw) so bad data is stopped where it enters, not three functions later.
+
+~~~check
+? What does this print?
+```js
+try {
+  console.log("A");
+  throw new Error("stop");
+  console.log("B");
+} catch (e) {
+  console.log("C");
+} finally {
+  console.log("D");
+}
+```
+- `A B C D`
++ `A C D`
+- `A D`
+- `A C`
+> The throw skips the rest of the try block ("B"), the catch runs, and finally always runs.
+~~~
+
+## Errors travel up the call stack
+
+An error thrown deep inside nested calls skips all the code in between until it reaches a `catch`:
+
+```js
+function readAge(text) {
+  const age = Number(text);
+  if (!Number.isInteger(age) || age < 0) throw new RangeError(`Not a valid age: "${text}"`);
+  return age;
+}
+function describeUser(name, ageText) {
+  const age = readAge(ageText);
+  return `${name} is ${age}`;
+}
+function main() {
+  for (const [name, age] of [["Ada", "36"], ["Bob", "-1"], ["Cy", "twelve"]]) {
+    try {
+      console.log(describeUser(name, age));
+    } catch (error) {
+      console.log(`Skipped ${name}: ${error.message}`);
+    }
+  }
+}
+main();
+```
+
+`readAge` doesn't need to know how errors will be reported, and `describeUser` doesn't need any error handling at all. **Catch errors where you can do something useful about them**: usually near the top, where you can show a message, skip an item or try again. Catching everywhere just to log and rethrow clutters code.
+
+## Catch only what you expect
+
+A `catch` block catches **everything**, including bugs you didn't anticipate. Swallowing those hides problems. Check the type, and rethrow what you can't handle:
+
+```js
+function parseConfig(text) {
+  try {
+    return JSON.parse(text);
+  } catch (error) {
+    if (error instanceof SyntaxError) {
+      return {};
+    }
+    throw error;
+  }
+}
+console.log(parseConfig("{oops}"));
+```
+
+The worst pattern of all is an empty `catch {}` around a large block: the program fails silently and nobody ever knows why.
+
+## Custom error classes
+
+For your own application's errors, define error **classes**. You'll learn classes properly in Module 8; for now, this pattern is all you need: a new kind of error that extends JavaScript's `Error`, with its own name and any extra properties:
+
+```js
+class ValidationError extends Error {
+  constructor(message, field) {
+    super(message);
+    this.name = "ValidationError";
+    this.field = field;
+  }
+}
+
+function validateSignup({ email, age }) {
+  if (!email.includes("@")) throw new ValidationError("Email needs an @", "email");
+  if (age < 13) throw new ValidationError("You must be at least 13", "age");
+  return true;
+}
+
+try {
+  validateSignup({ email: "ada.example.com", age: 36 });
+} catch (error) {
+  if (error instanceof ValidationError) {
+    console.log(`Please fix the ${error.field} field: ${error.message}`);
+  } else {
+    throw error;
+  }
+}
+```
+
+Now calling code can tell "the user typed something invalid" (show a friendly message next to the field) from "the program has a bug" (let it crash and get reported).
+
+## Wrapping errors with a cause
+
+When you catch a low-level error and throw a higher-level one, keep the original as its `cause`, so the details aren't lost:
+
+```js
+function loadSettings(text) {
+  try {
+    return JSON.parse(text);
+  } catch (error) {
+    throw new Error("Could not load the settings file", { cause: error });
+  }
+}
+try {
+  loadSettings("{bad");
+} catch (error) {
+  console.log(error.message);
+  console.log("Because:", error.cause.message);
+}
+```
+
+## Throw, or return a special value?
+
+Not every failure deserves an exception. A rough guide:
+
+- **Expected, common outcomes** are normal return values: `find` returns `undefined` when nothing matches; a `parseNumber` helper might return `null` for "not a number". The caller checks the result.
+- **Invalid use or impossible situations** throw: a negative quantity, a missing required setting, a broken invariant. The caller shouldn't have to check for them on every call.
+
+One warning for later: `try`/`catch` only catches errors thrown **while its block is running**. An error thrown later, inside a `setTimeout` callback or a promise, escapes it. Module 10 shows how to catch errors in asynchronous code.
+
+📚 **Go deeper:** javascript.info, "Error handling, try...catch" and "Custom errors, extending Error"; MDN, "Control flow and error handling" and "Error"; *Eloquent JavaScript* (4th ed.), chapter 8, "Exceptions" and "Selective catching".
+--- goals
+- catch exceptions with `try`/`catch` and read an error's `name`, `message` and `stack`
+- run clean-up code with `finally`
+- throw `Error`, `TypeError` and `RangeError` with helpful messages
+- explain how errors travel up the call stack, and catch them where you can act
+- catch selectively with `instanceof`, rethrowing unexpected errors
+- define custom error classes and wrap errors with `cause`
+- choose between throwing and returning a special value
+--- quiz
+? What does this print?
+```js
+function f() {
+  throw new RangeError("too big");
+}
+try {
+  f();
+  console.log("after f");
+} catch (e) {
+  console.log(e.name);
+}
+```
+- `after f`
++ `RangeError`
+- `too big`
+- `RangeError: too big` and `after f`
+> f throws, so "after f" is skipped; the catch prints the error's name.
+? When does a `finally` block run?
+- Only if an error was thrown
+- Only if no error was thrown
++ Always, whether or not an error was thrown, even after a return
+- Only if there is no catch block
+> finally is for clean-up that must always happen.
+? Why should you `throw new Error("...")` rather than `throw "..."`?
+- Strings can't be thrown in JavaScript
++ Error objects carry a name, a message and a stack trace that other code and tools rely on
+- Strings are slower
+- Error objects are automatically caught
+> Throwing a string works, but loses the stack trace and breaks code that reads error.message.
+? What's wrong with this?
+```js
+try {
+  processOrders(orders);
+} catch {}
+```
+- Nothing; it prevents crashes
++ Every error, including real bugs, disappears silently
+- `catch` must have a variable
+- `try` can't contain a function call
+> An empty catch hides failures. Catch only what you can handle, and handle it.
+? A function is called with a quantity of -3, which makes no sense. Which error type fits best?
+- `SyntaxError`
+- `ReferenceError`
++ `RangeError`
+- `TypeError`
+> The type (number) is right, but the value is outside the allowed range.
+? What does `error.cause` hold in `new Error("Save failed", { cause: original })`?
++ The original error that led to this one
+- The line number
+- The stack trace
+- The error's type name
+> Wrapping keeps the low-level details while giving a higher-level message.
+--- exercise code javascript
+::prompt
+Write `parseQuantity(text)` that turns user input into a whole number of items:
+
+- trim the text; if it's empty, throw an `Error` with the message `Quantity is required`;
+- if it isn't a whole number (use `Number(...)` and `Number.isInteger(...)`), throw a `TypeError` with the message `Not a whole number: "<text>"` (the trimmed text, in double quotes);
+- if it's below 1 or above 99, throw a `RangeError` with the message `Quantity must be between 1 and 99`;
+- otherwise return the number.
+::starter
+function parseQuantity(text) {
+}
+::solution
+function parseQuantity(text) {
+  const trimmed = text.trim();
+  if (trimmed === "") throw new Error("Quantity is required");
+  const n = Number(trimmed);
+  if (!Number.isInteger(n)) throw new TypeError(`Not a whole number: "${trimmed}"`);
+  if (n < 1 || n > 99) throw new RangeError("Quantity must be between 1 and 99");
+  return n;
+}
+::tests
+assert.strictEqual(parseQuantity("3"), 3);
+assert.strictEqual(parseQuantity("  42 "), 42);
+assert.throws(() => parseQuantity("   "), { name: "Error", message: "Quantity is required" });
+assert.throws(() => parseQuantity("2.5"), { name: "TypeError", message: 'Not a whole number: "2.5"' });
+assert.throws(() => parseQuantity(" abc "), { name: "TypeError", message: 'Not a whole number: "abc"' });
+assert.throws(() => parseQuantity("0"), RangeError);
+assert.throws(() => parseQuantity("100"), /between 1 and 99/);
+assert.strictEqual(parseQuantity("99"), 99);
+::hints
+- Check the cases in order, each with a guard clause that throws.
+- `Number.isInteger(Number("2.5"))` is false, and so is `Number.isInteger(NaN)`.
+--- exercise code javascript
+::prompt
+Write `safeTotal(lines)` for a shop's import tool. `lines` is an array of strings like `"3 x 4.50"` (quantity x price). For each line, use the given `parseLine` (which throws on bad lines) inside `try`/`catch`. Return an object `{ total, errors }`: the total of all good lines (rounded to 2 decimals) and an array of messages `"Line N: <error message>"` for the bad ones (N counts from 1). Only catch the `Error`s thrown by `parseLine`; don't change `parseLine`.
+::starter
+function parseLine(line) {
+  const parts = line.split(" x ");
+  if (parts.length !== 2) throw new Error(`expected "quantity x price", got "${line}"`);
+  const qty = Number(parts[0]);
+  const price = Number(parts[1]);
+  if (!Number.isInteger(qty) || qty < 1) throw new RangeError(`bad quantity "${parts[0]}"`);
+  if (Number.isNaN(price) || price < 0) throw new RangeError(`bad price "${parts[1]}"`);
+  return qty * price;
+}
+
+function safeTotal(lines) {
+}
+::solution
+function parseLine(line) {
+  const parts = line.split(" x ");
+  if (parts.length !== 2) throw new Error(`expected "quantity x price", got "${line}"`);
+  const qty = Number(parts[0]);
+  const price = Number(parts[1]);
+  if (!Number.isInteger(qty) || qty < 1) throw new RangeError(`bad quantity "${parts[0]}"`);
+  if (Number.isNaN(price) || price < 0) throw new RangeError(`bad price "${parts[1]}"`);
+  return qty * price;
+}
+
+function safeTotal(lines) {
+  let total = 0;
+  const errors = [];
+  for (const [i, line] of lines.entries()) {
+    try {
+      total += parseLine(line);
+    } catch (error) {
+      errors.push(`Line ${i + 1}: ${error.message}`);
+    }
+  }
+  return { total: Math.round(total * 100) / 100, errors };
+}
+::tests
+assert.deepStrictEqual(safeTotal(["3 x 4.50", "1 x 0.99"]), { total: 14.49, errors: [] });
+assert.deepStrictEqual(safeTotal(["2 x 5", "two x 5", "1 x -3", "oops", "1 x 1.1"]), {
+  total: 11.1,
+  errors: ['Line 2: bad quantity "two"', 'Line 3: bad price "-3"', 'Line 4: expected "quantity x price", got "oops"'],
+});
+assert.deepStrictEqual(safeTotal([]), { total: 0, errors: [] });
+::hints
+- Loop with `lines.entries()` to get both the index and the line.
+- Put only the risky call in `try`; in `catch`, push the message and carry on with the next line.
+--- exercise code javascript
+::prompt
+Create a custom error class `InsufficientFundsError` (extending `Error`, with `name` set to `"InsufficientFundsError"` and a `shortfall` property), and write `transfer(accounts, from, to, amount)`. `accounts` is an object of balances, e.g. `{ ada: 100, bob: 20 }`.
+
+- Throw a `RangeError` if `amount` isn't a positive number.
+- Throw an `Error` with message `Unknown account: <name>` if either account doesn't exist.
+- Throw an `InsufficientFundsError` with message `<from> is short by <shortfall>` if the balance is too low.
+- Otherwise move the money and return the updated accounts object. If anything throws, no balance may have changed.
+::starter
+class InsufficientFundsError extends Error {
+  constructor(message, shortfall) {
+    // call super, then set name and shortfall
+  }
+}
+
+function transfer(accounts, from, to, amount) {
+}
+::solution
+class InsufficientFundsError extends Error {
+  constructor(message, shortfall) {
+    super(message);
+    this.name = "InsufficientFundsError";
+    this.shortfall = shortfall;
+  }
+}
+
+function transfer(accounts, from, to, amount) {
+  if (typeof amount !== "number" || !(amount > 0)) throw new RangeError("Amount must be a positive number");
+  for (const name of [from, to]) {
+    if (!(name in accounts)) throw new Error(`Unknown account: ${name}`);
+  }
+  if (accounts[from] < amount) {
+    const shortfall = amount - accounts[from];
+    throw new InsufficientFundsError(`${from} is short by ${shortfall}`, shortfall);
+  }
+  accounts[from] -= amount;
+  accounts[to] += amount;
+  return accounts;
+}
+::tests
+const __acc = { ada: 100, bob: 20 };
+assert.deepStrictEqual(transfer(__acc, "ada", "bob", 30), { ada: 70, bob: 50 });
+assert.throws(() => transfer(__acc, "bob", "ada", 80), (e) => e instanceof InsufficientFundsError && e instanceof Error && e.name === "InsufficientFundsError" && e.shortfall === 30 && e.message === "bob is short by 30");
+assert.deepStrictEqual(__acc, { ada: 70, bob: 50 }, "a failed transfer must not change any balance");
+assert.throws(() => transfer(__acc, "ada", "zed", 5), { message: "Unknown account: zed" });
+assert.throws(() => transfer(__acc, "ada", "bob", -5), RangeError);
+assert.throws(() => transfer(__acc, "ada", "bob", NaN), RangeError);
+assert.deepStrictEqual(__acc, { ada: 70, bob: 50 });
+::hints
+- In the constructor: `super(message);` first, then `this.name = "InsufficientFundsError";` and `this.shortfall = shortfall;`.
+- Do all the checks before changing anything, so a failure leaves the balances untouched.
+- `!(amount > 0)` is also true for NaN, which `amount <= 0` would miss.
+--- cards
+Exception :: An error object thrown with throw; it travels up the call stack until a catch handles it, or stops the program.
+try / catch / finally :: try runs code; catch (e) runs if it throws; finally always runs (clean-up).
+Error properties :: name (kind), message (what went wrong), stack (where it happened), cause (the error behind it).
+Which error to throw :: TypeError: wrong type. RangeError: value out of range. Error (or a custom class): everything else.
+Selective catch :: Handle only errors you expect (check instanceof); rethrow the rest with throw error.
+Custom error :: class MyError extends Error { constructor(msg) { super(msg); this.name = "MyError"; } }
+Throw vs return :: Return a special value (null, undefined) for expected outcomes; throw for invalid use and impossible situations.
+
+=== lesson js-debugging | Debugging | 80
+## Debugging is a skill
+
+Every programmer spends a large share of their time finding out why code doesn't do what they expect. Good debuggers aren't lucky; they're **systematic**. They treat a bug like a scientist treats a puzzle:
+
+1. **Reproduce it.** Find exact steps or inputs that make the bug happen every time. A bug you can't trigger, you can't confirm you've fixed.
+2. **Read the evidence.** The error message, the line, the stack trace, the wrong output. What exactly happens, versus what should?
+3. **Form a hypothesis.** "I think `total` is a string, so `+` joins instead of adding."
+4. **Test it.** Print the value, or pause the program and look. Was the guess right?
+5. **Fix, then verify.** Run the reproduction again, and the tests, to confirm it's fixed and nothing else broke.
+
+The trap is skipping to step 5: changing things at random until the symptom disappears. That often hides the bug instead of fixing it.
+
+## Logging like a professional
+
+`console.log` is the simplest debugging tool, and pros use it all the time. A few tricks make it far more useful:
+
+```js
+const price = "19.99";
+const qty = 3;
+console.log({ price, qty });
+console.log(typeof price, typeof qty);
+console.log("total:", price * qty, "joined:", price + qty);
+```
+
+- `console.log({ price, qty })` uses shorthand properties to print each value **with its name**. No more guessing which number is which.
+- Print `typeof` when you suspect a type problem.
+- Label every log, so you can find it in a long output.
+
+More of the console toolkit:
+
+```js
+const orders = [
+  { id: 1, item: "Book", qty: 2 },
+  { id: 2, item: "Pen", qty: 10 },
+];
+console.table(orders);
+console.group("Processing order 1");
+console.log("checking stock");
+console.log("charging card");
+console.groupEnd();
+for (let i = 0; i < 3; i++) console.count("loop ran");
+console.assert(orders.length === 3, "expected 3 orders, got", orders.length);
+```
+
+- `console.table` shows arrays of objects as a table.
+- `console.group` / `groupEnd` indent related messages.
+- `console.count(label)` counts how often a line is reached. Great for "is this loop running too often?"
+- `console.assert(condition, message)` prints only when the condition is **false**.
+- `console.time("label")` / `console.timeEnd("label")` measure how long code takes.
+- `console.error` and `console.warn` stand out in red and yellow in browsers, and in Node they go to the separate error stream.
+- `console.trace()` prints the current call stack: "how did I get here?"
+
+Remove debugging logs before you commit your code (or use a proper logging library in larger apps, where log levels let you switch detail on and off).
+
+## The debugger: pausing a running program
+
+Logging shows you what you thought to print. A **debugger** lets you **pause** the program at any line and look at *everything*: every variable, the whole call stack, and then continue step by step. Every browser has one built in:
+
+1. Open the developer tools (`F12`) and go to the **Sources** tab (Firefox: **Debugger**).
+2. Open your script file and click a line number to set a **breakpoint** (a blue marker).
+3. Do whatever triggers the code (reload, click the button...). Execution pauses on that line, *before* it runs.
+4. Look at the **Scope** panel (all variables and their values) and the **Call Stack** panel (who called this function), and hover over variables in the code.
+5. Step through:
+   - **Step over** (F10): run this line, pause on the next.
+   - **Step into** (F11): go inside the function called on this line.
+   - **Step out** (Shift+F11): finish this function, pause back in its caller.
+   - **Resume** (F8): run until the next breakpoint.
+
+Useful extras: right-click a line number for a **conditional breakpoint** (pause only when, say, `i === 99`) or a **logpoint** (prints a message without editing your code); tick **Pause on exceptions** to stop right where an error is thrown; add **watch** expressions to track values as you step.
+
+You can also write `debugger;` in your code: when developer tools are open, execution pauses there.
+
+For Node.js, VS Code has the same debugger built in: open your file, click in the margin to set a breakpoint, and press `F5` (Run and Debug → Node.js). Or run `node --inspect-brk app.js` and open `chrome://inspect` in Chrome.
+
+## Narrowing it down
+
+When you don't know where a bug is, shrink the search space:
+
+- **Divide and conquer**: check the value halfway through the process. Correct there? The bug is in the second half. Repeat. Ten checks can find one bad line among a thousand.
+- **Make a minimal reproduction**: copy the failing case into a new file and delete everything that isn't needed for the bug to happen. Often the bug becomes obvious along the way, and if not, you have the perfect example to show a colleague or post online.
+- **Check your assumptions**: the bug is usually in the part you were *sure* was fine. Print it anyway.
+- **Explain it out loud** ("rubber duck debugging"): describing the code line by line to someone, or to a rubber duck, forces you to notice the step that doesn't do what you assumed.
+- **Take a break**: fresh eyes solve in five minutes what tired ones couldn't in an hour. That's not a joke; it's common professional advice.
+
+## A field guide to JavaScript bugs
+
+Most bugs you'll meet belong to a few families. When stuck, run down this list:
+
+| Symptom | Usual suspect |
+|---|---|
+| `"5" + 3` gives `"53"`, totals look like long numbers | a string where you expected a number (from input, JSON or the DOM) |
+| a value is unexpectedly `undefined` | a typo in a property name (`user.nmae` gives undefined silently), a missing `return`, or a function's result not stored |
+| `NaN` appears and spreads | maths on `undefined` or text that isn't a number |
+| a loop does one iteration too many or too few | `<=` versus `<` (off by one) |
+| data changes "by itself" | two names for one object (aliasing), or a function mutating its argument |
+| the condition is always true | `=` instead of `===`, or `x === "a" \|\| "b"` |
+| sorted numbers in the wrong order | `sort()` without a comparator |
+| a value is missing right after you fetched it | asynchronous code not awaited (Module 10) |
+| `this` is undefined in a callback | a method passed as a callback (Module 8) |
+
+## A worked example
+
+This function should return the average score, but prints a strange result:
+
+```js
+function average(scores) {
+  let total = 0;
+  for (let i = 0; i <= scores.length; i++) {
+    total += scores[i];
+  }
+  return total / scores.length;
+}
+console.log(average([80, 90, 100]));
+```
+
+The result is `NaN`. Hypothesis: something in the sum isn't a number. Add a log inside the loop, `console.log({ i, score: scores[i], total })`, and run again: the last iteration shows `i: 3, score: undefined`. The loop runs one step too far, because `<=` should be `<`. Adding `undefined` to a number gives `NaN`, and `NaN` poisons the total. The fix is one character; finding it took one well-placed log. (Better still: `for (const score of scores)` can't go out of bounds at all.)
+
+📚 **Go deeper:** Chrome DevTools documentation, "Debug JavaScript" (developer.chrome.com/docs/devtools/javascript); javascript.info, "Debugging in the browser"; VS Code documentation, "Node.js debugging"; *The Pragmatic Programmer* (20th anniversary ed.), topic 20 "Debugging".
+--- goals
+- debug systematically: reproduce, read the evidence, hypothesise, test, fix and verify
+- log values with names, types and labels, and use `console.table`, `group`, `count`, `assert` and `time`
+- pause code with breakpoints and step through it in browser or VS Code debuggers
+- narrow down bugs by dividing the problem and making minimal reproductions
+- recognise the common families of JavaScript bugs from their symptoms
+--- quiz
+? What's the first step in fixing a bug?
+- Rewrite the function from scratch
++ Reproduce it reliably
+- Add try/catch around the code
+- Change code until the symptom disappears
+> You can't check a fix for a bug you can't trigger.
+? What does `console.log({ total, count })` print when `total` is 12 and `count` is 3?
+- `12 3`
++ `{ total: 12, count: 3 }`
+- `total count`
+- `[ 12, 3 ]`
+> Shorthand properties turn it into an object, so each value is printed with its name.
+? In the debugger, which action runs the current line and goes *inside* the function it calls?
+- Step over
++ Step into
+- Step out
+- Resume
+> Step into follows the call; step over runs it as one step.
+? A total prints as `"1020"` instead of `30`. What's the likely cause?
++ The values are strings, so `+` joined them
+- An off-by-one error
+- A missing return
+- The array isn't sorted
+> "10" + "20" joins to "1020". Convert with Number() where the data comes in.
+? Why does `user.nmae` cause hard-to-find bugs?
+- It throws a SyntaxError
++ It silently gives `undefined` instead of raising an error
+- It deletes the property
+- It's a ReferenceError
+> Reading a missing property isn't an error, so the typo surfaces later as an undefined or NaN somewhere else.
+? What's a minimal reproduction?
+- The shortest possible fix
++ The smallest piece of code that still shows the bug
+- A test that always passes
+- A copy of the whole project
+> Stripping away everything unrelated often reveals the cause, and makes it easy to share.
+--- exercise code javascript
+::prompt
+This program should print a receipt with the total of the quantities times the prices, and the most expensive line. It runs without errors, but the output is wrong in **three** ways. Use `console.log` (try `console.log({ ... })`) to find the bugs, fix them, and remove your debugging logs. Don't change the data.
+::starter
+const cart = [
+  { item: "Notebook", qty: "2", price: 3.5 },
+  { item: "Pen", qty: "10", price: 0.8 },
+  { item: "Backpack", qty: "1", price: 24 },
+];
+let total = 0;
+let biggest = cart[0];
+for (let i = 1; i < cart.length; i++) {
+  const line = cart[i];
+  const lineTotal = line.qty * line.price;
+  total += lineTotal;
+  if (lineTotal > biggest.qty * biggest.price) biggest = line;
+  console.log(`${line.qty} x ${line.item}: ${lineTotal.toFixed(2)}`);
+}
+console.log("Total:", total.toFixed(2));
+console.log("Biggest line:", biggest.item);
+console.log("Items:", cart.reduce((sum, line) => sum + line.qty, 0));
+::solution
+const cart = [
+  { item: "Notebook", qty: "2", price: 3.5 },
+  { item: "Pen", qty: "10", price: 0.8 },
+  { item: "Backpack", qty: "1", price: 24 },
+];
+let total = 0;
+let biggest = cart[0];
+for (let i = 0; i < cart.length; i++) {
+  const line = cart[i];
+  const lineTotal = line.qty * line.price;
+  total += lineTotal;
+  if (lineTotal > biggest.qty * biggest.price) biggest = line;
+  console.log(`${line.qty} x ${line.item}: ${lineTotal.toFixed(2)}`);
+}
+console.log("Total:", total.toFixed(2));
+console.log("Biggest line:", biggest.item);
+console.log("Items:", cart.reduce((sum, line) => sum + Number(line.qty), 0));
+::expected
+2 x Notebook: 7.00
+10 x Pen: 8.00
+1 x Backpack: 24.00
+Total: 39.00
+Biggest line: Backpack
+Items: 13
+::variants
+price: 24 => price: 2.5
+::hints
+- Compare the output line by line with what you expect. Which line is missing?
+- The loop starts at the wrong index: the first item is skipped.
+- `qty` values are strings: `0 + "2"` joins. Convert with `Number(...)` before adding.
+--- exercise code javascript
+::prompt
+`longestWord(sentence)` should return the longest word in a sentence (the first one if there's a tie), ignoring punctuation `,.!?`. It has bugs. The checks below call it; fix the function so they pass. Add `console.log` lines while you investigate, then remove them.
+::starter
+function longestWord(sentence) {
+  const words = sentence.split(" ");
+  let longest = "";
+  for (const word of words) {
+    const clean = word.replaceAll(",", "").replaceAll(".", "");
+    if (clean.length >= longest.length) {
+      longest = word;
+    }
+  }
+}
+::solution
+function longestWord(sentence) {
+  const words = sentence.split(" ");
+  let longest = "";
+  for (const word of words) {
+    let clean = word;
+    for (const mark of [",", ".", "!", "?"]) clean = clean.replaceAll(mark, "");
+    if (clean.length > longest.length) {
+      longest = clean;
+    }
+  }
+  return longest;
+}
+::tests
+assert.strictEqual(longestWord("I love JavaScript"), "JavaScript");
+assert.strictEqual(longestWord("Hello, world!"), "Hello");
+assert.strictEqual(longestWord("Wow! Amazing."), "Amazing");
+assert.strictEqual(longestWord("cat dog"), "cat");
+assert.strictEqual(longestWord("Is it fun?"), "fun");
+assert.strictEqual(longestWord(""), "");
+::hints
+- First bug: the function never returns anything.
+- It stores the original `word` (with punctuation) instead of `clean`.
+- `>=` makes later words win ties; and `!` and `?` aren't removed.
+--- cards
+Debugging process :: Reproduce → read the evidence → hypothesise → test → fix and verify. Never change code at random.
+console.log({ a, b }) :: Prints each value with its name, thanks to shorthand properties.
+console.table / group / count / assert / time :: Table of objects / indented groups / count how often a line runs / print only if false / measure duration.
+Breakpoint :: A marker where the debugger pauses before running a line, so you can inspect variables and the call stack.
+Step over / into / out :: Run this line / go inside the called function / finish this function and pause in its caller.
+debugger; :: A statement that pauses execution there when developer tools are open.
+Minimal reproduction :: The smallest code that still shows the bug: often reveals the cause, always easy to share.
+
+=== lesson js-testing | Automated testing | 90
+## Why test automatically?
+
+You've been testing all along: running your code and checking the output by eye. That works for ten lines. For a real application it fails, because every change can break something you checked last week, and nobody re-checks everything by hand every time.
+
+**Automated tests** are small programs that run your code with known inputs and check the results, in seconds, every time you change anything. Professional teams run thousands of them before every release (DevQuest itself has a test suite you can see in its `tests/` folder). They give you:
+
+- **Confidence to change code**: if the tests still pass after a refactoring, you didn't break anything they cover.
+- **Regression protection**: a test written for a fixed bug makes sure it never comes back.
+- **Documentation**: tests show exactly how a function is meant to be used and what it returns at the edges.
+- **Better design**: code that's easy to test (pure functions, few hidden dependencies) is usually easier to understand too.
+
+## assert: the building block
+
+You've used `assert` since Module 5. In Node.js it's a built-in module you import: `import assert from "node:assert/strict";`. The essential checks:
+
+| Check | Passes when |
+|---|---|
+| `assert.strictEqual(actual, expected)` | `actual === expected` |
+| `assert.deepStrictEqual(actual, expected)` | arrays/objects have equal contents |
+| `assert.ok(value)` | `value` is truthy |
+| `assert.throws(fn, expected)` | calling `fn` throws a matching error |
+| `assert.match(text, /regex/)` | the text matches the pattern |
+| `assert.notStrictEqual(a, b)` | `a !== b` |
+
+The `expected` argument of `assert.throws` can be an error class (`RangeError`), a regular expression matched against the message (`/positive/`), or an object of properties to compare (`{ name: "TypeError", message: "..." }`). Note that you pass a **function** that makes the call: `assert.throws(() => withdraw(-5))`. Writing `assert.throws(withdraw(-5))` would call `withdraw` immediately, outside the check, and crash.
+
+## Test runners: test() and describe()
+
+A **test runner** organises checks into named tests, runs them all, and reports which passed. Node.js has one built in, `node:test`; DevQuest provides the same `test` and `describe` functions:
+
+```js
+function slugify(title) {
+  return title.trim().toLowerCase().replaceAll(" ", "-");
+}
+
+test("lowercases and joins words with dashes", () => {
+  assert.strictEqual(slugify("Hello World"), "hello-world");
+});
+
+test("removes surrounding spaces", () => {
+  assert.strictEqual(slugify("  Hi  "), "hi");
+});
+
+describe("edge cases", () => {
+  test("empty title gives an empty slug", () => {
+    assert.strictEqual(slugify(""), "");
+  });
+  test("double spaces", () => {
+    assert.strictEqual(slugify("a  b"), "a-b");
+  });
+});
+```
+
+Each test runs separately, so one failure doesn't stop the others, and the report says exactly which behaviour broke. Run it: the last test fails, because `slugify` turns two spaces into two dashes. Is that a bug in the code, or a wrong expectation in the test? Deciding that is part of testing.
+
+On your own computer, put tests in files named like `slugify.test.js`, start them with:
+
+```
+import { test, describe } from "node:test";
+import assert from "node:assert/strict";
+import { slugify } from "./slugify.js";
+```
+
+and run `node --test`. Node finds the test files and runs them all. Many projects use **Vitest** or **Jest** instead, which work the same way with a different style of checks: `expect(slugify("Hi")).toBe("hi")`. Learn one and the others take an afternoon.
+
+## Writing good tests
+
+**Arrange, Act, Assert.** Most tests have three steps: set up the inputs, call the code, check the result. Keep them visibly separate:
+
+```js
+function addItem(cart, item, qty) {
+  return { ...cart, [item]: (cart[item] ?? 0) + qty };
+}
+
+test("adding an item that's already in the cart increases its quantity", () => {
+  const cart = { apple: 2 };
+  const updated = addItem(cart, "apple", 3);
+  assert.deepStrictEqual(updated, { apple: 5 });
+  assert.deepStrictEqual(cart, { apple: 2 }, "the original cart is unchanged");
+});
+```
+
+More habits of good testers:
+
+- **One behaviour per test**, named as a sentence about that behaviour. When `"rejects negative amounts"` fails, you know what broke without reading the code.
+- **Test the edges, not just the middle.** Bugs live at boundaries. For any function, ask about:
+  - empty input (`""`, `[]`, `{}`), zero, one item;
+  - the boundaries of every rule (exactly 18, 17, 19);
+  - negative numbers, very large numbers, decimals;
+  - invalid input (wrong type, missing values) and the errors it should throw;
+  - text with spaces, capitals, accents and emoji.
+- **Keep tests independent**: no test should depend on another having run first. `beforeEach(() => { ... })` inside a `describe` can set up fresh data before every test.
+- **Make them fast and deterministic**: same result every run, no real network, no waiting, no randomness (see test doubles below).
+
+~~~check
+? What's wrong with this test?
+```js
+test("withdraw rejects negative amounts", () => {
+  assert.throws(withdraw(100, -5), RangeError);
+});
+```
+- `assert.throws` can't check RangeError
++ `withdraw` is called immediately, so the error is thrown before `assert.throws` can catch it; it needs `() => withdraw(100, -5)`
+- The test name is too long
+- Nothing
+> assert.throws needs a function it can call itself, inside its own try/catch.
+~~~
+
+## Test-driven development
+
+In **TDD**, you write the test *before* the code:
+
+1. **Red**: write a test for the next small behaviour. Run it; watch it fail (proving the test can fail).
+2. **Green**: write the simplest code that makes it pass.
+3. **Refactor**: tidy the code, with the tests guarding you.
+
+Then repeat with the next behaviour. TDD forces you to decide what the code should do before getting lost in how, and leaves you with a full test suite as a side effect. Even if you don't practise it strictly, the rhythm of small steps with tests is how many professionals work.
+
+## Test doubles: replacing what you can't control
+
+Some code depends on things that make tests slow or unpredictable: the current time, random numbers, the network, a database, sending emails. The trick is **dependency injection**: instead of the function reaching out for the dependency itself, it **receives** it as a parameter. In tests, you pass in a stand-in, called a **test double**.
+
+```js
+function greeting(now = new Date()) {
+  const hour = now.getHours();
+  if (hour < 12) return "Good morning";
+  if (hour < 18) return "Good afternoon";
+  return "Good evening";
+}
+
+test("before noon it's morning", () => {
+  assert.strictEqual(greeting(new Date(2026, 0, 1, 9, 0)), "Good morning");
+});
+test("at 18:00 it's evening", () => {
+  assert.strictEqual(greeting(new Date(2026, 0, 1, 18, 0)), "Good evening");
+});
+```
+
+Real callers just call `greeting()`, and the default uses the real clock. Tests pass a fixed date, so they give the same answer at any time of day.
+
+Kinds of doubles you'll hear about:
+
+- a **stub** returns canned answers (`() => 0.5` instead of `Math.random`);
+- a **fake** is a simple working replacement (an in-memory list instead of a database);
+- a **spy** records how it was called, so the test can check that something *happened*:
+
+```js
+function makeSpy() {
+  const calls = [];
+  const spy = (...args) => {
+    calls.push(args);
+  };
+  spy.calls = calls;
+  return spy;
+}
+
+function placeOrder(order, sendEmail) {
+  if (order.items.length === 0) throw new Error("Empty order");
+  sendEmail(order.customer, `Thanks for your order of ${order.items.length} item(s)!`);
+  return "placed";
+}
+
+test("placing an order emails the customer once", () => {
+  const send = makeSpy();
+  placeOrder({ customer: "ada@example.com", items: ["book"] }, send);
+  assert.deepStrictEqual(send.calls, [["ada@example.com", "Thanks for your order of 1 item(s)!"]]);
+});
+```
+
+Libraries such as Vitest and Jest have spies and module mocking built in (`vi.fn()`, `jest.fn()`), and `node:test` has `mock.fn()`; they're all this same idea.
+
+## How do you know your tests are good?
+
+**Code coverage** tools (`node --test --experimental-test-coverage`, `vitest --coverage`) show which lines your tests ran. Lines never run are certainly untested, but running a line isn't the same as checking its result.
+
+A sharper idea is **mutation testing**: deliberately put a small bug (a *mutant*) in the code, such as `<` instead of `<=`, and see whether any test fails. If none does, your tests have a gap. Tools like Stryker do this automatically. The exercises below work exactly like that: your tests must pass on the correct code and catch every one of several buggy versions.
+
+📚 **Go deeper:** Node.js documentation, "Test runner" (nodejs.org/api/test.html) and "Assert"; javascript.info, "Automated testing with Mocha"; Vitest documentation, "Getting Started"; Kent Beck, *Test-Driven Development: By Example*.
+--- goals
+- explain what automated tests give a team, and write checks with `assert`
+- organise tests with `test()` and `describe()`, and run them with `node --test`
+- structure tests as Arrange, Act, Assert, one behaviour per test
+- choose edge cases at boundaries, empty and invalid input
+- test errors with `assert.throws`, passing a function
+- isolate code from time, randomness and side effects with dependency injection and test doubles
+- judge test quality with coverage and mutation testing
+--- quiz
+? Which call checks that `parse("x")` throws a TypeError?
+- `assert.throws(parse("x"), TypeError)`
++ `assert.throws(() => parse("x"), TypeError)`
+- `assert.strictEqual(parse("x"), TypeError)`
+- `assert.ok(parse("x") instanceof TypeError)`
+> assert.throws must call the function itself; the others call parse first and crash.
+? Which check compares two arrays by content?
+- `assert.strictEqual`
++ `assert.deepStrictEqual`
+- `assert.ok`
+- `assert.equal`
+> strictEqual uses ===, which compares array identity, not contents.
+? For a function that accepts ages from 18 to 65, which inputs are the most valuable to test?
+- 30 and 40
++ 17, 18, 65 and 66
+- 1 and 1000
+- Only 18
+> Bugs live at boundaries: test just inside and just outside each limit.
+? What is the "red" step in TDD?
++ Write a failing test for the next behaviour
+- Fix all the bugs
+- Delete failing tests
+- Refactor the code
+> Red: a failing test. Green: make it pass simply. Refactor: tidy up.
+? A function uses `Math.random()`, which makes its tests unpredictable. What's the best fix?
+- Run the tests many times
+- Don't test it
++ Let the function receive the random-number function as a parameter, and pass a stub in tests
+- Use `Math.floor` around it
+> Dependency injection lets tests control the randomness.
+? Your tests run every line of a function (100% coverage). Does that prove it's correct?
+- Yes
++ No: running a line isn't the same as checking its result
+- Yes, if there are more than ten tests
+- Only for pure functions
+> Coverage shows what ran, not what was checked. Mutation testing gets closer to "would a bug be caught?".
+--- exercise code javascript
+::prompt
+**You are the tester.** `discount(price, percent)` (given, correct) returns the price after a percentage discount, rounded to cents, and throws a `RangeError` if `percent` isn't between 0 and 100. Write **at least three** tests with `test()` and `assert`.
+
+When you submit, your tests run against this correct `discount` (they must all pass) and then against **four buggy versions** (each must make at least one of your tests fail). Think about likely bugs: wrong formula, returning the discount instead of the price, losing the cents, forgetting to reject bad percentages. Don't change `discount`.
+::starter
+function discount(price, percent) {
+  if (percent < 0 || percent > 100) throw new RangeError("percent must be 0-100");
+  return Math.round(price * (100 - percent)) / 100;
+}
+
+test("10% off 50 is 45", () => {
+  // assert something here
+});
+::solution
+function discount(price, percent) {
+  if (percent < 0 || percent > 100) throw new RangeError("percent must be 0-100");
+  return Math.round(price * (100 - percent)) / 100;
+}
+
+test("10% off 50 is 45", () => {
+  assert.strictEqual(discount(50, 10), 45);
+});
+
+test("keeps the cents", () => {
+  assert.strictEqual(discount(19.99, 15), 16.99);
+});
+
+test("0% changes nothing and 100% makes it free", () => {
+  assert.strictEqual(discount(80, 0), 80);
+  assert.strictEqual(discount(80, 100), 0);
+});
+
+test("rejects percentages outside 0-100", () => {
+  assert.throws(() => discount(10, -1), RangeError);
+  assert.throws(() => discount(10, 101), RangeError);
+});
+::tests
+const __tests = __dqTests();
+assert.ok(__tests.length >= 3, `write at least 3 tests with test() (found ${__tests.length})`);
+const __real = discount;
+const __failing = async (impl) => {
+  discount = impl;
+  const failed = [];
+  for (const t of __tests) {
+    try {
+      await t.fn();
+    } catch {
+      failed.push(t.name);
+    }
+  }
+  discount = __real;
+  return failed;
+};
+const __onReal = await __failing(__real);
+if (__onReal.length) assert.fail(`your test "${__onReal[0]}" fails on the CORRECT discount(), so one of its expected values is wrong`);
+const __check = (p) => { if (p < 0 || p > 100) throw new RangeError("bad"); };
+const __bugs = [
+  [(price, percent) => { __check(percent); return Math.round((price - percent) * 100) / 100; }, "subtracts the percent as an amount (price - percent)"],
+  [(price, percent) => { __check(percent); return Math.round(price * percent) / 100; }, "returns the discount instead of the reduced price"],
+  [(price, percent) => { __check(percent); return Math.floor(price * (100 - percent) / 100); }, "drops the cents"],
+  [(price, percent) => Math.round(price * (100 - percent)) / 100, "never throws for a percent outside 0-100"],
+];
+for (const [__bug, __what] of __bugs) {
+  if ((await __failing(__bug)).length === 0) assert.fail(`none of your tests caught this bug: discount ${__what}`);
+}
+::hints
+- Each buggy version gets one behaviour wrong. Write a test that pins down each behaviour.
+- To catch "drops the cents", use a price whose result has cents, such as `discount(19.99, 15)` (16.99).
+- To test the errors: `assert.throws(() => discount(10, 101), RangeError)`.
+--- exercise code javascript
+::prompt
+**You are the tester again.** `isValidUsername(name)` (given, correct) accepts usernames that are 3 to 16 characters long, contain only lowercase letters, digits and underscores, and **start with a letter**. Write at least three tests (use `describe` to group them if you like). They'll be run against the correct version and against **four** buggy ones.
+::starter
+function isValidUsername(name) {
+  if (name.length < 3 || name.length > 16) return false;
+  if (!(name[0] >= "a" && name[0] <= "z")) return false;
+  for (const ch of name) {
+    const ok = (ch >= "a" && ch <= "z") || (ch >= "0" && ch <= "9") || ch === "_";
+    if (!ok) return false;
+  }
+  return true;
+}
+::solution
+function isValidUsername(name) {
+  if (name.length < 3 || name.length > 16) return false;
+  if (!(name[0] >= "a" && name[0] <= "z")) return false;
+  for (const ch of name) {
+    const ok = (ch >= "a" && ch <= "z") || (ch >= "0" && ch <= "9") || ch === "_";
+    if (!ok) return false;
+  }
+  return true;
+}
+
+describe("isValidUsername", () => {
+  test("accepts a simple name", () => {
+    assert.strictEqual(isValidUsername("ada_99"), true);
+  });
+  test("length limits are 3 to 16", () => {
+    assert.strictEqual(isValidUsername("abc"), true);
+    assert.strictEqual(isValidUsername("ab"), false);
+    assert.strictEqual(isValidUsername("a".repeat(16)), true);
+    assert.strictEqual(isValidUsername("a".repeat(17)), false);
+  });
+  test("must start with a letter", () => {
+    assert.strictEqual(isValidUsername("9lives"), false);
+    assert.strictEqual(isValidUsername("_ada"), false);
+  });
+  test("only lowercase letters, digits and underscores", () => {
+    assert.strictEqual(isValidUsername("Ada"), false);
+    assert.strictEqual(isValidUsername("ada-lovelace"), false);
+    assert.strictEqual(isValidUsername("ada lovelace"), false);
+  });
+});
+::tests
+const __tests = __dqTests();
+assert.ok(__tests.length >= 3, `write at least 3 tests with test() (found ${__tests.length})`);
+const __real = isValidUsername;
+const __failing = async (impl) => {
+  isValidUsername = impl;
+  const failed = [];
+  for (const t of __tests) {
+    try {
+      await t.fn();
+    } catch {
+      failed.push(t.name);
+    }
+  }
+  isValidUsername = __real;
+  return failed;
+};
+const __onReal = await __failing(__real);
+if (__onReal.length) assert.fail(`your test "${__onReal[0]}" fails on the CORRECT isValidUsername(), so one of its expectations is wrong`);
+const __chars = (n) => [...n].every((ch) => (ch >= "a" && ch <= "z") || (ch >= "0" && ch <= "9") || ch === "_");
+const __bugs = [
+  [(n) => n.length >= 3 && n.length <= 15 && n[0] >= "a" && n[0] <= "z" && __chars(n), "rejects 16-character names (off by one)"],
+  [(n) => n.length >= 3 && n.length <= 16 && __chars(n), "allows names that start with a digit or underscore"],
+  [(n) => n.length >= 3 && n.length <= 16 && n[0].toLowerCase() >= "a" && n[0].toLowerCase() <= "z" && __chars(n.toLowerCase()), "allows capital letters"],
+  [(n) => n.length >= 3 && n.length <= 16 && n[0] >= "a" && n[0] <= "z" && [...n].every((ch) => ch !== " "), "allows any character except spaces"],
+];
+for (const [__bug, __what] of __bugs) {
+  if ((await __failing(__bug)).length === 0) assert.fail(`none of your tests caught this bug: isValidUsername ${__what}`);
+}
+::hints
+- Each buggy version gets one rule wrong: the maximum length, the first character, capitals, and which characters are allowed.
+- Test exactly at the limits: 16 characters must pass, 17 must fail.
+- Try `"Ada"` (a capital) and `"ada-lovelace"` (a dash).
+--- exercise code javascript
+::prompt
+`rollDice` uses `Math.random`, so it can't be tested reliably. Refactor it to take the random-number function as a **second parameter with a default**: `rollDice(sides, random = Math.random)`. It returns a whole number from 1 to `sides`. Then write `makeSequence(values)`: a **stub** factory that returns a function giving the values from the array one after another on each call (and the last value again once it runs out), so tests can control the "random" numbers.
+::starter
+function rollDice(sides) {
+  return Math.floor(Math.random() * sides) + 1;
+}
+
+function makeSequence(values) {
+}
+::solution
+function rollDice(sides, random = Math.random) {
+  return Math.floor(random() * sides) + 1;
+}
+
+function makeSequence(values) {
+  let i = 0;
+  return () => {
+    const value = values[Math.min(i, values.length - 1)];
+    i++;
+    return value;
+  };
+}
+::tests
+const __seq = makeSequence([0, 0.5, 0.999]);
+assert.strictEqual(__seq(), 0);
+assert.strictEqual(__seq(), 0.5);
+assert.strictEqual(__seq(), 0.999);
+assert.strictEqual(__seq(), 0.999);
+assert.strictEqual(rollDice(6, makeSequence([0])), 1);
+assert.strictEqual(rollDice(6, makeSequence([0.999])), 6);
+assert.strictEqual(rollDice(20, makeSequence([0.5])), 11);
+for (let __i = 0; __i < 50; __i++) {
+  const __r = rollDice(6);
+  assert.ok(Number.isInteger(__r) && __r >= 1 && __r <= 6, `rollDice(6) with the real Math.random gave ${__r}`);
+}
+::hints
+- A default parameter keeps normal calls working: `function rollDice(sides, random = Math.random)`, then call `random()`.
+- `makeSequence` is a closure with a counter; don't let the index go past the last value.
+--- cards
+Automated test :: Code that runs your code with known inputs and checks the results, every time you change anything.
+test(name, fn) / describe(name, fn) :: Name a test / group tests (node:test, Vitest, Jest). Run Node's with node --test.
+assert.throws(() => f(x), Type) :: Pass a FUNCTION that makes the call; assert.throws calls it inside its own try/catch.
+Arrange, Act, Assert :: Set up inputs, call the code, check the result. One behaviour per test.
+Edge cases :: Empty, zero, one, boundaries (17/18/19), negatives, huge values, invalid input, accents and emoji.
+TDD :: Red (failing test) → Green (simplest code that passes) → Refactor. Repeat in small steps.
+Test double :: A stand-in for a dependency in tests: stub (canned answers), fake (simple working version), spy (records calls).
+Dependency injection :: Pass dependencies (clock, random, send email) in as parameters, so tests can replace them.
+Mutation testing :: Put deliberate bugs in the code; a good test suite fails for each one.
+
+=== lesson js-m7-test | Module 7 test | 180 | exam
+This test covers Module 7: handling and throwing errors, custom error classes, debugging techniques, and writing automated tests with test doubles.
+
+Before you start, check that you can:
+
+- write `try`/`catch`/`finally`, and catch only the errors you can handle;
+- throw the right error type with a helpful message, and define a custom error class;
+- describe a systematic debugging process and use the console toolkit and breakpoints;
+- write tests with `test()`, `describe()` and `assert`, including for thrown errors;
+- choose edge cases, and replace time or randomness with test doubles.
+
+## Practise more
+
+- Code Dojo: [Retry with Backoff](#/dojo/dojo-js-retry) combines error handling with async code (Module 10).
+--- goals
+- handle, throw and design errors
+- debug systematically
+- write tests that catch real bugs
+--- quiz
+? What does this print?
+```js
+function f() {
+  try {
+    return "from try";
+  } finally {
+    console.log("cleanup");
+  }
+}
+console.log(f());
+```
++ `cleanup` then `from try`
+- `from try` then `cleanup`
+- `from try` only
+- `cleanup` only
+> finally runs before the function actually returns, so "cleanup" is printed first.
+? What does this print?
+```js
+try {
+  JSON.parse("{");
+} catch (e) {
+  console.log(e instanceof SyntaxError, e instanceof Error);
+}
+```
++ `true true`
+- `true false`
+- `false true`
+- Nothing; JSON.parse doesn't throw
+> Every built-in error type is also an Error.
+? A function catches every error, logs "Something went wrong" and returns null. What's the main risk?
+- It's slower
++ Real bugs are hidden, and callers can't tell what went wrong
+- JavaScript forbids it
+- It always crashes
+> Catch-everything-and-continue turns crashes you'd notice into silent wrong results.
+? Inside `class AppError extends Error { constructor(m) { ... } }`, what must come first in the constructor?
+- `this.name = "AppError"`
++ `super(m)`
+- `return this`
+- `throw this`
+> A subclass must call super() before using `this`.
+? Which tool lets you pause on a line and inspect every variable?
+- `console.log`
++ A breakpoint in a debugger
+- `assert`
+- `try`/`catch`
+> The debugger pauses execution and shows the scope and call stack.
+? Which test catches a bug where `isAdult(age)` uses `age > 18` instead of `age >= 18`?
+- `assert.strictEqual(isAdult(30), true)`
++ `assert.strictEqual(isAdult(18), true)`
+- `assert.strictEqual(isAdult(5), false)`
+- `assert.ok(typeof isAdult(20) === "boolean")`
+> Only the boundary value 18 behaves differently in the buggy version.
+? Why inject a clock (`now = new Date()`) into a function instead of calling `new Date()` inside it?
++ So tests can pass a fixed date and get the same result at any time
+- Because `new Date()` is slow
+- Because default parameters are required for dates
+- To make the function pure in production
+> Injection lets tests control time; real callers still get the real clock by default.
+--- exercise code javascript
+::prompt
+Write `parseOrder(text)` that reads an order line like `"ORD-1042;ada@example.com;3"` (id, email, quantity, separated by `;`) and returns `{ id, email, qty }` with `qty` as a number. Throw a `ParseError` (a custom class you define, with `name` `"ParseError"` and a `field` property naming the bad field) when:
+
+- there aren't exactly 3 parts (`field` is `"line"`);
+- the id doesn't start with `ORD-` (`field` is `"id"`);
+- the email has no `@` (`field` is `"email"`);
+- the quantity isn't a whole number from 1 to 100 (`field` is `"qty"`).
+
+The error message must mention the bad value.
+::starter
+class ParseError extends Error {
+}
+
+function parseOrder(text) {
+}
+::solution
+class ParseError extends Error {
+  constructor(message, field) {
+    super(message);
+    this.name = "ParseError";
+    this.field = field;
+  }
+}
+
+function parseOrder(text) {
+  const parts = text.split(";");
+  if (parts.length !== 3) throw new ParseError(`Expected 3 fields, got ${parts.length}: "${text}"`, "line");
+  const [id, email, qtyText] = parts.map((p) => p.trim());
+  if (!id.startsWith("ORD-")) throw new ParseError(`Bad order id "${id}"`, "id");
+  if (!email.includes("@")) throw new ParseError(`Bad email "${email}"`, "email");
+  const qty = Number(qtyText);
+  if (!Number.isInteger(qty) || qty < 1 || qty > 100) throw new ParseError(`Bad quantity "${qtyText}"`, "qty");
+  return { id, email, qty };
+}
+::tests
+assert.deepStrictEqual(parseOrder("ORD-1042;ada@example.com;3"), { id: "ORD-1042", email: "ada@example.com", qty: 3 });
+assert.deepStrictEqual(parseOrder(" ORD-7 ; bo@x.io ; 100 "), { id: "ORD-7", email: "bo@x.io", qty: 100 });
+const __field = (text) => {
+  try {
+    parseOrder(text);
+  } catch (e) {
+    assert.ok(e instanceof ParseError && e instanceof Error, "throw a ParseError");
+    assert.strictEqual(e.name, "ParseError");
+    return e;
+  }
+  assert.fail(`parseOrder(${JSON.stringify(text)}) should throw`);
+};
+assert.strictEqual(__field("ORD-1;a@b").field, "line");
+assert.strictEqual(__field("1042;a@b.c;2").field, "id");
+assert.strictEqual(__field("ORD-1;nobody;2").field, "email");
+assert.strictEqual(__field("ORD-1;a@b.c;0").field, "qty");
+assert.strictEqual(__field("ORD-1;a@b.c;2.5").field, "qty");
+assert.match(__field("ORD-1;a@b.c;lots").message, /lots/);
+assert.match(__field("XYZ;a@b.c;1").message, /XYZ/);
+::hints
+- The class: `constructor(message, field) { super(message); this.name = "ParseError"; this.field = field; }`.
+- Split on `;`, check the count, then destructure and trim the three parts.
+- Check each field in turn and throw with the right `field` name and the bad value in the message.
+--- exercise code javascript
+::prompt
+**Tester's exam.** `shippingCost(weightKg, express)` (given, correct) charges 5 for parcels up to 1 kg, 12 up to 5 kg, and 25 up to 20 kg; express delivery adds 10; weights of 0 or less, or over 20, throw a `RangeError`. Write at least four tests. They must pass on the correct code and catch **five** buggy versions.
+::starter
+function shippingCost(weightKg, express = false) {
+  if (!(weightKg > 0) || weightKg > 20) throw new RangeError(`Bad weight: ${weightKg}`);
+  let cost;
+  if (weightKg <= 1) cost = 5;
+  else if (weightKg <= 5) cost = 12;
+  else cost = 25;
+  return express ? cost + 10 : cost;
+}
+::solution
+function shippingCost(weightKg, express = false) {
+  if (!(weightKg > 0) || weightKg > 20) throw new RangeError(`Bad weight: ${weightKg}`);
+  let cost;
+  if (weightKg <= 1) cost = 5;
+  else if (weightKg <= 5) cost = 12;
+  else cost = 25;
+  return express ? cost + 10 : cost;
+}
+
+describe("shippingCost", () => {
+  test("price bands at their boundaries", () => {
+    assert.strictEqual(shippingCost(1), 5);
+    assert.strictEqual(shippingCost(1.5), 12);
+    assert.strictEqual(shippingCost(5), 12);
+    assert.strictEqual(shippingCost(5.1), 25);
+    assert.strictEqual(shippingCost(20), 25);
+  });
+  test("express adds 10", () => {
+    assert.strictEqual(shippingCost(3, true), 22);
+    assert.strictEqual(shippingCost(3, false), 12);
+  });
+  test("rejects impossible weights", () => {
+    assert.throws(() => shippingCost(0), RangeError);
+    assert.throws(() => shippingCost(-2), RangeError);
+    assert.throws(() => shippingCost(20.5), RangeError);
+  });
+  test("small parcels cost 5", () => {
+    assert.strictEqual(shippingCost(0.2), 5);
+  });
+});
+::tests
+const __tests = __dqTests();
+assert.ok(__tests.length >= 4, `write at least 4 tests with test() (found ${__tests.length})`);
+const __real = shippingCost;
+const __failing = async (impl) => {
+  shippingCost = impl;
+  const failed = [];
+  for (const t of __tests) {
+    try {
+      await t.fn();
+    } catch {
+      failed.push(t.name);
+    }
+  }
+  shippingCost = __real;
+  return failed;
+};
+const __onReal = await __failing(__real);
+if (__onReal.length) assert.fail(`your test "${__onReal[0]}" fails on the CORRECT shippingCost(), so one of its expectations is wrong`);
+const __make = (limit1, limit2, extra, minOk, maxOk) => (w, express = false) => {
+  if (!(w > minOk) || w > maxOk) throw new RangeError("bad");
+  const cost = w <= limit1 ? 5 : w <= limit2 ? 12 : 25;
+  return express ? cost + extra : cost;
+};
+const __bugs = [
+  [(w, e = false) => { if (!(w > 0) || w > 20) throw new RangeError("bad"); const c = w < 1 ? 5 : w <= 5 ? 12 : 25; return e ? c + 10 : c; }, "charges 12 for exactly 1 kg"],
+  [__make(1, 4.99, 10, 0, 20), "charges 25 for exactly 5 kg"],
+  [__make(1, 5, 5, 0, 20), "adds only 5 for express"],
+  [__make(1, 5, 10, -1, 20), "accepts a weight of 0"],
+  [__make(1, 5, 10, 0, 25), "accepts parcels up to 25 kg"],
+];
+for (const [__bug, __what] of __bugs) {
+  if ((await __failing(__bug)).length === 0) assert.fail(`none of your tests caught this bug: shippingCost ${__what}`);
+}
+::hints
+- Five bugs: both band boundaries (exactly 1 kg and exactly 5 kg), the express amount, and both weight limits (0 and just over 20).
+- Test each boundary value exactly: `shippingCost(1)`, `shippingCost(5)`, `shippingCost(20)`.
+- Errors: `assert.throws(() => shippingCost(0), RangeError)`.
