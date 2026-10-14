@@ -557,6 +557,18 @@ function devquestJsRuntime(g: any) {
     return null;
   }
 
+  /** The stack frames that point into the run's source (name and line), innermost first: V8 and Firefox formats. */
+  function frames(err: any): { name: string; line: number }[] {
+    const found: { name: string; line: number }[] = [];
+    for (const l of String((err && err.stack) || '').split('\n')) {
+      const m = l.match(/^\s*at (?:async )?(?:(.+?) \()?.*<anonymous>:(\d+):\d+\)?\s*$/) || l.match(/^(.*?)@.*> (?:Async)?Function:(\d+):\d+\s*$/);
+      if (!m) continue;
+      const name = (m[1] || '').replace(/^async\*/, '');
+      found.push({ name: /^(eval|anonymous|)$/.test(name) ? '' : name, line: Number(m[2]) - 2 });
+    }
+    return found;
+  }
+
   function describe(err: any) {
     if (err === null || typeof err !== 'object') return `Uncaught ${inspect(err)}`;
     return err.name ? `${err.name}: ${err.message}` : String(err);
@@ -615,9 +627,12 @@ function devquestJsRuntime(g: any) {
     } catch (err: any) {
       clearAll();
       const line = errorLine(err);
+      const stack = frames(err);
+      const inCode = stack.filter((f) => f.line >= 1 && f.line <= C);
       if (phase === 'tests') {
         const testSrc = o.tests!.split('\n');
-        const testLine = line !== null && line > C + 1 ? testSrc[line - C - 2] : undefined;
+        const testFrame = stack.find((f) => f.line > C + 1);
+        const testLine = testFrame ? testSrc[testFrame.line - C - 2] : undefined;
         let msg: string;
         if (err instanceof AssertionError && (err as any).generatedMessage) {
           msg = testLine !== undefined ? `This check failed: ${testLine.trim()}` : err.message;
@@ -625,10 +640,27 @@ function devquestJsRuntime(g: any) {
           if (/Equal$/.test(e.operator)) msg += `\n  expected: ${inspect(e.expected)}\n  got:      ${inspect(e.actual)}`;
           else if (e.operator !== '==') msg += `\n  ${e.message}`;
         } else if (err instanceof AssertionError) msg = err.message;
-        else msg = `${describe(err)}${testLine !== undefined ? `\n  while checking: ${testLine.trim()}` : ''}`;
+        else msg = `${describe(err)}${inCode.length ? ` (line ${inCode[0].line} of your code)` : ''}${testLine !== undefined ? `\n  while checking: ${testLine.trim()}` : ''}`;
         return { ok: true, output: out.slice(0, testStart), testError: msg };
       }
-      return { ok: false, output: out, error: describe(err) + (line !== null && line >= 1 && line <= C ? ` (line ${line})` : '') };
+      // Like Node, show the chain of calls when the error passed through the learner's functions
+      // Engines keep only the innermost frames (10 in V8), so a long run of one call is "many", not an exact count
+      const again = (n: number) => `    ... the same call ${n < 5 ? `${n} more time${n === 1 ? '' : 's'}` : 'repeated many more times'}`;
+      const shown: string[] = [];
+      let repeats = 0;
+      for (const f of inCode) {
+        const text = f.name ? `    at ${f.name} (line ${f.line})` : `    at line ${f.line}`;
+        if (text === shown[shown.length - 1] && !f.name) continue; // e.g. a callback on the same line as its caller
+        if (text === shown[shown.length - 1]) repeats++;
+        else {
+          if (repeats) shown.push(again(repeats));
+          repeats = 0;
+          shown.push(text);
+        }
+      }
+      if (repeats) shown.push(again(repeats));
+      const trace = shown.length >= 2 ? '\n' + shown.join('\n') : '';
+      return { ok: false, output: out, error: describe(err) + (line !== null && line >= 1 && line <= C ? ` (line ${line})` : '') + trace };
     }
   }
 
