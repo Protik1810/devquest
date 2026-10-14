@@ -1,0 +1,2544 @@
+=== module Module 9 · Inheritance and object-oriented design
+
+=== lesson js-inheritance | Inheritance | 85
+## Building on an existing class
+
+Often one kind of thing is a **special case** of another: a savings account *is a* bank account that also earns interest; a manager *is an* employee who also has a team. **Inheritance** lets a class take everything from another class and add or change only what's different:
+
+```js
+class Employee {
+  constructor(name, salary) {
+    this.name = name;
+    this.salary = salary;
+  }
+  describe() {
+    return `${this.name} earns ${this.salary}`;
+  }
+  raise(percent) {
+    this.salary = Math.round(this.salary * (1 + percent / 100));
+  }
+}
+
+class Manager extends Employee {
+  constructor(name, salary, team = []) {
+    super(name, salary);
+    this.team = team;
+  }
+  describe() {
+    return `${super.describe()} and manages ${this.team.length} people`;
+  }
+}
+
+const boss = new Manager("Grace", 90000, ["Ada", "Linus"]);
+boss.raise(10);
+console.log(boss.describe());
+console.log(boss instanceof Manager, boss instanceof Employee);
+```
+
+- `class Manager extends Employee` makes `Manager` a **subclass** (or *child class*) of `Employee`, its **superclass** (*parent* or *base* class).
+- `Manager` **inherits** everything `Employee` has: `raise` works on a manager without being written again.
+- It can **add** new things (`team`) and **override** methods by defining one with the same name (`describe`).
+- A manager is also an employee: `instanceof Employee` is true.
+
+## super: calling the parent
+
+`super` gives access to the parent class:
+
+- `super(...)` in the constructor runs the **parent's constructor**. In a subclass constructor, you **must** call it before using `this`, because the parent creates and sets up the object. Forget, and you get `ReferenceError: Must call super constructor in derived class before accessing 'this'`.
+- `super.method(...)` calls the parent's version of a method, so an override can **extend** the parent's behaviour instead of rewriting it, as `describe` does above.
+
+If a subclass doesn't need its own constructor, leave it out: it automatically passes all arguments to the parent's.
+
+## How it works: the chain grows
+
+`extends` simply adds a link in the prototype chain from the last lesson: `boss` → `Manager.prototype` → `Employee.prototype` → `Object.prototype`. When you call `boss.raise()`, JavaScript doesn't find `raise` on `Manager.prototype`, so it continues to `Employee.prototype` and finds it there. When you call `boss.describe()`, it finds `Manager`'s version first, so that one wins. Static methods are inherited too.
+
+~~~check
+? What does this print?
+```js
+class A {
+  hello() {
+    return "A";
+  }
+  greet() {
+    return "Hello from " + this.hello();
+  }
+}
+class B extends A {
+  hello() {
+    return "B";
+  }
+}
+console.log(new B().greet());
+```
+- `Hello from A`
++ `Hello from B`
+- An error: B has no greet method
+- `Hello from AB`
+> greet is inherited from A, but this is a B, so this.hello() finds B's override.
+~~~
+
+That last check shows the most powerful idea in this module: a method in the parent class can call a method that a **subclass** overrides, and the subclass's version runs. The parent defines the overall algorithm; children fill in details. This is called the **template method** pattern.
+
+## Private fields aren't inherited for direct access
+
+A subclass can't touch its parent's `#private` fields; to the subclass they're as hidden as to anyone else. It must use the parent's public (or getter) interface:
+
+```js
+class Account {
+  #balance = 0;
+  deposit(amount) {
+    this.#balance += amount;
+  }
+  get balance() {
+    return this.#balance;
+  }
+}
+class SavingsAccount extends Account {
+  constructor(rate) {
+    super();
+    this.rate = rate;
+  }
+  addInterest() {
+    this.deposit(Math.round(this.balance * this.rate * 100) / 100);
+  }
+}
+const s = new SavingsAccount(0.05);
+s.deposit(200);
+s.addInterest();
+console.log(s.balance);
+```
+
+That's a good thing: the parent keeps control of its invariants, even against its own children. JavaScript has no "protected" keyword; when a subclass truly needs more access, the parent exposes a method for it.
+
+## Extending built-in classes
+
+You can extend JavaScript's own classes. You've already done it with `Error`; arrays and maps work too:
+
+```js
+class Stack extends Array {
+  peek() {
+    return this.at(-1);
+  }
+}
+const s = Stack.from([1, 2, 3]);
+s.push(4);
+console.log(s.peek(), s.length, s instanceof Array);
+```
+
+Be careful with this: an `Array` subclass exposes *every* array method, so code could `splice` the middle of your "stack". Often it's better to wrap an array in a private field (composition, coming in two lessons).
+
+## Abstract base classes
+
+Sometimes a parent class only exists to be extended: there's no such thing as a plain "shape", only circles and squares. JavaScript has no `abstract` keyword, but you can enforce it:
+
+```js
+class Shape {
+  constructor(name) {
+    if (new.target === Shape) {
+      throw new TypeError("Shape is abstract: create a Circle or a Square");
+    }
+    this.name = name;
+  }
+  area() {
+    throw new Error(`${this.constructor.name} must implement area()`);
+  }
+  describe() {
+    return `${this.name} with area ${this.area().toFixed(2)}`;
+  }
+}
+
+class Circle extends Shape {
+  constructor(r) {
+    super("circle");
+    this.r = r;
+  }
+  area() {
+    return Math.PI * this.r ** 2;
+  }
+}
+
+console.log(new Circle(1).describe());
+try {
+  new Shape("blob");
+} catch (error) {
+  console.log(error.message);
+}
+```
+
+`new.target` is the class that `new` was actually called with, so the check only fires for `new Shape(...)`. The "abstract" `area` method throws a clear message if a subclass forgets to implement it.
+
+## When to inherit
+
+Inheritance is powerful and easy to overuse. Use it only when:
+
+- the relationship is genuinely **"is a"**: a `Manager` *is an* `Employee`; a `Car` is *not* an `Engine` (it *has* one);
+- the subclass can be used **anywhere** the parent is expected, without surprises. This is the **Liskov substitution principle**: code written for `Employee` must keep working when given a `Manager`. A `Square` subclass of `Rectangle` whose `setWidth` secretly changes the height breaks that promise;
+- the hierarchy stays **shallow**: one or two levels. Deep chains (`Animal` → `Mammal` → `Pet` → `Dog` → `ServiceDog`) become hard to change, because every class depends on all the ones above it.
+
+When in doubt, prefer **composition**, two lessons from now.
+
+📚 **Go deeper:** javascript.info, "Class inheritance" and "Extending built-in classes"; MDN, "extends" and "super"; *Eloquent JavaScript* (4th ed.), chapter 6, "Inheritance".
+--- goals
+- create subclasses with `extends`, adding fields and methods
+- call the parent's constructor with `super(...)` and parent methods with `super.method()`
+- override methods, and explain how the prototype chain picks the version that runs
+- use the template method pattern: a parent's method calling a child's override
+- work with private fields through the parent's public interface
+- enforce abstract base classes with `new.target`
+- decide when inheritance fits ("is a", Liskov substitution, shallow hierarchies)
+--- quiz
+? In a subclass constructor, what must happen before `this` is used?
+- Nothing
++ `super(...)` must be called
+- `this` must be declared
+- The parent's methods must be copied
+> The parent constructor creates and initialises the object; until super() runs, this doesn't exist yet.
+? What does this print?
+```js
+class Animal {
+  sound() {
+    return "...";
+  }
+  speak() {
+    return `It says ${this.sound()}`;
+  }
+}
+class Cat extends Animal {
+  sound() {
+    return "meow";
+  }
+}
+console.log(new Animal().speak(), "|", new Cat().speak());
+```
+- `It says ... | It says ...`
++ `It says ... | It says meow`
+- `It says meow | It says meow`
+- An error
+> The inherited speak calls this.sound(), which finds Cat's override for a cat.
+? How does an override call the parent's version of the same method?
+- `parent.method()`
++ `super.method()`
+- `this.super()`
+- `Animal.method()`
+> super.method() calls the version from the parent class.
+? Can a subclass read the parent's `#secret` field directly?
+- Yes, with `this.#secret`
+- Yes, with `super.#secret`
++ No; it must go through the parent's methods or getters
+- Only in the constructor
+> Private fields are private to the class that declares them, even from subclasses.
+? Which relationship suits inheritance?
++ `Truck extends Vehicle`
+- `Car extends Engine`
+- `Invoice extends Customer`
+- `Library extends Book`
+> A truck is a vehicle. A car has an engine; a library has books: those are composition.
+? What is `new.target` inside a constructor?
+- The parent class
++ The class that `new` was called with
+- The new object
+- Always `undefined`
+> It lets a base class detect being instantiated directly.
+--- exercise code javascript
+::prompt
+Write a class `Account` with `owner`, a private `#balance` (starting at the constructor's second argument, default 0), `deposit(amount)`, `withdraw(amount)` (throws an `Error` `"Insufficient funds"` if it would go below 0) and a `balance` getter.
+
+Then write `SavingsAccount extends Account` with a `rate` (third constructor argument), an `addInterest()` method that deposits `balance × rate` rounded to cents, and a **limit of 3 withdrawals**: a fourth `withdraw` throws an `Error` `"Withdrawal limit reached"`. Override `withdraw` and use `super.withdraw` for the actual withdrawal.
+::starter
+class Account {
+}
+
+class SavingsAccount extends Account {
+}
+::solution
+class Account {
+  #balance;
+
+  constructor(owner, balance = 0) {
+    this.owner = owner;
+    this.#balance = balance;
+  }
+
+  deposit(amount) {
+    this.#balance += amount;
+    return this.#balance;
+  }
+
+  withdraw(amount) {
+    if (amount > this.#balance) throw new Error("Insufficient funds");
+    this.#balance -= amount;
+    return this.#balance;
+  }
+
+  get balance() {
+    return this.#balance;
+  }
+}
+
+class SavingsAccount extends Account {
+  #withdrawals = 0;
+
+  constructor(owner, balance = 0, rate = 0.02) {
+    super(owner, balance);
+    this.rate = rate;
+  }
+
+  addInterest() {
+    return this.deposit(Math.round(this.balance * this.rate * 100) / 100);
+  }
+
+  withdraw(amount) {
+    if (this.#withdrawals >= 3) throw new Error("Withdrawal limit reached");
+    const result = super.withdraw(amount);
+    this.#withdrawals++;
+    return result;
+  }
+}
+::tests
+const __a = new Account("Ada", 50);
+assert.strictEqual(__a.deposit(25), 75);
+assert.throws(() => __a.withdraw(100), { message: "Insufficient funds" });
+const __s = new SavingsAccount("Grace", 1000, 0.05);
+assert.ok(__s instanceof Account);
+assert.strictEqual(__s.addInterest(), 1050);
+__s.withdraw(10);
+__s.withdraw(10);
+assert.throws(() => __s.withdraw(5000), { message: "Insufficient funds" });
+__s.withdraw(10);
+assert.throws(() => __s.withdraw(1), { message: "Withdrawal limit reached" });
+assert.strictEqual(__s.balance, 1020);
+assert.strictEqual(new SavingsAccount("X").balance, 0);
+assert.ok(Object.hasOwn(SavingsAccount.prototype, "withdraw"), "override withdraw in SavingsAccount");
+::hints
+- The subclass constructor: `super(owner, balance);` first, then `this.rate = rate;`.
+- Keep the withdrawal count in the subclass's own private field.
+- Count a withdrawal only after `super.withdraw(amount)` succeeded: a failed one shouldn't use up the limit.
+--- exercise code javascript
+::prompt
+Write an **abstract** class `Shape` (throw a `TypeError` if it's created directly, using `new.target`) with an `area()` method that throws an `Error` saying the subclass must implement it, and a `describe()` method returning e.g. `"Circle with area 3.14"` (the subclass's class name, and the area with 2 decimals).
+
+Then write `Circle(r)`, `Rectangle(w, h)` and `Square(side)`. `Square` should extend `Rectangle`.
+::starter
+class Shape {
+}
+::solution
+class Shape {
+  constructor() {
+    if (new.target === Shape) throw new TypeError("Shape is abstract");
+  }
+
+  area() {
+    throw new Error(`${this.constructor.name} must implement area()`);
+  }
+
+  describe() {
+    return `${this.constructor.name} with area ${this.area().toFixed(2)}`;
+  }
+}
+
+class Circle extends Shape {
+  constructor(r) {
+    super();
+    this.r = r;
+  }
+
+  area() {
+    return Math.PI * this.r ** 2;
+  }
+}
+
+class Rectangle extends Shape {
+  constructor(w, h) {
+    super();
+    this.w = w;
+    this.h = h;
+  }
+
+  area() {
+    return this.w * this.h;
+  }
+}
+
+class Square extends Rectangle {
+  constructor(side) {
+    super(side, side);
+  }
+}
+::tests
+assert.throws(() => new Shape(), TypeError);
+assert.strictEqual(new Circle(1).describe(), "Circle with area 3.14");
+assert.strictEqual(new Rectangle(2, 3).describe(), "Rectangle with area 6.00");
+assert.strictEqual(new Square(4).describe(), "Square with area 16.00");
+assert.ok(new Square(1) instanceof Rectangle && new Square(1) instanceof Shape);
+class __Blob extends Shape {}
+assert.throws(() => new __Blob().area(), /__Blob must implement area/);
+::hints
+- `if (new.target === Shape) throw new TypeError(...)` in Shape's constructor.
+- `this.constructor.name` is the name of the actual class, e.g. "Circle".
+- Square only needs a constructor that calls `super(side, side)`.
+--- exercise code javascript
+::prompt
+**Template method.** Write a base class `Report` with a method `render()` that returns the lines `header()`, then one line per item from `rows()`, then `footer()`, joined with `\n`. `header()` returns `"=== " + this.title + " ==="` and `footer()` returns `""` (so subclasses may override them); `rows()` must be implemented by subclasses (the base version throws an `Error`). Empty lines are left out of the result.
+
+Write `SalesReport` (constructor takes a title and an array of `{ product, amount }`): its rows are `"product: amount"`, and its footer is `"Total: <sum>"`.
+::starter
+class Report {
+  constructor(title) {
+    this.title = title;
+  }
+}
+
+class SalesReport extends Report {
+}
+::solution
+class Report {
+  constructor(title) {
+    this.title = title;
+  }
+
+  header() {
+    return `=== ${this.title} ===`;
+  }
+
+  rows() {
+    throw new Error(`${this.constructor.name} must implement rows()`);
+  }
+
+  footer() {
+    return "";
+  }
+
+  render() {
+    return [this.header(), ...this.rows(), this.footer()].filter((line) => line !== "").join("\n");
+  }
+}
+
+class SalesReport extends Report {
+  constructor(title, sales) {
+    super(title);
+    this.sales = sales;
+  }
+
+  rows() {
+    return this.sales.map((s) => `${s.product}: ${s.amount}`);
+  }
+
+  footer() {
+    return `Total: ${this.sales.reduce((sum, s) => sum + s.amount, 0)}`;
+  }
+}
+::tests
+const __r = new SalesReport("October", [{ product: "Pens", amount: 120 }, { product: "Paper", amount: 80 }]);
+assert.strictEqual(__r.render(), "=== October ===\nPens: 120\nPaper: 80\nTotal: 200");
+class __Simple extends Report {
+  rows() {
+    return ["a", "b"];
+  }
+}
+assert.strictEqual(new __Simple("S").render(), "=== S ===\na\nb");
+assert.throws(() => new Report("x").render(), /must implement rows/);
+assert.ok(!Object.hasOwn(SalesReport.prototype, "render"), "render belongs to Report only");
+::hints
+- `render` builds `[this.header(), ...this.rows(), this.footer()]`, filters out empty strings and joins with `"\n"`.
+- SalesReport overrides only `rows` and `footer`; `render` and `header` are inherited.
+--- cards
+extends :: class Child extends Parent: Child inherits Parent's methods, and can add or override them.
+super(...) :: In a subclass constructor, calls the parent's constructor. Required before using this.
+super.method() :: Calls the parent's version of a method from an override, to extend rather than replace it.
+Overriding :: A subclass method with the same name as the parent's; the prototype chain finds the child's first.
+Template method :: A parent method defines the algorithm and calls methods that subclasses override.
+Abstract class :: Meant only to be extended. Enforce with if (new.target === Base) throw ... and methods that throw "must implement".
+Liskov substitution :: A subclass must work anywhere its parent is expected, with no surprises.
+
+=== lesson js-polymorphism | Polymorphism and duck typing | 80
+## One call, many behaviours
+
+**Polymorphism** (Greek for "many forms") means code can work with objects of different types through the **same interface**, and each object responds in its own way:
+
+```js
+class Circle {
+  constructor(r) {
+    this.r = r;
+  }
+  area() {
+    return Math.PI * this.r ** 2;
+  }
+}
+class Square {
+  constructor(side) {
+    this.side = side;
+  }
+  area() {
+    return this.side ** 2;
+  }
+}
+class Triangle {
+  constructor(base, height) {
+    this.base = base;
+    this.height = height;
+  }
+  area() {
+    return (this.base * this.height) / 2;
+  }
+}
+
+const shapes = [new Circle(1), new Square(2), new Triangle(3, 4)];
+const total = shapes.reduce((sum, s) => sum + s.area(), 0);
+console.log(total.toFixed(2));
+```
+
+The `reduce` doesn't know or care what kind of shape it has; it just calls `area()`. Add a `Hexagon` class tomorrow, and the total still works without changing a single line of it.
+
+## Duck typing
+
+Notice something: `Circle`, `Square` and `Triangle` don't share a parent class. In JavaScript, polymorphism doesn't need inheritance. Any object with an `area()` method works. This is **duck typing**: "if it walks like a duck and quacks like a duck, it's a duck." What matters is what an object **can do**, not what class it came from.
+
+```js
+const shapes = [
+  { area: () => 10 },
+  { name: "custom", area() { return 2.5; } },
+];
+console.log(shapes.map((s) => s.area()));
+```
+
+You've relied on duck typing all along: `for...of` works on anything iterable, `JSON.stringify` uses any object's `toJSON`, template literals use any object's `toString`. These informal agreements about which methods an object provides are called **protocols** or **interfaces**.
+
+## Interfaces by agreement
+
+Languages like Java and C# have an `interface` keyword the compiler checks. JavaScript doesn't, so you document the expected shape and, where it matters, check it at the boundary:
+
+```js
+/**
+ * @typedef {object} Notifier
+ * @property {(to: string, text: string) => string} send
+ */
+
+function notifyAll(notifiers, to, text) {
+  for (const n of notifiers) {
+    if (typeof n.send !== "function") throw new TypeError("Every notifier needs a send(to, text) method");
+  }
+  return notifiers.map((n) => n.send(to, text));
+}
+
+const email = { send: (to, text) => `email to ${to}: ${text}` };
+const sms = { send: (to, text) => `SMS to ${to}: ${text.slice(0, 20)}` };
+console.log(notifyAll([email, sms], "Ada", "Your order has shipped!"));
+```
+
+The JSDoc `@typedef` documents the interface for readers and editors. TypeScript (Module 12) turns exactly this kind of agreement into something the computer checks for you.
+
+~~~check
+? What does duck typing mean?
+- Every class must extend a base class called Duck
++ An object is usable if it has the methods the code needs, whatever its class
+- Objects are compared by their class names
+- Methods are copied between objects
+> JavaScript cares about what an object can do, not its type.
+~~~
+
+## Replacing conditionals with polymorphism
+
+A tell-tale sign that polymorphism would help is a `switch` on an object's "type" that appears in several places:
+
+```js
+function area(shape) {
+  switch (shape.kind) {
+    case "circle":
+      return Math.PI * shape.r ** 2;
+    case "square":
+      return shape.side ** 2;
+    default:
+      throw new Error(`Unknown shape ${shape.kind}`);
+  }
+}
+console.log(area({ kind: "square", side: 3 }));
+```
+
+Every new shape means finding and editing every such `switch` (area, perimeter, drawing, saving...), and forgetting one is a bug. With polymorphism, each class carries its own behaviour, and adding a shape means adding **one class** and touching nothing else. This is the **open/closed principle**: code should be *open* for extension (new kinds of things) but *closed* for modification (no editing of working code).
+
+That said, a single small `switch` is often perfectly fine. Reach for polymorphism when the same type-check keeps reappearing.
+
+## Polymorphism with functions
+
+Functions are objects with one behaviour, so passing different functions is polymorphism too:
+
+```js
+const strategies = {
+  standard: (total) => total,
+  member: (total) => total * 0.9,
+  blackFriday: (total) => Math.max(total - 20, 0),
+};
+function checkout(total, pricing) {
+  return pricing(total).toFixed(2);
+}
+for (const [name, pricing] of Object.entries(strategies)) {
+  console.log(name, checkout(100, pricing));
+}
+```
+
+Choosing between interchangeable algorithms at runtime is the **strategy pattern**. In JavaScript it's often just a function or an object of functions; no class needed.
+
+## Checking types: when, and how
+
+Sometimes you do need to know what you have. Options, from best to worst:
+
+1. **Check for the capability**: `typeof x.render === "function"`, `Symbol.iterator in x`. Works for every object that fits.
+2. **`instanceof`** when there's a real class family: `if (error instanceof ValidationError)`.
+3. **Comparing `x.constructor.name`** strings: fragile (minifiers rename classes); avoid.
+
+📚 **Go deeper:** *Eloquent JavaScript* (4th ed.), chapter 6, "Polymorphism"; javascript.info, "Class checking: instanceof"; Martin Fowler, *Refactoring* (2nd ed.), "Replace Conditional with Polymorphism".
+--- goals
+- write code that works with any object that provides a given method (polymorphism)
+- explain duck typing and protocols such as iterable and `toJSON`
+- document interfaces with JSDoc and check them at boundaries
+- replace repeated type `switch`es with classes (the open/closed principle)
+- use functions as interchangeable strategies
+- check capabilities rather than class names
+--- quiz
+? What is polymorphism?
++ Different objects responding to the same method call in their own way
+- A class with many constructors
+- Copying methods between classes
+- Changing a variable's type
+> One interface, many implementations.
+? Do two classes need a common parent to be used polymorphically in JavaScript?
+- Yes, always
++ No; it's enough that both provide the methods the code calls
+- Only if they're in the same file
+- Only for static methods
+> Duck typing: shared behaviour, not shared ancestry.
+? You keep adding `case "pdf":`, `case "csv":` to several switch statements whenever a new export format appears. What's the better design?
+- More switch statements
++ One class (or object) per format with the same methods, so a new format is one new class
+- A global variable for the format
+- One giant function with nested ifs
+> Replace the repeated conditional with polymorphism (open/closed principle).
+? What is the strategy pattern?
+- Planning a project
++ Passing interchangeable algorithms (often functions) to code that uses them
+- A class with only static methods
+- Inheriting from several classes
+> The caller picks the behaviour; the code using it stays the same.
+? Which check works for every iterable object, whatever its class?
+- `x instanceof Array`
+- `x.constructor.name === "Array"`
++ `typeof x[Symbol.iterator] === "function"`
+- `Array.isArray(x)`
+> Check the capability (the iteration protocol), not the class.
+--- exercise code javascript
+::prompt
+Write three classes for a payroll system, each with a method `monthlyPay()` and a getter `title`:
+
+- `Salaried(name, yearlySalary)`: pays a twelfth of the yearly salary (rounded to cents); title `"Salaried"`;
+- `Hourly(name, rate, hours)`: pays rate × hours, with hours over 160 paid at 1.5× the rate; title `"Hourly"`;
+- `Contractor(name, invoices)`: pays the sum of the invoice amounts (an array of numbers); title `"Contractor"`.
+
+Then write `payroll(staff)` that returns lines like `"Ada (Salaried): 5000.00"`, one per person, followed by `"Total: <sum>"` with two decimals. `payroll` must work only through `monthlyPay()`, `title` and `name`: no `instanceof` or type checks.
+::starter
+class Salaried {
+}
+
+class Hourly {
+}
+
+class Contractor {
+}
+
+function payroll(staff) {
+}
+::solution
+class Salaried {
+  constructor(name, yearlySalary) {
+    this.name = name;
+    this.yearlySalary = yearlySalary;
+  }
+
+  get title() {
+    return "Salaried";
+  }
+
+  monthlyPay() {
+    return Math.round((this.yearlySalary / 12) * 100) / 100;
+  }
+}
+
+class Hourly {
+  constructor(name, rate, hours) {
+    this.name = name;
+    this.rate = rate;
+    this.hours = hours;
+  }
+
+  get title() {
+    return "Hourly";
+  }
+
+  monthlyPay() {
+    const normal = Math.min(this.hours, 160);
+    const extra = Math.max(this.hours - 160, 0);
+    return normal * this.rate + extra * this.rate * 1.5;
+  }
+}
+
+class Contractor {
+  constructor(name, invoices) {
+    this.name = name;
+    this.invoices = invoices;
+  }
+
+  get title() {
+    return "Contractor";
+  }
+
+  monthlyPay() {
+    return this.invoices.reduce((sum, amount) => sum + amount, 0);
+  }
+}
+
+function payroll(staff) {
+  const lines = staff.map((p) => `${p.name} (${p.title}): ${p.monthlyPay().toFixed(2)}`);
+  const total = staff.reduce((sum, p) => sum + p.monthlyPay(), 0);
+  return [...lines, `Total: ${total.toFixed(2)}`];
+}
+::tests
+const __staff = [new Salaried("Ada", 60000), new Hourly("Bob", 20, 170), new Contractor("Cy", [500, 1250.5])];
+assert.deepStrictEqual(payroll(__staff), ["Ada (Salaried): 5000.00", "Bob (Hourly): 3500.00", "Cy (Contractor): 1750.50", "Total: 10250.50"]);
+assert.strictEqual(new Hourly("D", 10, 100).monthlyPay(), 1000);
+const __duck = { name: "Robot", title: "Volunteer", monthlyPay: () => 0 };
+assert.deepStrictEqual(payroll([__duck]), ["Robot (Volunteer): 0.00", "Total: 0.00"], "payroll must work with any object that has the right methods");
+assert.deepStrictEqual(payroll([]), ["Total: 0.00"]);
+::hints
+- Each class has its own `monthlyPay()`; payroll calls it without knowing which class it has.
+- Hourly overtime: `Math.min(hours, 160)` normal hours plus `Math.max(hours - 160, 0)` at 1.5× the rate.
+--- exercise code javascript
+::prompt
+An online shop calculates shipping with a `switch` on `method` (see the starter). Replace it with **strategy objects**: write an object `shippingMethods` with keys `standard`, `express` and `pickup`, each an object with a `label` and a `cost(weightKg)` function, keeping the same prices. Then write `quote(weightKg, methodName)` that returns `"<label>: <cost with 2 decimals>"`, throwing an `Error` `"Unknown shipping method: <name>"` for an unknown name. Adding a new method must only require adding one entry to `shippingMethods`.
+::starter
+function quote(weightKg, method) {
+  switch (method) {
+    case "standard":
+      return `Standard (3-5 days): ${(4.99 + weightKg * 0.5).toFixed(2)}`;
+    case "express":
+      return `Express (next day): ${(12 + weightKg * 1.2).toFixed(2)}`;
+    case "pickup":
+      return `Pick up in store: ${(0).toFixed(2)}`;
+    default:
+      throw new Error(`Unknown shipping method: ${method}`);
+  }
+}
+::solution
+const shippingMethods = {
+  standard: { label: "Standard (3-5 days)", cost: (kg) => 4.99 + kg * 0.5 },
+  express: { label: "Express (next day)", cost: (kg) => 12 + kg * 1.2 },
+  pickup: { label: "Pick up in store", cost: () => 0 },
+};
+
+function quote(weightKg, methodName) {
+  const method = shippingMethods[methodName];
+  if (!Object.hasOwn(shippingMethods, methodName)) throw new Error(`Unknown shipping method: ${methodName}`);
+  return `${method.label}: ${method.cost(weightKg).toFixed(2)}`;
+}
+::tests
+assert.strictEqual(quote(2, "standard"), "Standard (3-5 days): 5.99");
+assert.strictEqual(quote(5, "express"), "Express (next day): 18.00");
+assert.strictEqual(quote(30, "pickup"), "Pick up in store: 0.00");
+assert.throws(() => quote(1, "drone"), { message: "Unknown shipping method: drone" });
+assert.throws(() => quote(1, "toString"), /Unknown shipping method/);
+shippingMethods.drone = { label: "Drone (1 hour)", cost: (kg) => 20 + kg * 3 };
+assert.strictEqual(quote(1, "drone"), "Drone (1 hour): 23.00", "a new method should only need a new entry");
+::hints
+- Each entry: `{ label: "...", cost: (kg) => ... }`.
+- Look the method up with `shippingMethods[methodName]`, and check `Object.hasOwn(shippingMethods, methodName)` so names like "toString" are rejected.
+--- cards
+Polymorphism :: The same call (shape.area()) working on different kinds of objects, each in its own way.
+Duck typing :: An object is usable if it has the methods the code needs, regardless of its class.
+Protocol / interface :: An agreed set of methods (iterable, toJSON, send(to, text)). Documented in JS, checked by the compiler in TypeScript.
+Open/closed principle :: Open for extension (add a new class), closed for modification (no editing of working code).
+Replace conditional with polymorphism :: Turn repeated switch (x.kind) into one class per kind with the same methods.
+Strategy pattern :: Pass interchangeable algorithms, often plain functions, to the code that uses them.
+
+=== lesson js-composition | Composition and mixins | 80
+## "Has a" instead of "is a"
+
+**Composition** builds an object out of other objects that each do one job. A car **has** an engine, wheels and a radio; it isn't a subclass of any of them:
+
+```js
+class Engine {
+  constructor(horsepower) {
+    this.horsepower = horsepower;
+    this.running = false;
+  }
+  start() {
+    this.running = true;
+    return "Vroom";
+  }
+}
+
+class Radio {
+  #station = "off";
+  tune(station) {
+    this.#station = station;
+  }
+  get station() {
+    return this.#station;
+  }
+}
+
+class Car {
+  constructor(model, engine, radio = new Radio()) {
+    this.model = model;
+    this.engine = engine;
+    this.radio = radio;
+  }
+  start() {
+    return `${this.model}: ${this.engine.start()}`;
+  }
+}
+
+const car = new Car("Roadster", new Engine(300));
+console.log(car.start());
+car.radio.tune("Jazz FM");
+console.log(car.radio.station, car.engine.running);
+```
+
+`Car` **delegates** work to its parts: `car.start()` asks the engine to start. Each part is small, focused and reusable: the same `Radio` class could go in a boat.
+
+## Why "composition over inheritance"?
+
+This advice, from the classic *Design Patterns* book (1994), is one of the most repeated in software design. Inheritance has costs that appear as programs grow:
+
+- **Tight coupling**: a subclass depends on its parent's internals. Changing the parent can break children in surprising ways (the *fragile base class* problem).
+- **Rigid hierarchies**: real things don't fit one tree. Is a `FlyingCar` a `Car` or a `Plane`? With single inheritance you must pick one and duplicate the other.
+- **You get everything**: inheriting gives a child *all* of the parent's methods, wanted or not (remember `Stack extends Array` exposing `splice`). As Joe Armstrong put it: "you wanted a banana, but you got a gorilla holding the banana and the entire jungle."
+
+Composition avoids these: parts are swapped freely, each class exposes only what it chooses, and new combinations need no new hierarchy.
+
+## Swappable parts and dependency injection
+
+Because the car *receives* its engine in the constructor, you can give it any engine with a `start()` method, including an electric one, or a fake one in tests. This is **dependency injection** again, now with objects:
+
+```js
+class ElectricMotor {
+  start() {
+    return "Hmmm (silently)";
+  }
+}
+class Car {
+  constructor(model, engine) {
+    this.model = model;
+    this.engine = engine;
+  }
+  start() {
+    return `${this.model}: ${this.engine.start()}`;
+  }
+}
+console.log(new Car("Model E", new ElectricMotor()).start());
+const fakeEngine = { start: () => "test engine started" };
+console.log(new Car("Test car", fakeEngine).start());
+```
+
+Composition plus duck typing gives you polymorphism without any inheritance at all.
+
+~~~check
+? Which design uses composition?
+- `class Logger extends FileWriter`
++ `class Logger { constructor(writer) { this.writer = writer; } }`
+- `class Logger extends Array`
+- `Object.setPrototypeOf(Logger, FileWriter)`
+> The logger has a writer it delegates to, which can be swapped for any object with the right methods.
+~~~
+
+## Wrapping instead of extending
+
+Remember the `Stack extends Array` that exposed every array method? Composition fixes it: wrap a private array and expose only what a stack should do:
+
+```js
+class Stack {
+  #items = [];
+  push(x) {
+    this.#items.push(x);
+    return this;
+  }
+  pop() {
+    return this.#items.pop();
+  }
+  get size() {
+    return this.#items.length;
+  }
+}
+const s = new Stack().push(1).push(2);
+console.log(s.pop(), s.size, typeof s.splice);
+```
+
+## Mixins: sharing behaviour across unrelated classes
+
+Sometimes several unrelated classes need the same small ability: serialising to JSON, emitting events, logging. A **mixin** is a reusable bundle of methods mixed into a class. The simplest form copies methods onto a prototype:
+
+```js
+const Describable = {
+  describe() {
+    return `${this.constructor.name}: ${JSON.stringify(this)}`;
+  },
+};
+class Book {
+  constructor(title) {
+    this.title = title;
+  }
+}
+class Song {
+  constructor(name) {
+    this.name = name;
+  }
+}
+Object.assign(Book.prototype, Describable);
+Object.assign(Song.prototype, Describable);
+console.log(new Book("Dune").describe());
+console.log(new Song("Loops").describe());
+```
+
+A more powerful form is the **class-factory mixin**: a function that takes a base class and returns a new class extending it. Mixins can then be stacked:
+
+```js
+const Timestamped = (Base) =>
+  class extends Base {
+    touch() {
+      this.updatedAt = "2026-10-14";
+      return this;
+    }
+  };
+const Validated = (Base) =>
+  class extends Base {
+    validate() {
+      for (const [key, value] of Object.entries(this)) {
+        if (value === "") throw new Error(`${key} is empty`);
+      }
+      return true;
+    }
+  };
+
+class Note {
+  constructor(text) {
+    this.text = text;
+  }
+}
+class SmartNote extends Validated(Timestamped(Note)) {}
+
+const note = new SmartNote("Buy milk").touch();
+console.log(note, note.validate());
+```
+
+Use mixins sparingly: when several mixins define the same method name, the last one wins silently, and it gets hard to see where a method came from. Plain composition (an object *has* an `EventEmitter`) is usually clearer.
+
+## Choosing between them
+
+| Use | When |
+|---|---|
+| **Composition** (has a) | the default: combining independent parts, swappable behaviour, testability |
+| **Inheritance** (is a) | a true specialisation, used anywhere the parent is, in a shallow hierarchy |
+| **Mixin** | one small ability shared by unrelated classes |
+| **Plain functions** | behaviour that needs no state at all |
+
+📚 **Go deeper:** *Design Patterns* (Gamma, Helm, Johnson, Vlissides), introduction, "Favor object composition over class inheritance"; javascript.info, "Mixins"; MDN, "Using classes" (Mix-ins section).
+--- goals
+- build objects from parts that each do one job (composition, "has a")
+- explain the costs of inheritance: tight coupling, rigid hierarchies, unwanted methods
+- inject parts through the constructor so they can be swapped and faked
+- wrap a built-in instead of extending it, to control the interface
+- share behaviour across unrelated classes with object and class-factory mixins
+- choose between composition, inheritance, mixins and plain functions
+--- quiz
+? What does "composition over inheritance" recommend?
++ Prefer building objects from other objects they delegate to, over deep class hierarchies
+- Never use classes
+- Always use mixins
+- Put all code in one class
+> Composition keeps parts small, swappable and loosely coupled.
+? Why can composition make testing easier?
+- Composed objects run faster
++ Parts passed into the constructor can be replaced by fakes in tests
+- Tests can't see private fields
+- Composition removes the need for tests
+> Dependency injection lets tests supply controllable stand-ins.
+? What's the "fragile base class" problem?
+- Base classes can't have private fields
++ Changes to a parent class can break its subclasses in unexpected ways
+- Base classes are slower
+- A base class can only have one child
+> Subclasses depend on the parent's behaviour and internals.
+? What does `const Timestamped = (Base) => class extends Base { ... }` define?
+- A normal class
++ A class-factory mixin: a function that adds behaviour to any base class
+- An abstract class
+- A decorator for functions
+> Call it with a base class to get a new class with the extra methods.
+? A `Playlist` class needs `add`, `remove` and `shuffle`, but shouldn't expose `splice`, `sort` or `length = 0`. What's the best design?
+- `class Playlist extends Array`
++ A class with a private `#songs` array and only the methods it needs
+- A mixin that copies all array methods
+- A global array
+> Wrapping (composition) controls exactly which operations exist.
+--- exercise code javascript
+::prompt
+Build a `Logger` by composition. A logger **has** a `formatter` and a `writer`, both passed to the constructor:
+
+- `logger.info(message)` and `logger.error(message)` call `formatter.format(level, message)` (level is `"INFO"` or `"ERROR"`) and pass the result to `writer.write(line)`;
+- write two formatters: `plainFormatter` (gives `"[INFO] message"`) and `jsonFormatter` (gives `'{"level":"INFO","message":"..."}'` using `JSON.stringify`);
+- write a `MemoryWriter` class that keeps written lines in an array, with a getter `lines` that returns a copy.
+
+Loggers must work with **any** formatter and writer that have the right methods.
+::starter
+const plainFormatter = {};
+const jsonFormatter = {};
+
+class MemoryWriter {
+}
+
+class Logger {
+}
+::solution
+const plainFormatter = {
+  format: (level, message) => `[${level}] ${message}`,
+};
+
+const jsonFormatter = {
+  format: (level, message) => JSON.stringify({ level, message }),
+};
+
+class MemoryWriter {
+  #lines = [];
+
+  write(line) {
+    this.#lines.push(line);
+  }
+
+  get lines() {
+    return [...this.#lines];
+  }
+}
+
+class Logger {
+  constructor(formatter, writer) {
+    this.formatter = formatter;
+    this.writer = writer;
+  }
+
+  #log(level, message) {
+    this.writer.write(this.formatter.format(level, message));
+  }
+
+  info(message) {
+    this.#log("INFO", message);
+  }
+
+  error(message) {
+    this.#log("ERROR", message);
+  }
+}
+::tests
+const __w = new MemoryWriter();
+const __log = new Logger(plainFormatter, __w);
+__log.info("Server started");
+__log.error("Disk full");
+assert.deepStrictEqual(__w.lines, ["[INFO] Server started", "[ERROR] Disk full"]);
+__w.lines.push("tamper");
+assert.strictEqual(__w.lines.length, 2, "lines must return a copy");
+const __jw = new MemoryWriter();
+new Logger(jsonFormatter, __jw).info('said "hi"');
+assert.deepStrictEqual(__jw.lines, ['{"level":"INFO","message":"said \\"hi\\""}']);
+const __seen = [];
+const __upper = { format: (level, m) => `${level}:${m.toUpperCase()}` };
+new Logger(__upper, { write: (line) => __seen.push(line) }).error("oops");
+assert.deepStrictEqual(__seen, ["ERROR:OOPS"], "Logger must work with any formatter and writer");
+::hints
+- Formatters are plain objects with a `format(level, message)` method.
+- The logger stores the two parts and delegates: `this.writer.write(this.formatter.format(level, message))`.
+- A private helper `#log(level, message)` avoids repeating that line in `info` and `error`.
+--- exercise code javascript
+::prompt
+Write a class-factory mixin `Observable(Base)` that adds event handling to any class: `on(event, handler)` registers a handler and returns a function that unregisters it, and `emit(event, ...args)` calls every handler for that event with the arguments (in registration order) and returns how many were called. Store handlers in a private `Map`.
+
+Then write `class Thermometer extends Observable(Object)` with a `reading` getter and a `set(celsius)` method that stores the value and emits `"change"` with the new reading, and also emits `"alert"` when it goes above 30.
+::starter
+const Observable = (Base) => class extends Base {
+};
+
+class Thermometer extends Observable(Object) {
+}
+::solution
+const Observable = (Base) =>
+  class extends Base {
+    #handlers = new Map();
+
+    on(event, handler) {
+      if (!this.#handlers.has(event)) this.#handlers.set(event, []);
+      this.#handlers.get(event).push(handler);
+      return () => {
+        const list = this.#handlers.get(event);
+        const i = list.indexOf(handler);
+        if (i >= 0) list.splice(i, 1);
+      };
+    }
+
+    emit(event, ...args) {
+      const list = [...(this.#handlers.get(event) ?? [])];
+      for (const handler of list) handler(...args);
+      return list.length;
+    }
+  };
+
+class Thermometer extends Observable(Object) {
+  #reading = null;
+
+  get reading() {
+    return this.#reading;
+  }
+
+  set(celsius) {
+    this.#reading = celsius;
+    this.emit("change", celsius);
+    if (celsius > 30) this.emit("alert", celsius);
+  }
+}
+::tests
+const __t = new Thermometer();
+const __log = [];
+const __off = __t.on("change", (c) => __log.push(`change ${c}`));
+__t.on("alert", (c) => __log.push(`alert ${c}`));
+__t.set(20);
+__t.set(35);
+__off();
+__t.set(10);
+assert.deepStrictEqual(__log, ["change 20", "change 35", "alert 35"]);
+assert.strictEqual(__t.reading, 10);
+assert.strictEqual(__t.emit("nothing"), 0);
+class __Doc extends Observable(class { constructor(t) { this.title = t; } }) {}
+const __d = new __Doc("x");
+let __n = 0;
+__d.on("save", () => __n++);
+__d.on("save", () => __n++);
+assert.strictEqual(__d.emit("save"), 2);
+assert.strictEqual(__n, 2);
+assert.strictEqual(__d.title, "x", "the mixin must keep the base class's behaviour");
+::hints
+- `#handlers = new Map();` inside the returned class; `on` pushes into the list for the event.
+- The unregister function finds the handler's index and removes it with `splice`.
+- Thermometer stores the reading in its own private field and calls `this.emit(...)`.
+--- cards
+Composition :: Building objects from parts they hold and delegate to ("has a"): car.engine.start().
+Composition over inheritance :: Prefer combining small swappable objects to deep class hierarchies (Design Patterns, 1994).
+Delegation :: An object handing work to another object it holds.
+Fragile base class :: Changing a parent class breaks subclasses that depend on its behaviour.
+Mixin (object) :: Object.assign(Class.prototype, { method() {...} }) copies methods into a class.
+Mixin (class factory) :: const M = (Base) => class extends Base { ... }; class C extends M(Other) {}.
+
+=== lesson js-design-patterns | Design principles and patterns | 85
+## Why principles?
+
+Code that works is the beginning, not the end. Real programs live for years and change constantly: new features, new rules, new people. **Design principles** are hard-won lessons about what makes code easy (or painful) to change. **Design patterns** are named, proven solutions to problems that keep coming up. Knowing their names also lets you talk with other developers: "let's put an adapter around that API" says a paragraph in four words.
+
+## Three everyday principles
+
+- **DRY, Don't Repeat Yourself**: every piece of knowledge (a tax rate, a validation rule, a formula) should live in one place. Copy-pasted logic means fixing every bug several times, and missing one.
+- **KISS, Keep It Simple**: the simplest design that works is usually best. Clever code is hard to read and harder to debug.
+- **YAGNI, You Aren't Gonna Need It**: don't build flexibility for imagined future needs. Add it when a real need arrives; you'll know far more by then.
+
+DRY and YAGNI pull in opposite directions sometimes. A useful rule: tolerate a duplication twice; on the third time, extract it.
+
+## SOLID
+
+Five principles for object-oriented design, collected by Robert C. Martin:
+
+| | Principle | In one sentence |
+|---|---|---|
+| **S** | Single responsibility | A class (or function) should have one reason to change. |
+| **O** | Open/closed | Add behaviour by adding code (new classes), not by editing working code. |
+| **L** | Liskov substitution | Subclasses must work wherever their parent is expected. |
+| **I** | Interface segregation | Don't force objects to provide methods they don't need: prefer small interfaces. |
+| **D** | Dependency inversion | High-level code should depend on abstractions (interfaces), not on concrete details. |
+
+You met O and L in the last lessons. Here's **S** in action. This function does three jobs, so it has three reasons to change (new validation rules, new prices, a new output format):
+
+```js
+function processOrder(order) {
+  if (!order.items.length) throw new Error("Empty order");
+  let total = 0;
+  for (const item of order.items) total += item.price * item.qty;
+  if (order.coupon === "SAVE10") total *= 0.9;
+  return `Order for ${order.customer}: ${total.toFixed(2)}`;
+}
+console.log(processOrder({ customer: "Ada", coupon: "SAVE10", items: [{ price: 20, qty: 2 }] }));
+```
+
+Split by responsibility, each piece is small, named, reusable and testable on its own:
+
+```js
+const validateOrder = (order) => {
+  if (!order.items.length) throw new Error("Empty order");
+};
+const subtotal = (items) => items.reduce((sum, i) => sum + i.price * i.qty, 0);
+const applyCoupon = (total, coupon) => (coupon === "SAVE10" ? total * 0.9 : total);
+const formatOrder = (customer, total) => `Order for ${customer}: ${total.toFixed(2)}`;
+
+function processOrder(order) {
+  validateOrder(order);
+  const total = applyCoupon(subtotal(order.items), order.coupon);
+  return formatOrder(order.customer, total);
+}
+console.log(processOrder({ customer: "Ada", coupon: "SAVE10", items: [{ price: 20, qty: 2 }] }));
+```
+
+And **D**: a high-level `ReportService` shouldn't create a specific database connection inside itself. It should receive "something that can load data" (an abstraction), so it can be given a real database, a file or a fake for tests. That's dependency injection, which you've now seen three times; it's the most practical idea in this lesson.
+
+## Patterns you'll meet constantly
+
+### Factory
+
+A function (or static method) that decides **which** object to create, so callers don't need to know the concrete classes:
+
+```js
+class EmailNotifier {
+  send(to, msg) {
+    return `Email to ${to}: ${msg}`;
+  }
+}
+class SmsNotifier {
+  send(to, msg) {
+    return `SMS to ${to}: ${msg}`;
+  }
+}
+function createNotifier(channel) {
+  switch (channel) {
+    case "email":
+      return new EmailNotifier();
+    case "sms":
+      return new SmsNotifier();
+    default:
+      throw new Error(`Unknown channel: ${channel}`);
+  }
+}
+console.log(createNotifier("sms").send("Ada", "Your code is ready"));
+```
+
+### Observer
+
+An object (the *subject*) keeps a list of listeners and notifies them when something happens, without knowing who they are. You built one in the mixins exercise; the browser's `addEventListener` and Node's `EventEmitter` are this pattern, and it's the heart of every UI framework.
+
+### Adapter
+
+Wraps an object whose interface doesn't fit, so it looks like the interface your code expects. Typical when integrating an old system or a third-party library:
+
+```js
+const legacyWeather = {
+  getTempF(city) {
+    return city === "Paris" ? 68 : 50;
+  },
+};
+const weatherAdapter = {
+  temperature(city) {
+    const celsius = ((legacyWeather.getTempF(city) - 32) * 5) / 9;
+    return { city, celsius: Math.round(celsius) };
+  },
+};
+console.log(weatherAdapter.temperature("Paris"));
+```
+
+### Decorator
+
+Wraps an object to **add behaviour while keeping the same interface**, so the wrapped object can be used anywhere the original was. (You wrapped *functions* this way in Module 5.)
+
+```js
+function withLogging(repo, log) {
+  return {
+    get(id) {
+      log.push(`get ${id}`);
+      return repo.get(id);
+    },
+  };
+}
+const users = { get: (id) => ({ id, name: id === 1 ? "Ada" : "Unknown" }) };
+const log = [];
+const logged = withLogging(users, log);
+console.log(logged.get(1).name, log);
+```
+
+Decorators stack: `withCache(withLogging(withRetry(api)))`, each layer adding one concern.
+
+### Facade
+
+A simple interface in front of a complicated subsystem: `checkout(cart)` hides the payment, stock and email steps behind one call.
+
+### Singleton (and why to be careful)
+
+"Exactly one instance" (one configuration, one database pool). In JavaScript, a module that exports one object already is a singleton; there's no need for special class tricks. But singletons are **global state** in disguise: any code can change them, and tests interfere with each other. Prefer passing the one instance in where it's needed.
+
+~~~check
+? Your code expects `store.save(key, value)`, but a library offers `lib.put({ k, v })`. Which pattern connects them?
+- Singleton
+- Observer
++ Adapter
+- Factory
+> An adapter translates one interface into another.
+~~~
+
+## Patterns are tools, not goals
+
+The biggest pattern mistake is using them where they aren't needed: a factory for one class, an abstract base for one subclass, five layers of indirection for a ten-line script. Patterns should **remove** pain you actually feel. Start simple (KISS, YAGNI), notice repetition and rigid spots as the program grows, and refactor towards a pattern when it clearly helps.
+
+Two famous anti-patterns to avoid: the **god object** (one class that knows and does everything) and **spaghetti code** (logic tangled across functions and globals so that every change breaks something elsewhere).
+
+📚 **Go deeper:** *Design Patterns: Elements of Reusable Object-Oriented Software* (Gamma et al., 1994); refactoring.guru (patterns explained with diagrams and examples in many languages); Addy Osmani, *Learning JavaScript Design Patterns* (free online at patterns.dev); Robert C. Martin, *Clean Architecture* (SOLID).
+--- goals
+- apply DRY, KISS and YAGNI, and balance them
+- explain the five SOLID principles with an example of each
+- split code by responsibility so each part has one reason to change
+- use the factory, observer, adapter, decorator and facade patterns
+- explain why singletons are global state, and prefer passing instances in
+- recognise when a pattern adds complexity instead of removing it
+--- quiz
+? A `User` class validates input, saves to the database, sends welcome emails and renders HTML. Which principle does it break?
++ Single responsibility
+- Liskov substitution
+- Open/closed
+- DRY
+> It has four reasons to change. Split it into focused parts.
+? What does YAGNI warn against?
+- Repeating code
++ Building features or flexibility before there's a real need
+- Using classes
+- Writing tests first
+> You Aren't Gonna Need It: wait for real requirements.
+? `withCache(api)` returns an object with the same methods as `api`, adding caching. Which pattern is that?
+- Adapter
++ Decorator
+- Factory
+- Singleton
+> Same interface, extra behaviour: a decorator. (An adapter changes the interface.)
+? Why is dependency inversion useful?
+- It makes code run faster
++ High-level code depends on an interface, so details (database, email service) can be swapped or faked
+- It removes the need for classes
+- It makes all fields private
+> Depend on abstractions; inject the concrete details.
+? What's the main risk of a singleton?
+- It uses too much memory
++ It's global state: any code can change it, and tests can interfere with each other
+- It can't have methods
+- It must be a class
+> Prefer creating the one instance and passing it where it's needed.
+? Which pattern does `button.addEventListener("click", handler)` use?
+- Factory
+- Adapter
++ Observer
+- Facade
+> The button notifies all registered listeners when it's clicked.
+--- exercise code javascript
+::prompt
+**Adapter.** Your app's code works with a payment interface `{ pay(amountInCents, currency) }` that returns `{ ok, id }`. You must integrate an old provider, `legacyGateway`, whose method is `charge({ amount, curr })` with `amount` in **whole units** (e.g. dollars, so cents ÷ 100), which returns a string like `"OK:TX123"` or `"FAIL:card declined"`.
+
+Write `adaptLegacy(gateway)` returning an object with `pay(amountInCents, currency)` that calls the gateway and returns `{ ok: true, id: "TX123" }` on success or `{ ok: false, error: "card declined" }` on failure. Then write `checkout(cents, payment)` that uses **only** the new interface and returns `"Paid (TX123)"` or `"Payment failed: card declined"`.
+::starter
+const legacyGateway = {
+  charge({ amount, curr }) {
+    if (amount > 1000) return "FAIL:limit exceeded";
+    return `OK:TX${Math.round(amount * 100)}${curr}`;
+  },
+};
+
+function adaptLegacy(gateway) {
+}
+
+function checkout(cents, payment) {
+}
+::solution
+const legacyGateway = {
+  charge({ amount, curr }) {
+    if (amount > 1000) return "FAIL:limit exceeded";
+    return `OK:TX${Math.round(amount * 100)}${curr}`;
+  },
+};
+
+function adaptLegacy(gateway) {
+  return {
+    pay(amountInCents, currency) {
+      const reply = gateway.charge({ amount: amountInCents / 100, curr: currency });
+      const [status, detail] = [reply.slice(0, reply.indexOf(":")), reply.slice(reply.indexOf(":") + 1)];
+      return status === "OK" ? { ok: true, id: detail } : { ok: false, error: detail };
+    },
+  };
+}
+
+function checkout(cents, payment) {
+  const result = payment.pay(cents, "USD");
+  return result.ok ? `Paid (${result.id})` : `Payment failed: ${result.error}`;
+}
+::tests
+const __p = adaptLegacy(legacyGateway);
+assert.deepStrictEqual(__p.pay(2599, "USD"), { ok: true, id: "TX2599USD" });
+assert.deepStrictEqual(__p.pay(500000, "USD"), { ok: false, error: "limit exceeded" });
+assert.strictEqual(checkout(2599, __p), "Paid (TX2599USD)");
+assert.strictEqual(checkout(500000, __p), "Payment failed: limit exceeded");
+const __fake = { pay: () => ({ ok: false, error: "network: timeout" }) };
+assert.strictEqual(checkout(100, __fake), "Payment failed: network: timeout", "checkout must only use pay()");
+const __odd = adaptLegacy({ charge: () => "FAIL:bad: very bad" });
+assert.deepStrictEqual(__odd.pay(1, "EUR"), { ok: false, error: "bad: very bad" });
+::hints
+- Convert the arguments: `gateway.charge({ amount: cents / 100, curr: currency })`.
+- Split the reply at the **first** colon only: the message itself may contain colons.
+- `checkout` never mentions the gateway; it only calls `payment.pay(...)`.
+--- exercise code javascript
+::prompt
+**Decorator.** A data source has an `async`-free method `get(id)`. Write `withCache(source)` that returns an object with the **same** `get(id)` interface, which asks the source only the first time for each id and then returns the remembered result. Add a `stats()` method returning `{ hits, misses }`. Then write `withRetry(source, attempts)` whose `get(id)` retries a source that throws, up to `attempts` times in total, rethrowing the last error. The two decorators must stack: `withCache(withRetry(source, 3))`.
+::starter
+function withCache(source) {
+}
+
+function withRetry(source, attempts) {
+}
+::solution
+function withCache(source) {
+  const cache = new Map();
+  let hits = 0;
+  let misses = 0;
+  return {
+    get(id) {
+      if (cache.has(id)) {
+        hits++;
+        return cache.get(id);
+      }
+      misses++;
+      const value = source.get(id);
+      cache.set(id, value);
+      return value;
+    },
+    stats() {
+      return { hits, misses };
+    },
+  };
+}
+
+function withRetry(source, attempts) {
+  return {
+    get(id) {
+      let lastError;
+      for (let i = 0; i < attempts; i++) {
+        try {
+          return source.get(id);
+        } catch (error) {
+          lastError = error;
+        }
+      }
+      throw lastError;
+    },
+  };
+}
+::tests
+let __calls = 0;
+const __db = { get: (id) => { __calls++; return { id, name: `user${id}` }; } };
+const __cached = withCache(__db);
+assert.deepStrictEqual(__cached.get(1), { id: 1, name: "user1" });
+__cached.get(1);
+__cached.get(2);
+__cached.get(1);
+assert.strictEqual(__calls, 2);
+assert.deepStrictEqual(__cached.stats(), { hits: 2, misses: 2 });
+let __tries = 0;
+const __flaky = { get: (id) => { __tries++; if (__tries < 3) throw new Error("timeout"); return `ok ${id}`; } };
+const __both = withCache(withRetry(__flaky, 3));
+assert.strictEqual(__both.get(7), "ok 7");
+assert.strictEqual(__both.get(7), "ok 7");
+assert.strictEqual(__tries, 3);
+assert.throws(() => withRetry({ get: () => { throw new Error("down"); } }, 2).get(1), { message: "down" });
+::hints
+- withCache keeps a `Map` and two counters in its closure; `get` checks the map first.
+- withRetry loops `attempts` times with `try { return source.get(id); } catch (e) { lastError = e; }`, then throws `lastError`.
+- Both return plain objects with a `get(id)` method, which is why they stack.
+--- cards
+DRY / KISS / YAGNI :: Don't repeat knowledge; keep it simple; don't build for imagined future needs.
+SOLID :: Single responsibility, Open/closed, Liskov substitution, Interface segregation, Dependency inversion.
+Single responsibility :: A class or function should have one reason to change.
+Dependency inversion :: Depend on abstractions; inject concrete details (database, email) from outside.
+Factory :: A function that decides which object to create: createNotifier("sms").
+Observer :: A subject notifies registered listeners of events: addEventListener, EventEmitter.
+Adapter :: Wraps an object to give it the interface your code expects.
+Decorator :: Wraps an object to add behaviour while keeping the same interface. Stackable.
+Singleton :: One shared instance: really global state. Prefer passing the instance in.
+
+=== lesson js-iterators-generators | Iterators and generators | 85
+## What makes for...of work?
+
+`for...of` works on arrays, strings, Maps, Sets... but not on plain objects. What do the working ones have in common? They follow the **iteration protocol**:
+
+- An **iterable** is an object with a method stored under the special key `Symbol.iterator`. Calling it returns an **iterator**.
+- An **iterator** is an object with a `next()` method. Each call returns `{ value, done }`: the next value, and `done: true` once there are no more.
+
+```js
+const letters = ["a", "b"];
+const it = letters[Symbol.iterator]();
+console.log(it.next());
+console.log(it.next());
+console.log(it.next());
+```
+
+`for...of` does exactly this behind the scenes: get an iterator, call `next()` until `done` is true. So do spread (`[...x]`), destructuring (`const [a, b] = x`), `Array.from(x)`, `new Set(x)`, `new Map(x)` and `Promise.all(x)`. Make your own objects iterable, and all of these work with them.
+
+## Making a class iterable
+
+```js
+class Countdown {
+  constructor(from) {
+    this.from = from;
+  }
+  [Symbol.iterator]() {
+    let current = this.from;
+    return {
+      next: () => (current > 0 ? { value: current--, done: false } : { value: undefined, done: true }),
+    };
+  }
+}
+const c = new Countdown(3);
+for (const n of c) console.log(n);
+console.log([...c], Math.max(...c));
+```
+
+Each call to `[Symbol.iterator]()` creates a fresh iterator with its own `current`, so the same countdown can be looped over again and again.
+
+## Generators: iterators made easy
+
+Writing `next()` by hand is fiddly. A **generator function**, written `function*`, builds the iterator for you. Inside it, `yield value` hands out the next value and **pauses** the function right there until the next value is requested:
+
+```js
+function* countdown(from) {
+  for (let i = from; i > 0; i--) {
+    yield i;
+  }
+  return "liftoff";
+}
+const gen = countdown(2);
+console.log(gen.next());
+console.log(gen.next());
+console.log(gen.next());
+console.log([...countdown(5)]);
+```
+
+Calling `countdown(2)` doesn't run any of its code yet; it returns a generator object. Each `next()` runs the function until the next `yield`, then freezes it, local variables and all, until the next `next()`. (A `return` value shows up once with `done: true`, but `for...of` and spread ignore it.)
+
+With a generator, the iterable class becomes much simpler: make `[Symbol.iterator]` a generator method with `*`:
+
+```js
+class Range {
+  constructor(start, end, step = 1) {
+    this.start = start;
+    this.end = end;
+    this.step = step;
+  }
+  *[Symbol.iterator]() {
+    for (let i = this.start; i <= this.end; i += this.step) yield i;
+  }
+}
+console.log([...new Range(1, 10, 3)]);
+const [first, second] = new Range(5, 100);
+console.log(first, second);
+```
+
+~~~check
+? What does this print?
+```js
+function* g() {
+  console.log("A");
+  yield 1;
+  console.log("B");
+  yield 2;
+}
+const it = g();
+console.log("start");
+console.log(it.next().value);
+```
+- `A`, `start`, `1`
++ `start`, `A`, `1`
+- `start`, `A`, `1`, `B`, `2`
+- `start`, `1`
+> Calling g() runs nothing. The first next() runs up to the first yield, printing "A" and producing 1. "B" never runs.
+~~~
+
+## Laziness and infinite sequences
+
+Because generators produce values **only when asked**, they can describe sequences that never end, as long as you only take what you need:
+
+```js
+function* naturals() {
+  let n = 1;
+  while (true) yield n++;
+}
+function* take(iterable, count) {
+  if (count <= 0) return;
+  for (const value of iterable) {
+    yield value;
+    if (--count === 0) return;
+  }
+}
+function* filter(iterable, predicate) {
+  for (const value of iterable) if (predicate(value)) yield value;
+}
+const squaresOfOdds = filter(naturals(), (n) => n % 2 === 1);
+console.log([...take(squaresOfOdds, 5)]);
+```
+
+Nothing here builds a big array: each number flows through the pipeline one at a time. That's **lazy evaluation**, useful for huge data (reading a large file line by line), endless streams (IDs, events) and work you might stop early.
+
+Modern JavaScript (2025: current browsers and Node.js 22+) adds these helpers directly to iterators: `naturals().filter((n) => n % 2).map((n) => n * n).take(5).toArray()`. On older platforms, small generator functions like `take` and `filter` above do the same job.
+
+## yield*: delegating to another iterable
+
+`yield* other` yields every value of another iterable in turn. It makes recursive generators natural, such as walking a tree of folders:
+
+```js
+const folder = {
+  name: "project",
+  children: [
+    { name: "README.md" },
+    { name: "src", children: [{ name: "app.js" }, { name: "utils", children: [{ name: "math.js" }] }] },
+  ],
+};
+function* walk(node, path = "") {
+  const here = path ? `${path}/${node.name}` : node.name;
+  if (!node.children) {
+    yield here;
+    return;
+  }
+  for (const child of node.children) yield* walk(child, here);
+}
+console.log([...walk(folder)]);
+```
+
+## Where you'll see this
+
+- Libraries for data processing and streams use iterators everywhere.
+- **Async generators** (`async function*` with `for await...of`, Module 10) handle data that arrives over time, such as pages from an API.
+- Many algorithms (tree traversals, permutations, pagination) are cleanest as generators.
+
+📚 **Go deeper:** javascript.info, "Iterables", "Generators" and "Async iteration and generators"; MDN JavaScript Guide, "Iterators and generators"; *Eloquent JavaScript* (4th ed.), chapter 6, "The iterator interface".
+--- goals
+- explain the iteration protocol: `Symbol.iterator`, `next()` and `{ value, done }`
+- list the language features that use iterables (for...of, spread, destructuring, Array.from, Set, Map)
+- make classes iterable with an iterator object or a generator method
+- write generator functions with `yield`, and predict when their code runs
+- build lazy pipelines over infinite sequences
+- delegate with `yield*`, including recursively
+--- quiz
+? What does `iterator.next()` return when there are no more values?
+- `null`
+- `undefined`
++ `{ value: undefined, done: true }`
+- It throws an error
+> next() always returns an object; done tells you whether the sequence has ended.
+? Why does `for (const x of { a: 1 })` throw a TypeError?
++ Plain objects aren't iterable: they have no `Symbol.iterator` method
+- Objects can't be used in loops at all
+- `const` isn't allowed in for...of
+- The object is empty
+> Use Object.keys/values/entries to iterate over an object.
+? What does calling a generator function do?
+- Runs all of its code immediately
++ Returns a generator object without running its body yet
+- Returns an array of its yielded values
+- Throws unless you use `new`
+> The body runs bit by bit, as next() is called.
+? What does `[...take(naturals(), 3)]` give, with `naturals` yielding 1, 2, 3... forever?
+- It never finishes
++ `[1, 2, 3]`
+- `[0, 1, 2]`
+- An error
+> take stops asking after 3 values, so the infinite generator is only advanced three times.
+? What does `yield* [1, 2]` do inside a generator?
+- Yields the array `[1, 2]` as one value
++ Yields 1, then 2
+- Yields `undefined`
+- Multiplies the values
+> yield* delegates to another iterable, yielding each of its values.
+--- exercise code javascript
+::prompt
+Make a class `DateRange` iterable. It's created with two dates written as `"YYYY-MM-DD"` strings and yields each day from the first to the last (inclusive) as a `"YYYY-MM-DD"` string, using a **generator method** `*[Symbol.iterator]()`. To step through days safely, work in UTC: `new Date(start + "T00:00:00Z")`, then `date.setUTCDate(date.getUTCDate() + 1)` moves one day forward, and `date.toISOString().slice(0, 10)` gives the string back.
+::starter
+class DateRange {
+  constructor(start, end) {
+    this.start = start;
+    this.end = end;
+  }
+}
+::solution
+class DateRange {
+  constructor(start, end) {
+    this.start = start;
+    this.end = end;
+  }
+
+  *[Symbol.iterator]() {
+    const day = new Date(this.start + "T00:00:00Z");
+    const last = new Date(this.end + "T00:00:00Z");
+    while (day <= last) {
+      yield day.toISOString().slice(0, 10);
+      day.setUTCDate(day.getUTCDate() + 1);
+    }
+  }
+}
+::tests
+assert.deepStrictEqual([...new DateRange("2026-02-27", "2026-03-02")], ["2026-02-27", "2026-02-28", "2026-03-01", "2026-03-02"]);
+assert.deepStrictEqual([...new DateRange("2024-02-28", "2024-03-01")], ["2024-02-28", "2024-02-29", "2024-03-01"]);
+assert.deepStrictEqual([...new DateRange("2026-01-05", "2026-01-05")], ["2026-01-05"]);
+assert.deepStrictEqual([...new DateRange("2026-01-05", "2026-01-01")], []);
+const __r = new DateRange("2026-12-31", "2027-01-01");
+assert.deepStrictEqual(Array.from(__r), ["2026-12-31", "2027-01-01"]);
+assert.deepStrictEqual([...__r], ["2026-12-31", "2027-01-01"], "a range can be iterated more than once");
+::hints
+- A generator method: `*[Symbol.iterator]() { ... yield ...; }`.
+- Loop while the current day is not after the last day (`day <= last` compares dates).
+- Yield the string first, then move the date forward one day.
+--- exercise code javascript
+::prompt
+Write three generator functions:
+
+- `fibonacci()`: yields the Fibonacci numbers 0, 1, 1, 2, 3, 5, ... forever;
+- `take(iterable, n)`: yields the first `n` values of any iterable (and stops asking after that, so it works on infinite ones);
+- `chunk(iterable, size)`: yields arrays of `size` consecutive values (the last one may be shorter).
+::starter
+function* fibonacci() {
+}
+
+function* take(iterable, n) {
+}
+
+function* chunk(iterable, size) {
+}
+::solution
+function* fibonacci() {
+  let [a, b] = [0, 1];
+  while (true) {
+    yield a;
+    [a, b] = [b, a + b];
+  }
+}
+
+function* take(iterable, n) {
+  if (n <= 0) return;
+  let count = 0;
+  for (const value of iterable) {
+    yield value;
+    if (++count >= n) return;
+  }
+}
+
+function* chunk(iterable, size) {
+  let batch = [];
+  for (const value of iterable) {
+    batch.push(value);
+    if (batch.length === size) {
+      yield batch;
+      batch = [];
+    }
+  }
+  if (batch.length) yield batch;
+}
+::tests
+assert.deepStrictEqual([...take(fibonacci(), 10)], [0, 1, 1, 2, 3, 5, 8, 13, 21, 34]);
+assert.deepStrictEqual([...take([1, 2, 3], 5)], [1, 2, 3]);
+assert.deepStrictEqual([...take(fibonacci(), 0)], []);
+assert.deepStrictEqual([...chunk([1, 2, 3, 4, 5], 2)], [[1, 2], [3, 4], [5]]);
+assert.deepStrictEqual([...chunk(take(fibonacci(), 6), 3)], [[0, 1, 1], [2, 3, 5]]);
+assert.deepStrictEqual([...chunk("abcd", 4)], [["a", "b", "c", "d"]]);
+assert.deepStrictEqual([...chunk([], 3)], []);
+let __pulled = 0;
+function* __counting() { while (true) yield ++__pulled; }
+[...take(__counting(), 3)];
+assert.strictEqual(__pulled, 3, "take must stop pulling values once it has n");
+::hints
+- fibonacci: keep two numbers; `[a, b] = [b, a + b]` moves along.
+- take: return right after yielding the n-th value, so the source isn't asked for one more.
+- chunk: collect into a batch; yield and start a new batch when it's full; yield the leftover at the end.
+--- exercise code javascript
+::prompt
+A comment thread is a tree: each comment is `{ author, text, replies: [...] }`. Write a **recursive generator** `walk(comments, depth = 0)` that yields `{ author, text, depth }` for every comment, depth-first (a comment, then its replies, then the next comment), using `yield*` for the replies. Then write `render(comments)` that returns the lines `"<indent><author>: <text>"`, indenting two spaces per depth level.
+::starter
+function* walk(comments, depth = 0) {
+}
+
+function render(comments) {
+}
+::solution
+function* walk(comments, depth = 0) {
+  for (const { author, text, replies = [] } of comments) {
+    yield { author, text, depth };
+    yield* walk(replies, depth + 1);
+  }
+}
+
+function render(comments) {
+  return [...walk(comments)].map(({ author, text, depth }) => `${"  ".repeat(depth)}${author}: ${text}`);
+}
+::tests
+const __thread = [
+  { author: "ada", text: "Generators are neat", replies: [
+    { author: "bob", text: "Agreed!", replies: [{ author: "ada", text: "Thanks", replies: [] }] },
+    { author: "cy", text: "Why?", replies: [] },
+  ] },
+  { author: "dee", text: "Second topic", replies: [] },
+];
+assert.deepStrictEqual([...walk(__thread)].map((c) => `${c.depth}${c.author}`), ["0ada", "1bob", "2ada", "1cy", "0dee"]);
+assert.deepStrictEqual(render(__thread), ["ada: Generators are neat", "  bob: Agreed!", "    ada: Thanks", "  cy: Why?", "dee: Second topic"]);
+assert.deepStrictEqual(render([]), []);
+assert.deepStrictEqual(render([{ author: "x", text: "no replies key" }]), ["x: no replies key"]);
+::hints
+- Loop over the comments; yield one, then `yield* walk(comment.replies, depth + 1)`.
+- Destructure with a default for comments without replies: `{ author, text, replies = [] }`.
+- `render` spreads the generator into an array and maps each item to a line.
+--- cards
+Iterable :: An object with a [Symbol.iterator]() method that returns an iterator. Arrays, strings, Maps, Sets...
+Iterator :: An object whose next() returns { value, done }.
+Uses of iterables :: for...of, spread [...x], destructuring, Array.from, new Set(x), new Map(x), Promise.all(x).
+Generator function :: function* f() { yield 1; } returns a generator (an iterator); code runs only as next() is called.
+yield :: Hands out a value and pauses the generator until the next value is requested.
+Lazy evaluation :: Producing values only when needed, so infinite sequences and big data are fine.
+yield* :: Yields every value of another iterable, e.g. a recursive call.
+
+=== lesson js-oop-case-study | Case study: designing a task manager | 90
+## From requirements to design
+
+Knowing the features of classes isn't the same as knowing how to design with them. In this lesson we'll design a small but realistic program step by step, the way a professional would, using the ideas from Modules 7 to 9.
+
+**The requirements** (from an imaginary product manager):
+
+1. Tasks have a title, an optional due date and a priority (low, normal, high).
+2. A task moves through the states *todo* → *doing* → *done*. It can go back from *doing* to *todo*, but a *done* task is finished.
+3. Tasks belong to projects. We list a project's tasks, filter them (by state, overdue), and see its progress.
+4. Other parts of the app (a sidebar counter, a notification) need to react when tasks change.
+5. Projects must be saved and loaded (in the browser this will be `localStorage`).
+
+## Step 1: find the nouns and verbs
+
+Nouns suggest classes and data: **task**, **project**, **state**, **priority**, **due date**. Verbs suggest methods: *create, start, finish, reopen, list, filter, save, load*. Rules suggest invariants: "a done task is finished", "titles aren't empty".
+
+A first sketch:
+
+- `Task`: title, due date, priority, state; methods `start()`, `finish()`, `reopen()`, `isOverdue(today)`.
+- `Project`: a name and its tasks; methods `add()`, `find()`, filters, `progress`.
+- Saving: `toJSON()` and `fromJSON()`, with the actual storage injected (so tests don't need a browser).
+- Change notifications: an observer, composed into `Project`.
+
+## Step 2: a Task that protects its rules
+
+State transitions are a classic source of bugs, so the task enforces them itself, with a small table of allowed moves:
+
+```js
+class Task {
+  static #moves = { todo: ["doing"], doing: ["todo", "done"], done: [] };
+  #state = "todo";
+
+  constructor(title, { due = null, priority = "normal" } = {}) {
+    if (!title || !title.trim()) throw new Error("A task needs a title");
+    if (!["low", "normal", "high"].includes(priority)) throw new RangeError(`Unknown priority: ${priority}`);
+    this.title = title.trim();
+    this.due = due;
+    this.priority = priority;
+  }
+
+  get state() {
+    return this.#state;
+  }
+
+  #moveTo(next) {
+    if (!Task.#moves[this.#state].includes(next)) {
+      throw new Error(`Can't move "${this.title}" from ${this.#state} to ${next}`);
+    }
+    this.#state = next;
+  }
+
+  start() {
+    this.#moveTo("doing");
+  }
+  finish() {
+    this.#moveTo("done");
+  }
+  reopen() {
+    this.#moveTo("todo");
+  }
+
+  isOverdue(today) {
+    return this.due !== null && this.#state !== "done" && this.due < today;
+  }
+}
+
+const t = new Task("Write tests", { due: "2026-10-10", priority: "high" });
+t.start();
+console.log(t.state, t.isOverdue("2026-10-14"));
+t.finish();
+try {
+  t.start();
+} catch (error) {
+  console.log(error.message);
+}
+```
+
+Design notes:
+
+- The **options object** keeps the constructor readable: `new Task("Write tests", { priority: "high" })`.
+- The state is **private**, changed only through intention-revealing methods (`start`, `finish`), so the rules can't be bypassed.
+- The transition table is **data**, not a tangle of `if`s: adding a "blocked" state later means editing one line.
+- Dates are passed in as `"YYYY-MM-DD"` strings, which compare correctly as text, and `isOverdue` receives `today` instead of reading the clock: **dependency injection** of time, so tests are deterministic.
+
+## Step 3: a Project that composes tasks and events
+
+```js
+class Emitter {
+  #handlers = new Map();
+  on(event, fn) {
+    if (!this.#handlers.has(event)) this.#handlers.set(event, []);
+    this.#handlers.get(event).push(fn);
+  }
+  emit(event, data) {
+    for (const fn of this.#handlers.get(event) ?? []) fn(data);
+  }
+}
+
+class Project {
+  #tasks = [];
+  events = new Emitter();
+
+  constructor(name) {
+    this.name = name;
+  }
+
+  add(task) {
+    this.#tasks.push(task);
+    this.events.emit("changed", { type: "added", title: task.title });
+    return task;
+  }
+
+  update(title, action) {
+    const task = this.#tasks.find((t) => t.title === title);
+    if (!task) throw new Error(`No task called "${title}"`);
+    task[action]();
+    this.events.emit("changed", { type: action, title });
+  }
+
+  inState(state) {
+    return this.#tasks.filter((t) => t.state === state);
+  }
+
+  get progress() {
+    if (this.#tasks.length === 0) return 0;
+    return Math.round((this.inState("done").length / this.#tasks.length) * 100);
+  }
+
+  *[Symbol.iterator]() {
+    yield* this.#tasks;
+  }
+}
+
+class Task {
+  #state = "todo";
+  constructor(title) {
+    this.title = title;
+  }
+  get state() {
+    return this.#state;
+  }
+  start() {
+    this.#state = "doing";
+  }
+  finish() {
+    this.#state = "done";
+  }
+}
+
+const home = new Project("Home");
+home.events.on("changed", (e) => console.log(`[event] ${e.type}: ${e.title}`));
+home.add(new Task("Water plants"));
+home.add(new Task("Fix the tap"));
+home.update("Water plants", "start");
+home.update("Water plants", "finish");
+console.log(`${home.name}: ${home.progress}% done`);
+console.log([...home].map((t) => `${t.title} (${t.state})`));
+```
+
+(This example repeats a simplified `Task` so it can run on its own.) Design notes:
+
+- `Project` **has** an emitter (composition), rather than extending one: other parts of the app subscribe with `project.events.on(...)` without the project knowing who they are (observer).
+- The task list is private; outside code gets **filtered copies** and **iteration** (a generator method), never the array itself.
+- `update` tells the task what to do (tell, don't ask), and is the one place where changes are announced.
+
+## Step 4: saving and loading
+
+Persistence is a separate responsibility, so it lives in a separate place. The domain classes only know how to turn themselves into plain data and back; **where** data is stored is injected:
+
+```js
+class Task {
+  constructor(title, state = "todo") {
+    this.title = title;
+    this.state = state;
+  }
+  toJSON() {
+    return { title: this.title, state: this.state };
+  }
+  static fromJSON(data) {
+    return new Task(data.title, data.state);
+  }
+}
+
+class MemoryStorage {
+  #data = new Map();
+  save(key, text) {
+    this.#data.set(key, text);
+  }
+  load(key) {
+    return this.#data.get(key) ?? null;
+  }
+}
+
+function saveTasks(storage, key, tasks) {
+  storage.save(key, JSON.stringify(tasks));
+}
+function loadTasks(storage, key) {
+  const text = storage.load(key);
+  return text === null ? [] : JSON.parse(text).map(Task.fromJSON);
+}
+
+const storage = new MemoryStorage();
+saveTasks(storage, "home", [new Task("Water plants", "done"), new Task("Fix the tap")]);
+const loaded = loadTasks(storage, "home");
+console.log(loaded, loaded[0] instanceof Task);
+```
+
+In the browser, a `LocalStorageAdapter` with the same `save`/`load` methods would wrap `localStorage.setItem`/`getItem`; in Node, a file-based one would use `fs`. The rest of the program never changes: **dependency inversion** in practice.
+
+## Step 5: tests pin it all down
+
+Every rule from the requirements becomes a test: transitions, invalid input, filters, progress, a save/load round trip. Because time and storage are injected, every test is fast and deterministic. You've written tests like these in Module 7; the exercises below are checked the same way.
+
+## What we didn't do
+
+No inheritance hierarchy (no `HighPriorityTask extends Task`): priority is just data. No singleton "TaskManager" that owns everything. No abstraction for things that don't vary yet (YAGNI). The design is small, and each part has one job, which is what makes it easy to grow.
+
+📚 **Go deeper:** Sandi Metz, *Practical Object-Oriented Design* (examples in Ruby, ideas universal); Martin Fowler, "Tell Don't Ask" and "Anemic Domain Model" (martinfowler.com); *Eloquent JavaScript* (4th ed.), chapter 7, "Project: A Robot".
+--- goals
+- turn written requirements into classes, methods and invariants (nouns, verbs, rules)
+- enforce state transitions inside a class with private state and a transition table
+- compose an event emitter into a domain class to notify other parts of a program
+- separate persistence from domain logic with `toJSON`/`fromJSON` and an injected storage
+- keep designs small: data instead of subclasses, no premature abstraction
+--- quiz
+? In the requirements, which words usually suggest classes?
++ The nouns (task, project)
+- The verbs (finish, save)
+- The adjectives (high, overdue)
+- The numbers
+> Nouns hint at classes and data; verbs at methods; rules at invariants.
+? Why is `isOverdue(today)` given the date instead of calling `new Date()` inside?
+- Dates can't be created inside methods
++ So tests can pass a fixed date and get the same result every time
+- It's faster
+- To keep the method private
+> Injecting time makes behaviour deterministic and testable.
+? Why does `Project` hold an `Emitter` instead of extending one?
+- Classes can't extend Emitter
++ Composition keeps Project's interface focused and the emitter swappable; a project isn't a kind of emitter
+- Inheritance is forbidden in JavaScript
+- Emitters can only be used once
+> Has-a, not is-a.
+? Where should code that talks to `localStorage` live in this design?
+- Inside `Task`
+- Inside `Project`'s constructor
++ In a separate storage adapter with `save`/`load`, injected where it's needed
+- In a global variable
+> Persistence is a separate responsibility; injecting it keeps domain classes testable.
+? Why isn't there a `HighPriorityTask extends Task` class?
+- JavaScript doesn't allow it
++ Priority is just data: it doesn't change behaviour, so a subclass would add complexity for nothing
+- Subclasses can't have constructors
+- It would break JSON
+> Use subclasses for different behaviour, not for different values.
+--- exercise code javascript
+::prompt
+Write the `Task` class from the case study:
+
+- `constructor(title, { due = null, priority = "normal" } = {})`: trims the title and throws an `Error` if it's empty; throws a `RangeError` for a priority other than `"low"`, `"normal"` or `"high"`;
+- a private state starting at `"todo"`, with a `state` getter;
+- `start()`, `finish()` and `reopen()`, allowed only as todo → doing, doing → todo, doing → done (anything else throws an `Error` whose message contains the current and requested states);
+- `isOverdue(today)`: true if there's a due date (a `"YYYY-MM-DD"` string) before `today` and the task isn't done;
+- `toJSON()` returning `{ title, due, priority, state }` and `static fromJSON(data)` rebuilding an equal task, including its state.
+::starter
+class Task {
+}
+::solution
+class Task {
+  static #moves = { todo: ["doing"], doing: ["todo", "done"], done: [] };
+  #state = "todo";
+
+  constructor(title, { due = null, priority = "normal" } = {}) {
+    if (!title || !title.trim()) throw new Error("A task needs a title");
+    if (!["low", "normal", "high"].includes(priority)) throw new RangeError(`Unknown priority: ${priority}`);
+    this.title = title.trim();
+    this.due = due;
+    this.priority = priority;
+  }
+
+  get state() {
+    return this.#state;
+  }
+
+  #moveTo(next) {
+    if (!Task.#moves[this.#state].includes(next)) throw new Error(`Can't move from ${this.#state} to ${next}`);
+    this.#state = next;
+  }
+
+  start() {
+    this.#moveTo("doing");
+  }
+
+  finish() {
+    this.#moveTo("done");
+  }
+
+  reopen() {
+    this.#moveTo("todo");
+  }
+
+  isOverdue(today) {
+    return this.due !== null && this.#state !== "done" && this.due < today;
+  }
+
+  toJSON() {
+    return { title: this.title, due: this.due, priority: this.priority, state: this.#state };
+  }
+
+  static fromJSON({ title, due, priority, state }) {
+    const task = new Task(title, { due, priority });
+    task.#state = state;
+    return task;
+  }
+}
+::tests
+const __t = new Task("  Write tests ", { due: "2026-10-10", priority: "high" });
+assert.strictEqual(__t.title, "Write tests");
+assert.strictEqual(__t.state, "todo");
+assert.throws(() => __t.finish(), (e) => /todo/.test(e.message) && /done/.test(e.message));
+__t.start();
+assert.strictEqual(__t.isOverdue("2026-10-14"), true);
+assert.strictEqual(__t.isOverdue("2026-10-01"), false);
+__t.reopen();
+__t.start();
+__t.finish();
+assert.strictEqual(__t.state, "done");
+assert.strictEqual(__t.isOverdue("2030-01-01"), false, "done tasks are never overdue");
+assert.throws(() => __t.reopen(), Error);
+assert.throws(() => new Task("   "), { message: "A task needs a title" });
+assert.throws(() => new Task("x", { priority: "urgent" }), RangeError);
+assert.strictEqual(new Task("x").isOverdue("2026-01-01"), false);
+const __copy = Task.fromJSON(JSON.parse(JSON.stringify(__t)));
+assert.ok(__copy instanceof Task);
+assert.deepStrictEqual(__copy.toJSON(), { title: "Write tests", due: "2026-10-10", priority: "high", state: "done" });
+assert.throws(() => { __t.state = "todo"; }, TypeError, "state must be read-only");
+::hints
+- A static private table `static #moves = { todo: ["doing"], doing: ["todo", "done"], done: [] };` makes the rules data.
+- One private `#moveTo(next)` method checks the table and changes the state; start/finish/reopen call it.
+- Inside the class, a static method can set a private field of a new instance: `task.#state = state;`.
+--- exercise code javascript
+::prompt
+Write a class `Project` that **composes** tasks and an event emitter (both are given). It needs:
+
+- `constructor(name)`; a public `events` property holding a new `Emitter`;
+- `add(title, options)`: creates a `Task`, stores it, emits `"changed"` with `{ type: "added", title }`, returns the task; throws an `Error` if a task with that title already exists;
+- `update(title, action)` where action is `"start"`, `"finish"` or `"reopen"`: calls it on the task (unknown title: throw an `Error`) and emits `{ type: action, title }`;
+- `overdue(today)`: the titles of overdue tasks; a `progress` getter: the percentage of done tasks (rounded; 0 for no tasks);
+- `*[Symbol.iterator]()` yielding the tasks; `toJSON()` returning `{ name, tasks }` and `static fromJSON(data)`.
+::starter
+class Emitter {
+  #handlers = new Map();
+  on(event, fn) {
+    if (!this.#handlers.has(event)) this.#handlers.set(event, []);
+    this.#handlers.get(event).push(fn);
+  }
+  emit(event, data) {
+    for (const fn of this.#handlers.get(event) ?? []) fn(data);
+  }
+}
+
+class Task {
+  constructor(title, { due = null, state = "todo" } = {}) {
+    this.title = title;
+    this.due = due;
+    this.state = state;
+  }
+  start() { if (this.state !== "todo") throw new Error("not todo"); this.state = "doing"; }
+  finish() { if (this.state !== "doing") throw new Error("not doing"); this.state = "done"; }
+  reopen() { if (this.state !== "doing") throw new Error("not doing"); this.state = "todo"; }
+  isOverdue(today) { return this.due !== null && this.state !== "done" && this.due < today; }
+  toJSON() { return { title: this.title, due: this.due, state: this.state }; }
+}
+
+class Project {
+}
+::solution
+class Emitter {
+  #handlers = new Map();
+  on(event, fn) {
+    if (!this.#handlers.has(event)) this.#handlers.set(event, []);
+    this.#handlers.get(event).push(fn);
+  }
+  emit(event, data) {
+    for (const fn of this.#handlers.get(event) ?? []) fn(data);
+  }
+}
+
+class Task {
+  constructor(title, { due = null, state = "todo" } = {}) {
+    this.title = title;
+    this.due = due;
+    this.state = state;
+  }
+  start() { if (this.state !== "todo") throw new Error("not todo"); this.state = "doing"; }
+  finish() { if (this.state !== "doing") throw new Error("not doing"); this.state = "done"; }
+  reopen() { if (this.state !== "doing") throw new Error("not doing"); this.state = "todo"; }
+  isOverdue(today) { return this.due !== null && this.state !== "done" && this.due < today; }
+  toJSON() { return { title: this.title, due: this.due, state: this.state }; }
+}
+
+class Project {
+  #tasks = new Map();
+  events = new Emitter();
+
+  constructor(name) {
+    this.name = name;
+  }
+
+  add(title, options) {
+    if (this.#tasks.has(title)) throw new Error(`Duplicate task: ${title}`);
+    const task = new Task(title, options);
+    this.#tasks.set(title, task);
+    this.events.emit("changed", { type: "added", title });
+    return task;
+  }
+
+  update(title, action) {
+    const task = this.#tasks.get(title);
+    if (!task) throw new Error(`No task called "${title}"`);
+    task[action]();
+    this.events.emit("changed", { type: action, title });
+  }
+
+  overdue(today) {
+    return [...this].filter((t) => t.isOverdue(today)).map((t) => t.title);
+  }
+
+  get progress() {
+    const all = [...this];
+    if (all.length === 0) return 0;
+    return Math.round((all.filter((t) => t.state === "done").length / all.length) * 100);
+  }
+
+  *[Symbol.iterator]() {
+    yield* this.#tasks.values();
+  }
+
+  toJSON() {
+    return { name: this.name, tasks: [...this] };
+  }
+
+  static fromJSON({ name, tasks }) {
+    const project = new Project(name);
+    for (const t of tasks) project.#tasks.set(t.title, new Task(t.title, t));
+    return project;
+  }
+}
+::tests
+const __p = new Project("Launch");
+const __events = [];
+__p.events.on("changed", (e) => __events.push(`${e.type}:${e.title}`));
+__p.add("Design", { due: "2026-10-01" });
+__p.add("Build", { due: "2026-11-01" });
+__p.add("Test");
+assert.throws(() => __p.add("Test"), /Duplicate/);
+__p.update("Design", "start");
+__p.update("Design", "finish");
+__p.update("Build", "start");
+assert.throws(() => __p.update("Ship", "start"), /No task/);
+assert.deepStrictEqual(__events, ["added:Design", "added:Build", "added:Test", "start:Design", "finish:Design", "start:Build"]);
+assert.strictEqual(__p.progress, 33);
+assert.deepStrictEqual(__p.overdue("2026-11-05"), ["Build"]);
+assert.deepStrictEqual([...__p].map((t) => t.title), ["Design", "Build", "Test"]);
+const __copy = Project.fromJSON(JSON.parse(JSON.stringify(__p)));
+assert.deepStrictEqual(JSON.parse(JSON.stringify(__copy)), JSON.parse(JSON.stringify(__p)));
+assert.ok([...__copy][0] instanceof Task);
+assert.strictEqual(new Project("Empty").progress, 0);
+assert.deepStrictEqual(Object.keys(__p).sort(), ["events", "name"], "tasks must be private");
+::hints
+- Store tasks in a private `Map` keyed by title; that makes duplicates and lookups easy.
+- `task[action]()` calls the method named by the string in `action`.
+- The generator method `*[Symbol.iterator]() { yield* this.#tasks.values(); }` lets `[...this]` work everywhere else.
+--- cards
+Design from requirements :: Nouns → classes/data, verbs → methods, rules → invariants.
+Transition table :: Allowed state changes stored as data ({ todo: ["doing"], ... }) checked by one private method.
+Injected time :: Pass today/now in, so behaviour (overdue, greeting) is testable.
+Persistence boundary :: Domain classes provide toJSON/fromJSON; storage is a separate, injected adapter.
+Data, not subclasses :: Model variations of value (priority) as data; use subclasses only for different behaviour.
+
+=== lesson js-m9-test | Module 9 test | 200 | exam
+This test covers Module 9: inheritance, polymorphism and duck typing, composition and mixins, design principles and patterns, iterators and generators, and designing classes from requirements.
+
+Before you start, check that you can:
+
+- write subclasses with `super`, override methods and explain which version runs;
+- choose between inheritance, composition and mixins;
+- name the SOLID principles and use the factory, observer, adapter and decorator patterns;
+- make objects iterable and write generators, including lazy and recursive ones;
+- turn requirements into a small, testable design.
+
+## Practise more
+
+- Code Dojo: [Event Emitter](#/dojo/dojo-js-event-emitter) (the observer pattern) and [Deep Equal](#/dojo/dojo-js-deep-equal).
+- Project: [Library Management (JavaScript)](#/projects/library-system): design it with composition and tests.
+--- goals
+- design class hierarchies and compositions that are easy to change
+- apply design principles and patterns where they help
+- build iterable objects and lazy sequences
+--- quiz
+? What does this print?
+```js
+class A {
+  name() {
+    return "A";
+  }
+  hello() {
+    return `I am ${this.name()}`;
+  }
+}
+class B extends A {
+  name() {
+    return "B and " + super.name();
+  }
+}
+console.log(new B().hello());
+```
+- `I am A`
+- `I am B`
++ `I am B and A`
+- An error
+> hello is inherited; this.name() finds B's override, which also calls A's version through super.
+? Which design best follows "composition over inheritance" for a game character that can fly, swim or both?
+- `class FlyingSwimmingCharacter extends FlyingCharacter`
++ A `Character` that holds a list of ability objects (`[new Flight(), new Swimming()]`)
+- One class with a `switch` on a `type` string in every method
+- Copying the fly and swim code into each character class
+> Abilities as composable parts: any combination without new classes.
+? A function accepts anything with a `render()` method. What is this called?
+- Inheritance
++ Duck typing
+- Encapsulation
+- Recursion
+> What matters is the method, not the class.
+? Which SOLID principle says a subclass must work anywhere its parent does?
+- Single responsibility
+- Open/closed
++ Liskov substitution
+- Dependency inversion
+> Substitutability without surprises.
+? What does this print?
+```js
+function* gen() {
+  yield 1;
+  yield* [2, 3];
+  return 4;
+}
+console.log([...gen()]);
+```
+- `[ 1, [ 2, 3 ], 4 ]`
+- `[ 1, 2, 3, 4 ]`
++ `[ 1, 2, 3 ]`
+- `[ 1 ]`
+> yield* yields 2 and 3; the return value isn't included by spread.
+? Which pattern wraps an object to give it a different interface?
++ Adapter
+- Decorator
+- Observer
+- Singleton
+> A decorator keeps the interface; an adapter changes it.
+? A class `Report` both computes statistics and formats them as HTML, CSV and PDF. What's the most useful refactoring?
+- Make every method static
++ Separate computing the statistics from formatting, with one formatter per output format
+- Add more `if` statements for each format
+- Turn it into a singleton
+> Single responsibility plus polymorphism (one formatter object per format).
+? What must an object have to work with `for...of`?
+- A `length` property
+- A `forEach` method
++ A `[Symbol.iterator]()` method returning an iterator
+- Numeric keys
+> That's the iteration protocol.
+--- exercise code javascript
+::prompt
+Build a tiny **pipeline** for processing records, combining several ideas from this module. Write:
+
+- `from(iterable)` returning a `Pipeline` object that wraps it;
+- `Pipeline` methods `map(fn)`, `filter(fn)` and `take(n)`, each returning a **new** `Pipeline` that is **lazy** (implemented with generators: nothing runs until the pipeline is iterated);
+- `Pipeline` must be iterable, and have `toArray()`.
+
+Laziness will be checked: a pipeline built on an infinite generator with `take(3)` must finish, and must not pull more values than needed.
+::starter
+class Pipeline {
+  constructor(source) {
+    this.source = source;
+  }
+}
+
+function from(iterable) {
+}
+::solution
+class Pipeline {
+  constructor(source) {
+    this.source = source;
+  }
+
+  *[Symbol.iterator]() {
+    yield* this.source;
+  }
+
+  map(fn) {
+    const source = this.source;
+    return new Pipeline((function* () {
+      for (const x of source) yield fn(x);
+    })());
+  }
+
+  filter(fn) {
+    const source = this.source;
+    return new Pipeline((function* () {
+      for (const x of source) if (fn(x)) yield x;
+    })());
+  }
+
+  take(n) {
+    const source = this.source;
+    return new Pipeline((function* () {
+      if (n <= 0) return;
+      let count = 0;
+      for (const x of source) {
+        yield x;
+        if (++count >= n) return;
+      }
+    })());
+  }
+
+  toArray() {
+    return [...this];
+  }
+}
+
+function from(iterable) {
+  return new Pipeline(iterable);
+}
+::tests
+assert.deepStrictEqual(from([1, 2, 3, 4, 5, 6]).filter((n) => n % 2 === 0).map((n) => n * 10).toArray(), [20, 40, 60]);
+let __pulled = 0;
+function* __naturals() { while (true) yield ++__pulled; }
+const __p = from(__naturals()).map((n) => n * n).filter((n) => n % 2 === 1).take(3);
+assert.strictEqual(__pulled, 0, "building the pipeline must not run anything");
+assert.deepStrictEqual(__p.toArray(), [1, 9, 25]);
+assert.strictEqual(__pulled, 5, "take(3) must stop pulling values once it has 3");
+assert.deepStrictEqual([...from("abc").map((c) => c.toUpperCase())], ["A", "B", "C"]);
+assert.deepStrictEqual(from([]).take(2).toArray(), []);
+assert.ok(from([1]).map((x) => x) instanceof Pipeline);
+::hints
+- Each method creates a generator over the current source and wraps it in a new `Pipeline`.
+- Calling a generator function creates the generator without running its body, which is exactly the laziness you need.
+- `toArray()` is just `[...this]`, once the class has a `*[Symbol.iterator]()` method.
+--- exercise code javascript
+::prompt
+Design a small **notification system**:
+
+- an abstract `Channel` class: creating one directly throws a `TypeError`; it has `send(user, message)` which checks that the message isn't empty (throw an `Error`) and then calls `this.deliver(user, message)`, which subclasses implement (the base version throws);
+- `EmailChannel` (delivers to `user.email`, returning `"email:<address>:<message>"`) and `SmsChannel` (delivers to `user.phone`, truncating the message to 20 characters, returning `"sms:<phone>:<message>"`); both throw an `Error` if the user has no address/number;
+- `createChannel(type)`: a factory for `"email"` and `"sms"` (unknown: throw an `Error`);
+- `Notifier` composed with a list of channels: `notify(user, message)` sends through every channel, collects the results, and **doesn't stop** if one channel fails: failures are returned as `"failed:<channel class name>:<error message>"`.
+::starter
+class Channel {
+}
+
+class EmailChannel extends Channel {
+}
+
+class SmsChannel extends Channel {
+}
+
+function createChannel(type) {
+}
+
+class Notifier {
+}
+::solution
+class Channel {
+  constructor() {
+    if (new.target === Channel) throw new TypeError("Channel is abstract");
+  }
+
+  send(user, message) {
+    if (!message) throw new Error("Empty message");
+    return this.deliver(user, message);
+  }
+
+  deliver() {
+    throw new Error(`${this.constructor.name} must implement deliver()`);
+  }
+}
+
+class EmailChannel extends Channel {
+  deliver(user, message) {
+    if (!user.email) throw new Error("No email address");
+    return `email:${user.email}:${message}`;
+  }
+}
+
+class SmsChannel extends Channel {
+  deliver(user, message) {
+    if (!user.phone) throw new Error("No phone number");
+    return `sms:${user.phone}:${message.slice(0, 20)}`;
+  }
+}
+
+function createChannel(type) {
+  if (type === "email") return new EmailChannel();
+  if (type === "sms") return new SmsChannel();
+  throw new Error(`Unknown channel: ${type}`);
+}
+
+class Notifier {
+  constructor(channels) {
+    this.channels = channels;
+  }
+
+  notify(user, message) {
+    return this.channels.map((channel) => {
+      try {
+        return channel.send(user, message);
+      } catch (error) {
+        return `failed:${channel.constructor.name}:${error.message}`;
+      }
+    });
+  }
+}
+::tests
+assert.throws(() => new Channel(), TypeError);
+const __n = new Notifier([createChannel("email"), createChannel("sms")]);
+assert.deepStrictEqual(__n.notify({ email: "ada@x.io", phone: "555" }, "Your build passed, congratulations!"), [
+  "email:ada@x.io:Your build passed, congratulations!",
+  "sms:555:Your build passed, c",
+]);
+assert.deepStrictEqual(__n.notify({ email: "bo@x.io" }, "Hi"), ["email:bo@x.io:Hi", "failed:SmsChannel:No phone number"]);
+assert.deepStrictEqual(__n.notify({ email: "a@b" }, ""), ["failed:EmailChannel:Empty message", "failed:SmsChannel:Empty message"]);
+assert.throws(() => createChannel("pigeon"), /Unknown channel/);
+class __Push extends Channel { deliver(u, m) { return `push:${u.id}:${m}`; } }
+assert.deepStrictEqual(new Notifier([new __Push()]).notify({ id: 7 }, "ok"), ["push:7:ok"], "new channels plug in without changing Notifier");
+class __Broken extends Channel {}
+assert.deepStrictEqual(new Notifier([new __Broken()]).notify({}, "x"), ["failed:__Broken:__Broken must implement deliver()"]);
+::hints
+- The base `send` is a template method: validate, then call `this.deliver(...)`.
+- Notifier wraps each `channel.send` in `try`/`catch`, so one failure doesn't stop the others.
+- `channel.constructor.name` gives the class name for the failure message.
