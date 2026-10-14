@@ -1,0 +1,1744 @@
+=== module Module 9 · Object-oriented programming II: inheritance and composition
+
+=== lesson py-inheritance | Inheritance | 100
+## Building on an existing class
+
+Often one kind of thing is a **special case** of another: a dog *is an* animal, a savings account *is a* bank account, a manager *is an* employee. **Inheritance** lets a new class start with everything an existing class has and then add or change only what's different.
+
+```python
+class Animal:
+    def __init__(self, name):
+        self.name = name
+
+    def speak(self):
+        return "..."
+
+    def describe(self):
+        return f"{self.name} says {self.speak()}"
+
+
+class Dog(Animal):          # Dog inherits from Animal
+    def speak(self):        # override: replace the inherited version
+        return "Woof!"
+
+
+class Cat(Animal):
+    def speak(self):
+        return "Meow"
+
+
+print(Dog("Rex").describe())     # Rex says Woof!
+print(Cat("Tom").describe())     # Tom says Meow
+print(Animal("Generic").describe())  # Generic says ...
+```
+
+- `Animal` is the **base class** (also called parent or superclass); `Dog` is a **derived class** (child, subclass).
+- `Dog` **inherits** `__init__` and `describe` without writing them again.
+- `Dog` **overrides** `speak`. Notice that the inherited `describe` calls `self.speak()`, and gets the **dog's** version, because `self` is a `Dog`. That's the heart of OOP: general code in the base class, specific behaviour in the subclasses.
+
+## How Python finds a method
+
+For `rex.describe()`, Python looks in the object, then in its class `Dog`, then in `Dog`'s base class `Animal`, and so on up the chain. The first match wins. At the top of every chain is the class `object`, which provides defaults like `__repr__` and `__eq__`; that's why even an empty class can be printed and compared.
+
+## Extending a method with super()
+
+Often you want to **add to** the parent's behaviour rather than replace it. `super()` gives access to the parent's version:
+
+```python
+class Dog(Animal):
+    def __init__(self, name, breed):
+        super().__init__(name)      # let Animal set up what it knows about
+        self.breed = breed          # then add what's specific to dogs
+        self.tricks = []
+
+    def describe(self):
+        return super().describe() + f" (a {self.breed})"
+
+
+rex = Dog("Rex", "beagle")
+print(rex.describe())    # Rex says ... (a beagle)
+```
+
+If a subclass defines its own `__init__`, the parent's `__init__` does **not** run automatically. Forgetting `super().__init__(...)` is a classic bug: attributes the parent sets up (like `name`) never get created.
+
+## isinstance and issubclass
+
+```python
+isinstance(rex, Dog)        # True
+isinstance(rex, Animal)     # True: a Dog is an Animal
+isinstance(rex, Cat)        # False
+issubclass(Dog, Animal)     # True
+```
+
+Use `isinstance` rather than `type(x) == Dog`, because it respects inheritance.
+
+## Inheritance you already use
+
+Python's exceptions are a class hierarchy, which is why `except LookupError` catches a `KeyError`. When you wrote `class InsufficientFundsError(Exception)` in Module 7, you were using inheritance: your exception got all of `Exception`'s behaviour for free.
+
+## When is inheritance right?
+
+Use it for a genuine **"is a"** relationship, where a subclass object can be used **anywhere** a base class object is expected without surprises. (That rule has a name, the **Liskov substitution principle**, which Module 10 returns to.) A savings account is a bank account: any code that deposits into an account works with it. Inheritance is the wrong tool when you just want to reuse some code; the composition lesson shows the alternative.
+
+Keep hierarchies **shallow**: one or two levels are easy to follow; five levels of subclasses make it hard to know where any method comes from.
+
+📚 **Go deeper:** Python Tutorial, section 9.5 "Inheritance"; *Python Crash Course* (3rd ed.), chapter 9 (inheritance); *Think Python* (3rd ed.), chapter 17 "Inheritance".
+--- quiz
+? What does this print?
+```python
+class A:
+    def hello(self):
+        return "A"
+
+class B(A):
+    pass
+
+print(B().hello())
+```
++ `A`
+- `B`
+- An error: B has no hello
+- `None`
+> B inherits `hello` from A.
+? What does this print?
+```python
+class Shape:
+    def name(self):
+        return "shape"
+    def describe(self):
+        return "I am a " + self.name()
+
+class Circle(Shape):
+    def name(self):
+        return "circle"
+
+print(Circle().describe())
+```
+- `I am a shape`
++ `I am a circle`
+- An error
+- `I am a None`
+> `describe` calls `self.name()`, and `self` is a Circle, so the override is used.
+? A subclass defines `__init__` but never calls `super().__init__(...)`. What happens?
+- Python calls the parent's `__init__` automatically anyway
++ The parent's setup never runs, so its attributes are missing
+- It's a syntax error
+- Nothing; it makes no difference
+> Overriding `__init__` replaces it; call `super().__init__()` to keep the parent's setup.
+? Given `class Dog(Animal)`, what is `isinstance(Dog("Rex"), Animal)`?
++ `True`
+- `False`
+- An error
+- `None`
+> An instance of a subclass is also an instance of the base class.
+? Which is a good use of inheritance?
+- `class Car(Engine)`, because a car uses an engine
++ `class SavingsAccount(BankAccount)`, because a savings account is a bank account
+- `class Logger(list)`, to reuse `append`
+- `class Customer(Address)`, because customers have addresses
+> Inheritance models "is a". "Has a" relationships call for composition.
+--- exercise code python
+::prompt
+Build a small class hierarchy:
+
+- `Animal(name)` with `speak()` returning `"..."` and `describe()` returning `"<name> says <speak()>"`;
+- `Dog` and `Cat` override `speak()` to return `"Woof!"` and `"Meow"`;
+- `Dog(name, breed)` also stores `breed` and an empty `tricks` list (call `super().__init__`), has `learn(trick)` to add a trick, and overrides `describe()` to add ` and knows N tricks` to the parent's description.
+::starter
+class Animal:
+    def __init__(self, name):
+        self.name = name
+::solution
+class Animal:
+    def __init__(self, name):
+        self.name = name
+
+    def speak(self):
+        return "..."
+
+    def describe(self):
+        return f"{self.name} says {self.speak()}"
+
+
+class Dog(Animal):
+    def __init__(self, name, breed):
+        super().__init__(name)
+        self.breed = breed
+        self.tricks = []
+
+    def speak(self):
+        return "Woof!"
+
+    def learn(self, trick):
+        self.tricks.append(trick)
+
+    def describe(self):
+        return super().describe() + f" and knows {len(self.tricks)} tricks"
+
+
+class Cat(Animal):
+    def speak(self):
+        return "Meow"
+::tests
+assert Animal("Thing").describe() == "Thing says ..."
+assert Cat("Tom").describe() == "Tom says Meow"
+rex = Dog("Rex", "beagle")
+assert rex.name == "Rex" and rex.breed == "beagle"
+rex.learn("sit")
+rex.learn("roll over")
+assert rex.describe() == "Rex says Woof! and knows 2 tricks"
+assert isinstance(rex, Animal) and issubclass(Cat, Animal)
+assert Dog("Fido", "pug").tricks == [], "each dog needs its own tricks list"
+assert "describe" not in vars(Cat), "Cat should inherit describe, not copy it"
+::hints
+- `Dog.__init__` starts with `super().__init__(name)`.
+- `Dog.describe` can build on the parent's: `super().describe() + f" and knows {len(self.tricks)} tricks"`.
+- `Cat` only needs to override `speak`.
+--- exercise code python
+::prompt
+`Employee(name, salary)` is given, with `annual_pay()` returning the salary. Write `Manager(Employee)`:
+
+- `Manager(name, salary, bonus)` stores the bonus (reuse the parent's `__init__` with `super()`) and starts with an empty `reports` list;
+- `add_report(employee)` adds an employee who reports to the manager;
+- `annual_pay()` is the parent's annual pay **plus** the bonus, plus 1,000 for each report.
+::starter
+class Employee:
+    def __init__(self, name, salary):
+        self.name = name
+        self.salary = salary
+
+    def annual_pay(self):
+        return self.salary
+
+
+class Manager(Employee):
+    pass
+::solution
+class Employee:
+    def __init__(self, name, salary):
+        self.name = name
+        self.salary = salary
+
+    def annual_pay(self):
+        return self.salary
+
+
+class Manager(Employee):
+    def __init__(self, name, salary, bonus):
+        super().__init__(name, salary)
+        self.bonus = bonus
+        self.reports = []
+
+    def add_report(self, employee):
+        self.reports.append(employee)
+
+    def annual_pay(self):
+        return super().annual_pay() + self.bonus + 1000 * len(self.reports)
+::tests
+boss = Manager("Grace", 90000, 10000)
+assert boss.name == "Grace" and boss.salary == 90000
+assert boss.annual_pay() == 100000
+boss.add_report(Employee("Ada", 60000))
+boss.add_report(Employee("Alan", 55000))
+assert boss.annual_pay() == 102000
+assert Employee("Bo", 30000).annual_pay() == 30000
+assert isinstance(boss, Employee)
+assert Manager("X", 1, 1).reports == []
+::hints
+- In `Manager.__init__`, call `super().__init__(name, salary)` first.
+- `annual_pay` can call `super().annual_pay()` and add to it.
+--- exercise code python
+::prompt
+Write a shape hierarchy:
+
+- `Shape` has `area()` that raises `NotImplementedError`, and `describe()` returning e.g. `"Circle with area 3.14"` (the class name, then the area rounded to 2 decimals). Get the class name with `type(self).__name__`;
+- `Circle(radius)` and `Rectangle(width, height)` implement `area()`;
+- `Square(side)` is a `Rectangle` whose width and height are both `side` (use `super().__init__`).
+::starter
+import math
+
+
+class Shape:
+    def area(self):
+        raise NotImplementedError
+::solution
+import math
+
+
+class Shape:
+    def area(self):
+        raise NotImplementedError
+
+    def describe(self):
+        return f"{type(self).__name__} with area {round(self.area(), 2)}"
+
+
+class Circle(Shape):
+    def __init__(self, radius):
+        self.radius = radius
+
+    def area(self):
+        return math.pi * self.radius ** 2
+
+
+class Rectangle(Shape):
+    def __init__(self, width, height):
+        self.width = width
+        self.height = height
+
+    def area(self):
+        return self.width * self.height
+
+
+class Square(Rectangle):
+    def __init__(self, side):
+        super().__init__(side, side)
+::tests
+assert Circle(1).describe() == "Circle with area 3.14"
+assert Rectangle(2, 3).describe() == "Rectangle with area 6"
+sq = Square(4)
+assert sq.describe() == "Square with area 16"
+assert (sq.width, sq.height) == (4, 4)
+assert isinstance(sq, Rectangle) and isinstance(sq, Shape)
+try:
+    Shape().area()
+except NotImplementedError:
+    pass
+else:
+    raise AssertionError("Shape.area should raise NotImplementedError")
+::hints
+- `describe` lives once, in `Shape`, and calls `self.area()`.
+- `type(self).__name__` gives `"Circle"`, `"Square"` and so on.
+- `Square.__init__(self, side)` just calls `super().__init__(side, side)`.
+--- cards
+Inheritance :: class Child(Parent): the child gets the parent's methods and attributes and can add or override them. Models "is a".
+Overriding :: Defining a method with the same name in a subclass replaces the inherited one for that subclass.
+super() :: Calls the parent class's version of a method: super().__init__(...), super().describe().
+isinstance / issubclass :: isinstance(obj, Base) is True for subclasses too; prefer it over type(obj) == Base.
+object :: The root of every class hierarchy; provides default __repr__, __eq__ and more.
+
+=== lesson py-polymorphism | Polymorphism, duck typing and abstract classes | 100
+**Polymorphism** ("many forms") means code can work with objects of **different classes** through the **same interface**:
+
+```python
+shapes = [Circle(1), Rectangle(2, 3), Square(4)]
+for shape in shapes:
+    print(shape.describe())          # each object answers in its own way
+total = sum(shape.area() for shape in shapes)
+```
+
+The loop doesn't care which kind of shape it has. Add a `Triangle` class tomorrow, and this code works with it unchanged. That's the real power of OOP: code that is **open to new kinds of objects without being edited**.
+
+## Duck typing
+
+In Python, polymorphism doesn't even need a shared base class. "If it walks like a duck and quacks like a duck, it's a duck": any object that has the methods you call will do.
+
+```python
+class Duck:
+    def speak(self):
+        return "Quack"
+
+class Robot:
+    def speak(self):
+        return "Beep"
+
+for thing in [Duck(), Robot()]:
+    print(thing.speak())     # works: both have speak()
+```
+
+The built-ins work this way. `len()` works on anything with `__len__`; a `for` loop works on anything iterable; `print` works on anything with `__str__`. Files, network connections and in-memory buffers all have `read()` and `write()`, so code written for one often works with the others.
+
+Duck typing fits with EAFP from Module 7: just call the method, and handle `AttributeError` if something might not have it. When you really need to check, `hasattr(obj, "speak")` asks about the **behaviour**, which is better than checking the exact type.
+
+## Abstract base classes: enforcing an interface
+
+Duck typing is flexible but relies on everyone remembering which methods to write. When you design a family of classes, an **abstract base class** (ABC) makes the required interface explicit and enforced:
+
+```python
+from abc import ABC, abstractmethod
+
+class Shape(ABC):
+    @abstractmethod
+    def area(self):
+        """Return the shape's area."""
+
+    @abstractmethod
+    def perimeter(self):
+        """Return the distance around the shape."""
+
+    def describe(self):                              # a normal, shared method
+        return f"area {self.area():.2f}, perimeter {self.perimeter():.2f}"
+
+
+class Circle(Shape):
+    def __init__(self, r):
+        self.r = r
+
+    def area(self):
+        return 3.14159 * self.r ** 2
+
+    def perimeter(self):
+        return 2 * 3.14159 * self.r
+```
+
+- You **can't create** an instance of an abstract class: `Shape()` raises `TypeError: Can't instantiate abstract class Shape...`.
+- A subclass that forgets to implement an abstract method can't be instantiated either, so the mistake shows up immediately, not later in production.
+- An ABC can still provide ordinary shared methods, like `describe`.
+
+Compared with the `raise NotImplementedError` approach from the last lesson, an ABC catches the missing method when the object is **created**, not when the method is finally called.
+
+## Structural typing with Protocol (a peek)
+
+`typing.Protocol` describes an interface for **type checkers** without requiring inheritance: "anything with a `speak()` method returning `str`". It's duck typing that tools can verify. Module 12 introduces type hints.
+
+## Avoid type-checking chains
+
+If you see code like this, polymorphism can probably replace it:
+
+```python
+if isinstance(shape, Circle):
+    area = 3.14159 * shape.r ** 2
+elif isinstance(shape, Rectangle):
+    area = shape.w * shape.h
+```
+
+Every new shape means editing this chain (and all the others like it). Moving `area()` into each class puts the knowledge where it belongs.
+
+📚 **Go deeper:** Python Library Reference, `abc` — Abstract Base Classes; Python Glossary, "duck-typing"; *Fluent Python* (2nd ed.), chapter 13 "Interfaces, Protocols, and ABCs".
+--- quiz
+? What does polymorphism let this loop do?
+```python
+for s in shapes:
+    print(s.area())
+```
+- Only work if every item is the same class
++ Work with any object that has an `area()` method, each computing it its own way
+- Convert all shapes to circles
+- Nothing special
+> The same call works on different classes.
+? Under duck typing, what does a function that calls `obj.read()` require?
+- `obj` must inherit from a `File` class
++ `obj` must have a `read()` method
+- `obj` must be a string
+- Nothing at all
+> Behaviour matters, not the class.
+? What happens with `Shape()` when `Shape(ABC)` has an `@abstractmethod`?
+- It creates a Shape whose methods do nothing
++ `TypeError`: can't instantiate an abstract class
+- `NotImplementedError` when created
+- It works if `__init__` is defined
+> Abstract classes can't be instantiated.
+? A subclass of an ABC forgets one abstract method. When do you find out?
+- Never
+- When that method is finally called
++ As soon as you try to create an instance of the subclass
+- When the program ends
+> The ABC refuses to instantiate incomplete subclasses.
+? Which is the best replacement for a long `if isinstance(...) / elif isinstance(...)` chain computing areas?
++ An `area()` method in each shape class
+- More `elif` branches
+- A global dictionary of areas
+- A `try`/`except` around each branch
+> Put the behaviour in the classes and call it polymorphically.
+--- exercise code python
+::prompt
+Use an abstract base class:
+
+- `Shape(ABC)` with abstract methods `area()` and `perimeter()`;
+- `Circle(radius)` and `Rect(width, height)` implement both (use `math.pi` for circles);
+- a function `total_area(shapes)` returns the sum of the areas of any shapes, rounded to 2 decimals.
+
+Creating a plain `Shape()` must raise `TypeError`.
+::starter
+import math
+from abc import ABC, abstractmethod
+
+
+class Shape(ABC):
+    pass
+::solution
+import math
+from abc import ABC, abstractmethod
+
+
+class Shape(ABC):
+    @abstractmethod
+    def area(self):
+        pass
+
+    @abstractmethod
+    def perimeter(self):
+        pass
+
+
+class Circle(Shape):
+    def __init__(self, radius):
+        self.radius = radius
+
+    def area(self):
+        return math.pi * self.radius ** 2
+
+    def perimeter(self):
+        return 2 * math.pi * self.radius
+
+
+class Rect(Shape):
+    def __init__(self, width, height):
+        self.width = width
+        self.height = height
+
+    def area(self):
+        return self.width * self.height
+
+    def perimeter(self):
+        return 2 * (self.width + self.height)
+
+
+def total_area(shapes):
+    return round(sum(s.area() for s in shapes), 2)
+::tests
+assert round(Circle(1).perimeter(), 2) == 6.28
+assert Rect(2, 3).perimeter() == 10
+assert total_area([Circle(1), Rect(2, 3)]) == 9.14
+assert total_area([]) == 0
+try:
+    Shape()
+except TypeError:
+    pass
+else:
+    raise AssertionError("Shape() must raise TypeError: make it abstract")
+class _Half(Shape):
+    def area(self):
+        return 1
+try:
+    _Half()
+except TypeError:
+    pass
+else:
+    raise AssertionError("a subclass missing perimeter() must not be instantiable")
+::hints
+- Decorate `area` and `perimeter` in `Shape` with `@abstractmethod`; their bodies can just be `pass`.
+- Each concrete class implements both.
+- `total_area` sums `s.area()` for every shape: it works for any shape, present or future.
+--- exercise code python
+::prompt
+**Duck typing:** write `notify_all(channels, message)` that calls `send(message)` on every channel that **has** a `send` method (skip the others, without crashing) and returns the list of what the `send` calls returned. Also write two channel classes:
+
+- `EmailChannel(address)` whose `send` returns `"email to <address>: <message>"`;
+- `SmsChannel(number)` whose `send` returns `"sms to <number>: <message>"`, cutting the message to its first 20 characters.
+::starter
+def notify_all(channels, message):
+    pass
+::solution
+class EmailChannel:
+    def __init__(self, address):
+        self.address = address
+
+    def send(self, message):
+        return f"email to {self.address}: {message}"
+
+
+class SmsChannel:
+    def __init__(self, number):
+        self.number = number
+
+    def send(self, message):
+        return f"sms to {self.number}: {message[:20]}"
+
+
+def notify_all(channels, message):
+    results = []
+    for ch in channels:
+        if hasattr(ch, "send"):
+            results.append(ch.send(message))
+    return results
+::tests
+class _Pigeon:
+    def send(self, message):
+        return "coo: " + message
+msg = "Your order has shipped today"
+out = notify_all([EmailChannel("ada@x.io"), SmsChannel("555-0100"), "not a channel", _Pigeon(), 42], msg)
+assert out == ["email to ada@x.io: Your order has shipped today", "sms to 555-0100: Your order has shipp", "coo: Your order has shipped today"]
+assert notify_all([], "hi") == []
+::hints
+- `hasattr(ch, "send")` asks whether an object has the method.
+- Any object with `send` works, even classes `notify_all` has never heard of.
+- `message[:20]` keeps the first 20 characters.
+--- exercise code python
+::prompt
+Model payment methods with an abstract base class:
+
+- `PaymentMethod(ABC)` with an abstract `pay(amount)` that returns a receipt string;
+- `CreditCard(last4)`: `pay` returns `"Paid 12.50 by card ending 4242"` (2 decimals);
+- `GiftCard(balance)`: `pay` deducts from the balance and returns `"Paid 12.50 by gift card, 7.50 left"`, or raises `ValueError` if the balance is too small;
+- `checkout(method, amount)` raises `ValueError` for amounts that aren't positive, otherwise returns `method.pay(amount)`.
+::starter
+from abc import ABC, abstractmethod
+::solution
+from abc import ABC, abstractmethod
+
+
+class PaymentMethod(ABC):
+    @abstractmethod
+    def pay(self, amount):
+        pass
+
+
+class CreditCard(PaymentMethod):
+    def __init__(self, last4):
+        self.last4 = last4
+
+    def pay(self, amount):
+        return f"Paid {amount:.2f} by card ending {self.last4}"
+
+
+class GiftCard(PaymentMethod):
+    def __init__(self, balance):
+        self.balance = balance
+
+    def pay(self, amount):
+        if amount > self.balance:
+            raise ValueError("not enough on the gift card")
+        self.balance -= amount
+        return f"Paid {amount:.2f} by gift card, {self.balance:.2f} left"
+
+
+def checkout(method, amount):
+    if amount <= 0:
+        raise ValueError("amount must be positive")
+    return method.pay(amount)
+::tests
+assert checkout(CreditCard("4242"), 12.5) == "Paid 12.50 by card ending 4242"
+gift = GiftCard(20)
+assert checkout(gift, 12.5) == "Paid 12.50 by gift card, 7.50 left"
+assert gift.balance == 7.5
+for bad in [lambda: checkout(gift, 10), lambda: checkout(CreditCard("1111"), 0)]:
+    try:
+        bad()
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("expected ValueError")
+assert gift.balance == 7.5, "a refused payment must not change the balance"
+try:
+    PaymentMethod()
+except TypeError:
+    pass
+else:
+    raise AssertionError("PaymentMethod must be abstract")
+assert isinstance(GiftCard(1), PaymentMethod)
+::hints
+- `class PaymentMethod(ABC):` with `@abstractmethod def pay(self, amount): pass`.
+- Each payment class inherits from `PaymentMethod` and implements `pay`.
+- `checkout` doesn't need to know which kind of method it gets: it just calls `pay`.
+--- cards
+Polymorphism :: The same call (shape.area()) works on objects of different classes, each with its own implementation.
+Duck typing :: Python cares whether an object has the needed methods, not what class it is.
+Abstract base class :: class Base(ABC) with @abstractmethod methods; it can't be instantiated, and neither can subclasses missing an abstract method.
+NotImplementedError vs ABC :: raise NotImplementedError fails when the method is called; an ABC fails when the object is created.
+
+=== lesson py-multiple-inheritance | Multiple inheritance, the MRO and mixins | 100
+## Inheriting from several classes
+
+A Python class can have more than one base class:
+
+```python
+class Flyer:
+    def fly(self):
+        return f"{self.name} flies"
+
+class Swimmer:
+    def swim(self):
+        return f"{self.name} swims"
+
+class Duck(Flyer, Swimmer):
+    def __init__(self, name):
+        self.name = name
+
+d = Duck("Donald")
+d.fly(), d.swim()     # both work
+```
+
+## The diamond problem
+
+Trouble starts when two parents share a grandparent and define the same method:
+
+```
+      A
+     / \
+    B   C
+     \ /
+      D
+```
+
+```python
+class A:
+    def who(self):
+        return "A"
+
+class B(A):
+    def who(self):
+        return "B"
+
+class C(A):
+    def who(self):
+        return "C"
+
+class D(B, C):
+    pass
+
+print(D().who())    # ?
+```
+
+Which `who` does `D` get? Python answers with the **method resolution order** (MRO): a single, well-defined list of classes to search, computed by an algorithm called **C3 linearisation**. You can see it:
+
+```python
+print([cls.__name__ for cls in D.__mro__])     # ['D', 'B', 'C', 'A', 'object']
+```
+
+So `D().who()` returns `"B"`. The MRO always keeps a class **before its parents**, keeps the **left-to-right order** of the bases you listed, and visits each class **once**: `A` comes after both `B` and `C`.
+
+## super() follows the MRO
+
+Here's the subtle part: `super()` doesn't mean "my parent". It means "**the next class in the MRO** of the object". That makes **cooperative** multiple inheritance work, where every class in the diamond runs exactly once:
+
+```python
+class A:
+    def hello(self):
+        return ["A"]
+
+class B(A):
+    def hello(self):
+        return ["B"] + super().hello()
+
+class C(A):
+    def hello(self):
+        return ["C"] + super().hello()
+
+class D(B, C):
+    def hello(self):
+        return ["D"] + super().hello()
+
+print(D().hello())      # ['D', 'B', 'C', 'A']
+```
+
+Inside `B.hello`, for a `D` object, `super()` is `C` (the next class in D's MRO), not `A`. If `B` and `C` had called `A.hello(self)` directly instead, `A` would run twice. The rule: in a hierarchy that might be combined, **always use `super()`**, and keep method signatures compatible.
+
+## Mixins: small reusable abilities
+
+The most practical use of multiple inheritance is the **mixin**: a small class that adds **one ability** to any class that includes it, and isn't meant to be used on its own:
+
+```python
+import json
+
+class JsonMixin:
+    def to_json(self):
+        return json.dumps(vars(self), sort_keys=True)
+
+class ReprMixin:
+    def __repr__(self):
+        fields = ", ".join(f"{k}={v!r}" for k, v in vars(self).items())
+        return f"{type(self).__name__}({fields})"
+
+class User(ReprMixin, JsonMixin):
+    def __init__(self, name, email):
+        self.name = name
+        self.email = email
+
+u = User("Ada", "ada@x.io")
+print(u)              # User(name='Ada', email='ada@x.io')
+print(u.to_json())    # {"email": "ada@x.io", "name": "Ada"}
+```
+
+Web frameworks like Django use mixins heavily (`LoginRequiredMixin`, and so on). Conventions: name them `...Mixin`, keep them small, give them no `__init__` of their own (or a cooperative one), and list them **before** the main base class.
+
+## Looking inside classes: introspection
+
+Python lets a program examine its own objects:
+
+```python
+type(u)                     # <class 'User'>
+type(u).__name__            # 'User'
+User.__bases__              # (ReprMixin, JsonMixin)
+User.__mro__                # the full lookup order
+isinstance(u, JsonMixin)    # True
+dir(u)                      # every attribute and method name, inherited ones included
+```
+
+## Use with care
+
+Multiple inheritance is powerful but can make code hard to follow. Mixins that add independent abilities are a good use. Deep diamonds of "real" classes are usually a sign that **composition** (next lesson) would be simpler.
+
+📚 **Go deeper:** Python Tutorial, section 9.5.1 "Multiple Inheritance"; "The Python 2.3 Method Resolution Order" (python.org/download/releases/2.3/mro); Raymond Hettinger, "Python's super() considered super!".
+--- quiz
+? With `class D(B, C)` where B and C both inherit from A, what is D's MRO?
++ D, B, C, A, object
+- D, B, A, C, object
+- D, C, B, A, object
+- D, A, B, C, object
+> Each class before its parents, bases left to right, every class once.
+? In the cooperative `hello` example, what is `super()` inside `B.hello` when called on a `D` object?
+- `A`
++ `C`
+- `D`
+- `object`
+> `super()` is the next class in the object's MRO, and after B comes C.
+? What does this print?
+```python
+class X:
+    def f(self):
+        return "X"
+
+class Y:
+    def f(self):
+        return "Y"
+
+class Z(Y, X):
+    pass
+
+print(Z().f())
+```
+- `X`
++ `Y`
+- An error: two `f` methods
+- `XY`
+> Bases are searched left to right: Y comes first.
+? What is a mixin?
++ A small class that adds one ability to other classes through inheritance, not meant to be used alone
+- A class with no methods
+- Another name for an abstract base class
+- A function that merges two classes
+> For example `JsonMixin` adds `to_json()` to any class that includes it.
+? Why should every class in a diamond call `super().method()` rather than `Parent.method(self)`?
+- It's faster
++ So that each class in the MRO runs exactly once, in order
+- `Parent.method(self)` is a syntax error
+- `super()` skips the base classes
+> Direct parent calls can run the shared base twice and skip siblings.
+--- exercise code python
+::prompt
+Write two mixins and use them:
+
+- `ReprMixin` gives a `__repr__` like `User(name='Ada', email='ada@x.io')`, built from `vars(self)` in attribute order;
+- `JsonMixin` gives `to_json()`, returning `json.dumps(vars(self), sort_keys=True)`;
+- `User(name, email)` and `Product(sku, price)` both use **both** mixins.
+::starter
+import json
+
+
+class User:
+    def __init__(self, name, email):
+        self.name = name
+        self.email = email
+::solution
+import json
+
+
+class ReprMixin:
+    def __repr__(self):
+        fields = ", ".join(f"{k}={v!r}" for k, v in vars(self).items())
+        return f"{type(self).__name__}({fields})"
+
+
+class JsonMixin:
+    def to_json(self):
+        return json.dumps(vars(self), sort_keys=True)
+
+
+class User(ReprMixin, JsonMixin):
+    def __init__(self, name, email):
+        self.name = name
+        self.email = email
+
+
+class Product(ReprMixin, JsonMixin):
+    def __init__(self, sku, price):
+        self.sku = sku
+        self.price = price
+::tests
+u = User("Ada", "ada@x.io")
+assert repr(u) == "User(name='Ada', email='ada@x.io')"
+assert u.to_json() == '{"email": "ada@x.io", "name": "Ada"}'
+p = Product("A-1", 9.5)
+assert repr(p) == "Product(sku='A-1', price=9.5)"
+assert p.to_json() == '{"price": 9.5, "sku": "A-1"}'
+assert issubclass(User, ReprMixin) and issubclass(Product, JsonMixin)
+assert "__repr__" not in vars(User) and "to_json" not in vars(Product), "get these from the mixins, don't copy them"
+::hints
+- `type(self).__name__` is the class name; `vars(self).items()` gives the attributes in order.
+- `f"{k}={v!r}"` shows strings with quotes.
+- `class User(ReprMixin, JsonMixin):` gets both abilities.
+--- exercise code python
+::prompt
+In this diamond, `D().greet()` should return `["D", "B", "C", "A"]`, each class adding its name once, in MRO order. But `B` and `C` call `A` directly, so `A` runs twice and `C` is skipped. Make all four classes **cooperate** with `super()`.
+::starter
+class A:
+    def greet(self):
+        return ["A"]
+
+
+class B(A):
+    def greet(self):
+        return ["B"] + A.greet(self)
+
+
+class C(A):
+    def greet(self):
+        return ["C"] + A.greet(self)
+
+
+class D(B, C):
+    def greet(self):
+        return ["D"] + B.greet(self)
+::solution
+class A:
+    def greet(self):
+        return ["A"]
+
+
+class B(A):
+    def greet(self):
+        return ["B"] + super().greet()
+
+
+class C(A):
+    def greet(self):
+        return ["C"] + super().greet()
+
+
+class D(B, C):
+    def greet(self):
+        return ["D"] + super().greet()
+::tests
+assert D().greet() == ["D", "B", "C", "A"]
+assert B().greet() == ["B", "A"]
+assert C().greet() == ["C", "A"]
+assert [k.__name__ for k in D.__mro__] == ["D", "B", "C", "A", "object"]
+::hints
+- Replace each direct call like `A.greet(self)` with `super().greet()`.
+- For a `D` object, `super()` inside `B` is `C`, so the chain visits every class once.
+--- cards
+Multiple inheritance :: class C(A, B): C gets methods from both; bases are searched left to right.
+MRO :: Method resolution order: the single list of classes Python searches (Class.__mro__). Each class before its parents, once.
+super() and the MRO :: super() is the next class in the object's MRO, not simply the parent. That makes cooperative inheritance work.
+Mixin :: A small class adding one ability (JsonMixin, ReprMixin) to any class that inherits it; not used alone.
+Introspection :: type(x), isinstance, issubclass, Class.__bases__, Class.__mro__, dir(x), vars(x).
+
+=== lesson py-composition | Composition over inheritance | 100
+Inheritance models **"is a"**. Most relationships between objects are **"has a"**: a car *has an* engine, an order *has* line items, a game *has* players. Modelling that is called **composition**: an object holds other objects in its attributes and uses them.
+
+```python
+class Engine:
+    def __init__(self, horsepower):
+        self.horsepower = horsepower
+        self.running = False
+
+    def start(self):
+        self.running = True
+
+
+class Car:
+    def __init__(self, model, engine):
+        self.model = model
+        self.engine = engine          # the car HAS an engine
+
+    def start(self):
+        self.engine.start()           # delegate the work to the part
+        return f"{self.model} is running"
+
+
+car = Car("Mini", Engine(130))
+print(car.start())
+```
+
+When `Car.start` passes the work on to `self.engine.start()`, that's called **delegation**.
+
+## Why "composition over inheritance"?
+
+This advice, from the famous *Design Patterns* book, exists because inheritance is often used just to **reuse code**, and that goes wrong in two classic ways.
+
+**1. Inheriting more than you wanted.** Make a stack by inheriting from `list`:
+
+```python
+class Stack(list):
+    def push(self, item):
+        self.append(item)
+```
+
+It works, but a `Stack` now also has `insert`, `sort`, `remove`, indexing, and every other list method. Anyone can put items in the middle, and the "last in, first out" promise is broken. With composition, the stack *has* a list, and exposes only what a stack should:
+
+```python
+class Stack:
+    def __init__(self):
+        self._items = []
+
+    def push(self, item):
+        self._items.append(item)
+
+    def pop(self):
+        return self._items.pop()
+```
+
+**2. A subclass that can't keep the parent's promises.** In maths a square is a rectangle, so `Square(Rectangle)` seems natural. But if `Rectangle` lets you set `width` and `height` independently, a `Square` either breaks that behaviour or stops being square. Code written for rectangles ("set width to 5, height stays 2, area is 10") gives wrong answers for squares. That's a violation of the **Liskov substitution principle**: a subclass must work anywhere its parent does.
+
+## Composition makes swapping parts easy
+
+Because parts are just attributes, you can give an object **different** parts, even at run time:
+
+```python
+car = Car("Mini", ElectricMotor(180))     # any object with start() will do: duck typing
+```
+
+## Dependency injection
+
+When an object **receives** its collaborators instead of creating them itself, that's **dependency injection**. It sounds grand, but it's just passing objects in:
+
+```python
+class Greeter:
+    def __init__(self, clock):
+        self.clock = clock               # injected: anything with an hour() method
+
+    def greet(self, name):
+        h = self.clock.hour()
+        part = "morning" if h < 12 else "afternoon" if h < 18 else "evening"
+        return f"Good {part}, {name}"
+```
+
+In the real program you pass a clock that reads the system time. In a **test** you pass a fake clock that always says 9 o'clock, so the test is fast and predictable. If `Greeter` created its own clock inside, you couldn't test the evening greeting without waiting for the evening. Dependency injection is one of the main reasons well-designed code is easy to test.
+
+## How to decide
+
+- Ask "is a" or "has a"? Only a true "is a" relationship, where the child can be used anywhere the parent can, calls for inheritance.
+- Prefer composition when you want to **reuse** behaviour, **combine** several behaviours, or **swap** parts.
+- Inheritance is great for frameworks' extension points and families of closely related types (exceptions, shapes behind an ABC).
+
+📚 **Go deeper:** Gamma, Helm, Johnson & Vlissides, *Design Patterns* (1994), chapter 1 ("Favor object composition over class inheritance"); Brandon Rhodes, python-patterns.guide, "The Composition Over Inheritance Principle"; Martin Fowler, "Inversion of Control Containers and the Dependency Injection pattern".
+--- quiz
+? Which relationship calls for composition?
+- A sparrow is a bird
++ An order has line items
+- A savings account is an account
+- A `KeyError` is a `LookupError`
+> "Has a" means one object holds another.
+? What's wrong with `class Stack(list)`?
+- Nothing
++ It inherits list methods like `insert` that break the stack's last-in-first-out rule
+- Lists can't be inherited from
+- It's slower than a list
+> Inheriting to reuse code exposes the whole parent interface.
+? Why does `Square(Rectangle)` with independently settable width and height cause trouble?
++ Code that relies on rectangles' behaviour gives wrong results with squares (it violates Liskov substitution)
+- Squares have no area
+- Python forbids it
+- Rectangles can't have subclasses
+> A subclass must keep the parent's promises.
+? What is dependency injection?
+- A security attack
++ Passing an object its collaborators instead of letting it create them
+- Inheriting from several classes
+- Importing modules at runtime
+> It makes objects flexible and easy to test with fakes.
+? In `Car.start()` calling `self.engine.start()`, what is the car doing?
+- Inheriting
++ Delegating to its part
+- Overriding
+- Introspecting
+> Delegation passes the work on to a component.
+--- exercise code python
+::prompt
+Model a car by **composition**:
+
+- `Engine(horsepower)` with a `running` attribute (starts `False`), and `start()` / `stop()`;
+- `Car(model, engine)` holds an engine; `start()` and `stop()` delegate to it; `status()` returns `"Mini (130 hp): running"` or `"Mini (130 hp): stopped"`.
+
+`Car` must **not** inherit from `Engine`.
+::starter
+class Engine:
+    def __init__(self, horsepower):
+        self.horsepower = horsepower
+        self.running = False
+::solution
+class Engine:
+    def __init__(self, horsepower):
+        self.horsepower = horsepower
+        self.running = False
+
+    def start(self):
+        self.running = True
+
+    def stop(self):
+        self.running = False
+
+
+class Car:
+    def __init__(self, model, engine):
+        self.model = model
+        self.engine = engine
+
+    def start(self):
+        self.engine.start()
+
+    def stop(self):
+        self.engine.stop()
+
+    def status(self):
+        state = "running" if self.engine.running else "stopped"
+        return f"{self.model} ({self.engine.horsepower} hp): {state}"
+::tests
+car = Car("Mini", Engine(130))
+assert car.status() == "Mini (130 hp): stopped"
+car.start()
+assert car.engine.running is True
+assert car.status() == "Mini (130 hp): running"
+car.stop()
+assert car.status() == "Mini (130 hp): stopped"
+assert not issubclass(Car, Engine), "a car HAS an engine; don't inherit"
+::hints
+- `Car.__init__` stores the engine in `self.engine`.
+- `Car.start` just calls `self.engine.start()`.
+- `status` reads `self.engine.running` and `self.engine.horsepower`.
+--- exercise code python
+::prompt
+This `Stack` inherits from `list`, so it exposes `insert`, `sort` and every other list method. Rewrite it with **composition** (store the items in a private list) so it offers only: `push(item)`, `pop()` (raise `IndexError("pop from empty stack")` when empty), `peek()` (the top item without removing it, same error when empty), `is_empty()`, and `len(stack)`.
+::starter
+class Stack(list):
+    def push(self, item):
+        self.append(item)
+
+    def peek(self):
+        return self[-1]
+
+    def is_empty(self):
+        return len(self) == 0
+::solution
+class Stack:
+    def __init__(self):
+        self._items = []
+
+    def push(self, item):
+        self._items.append(item)
+
+    def pop(self):
+        if not self._items:
+            raise IndexError("pop from empty stack")
+        return self._items.pop()
+
+    def peek(self):
+        if not self._items:
+            raise IndexError("peek from empty stack")
+        return self._items[-1]
+
+    def is_empty(self):
+        return not self._items
+
+    def __len__(self):
+        return len(self._items)
+::tests
+s = Stack()
+assert s.is_empty() and len(s) == 0
+s.push(1)
+s.push(2)
+s.push(3)
+assert s.peek() == 3 and len(s) == 3
+assert s.pop() == 3 and s.pop() == 2
+assert len(s) == 1 and not s.is_empty()
+assert not isinstance(s, list), "use composition, not inheritance from list"
+for name in ["insert", "sort", "append", "__getitem__"]:
+    assert not hasattr(s, name), f"a stack shouldn't expose {name}"
+s.pop()
+for op in [s.pop, s.peek]:
+    try:
+        op()
+    except IndexError:
+        pass
+    else:
+        raise AssertionError("pop/peek on an empty stack should raise IndexError")
+::hints
+- `class Stack:` (no base class), with `self._items = []` in `__init__`.
+- Each method delegates to `self._items`.
+- Define `__len__` so `len(stack)` works.
+--- exercise code python
+::prompt
+Write `Greeter(clock)` using **dependency injection**: the clock is any object with an `hour()` method returning 0–23. `greet(name)` returns `"Good morning, Ada"` before 12, `"Good afternoon, Ada"` from 12 to 17, and `"Good evening, Ada"` from 18. Also write `FixedClock(hour)`, a fake clock for tests that always returns the same hour.
+::starter
+from datetime import datetime
+
+
+class Greeter:
+    def greet(self, name):
+        hour = datetime.now().hour
+        return f"Hello, {name}"
+::solution
+class FixedClock:
+    def __init__(self, hour):
+        self._hour = hour
+
+    def hour(self):
+        return self._hour
+
+
+class Greeter:
+    def __init__(self, clock):
+        self.clock = clock
+
+    def greet(self, name):
+        h = self.clock.hour()
+        if h < 12:
+            part = "morning"
+        elif h < 18:
+            part = "afternoon"
+        else:
+            part = "evening"
+        return f"Good {part}, {name}"
+::tests
+assert Greeter(FixedClock(9)).greet("Ada") == "Good morning, Ada"
+assert Greeter(FixedClock(0)).greet("Bo") == "Good morning, Bo"
+assert Greeter(FixedClock(12)).greet("Ada") == "Good afternoon, Ada"
+assert Greeter(FixedClock(17)).greet("Ada") == "Good afternoon, Ada"
+assert Greeter(FixedClock(18)).greet("Ada") == "Good evening, Ada"
+class _Other:
+    def hour(self):
+        return 23
+assert Greeter(_Other()).greet("Cy") == "Good evening, Cy", "any object with hour() must work"
+::hints
+- `Greeter.__init__(self, clock)` stores the clock; `greet` calls `self.clock.hour()`.
+- `FixedClock` just remembers an hour and returns it from `hour()`.
+- Don't read the real time inside `Greeter`: that's what makes it untestable.
+--- cards
+Composition :: Building objects from other objects held in attributes ("has a"): a Car has an Engine.
+Delegation :: A method passes the work on to a component: def start(self): self.engine.start().
+Composition over inheritance :: Prefer holding a part to inheriting from it, unless the child truly is a substitutable kind of the parent.
+Liskov substitution principle :: A subclass must be usable anywhere its parent is expected without breaking expectations.
+Dependency injection :: Give an object its collaborators (pass them in) instead of creating them inside; makes testing with fakes easy.
+
+=== lesson py-dataclasses-enums | Dataclasses and enums | 100
+Two standard-library tools remove most of the boilerplate from everyday classes.
+
+## Dataclasses: classes that mainly hold data
+
+Many classes are mostly fields, plus an `__init__` that copies them, a `__repr__` and an `__eq__`. Writing those by hand is tedious and error-prone. The `@dataclass` decorator generates them from **type-annotated** fields:
+
+```python
+from dataclasses import dataclass, field
+
+@dataclass
+class Product:
+    name: str
+    price_cents: int
+    tags: list[str] = field(default_factory=list)     # a fresh list for each product
+
+    def price(self):
+        return self.price_cents / 100
+
+
+p = Product("Mug", 899)
+print(p)                          # Product(name='Mug', price_cents=899, tags=[])
+print(p == Product("Mug", 899))   # True: __eq__ compares the fields
+```
+
+The `name: str` syntax is a **type annotation**: it declares a field (Module 12 covers annotations in general). Python doesn't check the types at runtime; `@dataclass` uses the annotations to know which fields exist.
+
+## Defaults and the mutable default trap again
+
+Fields with defaults come after fields without. For a mutable default (a list or dict), you must use `field(default_factory=list)`, so each instance gets its own; `tags: list = []` is refused with a `ValueError`. It's the mutable-default trap from Module 5, and dataclasses protect you from it.
+
+## Validation with __post_init__
+
+The generated `__init__` calls `__post_init__` (if you define it) after setting the fields. It's the place to validate or compute derived values:
+
+```python
+@dataclass
+class Product:
+    name: str
+    price_cents: int
+
+    def __post_init__(self):
+        if self.price_cents < 0:
+            raise ValueError("price can't be negative")
+```
+
+## frozen=True and order=True
+
+```python
+@dataclass(frozen=True, order=True)
+class Version:
+    major: int
+    minor: int
+    patch: int = 0
+
+v = Version(1, 4)
+v.minor = 5                 # FrozenInstanceError: cannot assign to field 'minor'
+sorted([Version(2, 0), Version(1, 9)])   # order=True compares field by field
+{Version(1, 4), Version(1, 4)}           # frozen dataclasses are hashable: one item
+```
+
+- `frozen=True` makes instances **immutable** (and hashable), perfect for values like versions, coordinates and money.
+- `order=True` generates `<`, `<=`, `>`, `>=` comparing the fields as a tuple, in order.
+- `dataclasses.replace(v, minor=5)` returns a **copy** with some fields changed: the way to "modify" frozen objects.
+
+## Enums: named constants
+
+"Magic strings" are fragile: `status = "shiped"` (typo) silently never matches `"shipped"`. An **enumeration** defines a fixed set of named values:
+
+```python
+from enum import Enum
+
+class Status(Enum):
+    PENDING = "pending"
+    PAID = "paid"
+    SHIPPED = "shipped"
+
+s = Status.PAID
+print(s)                    # Status.PAID
+print(s.name, s.value)      # PAID paid
+Status("shipped")           # Status.SHIPPED: look up a member by its value
+Status["PAID"]              # Status.PAID: look up by name
+Status("lost")              # ValueError: 'lost' is not a valid Status
+list(Status)                # all members, in definition order
+s is Status.PAID            # True: each member is a single object
+```
+
+A typo like `Status.SHIPED` is an `AttributeError` immediately, instead of a silent bug. Editors can also autocomplete the members.
+
+Enum classes can have **methods** too:
+
+```python
+class Light(Enum):
+    RED = 1
+    GREEN = 2
+    YELLOW = 3
+
+    def next(self):
+        order = [Light.RED, Light.GREEN, Light.YELLOW]
+        return order[(order.index(self) + 1) % 3]
+```
+
+`enum.auto()` assigns values automatically, and `IntEnum` / `StrEnum` create members that also behave like ints or strings, handy when talking to databases or JSON.
+
+## When to use what
+
+| Need | Tool |
+|---|---|
+| a record of named fields, with sensible `repr` and `==` | `@dataclass` |
+| an immutable, hashable value object | `@dataclass(frozen=True)` (or a `namedtuple`) |
+| a fixed set of options or states | `Enum` |
+| behaviour-heavy objects with invariants | a regular class (properties, methods) |
+
+📚 **Go deeper:** Python Library Reference, `dataclasses` and `enum`; Python "Enum HOWTO" (docs.python.org/3/howto/enum.html); PEP 557 (Data Classes); *Fluent Python* (2nd ed.), chapter 5 "Data Class Builders".
+--- quiz
+? Which methods does `@dataclass` generate by default?
++ `__init__`, `__repr__` and `__eq__`
+- Only `__init__`
+- `__init__`, `__hash__` and `__lt__`
+- None; it only checks types
+> Ordering needs `order=True`; hashing comes with `frozen=True`.
+? How do you give a dataclass field an empty-list default?
+- `tags: list = []`
++ `tags: list = field(default_factory=list)`
+- `tags: list = list`
+- `tags: list = None` is the only way
+> `default_factory` creates a fresh list for each instance; a plain `[]` is refused.
+? What happens when you assign to a field of a `frozen=True` dataclass instance?
+- The value changes
++ `FrozenInstanceError`
+- A new instance is created automatically
+- Nothing; the assignment is ignored
+> Use `dataclasses.replace(obj, field=value)` to get a modified copy.
+? What does `Status("shipped")` return, for the lesson's enum?
++ `Status.SHIPPED`
+- `"shipped"`
+- `ValueError`
+- `Status.PAID`
+> Calling the enum with a value looks up the member.
+? Why is an enum better than plain strings for states?
+- It uses less memory
++ A typo becomes an immediate error, and the valid options are listed in one place
+- Strings can't be compared
+- Enums are faster to type
+> Magic strings fail silently; enum members fail loudly.
+--- exercise code python
+::prompt
+Write a dataclass `Product` with fields `name` (str), `price_cents` (int) and `tags` (a list of strings, defaulting to a **fresh** empty list). In `__post_init__`, raise `ValueError` if the price is negative. Add a method `has_tag(tag)` (case-insensitive). Then write a function `inventory_value(products)` returning the total price in cents.
+::starter
+from dataclasses import dataclass, field
+::solution
+from dataclasses import dataclass, field
+
+
+@dataclass
+class Product:
+    name: str
+    price_cents: int
+    tags: list[str] = field(default_factory=list)
+
+    def __post_init__(self):
+        if self.price_cents < 0:
+            raise ValueError("price can't be negative")
+
+    def has_tag(self, tag):
+        return tag.lower() in (t.lower() for t in self.tags)
+
+
+def inventory_value(products):
+    return sum(p.price_cents for p in products)
+::tests
+mug = Product("Mug", 899, ["Kitchen", "gift"])
+assert repr(mug) == "Product(name='Mug', price_cents=899, tags=['Kitchen', 'gift'])"
+assert mug == Product("Mug", 899, ["Kitchen", "gift"])
+assert mug.has_tag("kitchen") and not mug.has_tag("garden")
+a, b = Product("A", 1), Product("B", 2)
+a.tags.append("x")
+assert b.tags == [], "each product needs its own tags list"
+assert inventory_value([mug, a, b]) == 902
+try:
+    Product("Bad", -1)
+except ValueError:
+    pass
+else:
+    raise AssertionError("a negative price should raise ValueError")
+import dataclasses as _dc
+assert _dc.is_dataclass(Product)
+::hints
+- Decorate the class with `@dataclass` and declare fields with annotations: `name: str`.
+- `tags: list[str] = field(default_factory=list)`.
+- `__post_init__(self)` runs after the generated `__init__`.
+--- exercise code python
+::prompt
+Write a **frozen, ordered** dataclass `Version(major, minor, patch=0)`:
+
+- `str(v)` is like `1.4.0` (define `__str__`; the generated `repr` stays);
+- a class method `parse(text)` turns `"2.10.1"` or `"3.1"` into a `Version`;
+- `bump_minor()` returns a **new** version with the minor number + 1 and patch reset to 0 (use `dataclasses.replace`).
+
+Versions must sort correctly (`1.10.0` comes after `1.9.0`) and be usable in sets.
+::starter
+from dataclasses import dataclass, replace
+::solution
+from dataclasses import dataclass, replace
+
+
+@dataclass(frozen=True, order=True)
+class Version:
+    major: int
+    minor: int
+    patch: int = 0
+
+    def __str__(self):
+        return f"{self.major}.{self.minor}.{self.patch}"
+
+    @classmethod
+    def parse(cls, text):
+        parts = [int(p) for p in text.split(".")]
+        return cls(*parts)
+
+    def bump_minor(self):
+        return replace(self, minor=self.minor + 1, patch=0)
+::tests
+v = Version.parse("2.10.1")
+assert v == Version(2, 10, 1) and str(v) == "2.10.1"
+assert Version.parse("3.1") == Version(3, 1, 0)
+assert sorted([Version(1, 10), Version(1, 9), Version(0, 99)]) == [Version(0, 99), Version(1, 9), Version(1, 10)]
+assert str(v.bump_minor()) == "2.11.0" and v == Version(2, 10, 1), "bump_minor must return a new version"
+assert len({Version(1, 0), Version(1, 0, 0)}) == 1
+try:
+    v.major = 9
+except Exception as e:
+    assert type(e).__name__ == "FrozenInstanceError"
+else:
+    raise AssertionError("Version must be frozen")
+assert repr(Version(1, 2)) == "Version(major=1, minor=2, patch=0)"
+::hints
+- `@dataclass(frozen=True, order=True)` gives immutability, hashing and ordering.
+- In `parse`, split on `"."`, convert each part with `int`, and pass them with `cls(*parts)`.
+- `replace(self, minor=self.minor + 1, patch=0)` makes the modified copy.
+--- exercise code python
+::prompt
+Write an enum `Light` with members `RED`, `GREEN` and `YELLOW`, plus:
+
+- a method `next()` that returns the following light in the cycle RED → GREEN → YELLOW → RED;
+- a property `can_go` that is `True` only for `GREEN`;
+- a function `parse_light(text)` that turns `"red"`, `" Green "`, `"YELLOW"` into members by **name** (any case, spaces stripped) and raises `ValueError` for anything else.
+::starter
+from enum import Enum
+::solution
+from enum import Enum
+
+
+class Light(Enum):
+    RED = 1
+    GREEN = 2
+    YELLOW = 3
+
+    def next(self):
+        order = [Light.RED, Light.GREEN, Light.YELLOW]
+        return order[(order.index(self) + 1) % len(order)]
+
+    @property
+    def can_go(self):
+        return self is Light.GREEN
+
+
+def parse_light(text):
+    try:
+        return Light[text.strip().upper()]
+    except KeyError:
+        raise ValueError(f"unknown light: {text!r}") from None
+::tests
+assert Light.RED.next() is Light.GREEN
+assert Light.GREEN.next() is Light.YELLOW
+assert Light.YELLOW.next() is Light.RED
+assert Light.GREEN.can_go and not Light.RED.can_go and not Light.YELLOW.can_go
+assert parse_light(" Green ") is Light.GREEN
+assert parse_light("red") is Light.RED
+assert [m.name for m in Light] == ["RED", "GREEN", "YELLOW"]
+try:
+    parse_light("blue")
+except ValueError:
+    pass
+else:
+    raise AssertionError("unknown names should raise ValueError")
+::hints
+- `class Light(Enum):` with `RED = 1`, `GREEN = 2`, `YELLOW = 3`.
+- Inside a method, `self` is the member; find its position in a list of the three lights.
+- `Light["RED"]` looks a member up by name and raises `KeyError` if there's none; convert that into `ValueError`.
+--- cards
+@dataclass :: Generates __init__, __repr__ and __eq__ from annotated fields. Mutable defaults need field(default_factory=list).
+__post_init__ :: Called by a dataclass's generated __init__ after the fields are set; use it to validate or derive values.
+frozen=True / order=True :: frozen: immutable and hashable instances; order: <, > etc. comparing fields in order. dataclasses.replace makes modified copies.
+Enum :: A fixed set of named constants: Status.PAID, .name, .value, Status("paid"), Status["PAID"], list(Status).
+
+=== lesson py-m9-test | Module 9 test | 220
+This test covers inheritance and `super()`, polymorphism, duck typing and abstract base classes, multiple inheritance and the MRO, mixins, composition and dependency injection, dataclasses and enums.
+
+Make sure you can:
+
+- write subclasses that override and extend methods with `super()`;
+- explain polymorphism and duck typing, and enforce an interface with an ABC;
+- predict an MRO and explain what `super()` really refers to;
+- choose between inheritance and composition, with reasons;
+- replace boilerplate with dataclasses and magic strings with enums.
+--- quiz
+? What does this print?
+```python
+class Base:
+    def __init__(self):
+        self.tags = ["base"]
+
+class Child(Base):
+    def __init__(self):
+        self.tags = ["child"]
+
+print(Child().tags)
+```
+- `['base', 'child']`
++ `['child']`
+- `['base']`
+- An error
+> `Child.__init__` replaces `Base.__init__`, which never runs because `super().__init__()` isn't called.
+? Which expresses "an Order has many LineItems"?
+- `class Order(LineItem)`
++ `Order` holding a list of `LineItem` objects in an attribute
+- `class LineItem(Order)`
+- A mixin
+> "Has a" is composition.
+? What does `[c.__name__ for c in D.__mro__]` give for `class D(C, B)`, where `B(A)` and `C(A)`?
++ `['D', 'C', 'B', 'A', 'object']`
+- `['D', 'B', 'C', 'A', 'object']`
+- `['D', 'C', 'A', 'B', 'object']`
+- An error
+> The bases are listed C first this time.
+? What happens if a subclass of an ABC implements all but one abstract method?
+- It works; the missing method returns None
++ Creating an instance raises `TypeError`
+- Python adds the method automatically
+- The ABC becomes concrete
+> Every abstract method must be implemented before instantiation.
+? What's the benefit of passing a `clock` object into a class instead of reading the system time inside it?
++ Tests can pass a fake clock, making time-dependent behaviour easy to test
+- It's faster
+- It avoids inheritance
+- Python requires it
+> That's dependency injection.
+? Which dataclass option makes instances usable as dictionary keys?
+- `order=True`
++ `frozen=True`
+- `repr=False`
+- `slots=True`
+> Frozen dataclasses are immutable and get a `__hash__`.
+? What does `Color["RED"]` do for `class Color(Enum): RED = "r"`?
++ Returns `Color.RED` (lookup by name)
+- Returns `"r"`
+- Raises `ValueError`
+- Creates a new member
+> Square brackets look up by name; calling `Color("r")` looks up by value.
+? Duck typing means...
+- Every class must inherit from `object`
++ Any object with the right methods can be used, whatever its class
+- Types are checked at runtime
+- Only animals can have `speak()`
+> Behaviour matters, not ancestry.
+--- exercise code python
+::prompt
+Build a tiny battle system with inheritance and polymorphism:
+
+- `Character(name, hp)` with `take_damage(amount)` (hp never goes below 0), an `is_alive` property, and `attack(target)` that deals **10** damage and returns the damage dealt;
+- `Warrior(name, hp, armor)`: damage it takes is reduced by `armor` (never below 0); its `attack` deals **15**;
+- `Mage(name, hp, mana)`: its `attack` deals **25** damage and costs 10 mana if it has at least 10 mana, otherwise it falls back to the basic `Character` attack (use `super()`);
+- `battle_round(attackers, target)` makes every **living** attacker attack the target in order and returns the total damage the attacks returned.
+::starter
+class Character:
+    def __init__(self, name, hp):
+        self.name = name
+        self.hp = hp
+::solution
+class Character:
+    def __init__(self, name, hp):
+        self.name = name
+        self.hp = hp
+
+    def take_damage(self, amount):
+        self.hp = max(0, self.hp - amount)
+
+    @property
+    def is_alive(self):
+        return self.hp > 0
+
+    def attack(self, target):
+        target.take_damage(10)
+        return 10
+
+
+class Warrior(Character):
+    def __init__(self, name, hp, armor):
+        super().__init__(name, hp)
+        self.armor = armor
+
+    def take_damage(self, amount):
+        super().take_damage(max(0, amount - self.armor))
+
+    def attack(self, target):
+        target.take_damage(15)
+        return 15
+
+
+class Mage(Character):
+    def __init__(self, name, hp, mana):
+        super().__init__(name, hp)
+        self.mana = mana
+
+    def attack(self, target):
+        if self.mana >= 10:
+            self.mana -= 10
+            target.take_damage(25)
+            return 25
+        return super().attack(target)
+
+
+def battle_round(attackers, target):
+    total = 0
+    for a in attackers:
+        if a.is_alive:
+            total += a.attack(target)
+    return total
+::tests
+dummy = Character("Dummy", 100)
+mage = Mage("Merlin", 30, 15)
+assert mage.attack(dummy) == 25 and dummy.hp == 75 and mage.mana == 5
+assert mage.attack(dummy) == 10 and dummy.hp == 65, "without mana, a mage uses the basic attack"
+tank = Warrior("Tank", 50, armor=4)
+Character("Rat", 5).attack(tank)
+assert tank.hp == 44, "armor reduces damage"
+tank.take_damage(2)
+assert tank.hp == 44, "damage can't go below zero after armor"
+dead = Character("Ghost", 0)
+assert not dead.is_alive
+boss = Character("Boss", 60)
+dealt = battle_round([Warrior("W", 10, 1), Mage("M", 10, 20), dead, Character("C", 5)], boss)
+assert dealt == 50 and boss.hp == 10
+boss.take_damage(500)
+assert boss.hp == 0 and not boss.is_alive
+::hints
+- `take_damage` uses `max(0, ...)` so hp never goes negative.
+- `Warrior.take_damage` reduces the amount, then calls `super().take_damage(...)`.
+- `Mage.attack` falls back with `return super().attack(target)`.
+- `battle_round` doesn't care what kind of character each attacker is: that's polymorphism.
+--- exercise code python
+::prompt
+Combine a dataclass and an enum to model an order's life cycle:
+
+- `Status(Enum)`: `PENDING`, `PAID`, `SHIPPED`, `DELIVERED` (in that order);
+- `@dataclass Order` with `order_id` (str), `items` (dict of item name → price in cents, default a fresh empty dict) and `status` (default `Status.PENDING`);
+- `add_item(name, price_cents)`, allowed only while `PENDING` (else `ValueError`);
+- a `total` property (sum of prices);
+- `advance()` moves to the next status and returns it; advancing from `DELIVERED`, or paying (`PENDING` → `PAID`) an order with no items, raises `ValueError`.
+::starter
+from dataclasses import dataclass, field
+from enum import Enum
+::solution
+from dataclasses import dataclass, field
+from enum import Enum
+
+
+class Status(Enum):
+    PENDING = 1
+    PAID = 2
+    SHIPPED = 3
+    DELIVERED = 4
+
+
+@dataclass
+class Order:
+    order_id: str
+    items: dict = field(default_factory=dict)
+    status: Status = Status.PENDING
+
+    def add_item(self, name, price_cents):
+        if self.status is not Status.PENDING:
+            raise ValueError("can only add items to a pending order")
+        self.items[name] = price_cents
+
+    @property
+    def total(self):
+        return sum(self.items.values())
+
+    def advance(self):
+        order = list(Status)
+        i = order.index(self.status)
+        if i == len(order) - 1:
+            raise ValueError("the order is already delivered")
+        if self.status is Status.PENDING and not self.items:
+            raise ValueError("can't pay for an empty order")
+        self.status = order[i + 1]
+        return self.status
+::tests
+o = Order("A-1")
+assert o.status is Status.PENDING and o.items == {} and o.total == 0
+try:
+    o.advance()
+except ValueError:
+    pass
+else:
+    raise AssertionError("an empty order can't be paid")
+o.add_item("book", 1500)
+o.add_item("pen", 250)
+assert o.total == 1750
+assert o.advance() is Status.PAID
+try:
+    o.add_item("late", 1)
+except ValueError:
+    pass
+else:
+    raise AssertionError("items can only be added while pending")
+assert o.advance() is Status.SHIPPED and o.advance() is Status.DELIVERED
+try:
+    o.advance()
+except ValueError:
+    pass
+else:
+    raise AssertionError("can't advance past DELIVERED")
+assert Order("B").items is not Order("C").items, "each order needs its own items dict"
+assert [s.name for s in Status] == ["PENDING", "PAID", "SHIPPED", "DELIVERED"]
+::hints
+- `items: dict = field(default_factory=dict)` and `status: Status = Status.PENDING`.
+- `list(Status)` gives the members in order; find the current one's index to get the next.
+- Check the two error cases before changing `self.status`.

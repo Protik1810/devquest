@@ -1,0 +1,1836 @@
+=== module Module 8 · Object-oriented programming I: classes and objects
+
+=== lesson py-oop | Classes and objects | 100
+## Why objects?
+
+So far, **data** (variables, lists, dictionaries) and **behaviour** (functions) have lived separately. In a small program that's fine. In a big one, you end up with a dictionary for a bank account here, functions like `deposit(account, amount)` there, and nothing stopping some other code from setting the balance to `-1000` directly.
+
+**Object-oriented programming** (OOP) bundles data **and** the functions that work on it into a single unit: an **object**. A car object has **state** (its fuel level, its speed) and **behaviour** (accelerate, brake), and the behaviour keeps the state sensible: you can't brake below zero speed.
+
+You've been using objects all along. Every value in Python is an object: `"hi".upper()` calls a method of a string object, `scores.append(9)` calls a method of a list object. `type(42)` says `<class 'int'>`: even numbers are objects of a class. Now you'll create your own classes.
+
+## Classes and instances
+
+A **class** is a blueprint; an **instance** (or object) is a thing built from it. One `Dog` class can produce any number of dogs, each with its own name and age, like one cookie cutter making many cookies.
+
+```python
+class Dog:
+    def __init__(self, name, age):
+        self.name = name
+        self.age = age
+
+    def bark(self):
+        return f"{self.name} says woof!"
+
+    def birthday(self):
+        self.age += 1
+
+
+rex = Dog("Rex", 3)
+fido = Dog("Fido", 7)
+print(rex.bark())          # Rex says woof!
+rex.birthday()
+print(rex.age, fido.age)   # 4 7
+```
+
+Let's take it apart:
+
+- `class Dog:` defines a class. Class names use **CapWords** (`BankAccount`, `HttpRequest`).
+- Functions defined inside a class are called **methods**.
+- `__init__` (say "dunder init", for the double underscores) is the **initialiser**. Python calls it automatically when you create an object with `Dog("Rex", 3)`. Its job is to give the new object its starting state.
+- `self` is **the object the method is working on**. When you write `rex.bark()`, Python actually calls `Dog.bark(rex)`, passing `rex` in as `self`. That's why every method's first parameter is `self`.
+- `self.name = name` creates an **attribute**: a variable that belongs to that particular object. `rex.name` and `fido.name` are separate.
+- Outside the class, you reach attributes and methods with a dot: `rex.age`, `rex.bark()`.
+
+## What happens when you write Dog("Rex", 3)
+
+1. Python creates a new, empty `Dog` object.
+2. It calls `__init__(that_object, "Rex", 3)`, which fills in its attributes.
+3. It gives you back the object, which you name `rex`.
+
+`__init__` doesn't `return` anything; it just sets up `self`.
+
+## Methods read and change the object's state
+
+`bark` reads `self.name`; `birthday` changes `self.age`. Because each object has its own attributes, `rex.birthday()` doesn't affect `fido`. Methods can also call other methods of the same object with `self.method()`.
+
+## The classic mistakes
+
+- Forgetting `self` in the method definition: `def bark():` gives `TypeError: Dog.bark() takes 0 positional arguments but 1 was given` when called, because Python always passes the object.
+- Writing `name = name` instead of `self.name = name`: that just creates a local variable inside `__init__`, which vanishes. Later, `rex.name` fails with `AttributeError: 'Dog' object has no attribute 'name'`.
+- Calling a method without its object: `bark()` instead of `rex.bark()` (or `self.bark()` inside the class).
+
+## Designing a class: nouns and verbs
+
+Describe the problem in a sentence or two. The **nouns** suggest classes and attributes; the **verbs** suggest methods. *"A bank account has an owner and a balance. You can deposit money and withdraw it, but you can't withdraw more than the balance."*
+
+```python
+class BankAccount:
+    def __init__(self, owner, balance=0):
+        self.owner = owner
+        self.balance = balance
+
+    def deposit(self, amount):
+        if amount <= 0:
+            raise ValueError("a deposit must be positive")
+        self.balance += amount
+
+    def withdraw(self, amount):
+        if amount > self.balance:
+            raise ValueError("insufficient funds")
+        self.balance -= amount
+
+
+account = BankAccount("Ada", 100)
+account.deposit(50)
+account.withdraw(30)
+print(account.balance)    # 120
+```
+
+Notice how the class **protects its own rules**: code using the account calls `withdraw`, and `withdraw` refuses to let the balance go negative. A rule that must always hold is called an **invariant**; keeping invariants safe is one of the main jobs of a class.
+
+## Printing an object
+
+`print(rex)` shows something like `<__main__.Dog object at 0x7f3a...>`: the class name and a memory address. Two lessons from now you'll teach your classes to print nicely.
+
+## When is a class worth it?
+
+Use a class when some data and the operations on it belong together, especially when you need several objects of the same shape. Not everything needs one: if a "class" has only `__init__` and one other method, a plain function is usually simpler.
+
+📚 **Go deeper:** Python Tutorial, chapter 9 "Classes" (9.3 "A First Look at Classes"); *Python Crash Course* (3rd ed.), chapter 9; *Think Python* (3rd ed.), chapters 14–15.
+--- quiz
+? In `rex = Dog("Rex", 3)`, what are `Dog` and `rex`?
++ `Dog` is a class; `rex` is an instance (object) of it
+- `Dog` is an object; `rex` is a class
+- Both are functions
+- `Dog` is a method; `rex` is an attribute
+> The class is the blueprint, the instance is the thing built from it.
+? When you call `rex.bark()`, what is `self` inside `bark`?
+- The `Dog` class
++ The object `rex`
+- The string "bark"
+- Nothing; `self` is optional
+> Python passes the object before the dot as the first argument: `Dog.bark(rex)`.
+? What does this print?
+```python
+class Counter:
+    def __init__(self):
+        self.value = 0
+
+    def click(self):
+        self.value += 1
+
+a = Counter()
+b = Counter()
+a.click()
+a.click()
+b.click()
+print(a.value, b.value)
+```
+- `3 3`
++ `2 1`
+- `1 1`
+- `2 0`
+> Each object has its own `value` attribute.
+? This class gives `AttributeError: 'Cat' object has no attribute 'name'`. Why?
+```python
+class Cat:
+    def __init__(self, name):
+        name = name
+
+tom = Cat("Tom")
+print(tom.name)
+```
+- `__init__` must return the object
++ It assigns a local variable `name` instead of the attribute `self.name`
+- Classes can't have a `name` attribute
+- `print` can't show attributes
+> Attributes must be set on `self`: `self.name = name`.
+? When is `__init__` called?
+- When the class is defined
++ Automatically, each time a new object is created
+- Only if you call `obj.__init__()` yourself
+- When the program ends
+> Creating an object, `Cat("Tom")`, calls `__init__` on the new object.
+? What's the error when calling `rex.bark()` on a method defined as `def bark():`?
++ `TypeError`: it takes 0 positional arguments but 1 was given
+- `NameError`: `bark` isn't defined
+- `SyntaxError`
+- No error
+> Python always passes the object as the first argument, so the method needs `self`.
+--- exercise code python
+::prompt
+Write a `Rectangle` class:
+
+- `Rectangle(width, height)` stores both as attributes `width` and `height`;
+- `area()` and `perimeter()` return those values;
+- `is_square()` returns `True` if the sides are equal;
+- `scale(factor)` multiplies both sides by `factor`, changing the rectangle.
+::starter
+class Rectangle:
+    def __init__(self, width, height):
+        pass
+::solution
+class Rectangle:
+    def __init__(self, width, height):
+        self.width = width
+        self.height = height
+
+    def area(self):
+        return self.width * self.height
+
+    def perimeter(self):
+        return 2 * (self.width + self.height)
+
+    def is_square(self):
+        return self.width == self.height
+
+    def scale(self, factor):
+        self.width *= factor
+        self.height *= factor
+::tests
+r = Rectangle(3, 4)
+assert (r.width, r.height) == (3, 4)
+assert r.area() == 12
+assert r.perimeter() == 14
+assert r.is_square() is False
+assert Rectangle(5, 5).is_square() is True
+r.scale(2)
+assert (r.width, r.height) == (6, 8), "scale should change the rectangle's sides"
+assert r.area() == 48
+other = Rectangle(1, 1)
+assert other.area() == 1, "each rectangle has its own sides"
+::hints
+- In `__init__`: `self.width = width` and `self.height = height`.
+- Every method takes `self` first and reads the attributes through it.
+- `scale` changes the attributes: `self.width *= factor`.
+--- exercise code python
+::prompt
+Write a `BankAccount` class that keeps a history:
+
+- `BankAccount(owner, balance=0)` stores `owner` and `balance`, and starts `history` as an empty list;
+- `deposit(amount)` raises `ValueError` unless `amount > 0`; otherwise adds it and appends `"deposit 50"` (with the amount) to `history`;
+- `withdraw(amount)` raises `ValueError` unless `0 < amount <= balance`; otherwise subtracts it and appends `"withdraw 20"`.
+::starter
+class BankAccount:
+    def __init__(self, owner, balance=0):
+        self.owner = owner
+        self.balance = balance
+::solution
+class BankAccount:
+    def __init__(self, owner, balance=0):
+        self.owner = owner
+        self.balance = balance
+        self.history = []
+
+    def deposit(self, amount):
+        if amount <= 0:
+            raise ValueError("a deposit must be positive")
+        self.balance += amount
+        self.history.append(f"deposit {amount}")
+
+    def withdraw(self, amount):
+        if amount <= 0 or amount > self.balance:
+            raise ValueError("invalid withdrawal")
+        self.balance -= amount
+        self.history.append(f"withdraw {amount}")
+::tests
+acc = BankAccount("Ada", 100)
+acc.deposit(50)
+acc.withdraw(20)
+assert acc.balance == 130
+assert acc.history == ["deposit 50", "withdraw 20"]
+assert BankAccount("Bo").balance == 0
+for bad in [lambda: acc.withdraw(1000), lambda: acc.withdraw(0), lambda: acc.deposit(-5)]:
+    try:
+        bad()
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("invalid amounts must raise ValueError")
+assert acc.balance == 130, "a refused operation must not change the balance"
+assert len(acc.history) == 2
+assert BankAccount("Cy").history == [], "each account needs its own history list"
+::hints
+- Create the list in `__init__`: `self.history = []`.
+- Check the amount first and `raise ValueError(...)` before changing anything.
+- Record each successful operation with `self.history.append(f"deposit {amount}")`.
+--- exercise code python
+::prompt
+Write a `TodoList` class:
+
+- `add(task)` adds a task (a string), not done yet;
+- `complete(task)` marks it done, or raises `ValueError` if there's no such task;
+- `pending()` returns a list of the tasks not done yet, in the order they were added;
+- `progress()` returns a string like `"1/3 done"`.
+::starter
+class TodoList:
+    def __init__(self):
+        self.tasks = {}
+::solution
+class TodoList:
+    def __init__(self):
+        self.tasks = {}
+
+    def add(self, task):
+        self.tasks[task] = False
+
+    def complete(self, task):
+        if task not in self.tasks:
+            raise ValueError(f"no such task: {task}")
+        self.tasks[task] = True
+
+    def pending(self):
+        return [t for t, done in self.tasks.items() if not done]
+
+    def progress(self):
+        done = sum(1 for d in self.tasks.values() if d)
+        return f"{done}/{len(self.tasks)} done"
+::tests
+todo = TodoList()
+assert todo.progress() == "0/0 done"
+todo.add("write code")
+todo.add("test code")
+todo.add("ship it")
+todo.complete("test code")
+assert todo.pending() == ["write code", "ship it"]
+assert todo.progress() == "1/3 done"
+try:
+    todo.complete("party")
+except ValueError:
+    pass
+else:
+    raise AssertionError("completing an unknown task should raise ValueError")
+assert TodoList().pending() == [], "each list has its own tasks"
+::hints
+- A dictionary from task to `True`/`False` (done or not) works well, and keeps the insertion order.
+- `pending` can be one list comprehension over `self.tasks.items()`.
+- Count the done tasks for `progress`.
+--- cards
+Class vs instance :: A class is a blueprint (class Dog:); an instance is an object made from it (rex = Dog("Rex", 3)).
+__init__ :: The initialiser, called automatically when an object is created, to set its starting attributes.
+self :: The object a method is working on; obj.method() passes obj as self. It must be each method's first parameter.
+Attribute :: A variable belonging to an object, set with self.name = value and read with obj.name.
+Invariant :: A rule about an object's state that must always hold (e.g. balance >= 0); the class's methods enforce it.
+
+=== lesson py-oop-state | Objects, identity and state | 95
+## Objects are reached through references
+
+Everything you learned about lists and references applies to all objects. A variable holds a **reference** to an object; assigning it to another name doesn't copy the object:
+
+```python
+a = BankAccount("Ada", 100)
+b = a              # the same account, two names
+b.deposit(50)
+print(a.balance)   # 150
+```
+
+Passing an object to a function passes a reference too, so the function can call its methods and change it. That's often exactly what you want ("give this account to the payroll function"), but be aware of it.
+
+## Identity and equality
+
+By default, `==` between two of your objects compares **identity**: it's `True` only for the very same object.
+
+```python
+x = Dog("Rex", 3)
+y = Dog("Rex", 3)
+print(x == y)     # False: two different dogs that happen to look alike
+print(x == x)     # True
+```
+
+If two objects with the same data should count as equal (two points at the same coordinates, two amounts of money), you define `__eq__`, as you'll see in the special methods lesson.
+
+## Where attributes live
+
+Each object keeps its attributes in its own dictionary, which `vars()` shows:
+
+```python
+rex = Dog("Rex", 3)
+print(vars(rex))          # {'name': 'Rex', 'age': 3}
+```
+
+Methods aren't stored in each object; they live once, on the **class**. When you write `rex.bark`, Python looks in the object first, then in its class. That's why all dogs share one `bark` method but each has its own `name`.
+
+## Define every attribute in __init__
+
+Python lets you add attributes to an object at any time (`rex.colour = "brown"`), but then different dogs have different attributes, and code that reads `colour` crashes on some of them. Give **every** attribute a starting value in `__init__`, even if it's `None` or an empty list. A typo like `rex.nmae` then fails loudly with `AttributeError` instead of silently creating a new attribute when assigned.
+
+## Attributes by name: getattr and friends
+
+When the attribute's name is in a variable, use the built-ins:
+
+```python
+field = "age"
+getattr(rex, field)              # 3, same as rex.age
+getattr(rex, "colour", "unknown")  # a default instead of AttributeError
+setattr(rex, field, 4)           # rex.age = 4
+hasattr(rex, "bark")             # True
+```
+
+## Objects working together
+
+Objects often hold other objects: a `Library` holds `Book`s, an `Order` holds `LineItem`s, a `Game` holds `Player`s.
+
+```python
+class Book:
+    def __init__(self, title, author):
+        self.title = title
+        self.author = author
+        self.available = True
+
+
+class Library:
+    def __init__(self):
+        self.books = []
+
+    def add(self, book):
+        self.books.append(book)
+
+    def by_author(self, author):
+        return [b.title for b in self.books if b.author == author]
+```
+
+Lists of objects are everywhere. To sort them, give `sorted` a key function that pulls out the attribute:
+
+```python
+def by_age(dog):
+    return dog.age
+
+for dog in sorted(dogs, key=by_age):
+    print(dog.name)
+```
+
+(`operator.attrgetter("age")` does the same, and Module 12's `lambda` makes it shorter.)
+
+## Changing state versus returning new objects
+
+There are two styles of method:
+
+- **Mutating** methods change the object: `account.deposit(50)`, `list.append(x)`. They usually return `None`.
+- **Non-mutating** methods leave the object alone and return a **new** one: `"hi".upper()`, or a `Point.moved(dx, dy)` that returns a new point.
+
+Objects that never change after creation are **immutable**. They're easier to reason about: no other code can change them behind your back, so they're safe to share and to use as dictionary keys. Many value-like objects (points, dates, money) are designed this way.
+
+## Method chaining
+
+A method that changes the object can `return self`, so calls can be chained into a readable sentence. Query builders and many libraries work like this:
+
+```python
+query = Query("users").where("age > 18").order_by("name").limit(10)
+```
+
+📚 **Go deeper:** Python Tutorial, sections 9.1 "A Word About Names and Objects" and 9.3; *Think Python* (3rd ed.), chapter 14 "Classes and Functions"; Python Library Reference, `getattr`, `vars`, `operator.attrgetter`.
+--- quiz
+? What does this print?
+```python
+class Box:
+    def __init__(self, v):
+        self.v = v
+
+a = Box(1)
+b = a
+b.v = 2
+print(a.v)
+```
+- `1`
++ `2`
+- An error
+- `None`
+> `a` and `b` refer to the same Box.
+? Without a custom `__eq__`, what is `Box(1) == Box(1)`?
+- `True`
++ `False`
+- An error
+- `None`
+> The default `==` compares identity, and these are two different objects.
+? Where does Python find `rex.bark` when `bark` is a method?
+- In `vars(rex)`
++ On the class `Dog`, after not finding it on the object itself
+- In the global namespace
+- It copies it into each object
+> Attributes are looked up on the object first, then on its class.
+? What does `getattr(rex, "colour", "unknown")` return if `rex` has no `colour` attribute?
++ `"unknown"`
+- `None`
+- `AttributeError`
+- `"colour"`
+> The third argument is a default.
+? Why should every attribute get a value in `__init__`?
+- Python requires it
++ So every object has the same attributes and nothing crashes on a missing one
+- It makes the program faster
+- Attributes can't be added later
+> Python allows adding attributes later, but consistent objects are far easier to work with.
+--- exercise code python
+::prompt
+Write an **immutable-style** `Point` class:
+
+- `Point(x, y)` stores `x` and `y`;
+- `moved(dx, dy)` returns a **new** `Point`, leaving the original unchanged;
+- `distance_to(other)` returns the straight-line distance to another `Point`.
+::starter
+import math
+
+
+class Point:
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+::solution
+import math
+
+
+class Point:
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+
+    def moved(self, dx, dy):
+        return Point(self.x + dx, self.y + dy)
+
+    def distance_to(self, other):
+        return math.hypot(other.x - self.x, other.y - self.y)
+::tests
+p = Point(1, 2)
+q = p.moved(3, 4)
+assert (q.x, q.y) == (4, 6)
+assert (p.x, p.y) == (1, 2), "moved must not change the original point"
+assert q is not p
+assert Point(0, 0).distance_to(Point(3, 4)) == 5
+assert p.distance_to(p) == 0
+::hints
+- `moved` creates and returns `Point(self.x + dx, self.y + dy)`.
+- `math.hypot(a, b)` is `√(a² + b²)`, or use `math.sqrt`.
+--- exercise code python
+::prompt
+`Book` is given. Write a `Library` class:
+
+- `add(book)` adds a `Book`;
+- `by_author(author)` returns the titles by that author, in the order added;
+- `checkout(title)` marks the book unavailable and returns it, raising `ValueError` if there's no such book or it's already checked out;
+- `available()` returns the titles of the available books, sorted alphabetically.
+::starter
+class Book:
+    def __init__(self, title, author):
+        self.title = title
+        self.author = author
+        self.available = True
+
+
+class Library:
+    def __init__(self):
+        self.books = []
+::solution
+class Book:
+    def __init__(self, title, author):
+        self.title = title
+        self.author = author
+        self.available = True
+
+
+class Library:
+    def __init__(self):
+        self.books = []
+
+    def add(self, book):
+        self.books.append(book)
+
+    def by_author(self, author):
+        return [b.title for b in self.books if b.author == author]
+
+    def checkout(self, title):
+        for b in self.books:
+            if b.title == title:
+                if not b.available:
+                    raise ValueError(f"{title} is already checked out")
+                b.available = False
+                return b
+        raise ValueError(f"no book called {title}")
+
+    def available(self):
+        return sorted(b.title for b in self.books if b.available)
+::tests
+lib = Library()
+lib.add(Book("Emma", "Austen"))
+lib.add(Book("Dune", "Herbert"))
+lib.add(Book("Persuasion", "Austen"))
+assert lib.by_author("Austen") == ["Emma", "Persuasion"]
+assert lib.by_author("Tolkien") == []
+book = lib.checkout("Dune")
+assert book.title == "Dune" and book.available is False
+assert lib.available() == ["Emma", "Persuasion"]
+for title in ["Dune", "Ulysses"]:
+    try:
+        lib.checkout(title)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError(f"checkout({title!r}) should raise ValueError")
+::hints
+- `by_author` and `available` are list comprehensions over `self.books`.
+- In `checkout`, loop to find the book; if it's found, check `available` before changing it; if the loop ends without finding it, raise.
+--- exercise code python
+::prompt
+Write a `Query` builder whose methods **return `self`**, so calls can be chained, and a `build()` method that returns the SQL text:
+```python
+Query("users").where("age > 18").order_by("name").limit(10).build()
+# 'SELECT * FROM users WHERE age > 18 ORDER BY name LIMIT 10'
+```
+Several `where` conditions are joined with `AND`. Parts that weren't set are left out.
+::starter
+class Query:
+    def __init__(self, table):
+        self.table = table
+::solution
+class Query:
+    def __init__(self, table):
+        self.table = table
+        self.conditions = []
+        self.order = None
+        self.max_rows = None
+
+    def where(self, condition):
+        self.conditions.append(condition)
+        return self
+
+    def order_by(self, column):
+        self.order = column
+        return self
+
+    def limit(self, n):
+        self.max_rows = n
+        return self
+
+    def build(self):
+        sql = f"SELECT * FROM {self.table}"
+        if self.conditions:
+            sql += " WHERE " + " AND ".join(self.conditions)
+        if self.order:
+            sql += f" ORDER BY {self.order}"
+        if self.max_rows is not None:
+            sql += f" LIMIT {self.max_rows}"
+        return sql
+::tests
+assert Query("users").build() == "SELECT * FROM users"
+assert Query("users").where("age > 18").order_by("name").limit(10).build() == "SELECT * FROM users WHERE age > 18 ORDER BY name LIMIT 10"
+assert Query("orders").where("total > 100").where("paid = 1").build() == "SELECT * FROM orders WHERE total > 100 AND paid = 1"
+q = Query("t")
+assert q.where("x = 1") is q, "methods should return self so calls can be chained"
+assert Query("logs").limit(5).build() == "SELECT * FROM logs LIMIT 5"
+::hints
+- Start every part in `__init__` (an empty list of conditions, `None` for the others).
+- Each builder method stores its value and ends with `return self`.
+- `build` adds each clause only if it was set; join conditions with `" AND "`.
+--- cards
+References to objects :: b = a makes two names for one object; changes through b are seen through a. Functions receive references.
+Default == on objects :: Compares identity (same object) unless the class defines __eq__.
+vars(obj) :: The object's own attributes as a dict. Methods live on the class and are found there.
+getattr / setattr / hasattr :: Read, set or check an attribute by name: getattr(obj, "x", default).
+Mutating vs non-mutating methods :: Change the object (return None) vs leave it alone and return a new object.
+Method chaining :: Methods that return self allow obj.a().b().c().
+
+=== lesson py-class-attrs | Class attributes, classmethods and staticmethods | 95
+## Class attributes: shared by every instance
+
+Attributes set on `self` belong to one object. Variables defined directly in the class body belong to the **class**, and every instance shares them:
+
+```python
+class Dog:
+    species = "Canis familiaris"     # class attribute: one value for all dogs
+    count = 0                        # how many dogs have been created
+
+    def __init__(self, name):
+        self.name = name             # instance attribute: one per dog
+        Dog.count += 1
+
+
+a = Dog("Rex")
+b = Dog("Fido")
+print(a.species, b.species)   # both read the class attribute
+print(Dog.count)              # 2
+```
+
+Class attributes are good for **constants** that belong to the class (`MAX_SPEED = 120`, `species`) and for data about the class as a whole (a count of instances).
+
+## Reading versus assigning
+
+**Reading** `a.species` finds the class attribute, because Python looks on the object first and then on the class. **Assigning** through an object is different: `a.species = "wolf"` creates a new **instance** attribute on `a` that hides the class one. Other dogs still see the class value.
+
+That causes a classic bug when counting:
+
+```python
+def __init__(self, name):
+    self.count += 1      # BUG: reads Dog.count, then creates self.count on this one dog!
+```
+
+To change a class attribute, assign it through the class: `Dog.count += 1` (or `type(self).count += 1`).
+
+## The shared mutable trap
+
+A **mutable** class attribute is shared by every instance, which is almost never what you want for per-object data:
+
+```python
+class Player:
+    inventory = []            # BUG: one list for ALL players
+
+    def pick_up(self, item):
+        self.inventory.append(item)
+
+a, b = Player(), Player()
+a.pick_up("sword")
+print(b.inventory)            # ['sword']  ← b has a's sword!
+```
+
+`self.inventory.append` doesn't assign, it mutates the shared list. The fix: create the list in `__init__` (`self.inventory = []`), so each player gets their own. It's the same idea as the mutable default argument trap.
+
+## Class methods: methods of the class itself
+
+Decorating a method with `@classmethod` makes Python pass the **class** (named `cls` by convention) instead of an instance. The most common use is **alternative constructors**: other ways to create objects.
+
+```python
+class Date:
+    def __init__(self, year, month, day):
+        self.year = year
+        self.month = month
+        self.day = day
+
+    @classmethod
+    def from_string(cls, text):
+        """Create a Date from text like '2026-10-14'."""
+        year, month, day = text.split("-")
+        return cls(int(year), int(month), int(day))
+
+
+d = Date.from_string("2026-10-14")
+print(d.month)     # 10
+```
+
+Python's own classes do this: `dict.fromkeys(...)`, `int.from_bytes(...)`, `datetime.fromisoformat(...)`. Using `cls(...)` rather than `Date(...)` means the method also works properly for subclasses (Module 9).
+
+## Static methods: plain functions kept in the class
+
+`@staticmethod` receives neither the instance nor the class. It's an ordinary function placed inside the class because it belongs there conceptually:
+
+```python
+class Date:
+    ...
+    @staticmethod
+    def is_leap(year):
+        return year % 4 == 0 and (year % 100 != 0 or year % 400 == 0)
+
+Date.is_leap(2024)    # True
+```
+
+## Which kind of method?
+
+| Kind | First parameter | Use it when the method needs... |
+|---|---|---|
+| instance method | `self` | the object's data (most methods) |
+| `@classmethod` | `cls` | the class: alternative constructors, class-wide data |
+| `@staticmethod` | none | neither, but it belongs with the class |
+
+The `@` lines are **decorators**: they modify the function defined below them. Module 12 shows how they work and how to write your own.
+
+📚 **Go deeper:** Python Tutorial, section 9.3.5 "Class and Instance Variables"; Python Library Reference, `classmethod` and `staticmethod`; Real Python, "Python's Instance, Class, and Static Methods Demystified".
+--- quiz
+? What does this print?
+```python
+class A:
+    n = 0
+    def __init__(self):
+        A.n += 1
+
+A(); A(); A()
+print(A.n)
+```
+- `0`
+- `1`
++ `3`
+- An error
+> Each new object adds one to the shared class attribute.
+? After `a.species = "wolf"`, what is `Dog.species`?
++ Still `"Canis familiaris"`
+- `"wolf"`
+- `None`
+- An error
+> Assigning through the instance creates an instance attribute that hides the class one; the class attribute is unchanged.
+? What does this print?
+```python
+class Team:
+    members = []
+    def join(self, name):
+        self.members.append(name)
+
+x, y = Team(), Team()
+x.join("Ada")
+print(len(y.members))
+```
+- `0`
++ `1`
+- An error
+- `2`
+> Both teams share the single class-level list.
+? What does a `@classmethod` receive as its first argument?
+- The instance
++ The class
+- Nothing
+- The module
+> By convention it's named `cls`.
+? Which is a typical use of `@classmethod`?
++ An alternative constructor like `Date.from_string("2026-10-14")`
+- A method that needs the object's attributes
+- Making an attribute private
+- Speeding up a loop
+> It builds and returns a new instance using `cls(...)`.
+--- exercise code python
+::prompt
+Write an `Employee` class:
+
+- a class attribute `raise_percent = 4` and a class attribute `count = 0` that counts every employee created;
+- `Employee(name, salary)` stores both and increases the count;
+- `apply_raise()` increases the salary by `self.raise_percent` percent, rounded to 2 decimals. Reading it through `self` means a single employee can get a different percentage by setting their own `raise_percent`.
+::starter
+class Employee:
+    def __init__(self, name, salary):
+        self.name = name
+        self.salary = salary
+::solution
+class Employee:
+    raise_percent = 4
+    count = 0
+
+    def __init__(self, name, salary):
+        self.name = name
+        self.salary = salary
+        Employee.count += 1
+
+    def apply_raise(self):
+        self.salary = round(self.salary * (1 + self.raise_percent / 100), 2)
+::tests
+start = Employee.count
+a = Employee("Ada", 50000)
+b = Employee("Bo", 40000)
+assert Employee.count == start + 2, "count every employee created on the class"
+assert "count" not in vars(a), "count must not become an instance attribute"
+a.apply_raise()
+assert a.salary == 52000
+Employee.raise_percent = 10
+b.apply_raise()
+assert b.salary == 44000, "changing the class attribute affects every employee"
+Employee.raise_percent = 4
+c = Employee("Cy", 1000)
+c.raise_percent = 50
+c.apply_raise()
+assert c.salary == 1500, "an instance can override the class value"
+::hints
+- Define `raise_percent = 4` and `count = 0` directly in the class body.
+- In `__init__`, increase the count through the class: `Employee.count += 1`.
+- `apply_raise` reads `self.raise_percent`, which finds the instance's own value if it has one, otherwise the class's.
+--- exercise code python
+::prompt
+Write a `Temperature` class that stores degrees Celsius in an attribute `celsius`:
+
+- `Temperature(celsius)` raises `ValueError` if the value is below absolute zero (-273.15);
+- the static method `is_physical(celsius)` returns whether a value is at or above absolute zero (use it in `__init__`);
+- class methods `from_fahrenheit(f)` and `from_kelvin(k)` create a `Temperature` from other scales (C = (F − 32) × 5/9, C = K − 273.15), rounded to 2 decimals.
+::starter
+class Temperature:
+    def __init__(self, celsius):
+        self.celsius = celsius
+::solution
+class Temperature:
+    def __init__(self, celsius):
+        if not Temperature.is_physical(celsius):
+            raise ValueError(f"{celsius} is below absolute zero")
+        self.celsius = celsius
+
+    @staticmethod
+    def is_physical(celsius):
+        return celsius >= -273.15
+
+    @classmethod
+    def from_fahrenheit(cls, f):
+        return cls(round((f - 32) * 5 / 9, 2))
+
+    @classmethod
+    def from_kelvin(cls, k):
+        return cls(round(k - 273.15, 2))
+::tests
+assert Temperature(21).celsius == 21
+assert Temperature.from_fahrenheit(212).celsius == 100
+assert Temperature.from_fahrenheit(-40).celsius == -40
+assert Temperature.from_kelvin(0).celsius == -273.15
+assert Temperature.from_kelvin(300).celsius == 26.85
+assert isinstance(Temperature.from_kelvin(300), Temperature)
+assert Temperature.is_physical(-300) is False
+assert Temperature.is_physical(0) is True
+try:
+    Temperature(-300)
+except ValueError:
+    pass
+else:
+    raise AssertionError("Temperature(-300) should raise ValueError")
+::hints
+- `@staticmethod` above `def is_physical(celsius):`, with no `self`.
+- `@classmethod` above `def from_fahrenheit(cls, f):`, ending with `return cls(...)`.
+- Validate in `__init__` before storing the value.
+--- exercise code python
+::prompt
+Every `Player` currently shares one inventory, and the line that counts players has a bug too. Fix the class so each player has their **own** inventory and the class attribute `players_created` counts every player.
+::starter
+class Player:
+    inventory = []
+    players_created = 0
+
+    def __init__(self, name):
+        self.name = name
+        self.players_created += 1
+
+    def pick_up(self, item):
+        self.inventory.append(item)
+::solution
+class Player:
+    players_created = 0
+
+    def __init__(self, name):
+        self.name = name
+        self.inventory = []
+        Player.players_created += 1
+
+    def pick_up(self, item):
+        self.inventory.append(item)
+::tests
+start = Player.players_created
+a = Player("Ada")
+b = Player("Bo")
+a.pick_up("sword")
+b.pick_up("map")
+assert a.inventory == ["sword"], "each player needs their own inventory"
+assert b.inventory == ["map"]
+assert Player.players_created == start + 2, "count players on the class, not on each player"
+::hints
+- Move the list into `__init__`: `self.inventory = []`.
+- `self.players_created += 1` creates an instance attribute. Update the class attribute: `Player.players_created += 1`.
+--- cards
+Class attribute :: Defined in the class body and shared by all instances. Read via instance or class; change via the class.
+Instance attribute shadowing :: obj.attr = value creates an instance attribute that hides a class attribute of the same name.
+Shared mutable class attribute :: A list/dict in the class body is shared by every instance. Create per-object containers in __init__.
+@classmethod :: Receives the class as cls. Used for alternative constructors: return cls(...).
+@staticmethod :: A plain function in the class namespace; receives neither self nor cls.
+
+=== lesson py-encapsulation | Encapsulation and properties | 100
+## Hiding the engine
+
+A car gives you a steering wheel and pedals (its **interface**) and hides the engine (its **implementation**). You can drive any car without knowing how its engine works, and the manufacturer can redesign the engine without retraining every driver.
+
+**Encapsulation** applies the same idea to classes: code that uses a class should go through its **methods** and documented attributes, not reach into its internals. Two big benefits:
+
+1. The class can **protect its invariants**: if only `withdraw` can lower the balance, the balance can never go negative.
+2. You can **change the internals** later (store cents instead of dollars, cache a value, read from a database) without breaking any code that uses the class.
+
+## Python's conventions
+
+Python doesn't have keywords like `private` in Java or C++. It relies on naming conventions; the community motto is "we're all consenting adults here":
+
+- `self.balance`: **public**, part of the interface.
+- `self._balance`: one leading underscore means **internal**. Python doesn't stop anyone using it, but the underscore says "not part of the interface; may change without warning". Tools and other developers respect it.
+- `self.__balance`: two leading underscores trigger **name mangling**: Python renames it to `_BankAccount__balance`. It exists to avoid accidental name clashes with subclasses, not for security. Most code just uses one underscore.
+
+## Properties: attribute syntax, method power
+
+Suppose `Temperature` objects must never go below absolute zero. A plain attribute can't enforce that, because anyone can write `t.celsius = -500`. A **property** looks like an attribute from the outside but runs methods behind the scenes:
+
+```python
+class Temperature:
+    def __init__(self, celsius):
+        self.celsius = celsius            # goes through the setter below!
+
+    @property
+    def celsius(self):                    # the "getter": runs on  t.celsius
+        return self._celsius
+
+    @celsius.setter
+    def celsius(self, value):             # the "setter": runs on  t.celsius = value
+        if value < -273.15:
+            raise ValueError("below absolute zero")
+        self._celsius = value
+
+    @property
+    def fahrenheit(self):                 # computed, read-only
+        return self._celsius * 9 / 5 + 32
+
+
+t = Temperature(20)
+t.celsius = 25          # validated by the setter
+print(t.fahrenheit)     # 77.0, computed on demand
+t.celsius = -500        # ValueError: below absolute zero
+t.fahrenheit = 100      # AttributeError: property 'fahrenheit' of 'Temperature' object has no setter
+```
+
+The real value is stored in `self._celsius` (with the underscore); `celsius` is the public face. Callers write natural code (`t.celsius = 25`), and the class keeps control.
+
+## Why not get_x() and set_x() methods?
+
+In some languages, every attribute gets getter and setter methods "just in case". In Python, **start with plain public attributes**. If you later need validation or a computed value, turn the attribute into a property, and every caller's code keeps working unchanged. That's exactly why properties exist.
+
+## Read-only and computed attributes
+
+A property without a setter is **read-only**. That's useful for:
+
+- values computed from others (`area` from `width` and `height`, `full_name` from first and last names), which can then never get out of sync;
+- values that must only change through methods (an account's `balance`, changed only by `deposit` and `withdraw`).
+
+## Tell, don't ask
+
+Encapsulated designs **tell** objects what to do instead of **asking** for their data and doing it themselves:
+
+```python
+# asking: the rule lives outside the class, and is repeated wherever it's needed
+if account.balance >= 50:
+    account.balance -= 50
+
+# telling: the rule lives in one place, inside the class
+account.withdraw(50)
+```
+
+📚 **Go deeper:** Python Library Reference, `property`; Python Tutorial, section 9.6 "Private Variables"; *Fluent Python* (2nd ed.), chapter 22 "Dynamic Attributes and Properties"; Martin Fowler, "TellDontAsk".
+--- quiz
+? What does a single leading underscore, as in `self._cache`, mean?
+- Python makes the attribute private and blocks access
++ It's a convention: internal, not part of the public interface
+- The attribute is read-only
+- It's a syntax error
+> Python doesn't enforce it; it's a signal to other programmers.
+? What does Python do with `self.__secret` inside class `Vault`?
+- Encrypts it
++ Renames it to `_Vault__secret` (name mangling)
+- Deletes it after `__init__`
+- Nothing special
+> Name mangling avoids clashes in subclasses; it isn't security.
+? With the lesson's `Temperature`, what happens on `t.celsius = -300`?
+- The value is stored
++ The setter runs and raises `ValueError`
+- `AttributeError`
+- It's set to -273.15
+> Assigning to a property calls its setter, which validates the value.
+? What happens when you assign to a property that has no setter?
+- The value is stored anyway
++ `AttributeError`, because the property is read-only
+- `ValueError`
+- The property is deleted
+> Without `@x.setter`, a property is read-only.
+? Why does Python code usually start with plain attributes instead of getters and setters?
++ A plain attribute can later become a property without changing any calling code
+- Properties are slow
+- Getters and setters are a syntax error in Python
+- Attributes can't be validated
+> Properties let you add behaviour later, invisibly to callers.
+--- exercise code python
+::prompt
+Write a `BankAccount` whose `balance` is a **read-only property** (stored as `_balance`), so it can only change through `deposit(amount)` and `withdraw(amount)`. Both raise `ValueError` for amounts that aren't positive, and `withdraw` also for amounts above the balance. `BankAccount(owner, balance=0)` raises `ValueError` for a negative starting balance.
+::starter
+class BankAccount:
+    def __init__(self, owner, balance=0):
+        self.owner = owner
+        self.balance = balance
+::solution
+class BankAccount:
+    def __init__(self, owner, balance=0):
+        if balance < 0:
+            raise ValueError("the starting balance can't be negative")
+        self.owner = owner
+        self._balance = balance
+
+    @property
+    def balance(self):
+        return self._balance
+
+    def deposit(self, amount):
+        if amount <= 0:
+            raise ValueError("a deposit must be positive")
+        self._balance += amount
+
+    def withdraw(self, amount):
+        if amount <= 0 or amount > self._balance:
+            raise ValueError("invalid withdrawal")
+        self._balance -= amount
+::tests
+acc = BankAccount("Ada", 100)
+acc.deposit(25)
+acc.withdraw(50)
+assert acc.balance == 75
+try:
+    acc.balance = 1_000_000
+except AttributeError:
+    pass
+else:
+    raise AssertionError("balance must be read-only")
+assert acc.balance == 75
+for action in [lambda: acc.withdraw(500), lambda: acc.deposit(0), lambda: BankAccount("Bo", -5)]:
+    try:
+        action()
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("invalid amounts must raise ValueError")
+::hints
+- Store the value in `self._balance`.
+- `@property` above `def balance(self): return self._balance` makes a read-only property (no setter).
+- `deposit` and `withdraw` change `self._balance` after validating.
+--- exercise code python
+::prompt
+Write a `Rectangle` with `width` and `height` **properties** whose setters raise `ValueError` unless the value is a positive number, and a read-only computed `area` property. Changing a side must update the area automatically.
+::starter
+class Rectangle:
+    def __init__(self, width, height):
+        self.width = width
+        self.height = height
+::solution
+class Rectangle:
+    def __init__(self, width, height):
+        self.width = width
+        self.height = height
+
+    @property
+    def width(self):
+        return self._width
+
+    @width.setter
+    def width(self, value):
+        if value <= 0:
+            raise ValueError("width must be positive")
+        self._width = value
+
+    @property
+    def height(self):
+        return self._height
+
+    @height.setter
+    def height(self, value):
+        if value <= 0:
+            raise ValueError("height must be positive")
+        self._height = value
+
+    @property
+    def area(self):
+        return self._width * self._height
+::tests
+r = Rectangle(3, 4)
+assert r.area == 12
+r.width = 10
+assert r.area == 40, "area must follow the sides"
+for bad in [lambda: Rectangle(0, 5), lambda: Rectangle(2, -1), lambda: setattr(r, "height", 0)]:
+    try:
+        bad()
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("non-positive sides must raise ValueError")
+assert r.height == 4, "a refused value must not be stored"
+try:
+    r.area = 5
+except AttributeError:
+    pass
+else:
+    raise AssertionError("area must be read-only")
+::hints
+- Each side needs a `@property` getter and a `@width.setter` / `@height.setter` that validates and stores `self._width` / `self._height`.
+- `__init__` can keep `self.width = width`: that line already goes through the setter.
+- `area` is a property with no setter.
+--- exercise code python
+::prompt
+Write a `User` class:
+
+- an `email` **property** whose setter normalises the value (strip spaces, lowercase) and raises `ValueError` unless it contains an `@` followed later by a `.`;
+- `set_password(password)` stores only a **hash** of it in `_password_hash`, using `hashlib.sha256(password.encode()).hexdigest()`, and raises `ValueError` for passwords shorter than 8 characters;
+- `check_password(password)` returns whether the password matches.
+
+There must be **no** attribute holding the plain password.
+::starter
+import hashlib
+
+
+class User:
+    def __init__(self, email):
+        self.email = email
+::solution
+import hashlib
+
+
+class User:
+    def __init__(self, email):
+        self.email = email
+        self._password_hash = None
+
+    @property
+    def email(self):
+        return self._email
+
+    @email.setter
+    def email(self, value):
+        value = value.strip().lower()
+        at = value.find("@")
+        if at < 1 or "." not in value[at:]:
+            raise ValueError(f"invalid email: {value!r}")
+        self._email = value
+
+    @staticmethod
+    def _hash(password):
+        return hashlib.sha256(password.encode()).hexdigest()
+
+    def set_password(self, password):
+        if len(password) < 8:
+            raise ValueError("password must be at least 8 characters")
+        self._password_hash = User._hash(password)
+
+    def check_password(self, password):
+        return self._password_hash is not None and User._hash(password) == self._password_hash
+::tests
+u = User("  Ada@Example.COM ")
+assert u.email == "ada@example.com"
+u.set_password("correct horse")
+assert u.check_password("correct horse") is True
+assert u.check_password("wrong") is False
+assert "correct horse" not in [str(v) for v in vars(u).values()], "never store the plain password"
+import hashlib as _h
+assert u._password_hash == _h.sha256(b"correct horse").hexdigest()
+for bad in ["no-at-sign.com", "ada@nodot", "@example.com"]:
+    try:
+        User(bad)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError(f"User({bad!r}) should raise ValueError")
+try:
+    u.set_password("short")
+except ValueError:
+    pass
+else:
+    raise AssertionError("short passwords must raise ValueError")
+assert User("x@y.io").check_password("anything") is False
+::hints
+- The email setter: `value.strip().lower()`, then check there's an `@` (not first) with a `.` somewhere after it.
+- Hash with `hashlib.sha256(password.encode()).hexdigest()` and compare hashes in `check_password`.
+- Start `_password_hash` as `None` in `__init__`.
+--- cards
+Encapsulation :: Use objects through their interface (methods, documented attributes); keep internals hidden so invariants hold and internals can change.
+_name vs __name :: _name: internal by convention. __name: name-mangled to _Class__name to avoid subclass clashes. Neither is security.
+@property :: Makes a method run on attribute access (obj.x). Add @x.setter to validate assignments; no setter = read-only.
+Tell, don't ask :: Ask objects to do things (account.withdraw(50)) instead of reading their data and acting on it outside.
+Storing passwords :: Never store the plain password; store a hash (in real systems a slow one like bcrypt or Argon2) and compare hashes.
+
+=== lesson py-dunder | Special methods (dunder methods) | 105
+How does `len("hello")` know the length of a string, and `len([1, 2])` of a list? How does `+` add numbers but join strings? Python's **data model** answers: built-in functions and operators call **special methods** on the object, whose names start and end with double underscores ("dunder" methods).
+
+| You write | Python calls |
+|---|---|
+| `len(x)` | `x.__len__()` |
+| `str(x)`, `print(x)`, `f"{x}"` | `x.__str__()` |
+| `repr(x)`, and inside lists | `x.__repr__()` |
+| `x == y` | `x.__eq__(y)` |
+| `x < y` | `x.__lt__(y)` |
+| `x + y` | `x.__add__(y)` |
+| `x[i]` | `x.__getitem__(i)` |
+| `item in x` | `x.__contains__(item)` |
+| `bool(x)`, `if x:` | `x.__bool__()` (or `__len__`) |
+
+Define these methods, and your objects work with Python's syntax as naturally as the built-in types.
+
+## __repr__ and __str__
+
+```python
+class Point:
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+
+    def __repr__(self):
+        return f"Point({self.x!r}, {self.y!r})"
+
+    def __str__(self):
+        return f"({self.x}, {self.y})"
+
+
+p = Point(1, 2)
+print(p)           # (1, 2)          uses __str__
+print(repr(p))     # Point(1, 2)     uses __repr__
+print([p, p])      # [Point(1, 2), Point(1, 2)]   containers show repr
+```
+
+- `__repr__` is for **developers**: unambiguous, ideally looking like the code that would recreate the object. It appears in the shell, in lists, in debuggers and in error messages.
+- `__str__` is for **users**: readable. If you only define `__repr__`, `str()` uses it too.
+
+Always write at least a `__repr__`; it makes debugging far easier.
+
+## __eq__ and hashing
+
+```python
+    def __eq__(self, other):
+        if not isinstance(other, Point):
+            return NotImplemented          # let Python try the other side, then fall back to False
+        return (self.x, self.y) == (other.x, other.y)
+```
+
+Now `Point(1, 2) == Point(1, 2)` is `True`. Returning `NotImplemented` (not raising) for unknown types is the polite convention.
+
+There's a catch: defining `__eq__` makes objects **unhashable** (you can no longer put them in sets or use them as dictionary keys) unless you also define `__hash__`. Equal objects must have equal hashes, so hash the same fields you compare, and only for objects that don't change after creation:
+
+```python
+    def __hash__(self):
+        return hash((self.x, self.y))
+```
+
+## Ordering: __lt__ and friends
+
+Define `__lt__` (less than), and `sorted()`, `min()` and `max()` work on your objects. The `functools.total_ordering` decorator fills in `<=`, `>` and `>=` from `__eq__` and `__lt__`:
+
+```python
+from functools import total_ordering
+
+@total_ordering
+class Version:
+    def __init__(self, major, minor):
+        self.major, self.minor = major, minor
+
+    def __eq__(self, other):
+        return (self.major, self.minor) == (other.major, other.minor)
+
+    def __lt__(self, other):
+        return (self.major, self.minor) < (other.major, other.minor)
+```
+
+Comparing tuples of fields is a neat trick: tuples compare item by item.
+
+## Containers: __len__, __getitem__, __contains__, __iter__
+
+```python
+class Playlist:
+    def __init__(self, songs):
+        self._songs = list(songs)
+
+    def __len__(self):
+        return len(self._songs)
+
+    def __getitem__(self, index):         # pl[0], pl[-1], pl[1:3]
+        return self._songs[index]
+
+    def __contains__(self, song):         # "Yesterday" in pl
+        return song in self._songs
+
+    def __iter__(self):                   # for song in pl
+        return iter(self._songs)
+```
+
+By **delegating** to the list inside, a few lines make `Playlist` behave like a real sequence. (Module 12 shows how to write `__iter__` with generators.)
+
+## Arithmetic: __add__, __mul__ and the reflected versions
+
+```python
+class Vector:
+    def __init__(self, x, y):
+        self.x, self.y = x, y
+
+    def __add__(self, other):
+        return Vector(self.x + other.x, self.y + other.y)
+
+    def __mul__(self, k):                 # v * 3
+        return Vector(self.x * k, self.y * k)
+
+    def __rmul__(self, k):                # 3 * v: int doesn't know Vector, so Python tries v.__rmul__(3)
+        return self * k
+```
+
+Operators should return **new** objects and leave the operands unchanged, like numbers do.
+
+## Truthiness and calling
+
+- `__bool__` decides truthiness: an empty playlist or a zero vector might be falsy. Without it, Python uses `__len__` (0 is falsy), and otherwise every object is truthy.
+- `__call__` makes an instance callable like a function: `obj(args)`.
+
+## Use operators only when the meaning is obvious
+
+`vector + vector` and `money + money` read naturally. `user + user` doesn't: what would it mean? Overloading operators with surprising meanings makes code harder to read, so prefer a well-named method in that case.
+
+📚 **Go deeper:** Python Language Reference, "Data model" (section 3.3 "Special method names"); *Fluent Python* (2nd ed.), chapter 1 "The Python Data Model"; Python Library Reference, `functools.total_ordering`.
+--- quiz
+? Which method does `print(obj)` use?
+- `__repr__` only
++ `__str__`, falling back to `__repr__` if there's no `__str__`
+- `__print__`
+- `__format__` only
+> `print` calls `str(obj)`, which uses `__str__` if it exists.
+? How does `[Point(1, 2)]` display, with the lesson's `Point`?
++ `[Point(1, 2)]`
+- `[(1, 2)]`
+- `[<Point object>]`
+- `Point(1, 2)`
+> Containers show the `repr` of their items.
+? What happens after defining `__eq__` but not `__hash__`?
+- Nothing changes
++ The objects become unhashable: they can't go in sets or be dict keys
+- `==` stops working
+- The objects can't be printed
+> Equal objects must hash equally, so Python disables the default hash.
+? What does `__eq__` return for an `other` of a type it doesn't understand?
+- `False`
+- `None`
++ `NotImplemented`
+- It raises `TypeError`
+> `NotImplemented` lets Python try the other object's method, then fall back to comparing identity.
+? Why does `3 * v` need `__rmul__` when `v * 3` already works through `__mul__`?
+- It doesn't; `__mul__` handles both
++ `int.__mul__` doesn't know `Vector`, so Python then tries `v.__rmul__(3)`
+- `__rmul__` is called for `*=`
+- Multiplication isn't allowed on objects
+> Reflected methods handle the case where your object is on the right.
+? With `__len__` defined and no `__bool__`, when is an object falsy?
++ When `__len__` returns 0
+- Never
+- Always
+- When `__len__` returns 1
+> Python falls back to the length for truthiness.
+--- exercise code python
+::prompt
+Write a `Money` class for amounts in **whole cents** with a currency:
+
+- `repr(Money(1250, "EUR"))` is `Money(1250, 'EUR')`, and `str(...)` is `12.50 EUR`;
+- `==` compares amount and currency; equal `Money` values have equal hashes;
+- `+` adds two amounts of the **same** currency (a new `Money`), and raises `ValueError` for different currencies;
+- `<` compares amounts of the same currency (use `@total_ordering` so `sorted`, `max`, `>=` all work), raising `ValueError` for different currencies.
+::starter
+from functools import total_ordering
+
+
+class Money:
+    def __init__(self, cents, currency):
+        self.cents = cents
+        self.currency = currency
+::solution
+from functools import total_ordering
+
+
+@total_ordering
+class Money:
+    def __init__(self, cents, currency):
+        self.cents = cents
+        self.currency = currency
+
+    def __repr__(self):
+        return f"Money({self.cents!r}, {self.currency!r})"
+
+    def __str__(self):
+        return f"{self.cents / 100:.2f} {self.currency}"
+
+    def __eq__(self, other):
+        if not isinstance(other, Money):
+            return NotImplemented
+        return (self.cents, self.currency) == (other.cents, other.currency)
+
+    def __hash__(self):
+        return hash((self.cents, self.currency))
+
+    def _check(self, other):
+        if self.currency != other.currency:
+            raise ValueError(f"can't mix {self.currency} and {other.currency}")
+
+    def __add__(self, other):
+        self._check(other)
+        return Money(self.cents + other.cents, self.currency)
+
+    def __lt__(self, other):
+        self._check(other)
+        return self.cents < other.cents
+::tests
+a = Money(1250, "EUR")
+assert repr(a) == "Money(1250, 'EUR')"
+assert str(a) == "12.50 EUR"
+assert str(Money(5, "USD")) == "0.05 USD"
+assert a == Money(1250, "EUR")
+assert a != Money(1250, "USD")
+assert len({a, Money(1250, "EUR")}) == 1, "equal Money must have equal hashes"
+total = a + Money(250, "EUR")
+assert total == Money(1500, "EUR") and a == Money(1250, "EUR"), "+ returns a new Money and leaves the operands alone"
+assert sorted([Money(300, "EUR"), Money(100, "EUR"), Money(200, "EUR")]) == [Money(100, "EUR"), Money(200, "EUR"), Money(300, "EUR")]
+assert Money(500, "EUR") >= Money(500, "EUR")
+assert max(Money(1, "GBP"), Money(9, "GBP")) == Money(9, "GBP")
+for bad in [lambda: a + Money(1, "USD"), lambda: a < Money(1, "USD")]:
+    try:
+        bad()
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("mixing currencies must raise ValueError")
+::hints
+- `__repr__` with `!r` gives the quotes: `f"Money({self.cents!r}, {self.currency!r})"`.
+- `__str__`: `f"{self.cents / 100:.2f} {self.currency}"`.
+- Hash the same tuple you compare in `__eq__`. Put the currency check in a helper used by `__add__` and `__lt__`.
+--- exercise code python
+::prompt
+Write a 2D `Vector` class:
+
+- `repr` like `Vector(3, 4)`;
+- `+` and `-` with another vector; `*` by a number on either side (`v * 2` and `2 * v`);
+- `abs(v)` is its length, `√(x² + y²)` (that's `__abs__`);
+- `==` compares coordinates;
+- the zero vector is falsy, every other vector truthy.
+
+All operators return new vectors.
+::starter
+import math
+
+
+class Vector:
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+::solution
+import math
+
+
+class Vector:
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+
+    def __repr__(self):
+        return f"Vector({self.x!r}, {self.y!r})"
+
+    def __add__(self, other):
+        return Vector(self.x + other.x, self.y + other.y)
+
+    def __sub__(self, other):
+        return Vector(self.x - other.x, self.y - other.y)
+
+    def __mul__(self, k):
+        return Vector(self.x * k, self.y * k)
+
+    def __rmul__(self, k):
+        return self * k
+
+    def __abs__(self):
+        return math.hypot(self.x, self.y)
+
+    def __eq__(self, other):
+        if not isinstance(other, Vector):
+            return NotImplemented
+        return (self.x, self.y) == (other.x, other.y)
+
+    def __bool__(self):
+        return bool(self.x or self.y)
+::tests
+v = Vector(3, 4)
+w = Vector(1, -2)
+assert repr(v) == "Vector(3, 4)"
+assert v + w == Vector(4, 2)
+assert v - w == Vector(2, 6)
+assert v * 2 == Vector(6, 8)
+assert 2 * v == Vector(6, 8)
+assert abs(v) == 5
+assert v == Vector(3, 4) and v != w
+assert bool(Vector(0, 0)) is False
+assert bool(v) is True
+assert v == Vector(3, 4), "operators must not change their operands"
+::hints
+- Each arithmetic method returns a new `Vector(...)`.
+- `__rmul__` can simply `return self * k`.
+- `__bool__` must return a real bool: `bool(self.x or self.y)`.
+--- exercise code python
+::prompt
+Make `Playlist` behave like a sequence of song titles:
+
+- `len(pl)` is the number of songs;
+- `pl[0]`, `pl[-1]` and slices like `pl[1:3]` work (slices give a list);
+- `"Yesterday" in pl` checks titles;
+- `for song in pl:` loops over them;
+- `add(title)` appends a song;
+- `repr(pl)` is like `Playlist('Road trip', 3 songs)`.
+::starter
+class Playlist:
+    def __init__(self, name, songs=None):
+        self.name = name
+        self._songs = list(songs or [])
+::solution
+class Playlist:
+    def __init__(self, name, songs=None):
+        self.name = name
+        self._songs = list(songs or [])
+
+    def add(self, title):
+        self._songs.append(title)
+
+    def __len__(self):
+        return len(self._songs)
+
+    def __getitem__(self, index):
+        return self._songs[index]
+
+    def __contains__(self, title):
+        return title in self._songs
+
+    def __iter__(self):
+        return iter(self._songs)
+
+    def __repr__(self):
+        return f"Playlist({self.name!r}, {len(self)} songs)"
+::tests
+pl = Playlist("Road trip", ["Africa", "Hey Jude", "Wonderwall"])
+assert len(pl) == 3
+assert pl[0] == "Africa" and pl[-1] == "Wonderwall"
+assert pl[1:3] == ["Hey Jude", "Wonderwall"]
+assert "Hey Jude" in pl and "Thriller" not in pl
+pl.add("Thriller")
+assert [s for s in pl] == ["Africa", "Hey Jude", "Wonderwall", "Thriller"]
+assert repr(pl) == "Playlist('Road trip', 4 songs)"
+empty = Playlist("Quiet")
+assert len(empty) == 0 and not empty
+songs = ["a"]
+p2 = Playlist("Copy", songs)
+p2.add("b")
+assert songs == ["a"], "the playlist should keep its own copy of the songs"
+::hints
+- Delegate to the internal list: `__len__` returns `len(self._songs)`, `__getitem__` returns `self._songs[index]` (that handles slices too).
+- `__iter__` can return `iter(self._songs)`.
+- With `__len__` defined, an empty playlist is automatically falsy.
+--- cards
+Dunder (special) methods :: Methods like __len__, __eq__, __add__ that Python calls for built-ins and operators: len(x) calls x.__len__().
+__repr__ vs __str__ :: repr: unambiguous, for developers (shown in lists, debuggers). str: readable, for users (print). str falls back to repr.
+__eq__ and __hash__ :: Defining __eq__ makes objects unhashable unless you define __hash__ over the same fields (for immutable objects).
+NotImplemented :: Return it from comparison/arithmetic methods for unsupported types, so Python can try the other operand.
+@total_ordering :: From __eq__ and __lt__, fills in <=, >, >=.
+__rmul__ / __radd__ :: Reflected operators, used when your object is on the right: 3 * v calls v.__rmul__(3).
+
+=== lesson py-m8-test | Module 8 test | 210
+This test checks the foundations of object-oriented programming: classes and instances, `self` and attributes, object identity, class versus instance attributes, class and static methods, encapsulation with properties, and special methods.
+
+Make sure you can:
+
+- write a class with `__init__`, attributes and methods, and explain what `self` is;
+- predict what happens when objects are shared between names;
+- tell class attributes from instance attributes, and avoid the shared-mutable trap;
+- use `@classmethod` for alternative constructors and `@staticmethod` for helpers;
+- protect invariants with properties;
+- give a class `__repr__`, `__eq__`, `__hash__`, ordering and container behaviour.
+--- quiz
+? What does this print?
+```python
+class C:
+    def __init__(self):
+        self.items = []
+
+a = C()
+b = a
+b.items.append(1)
+c = C()
+print(len(a.items), len(c.items))
+```
++ `1 0`
+- `1 1`
+- `0 0`
+- `0 1`
+> `a` and `b` are one object; `c` is a new object with its own list.
+? What does this print?
+```python
+class K:
+    total = 10
+
+k = K()
+k.total = 99
+print(K.total, k.total)
+```
++ `10 99`
+- `99 99`
+- `10 10`
+- An error
+> Assigning through the instance creates an instance attribute; the class attribute is unchanged.
+? Which method makes `len(obj)` work?
+- `length`
++ `__len__`
+- `__size__`
+- `count`
+> `len()` calls `__len__`.
+? What's the best way to create a `Color` from a hex string like `"#ff8800"`?
++ A `@classmethod` such as `Color.from_hex("#ff8800")` that returns `cls(...)`
+- A `@staticmethod` that changes a global
+- Parsing the string in every caller
+- A property
+> Alternative constructors are the classic classmethod.
+? What does `@property` without a setter make?
+- A private attribute
++ A read-only attribute computed by a method
+- A class attribute
+- A static method
+> Reading runs the method; assigning raises `AttributeError`.
+? Why might `Point(1, 2)` objects not work in a set after you add `__eq__`?
+- Sets can't hold objects
++ Defining `__eq__` without `__hash__` makes them unhashable
+- `__eq__` must return a string
+- Points are mutable lists
+> Add `__hash__` returning `hash((self.x, self.y))`.
+? What does `print([Money(100, "EUR")])` show, if `Money` defines both `__str__` and `__repr__`?
+- The `__str__` text
++ The `__repr__` text, inside brackets
+- `[<Money object>]`
+- An error
+> Containers always use the items' repr.
+? Which design best protects the rule "stock can't go negative"?
+- A public `stock` attribute that callers adjust
++ A read-only `stock` property changed only by `remove(qty)`, which validates
+- A comment saying "don't make it negative"
+- A global variable
+> Encapsulation: the class enforces its own invariant.
+--- exercise code python
+::prompt
+Write a `ShoppingCart`:
+
+- `add(name, price_cents, qty=1)` adds an item; adding a name that's already in the cart increases its quantity (keep the first price); `qty` must be positive, else `ValueError`;
+- `remove(name)` removes an item completely (`KeyError` if it isn't there);
+- a read-only `total` property: the sum of price × quantity, in cents;
+- `len(cart)` is the **total number of units** (2 apples + 1 pear = 3);
+- `name in cart` checks item names;
+- `str(cart)` lists the items, one line each, in the order added, like `2 x apple @ 0.50 = 1.00`, then a last line `Total: 1.60`.
+::starter
+class ShoppingCart:
+    def __init__(self):
+        self._items = {}
+::solution
+class ShoppingCart:
+    def __init__(self):
+        self._items = {}
+
+    def add(self, name, price_cents, qty=1):
+        if qty <= 0:
+            raise ValueError("quantity must be positive")
+        if name in self._items:
+            self._items[name][1] += qty
+        else:
+            self._items[name] = [price_cents, qty]
+
+    def remove(self, name):
+        del self._items[name]
+
+    @property
+    def total(self):
+        return sum(price * qty for price, qty in self._items.values())
+
+    def __len__(self):
+        return sum(qty for _, qty in self._items.values())
+
+    def __contains__(self, name):
+        return name in self._items
+
+    def __str__(self):
+        lines = [f"{qty} x {name} @ {price / 100:.2f} = {price * qty / 100:.2f}" for name, (price, qty) in self._items.items()]
+        lines.append(f"Total: {self.total / 100:.2f}")
+        return "\n".join(lines)
+::tests
+cart = ShoppingCart()
+cart.add("apple", 50, 2)
+cart.add("pear", 60)
+assert cart.total == 160
+assert len(cart) == 3
+assert "apple" in cart and "kiwi" not in cart
+assert str(cart) == "2 x apple @ 0.50 = 1.00\n1 x pear @ 0.60 = 0.60\nTotal: 1.60"
+cart.add("apple", 50)
+assert len(cart) == 4 and cart.total == 210
+cart.remove("pear")
+assert "pear" not in cart and cart.total == 150
+try:
+    cart.remove("pear")
+except KeyError:
+    pass
+else:
+    raise AssertionError("removing a missing item should raise KeyError")
+try:
+    cart.add("fig", 30, 0)
+except ValueError:
+    pass
+else:
+    raise AssertionError("qty must be positive")
+try:
+    cart.total = 0
+except AttributeError:
+    pass
+else:
+    raise AssertionError("total must be read-only")
+assert str(ShoppingCart()) == "Total: 0.00"
+::hints
+- Store items in a dict from name to `[price, qty]` (a list, so the quantity can be updated).
+- `total` and `__len__` are sums over `self._items.values()`.
+- Build `__str__` from a list of lines and `"\n".join(...)`.
+--- exercise code python
+::prompt
+Write a `Ratio` class for exact fractions:
+
+- `Ratio(n, d)` stores the fraction **in lowest terms** with the sign on the numerator (`Ratio(2, -4)` becomes numerator `-1`, denominator `2`), and raises `ZeroDivisionError` if `d` is 0. Use `math.gcd`;
+- attributes `numerator` and `denominator`;
+- `str` like `1/2` (and just `3` when the denominator is 1), `repr` like `Ratio(1, 2)`;
+- `+` and `*` with another `Ratio`, giving a new reduced `Ratio`;
+- `==` and `hash` based on the reduced values, and `float(r)` (that's `__float__`).
+::starter
+import math
+
+
+class Ratio:
+    def __init__(self, n, d):
+        self.numerator = n
+        self.denominator = d
+::solution
+import math
+
+
+class Ratio:
+    def __init__(self, n, d):
+        if d == 0:
+            raise ZeroDivisionError("denominator is zero")
+        if d < 0:
+            n, d = -n, -d
+        g = math.gcd(n, d)
+        self.numerator = n // g
+        self.denominator = d // g
+
+    def __repr__(self):
+        return f"Ratio({self.numerator}, {self.denominator})"
+
+    def __str__(self):
+        if self.denominator == 1:
+            return str(self.numerator)
+        return f"{self.numerator}/{self.denominator}"
+
+    def __add__(self, other):
+        return Ratio(self.numerator * other.denominator + other.numerator * self.denominator, self.denominator * other.denominator)
+
+    def __mul__(self, other):
+        return Ratio(self.numerator * other.numerator, self.denominator * other.denominator)
+
+    def __eq__(self, other):
+        if not isinstance(other, Ratio):
+            return NotImplemented
+        return (self.numerator, self.denominator) == (other.numerator, other.denominator)
+
+    def __hash__(self):
+        return hash((self.numerator, self.denominator))
+
+    def __float__(self):
+        return self.numerator / self.denominator
+::tests
+r = Ratio(2, -4)
+assert (r.numerator, r.denominator) == (-1, 2)
+assert str(r) == "-1/2" and repr(r) == "Ratio(-1, 2)"
+assert str(Ratio(6, 3)) == "2"
+assert Ratio(1, 2) + Ratio(1, 3) == Ratio(5, 6)
+assert Ratio(1, 2) + Ratio(1, 2) == Ratio(1, 1)
+assert Ratio(2, 3) * Ratio(3, 4) == Ratio(1, 2)
+assert Ratio(1, 2) == Ratio(3, 6)
+assert len({Ratio(1, 2), Ratio(2, 4), Ratio(-3, -6)}) == 1
+assert float(Ratio(3, 4)) == 0.75
+assert Ratio(0, 5) == Ratio(0, 1)
+try:
+    Ratio(1, 0)
+except ZeroDivisionError:
+    pass
+else:
+    raise AssertionError("a zero denominator should raise ZeroDivisionError")
+::hints
+- Move a negative sign to the numerator, then divide both by `math.gcd(n, d)`.
+- a/b + c/d = (a·d + c·b) / (b·d); a/b × c/d = (a·c) / (b·d). The constructor reduces the result for you.
+- Hash the same `(numerator, denominator)` tuple that `__eq__` compares.

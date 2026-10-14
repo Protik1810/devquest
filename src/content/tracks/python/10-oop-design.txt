@@ -1,0 +1,1566 @@
+=== module Module 10 · Object-oriented programming III: design
+
+=== lesson py-solid | Design principles: SOLID and friends | 105
+Knowing the syntax of classes is one thing; designing code that stays easy to change as it grows is another. Over decades, developers distilled their experience into principles. The best known are the five **SOLID** principles, popularised by Robert C. Martin. They're guidelines, not laws, but they explain *why* some designs age well and others turn into a tangle.
+
+## S: Single responsibility principle
+
+*A class should have one reason to change.*
+
+```python
+class SalesReport:                       # does three jobs
+    def __init__(self, sales):
+        self.sales = sales
+    def total(self): ...                 # 1. calculations
+    def as_text(self): ...               # 2. presentation
+    def save(self, path): ...            # 3. storage
+```
+
+If the finance team changes how totals work, the marketing team wants a new layout, and IT moves files to the cloud, all three edits land in the same class, and each risks breaking the others. Split it: a `SalesStats` class for the numbers, a `ReportFormatter` for the text, and a separate function or class for saving. Each is small, focused and easy to test.
+
+A practical test: try describing the class in one sentence **without** the word "and".
+
+## O: Open/closed principle
+
+*Code should be open for extension but closed for modification.* You should be able to add new behaviour **without editing** code that already works.
+
+```python
+# Closed to extension: every new discount type means editing this function
+def apply_discount(price, kind):
+    if kind == "percent": ...
+    elif kind == "fixed": ...
+    elif kind == "bogo": ...
+
+# Open to extension: new rules are new classes; this function never changes
+def apply_rules(price, rules):
+    for rule in rules:
+        price = rule.apply(price)
+    return price
+```
+
+Polymorphism is the usual tool: define an interface (each rule has `apply(price)`), and extend the system by adding new classes.
+
+## L: Liskov substitution principle
+
+*Objects of a subclass must be usable wherever the base class is expected, without surprises.* You met this with `Square(Rectangle)` in Module 9. A subclass shouldn't demand more (refuse inputs the parent accepts), promise less (return something the parent never would), or raise new kinds of errors that callers can't expect.
+
+## I: Interface segregation principle
+
+*Don't force classes to depend on methods they don't use.* A `Printer` interface with `print`, `scan` and `fax` forces a simple printer to fake `scan` and `fax`. Several small interfaces (`Printable`, `Scannable`) are better than one big one. In Python, with duck typing and ABCs, this means keeping abstract base classes and protocols **small**.
+
+## D: Dependency inversion principle
+
+*Depend on abstractions, not on concrete details.* High-level code (the business rules) shouldn't create or know about low-level details (which database, which email service). It should talk to an **interface**, and the details are plugged in from outside, which is the dependency injection you met in Module 9:
+
+```python
+class OrderService:
+    def __init__(self, repository, notifier):     # any objects with save()/send()
+        self.repository = repository
+        self.notifier = notifier
+
+    def place(self, order):
+        self.repository.save(order)
+        self.notifier.send(f"Order {order['id']} placed")
+```
+
+The same `OrderService` works with a real database in production and an in-memory fake in tests.
+
+## Cohesion and coupling
+
+Two words you'll hear in every design discussion:
+
+- **Cohesion**: how closely the parts *inside* a module or class belong together. Aim **high**: everything in `SalesStats` is about statistics.
+- **Coupling**: how much separate modules or classes depend on each other's details. Aim **low**: `OrderService` knows only that the notifier has `send()`.
+
+High cohesion and low coupling are what SOLID is ultimately trying to achieve.
+
+## Three more rules of thumb
+
+- **DRY** (don't repeat yourself): every piece of knowledge should live in one place. But don't merge code that merely *looks* similar and changes for different reasons.
+- **KISS** (keep it simple): the simplest design that works is usually best.
+- **YAGNI** (you aren't gonna need it): don't build flexibility for imagined future needs. Make code easy to change instead; the tests and the principles above do that.
+
+Principles conflict sometimes, and over-applying them produces needless layers of tiny classes. Use them to **explain and improve** a design, not as a checklist to satisfy.
+
+📚 **Go deeper:** Robert C. Martin, *Clean Architecture* (part III, "Design Principles"); Brandon Rhodes, python-patterns.guide; "SOLID principles in Python" talks (PyCon); Andrew Hunt & David Thomas, *The Pragmatic Programmer* (DRY).
+--- quiz
+? A `User` class validates passwords, formats profile pages and sends emails. Which principle does it break most clearly?
++ Single responsibility
+- Liskov substitution
+- Interface segregation
+- Open/closed
+> It has three unrelated reasons to change.
+? Every new payment type requires editing a long `if`/`elif` chain in `checkout()`. Which principle points to a better design?
+- Single responsibility
++ Open/closed: add new payment classes without modifying `checkout`
+- YAGNI
+- Liskov substitution
+> Extend with new classes behind a shared interface.
+? What does the dependency inversion principle recommend?
+- Subclasses should invert their parent's behaviour
++ High-level code should depend on abstractions, with concrete details passed in
+- Dependencies should be installed in reverse order
+- Avoid all dependencies
+> That's what makes swapping a real database for a fake possible.
+? What do "high cohesion, low coupling" mean?
++ Parts of a class belong together, and classes depend little on each other's details
+- Classes should be large and share data freely
+- Every class should inherit from every other
+- Code should have few functions
+> That combination makes code easy to change.
+? You're tempted to add a plugin system "in case we need it someday". Which principle says wait?
+- DRY
+- SOLID
++ YAGNI
+- Liskov
+> You aren't gonna need it: build what's needed now, keep it easy to change.
+--- exercise code python
+::prompt
+**Single responsibility.** `SalesReport` mixes calculations and presentation. Split it into two classes:
+
+- `SalesStats(sales)`, where `sales` is a list of amounts: `total()`, `average()` (0 for no sales) and `best()` (`None` for no sales);
+- `ReportFormatter` with a method `format(stats)` that takes a `SalesStats` and returns the text, exactly as the old `as_text` did.
+::starter
+class SalesReport:
+    def __init__(self, sales):
+        self.sales = sales
+
+    def as_text(self):
+        total = sum(self.sales)
+        average = total / len(self.sales) if self.sales else 0
+        best = max(self.sales) if self.sales else None
+        return f"Total: {total}\nAverage: {average:.2f}\nBest: {best}"
+::solution
+class SalesStats:
+    def __init__(self, sales):
+        self.sales = list(sales)
+
+    def total(self):
+        return sum(self.sales)
+
+    def average(self):
+        return self.total() / len(self.sales) if self.sales else 0
+
+    def best(self):
+        return max(self.sales) if self.sales else None
+
+
+class ReportFormatter:
+    def format(self, stats):
+        return f"Total: {stats.total()}\nAverage: {stats.average():.2f}\nBest: {stats.best()}"
+::tests
+stats = SalesStats([120, 80, 100])
+assert stats.total() == 300 and stats.average() == 100 and stats.best() == 120
+empty = SalesStats([])
+assert empty.total() == 0 and empty.average() == 0 and empty.best() is None
+assert ReportFormatter().format(stats) == "Total: 300\nAverage: 100.00\nBest: 120"
+assert ReportFormatter().format(empty) == "Total: 0\nAverage: 0.00\nBest: None"
+assert not hasattr(SalesStats, "format") and not hasattr(ReportFormatter, "total"), "keep calculation and presentation apart"
+::hints
+- Move the three calculations into methods of `SalesStats`.
+- `ReportFormatter.format(stats)` only calls the stats' methods and builds the string.
+--- exercise code python
+::prompt
+**Open/closed.** Write discount rules as small classes that each have `apply(price)` returning the new price, and a function `final_price(price, rules)` that applies them in order and rounds to 2 decimals. Adding a new kind of rule must never require changing `final_price`.
+
+- `PercentOff(percent)`: takes off a percentage;
+- `AmountOff(amount)`: takes off a fixed amount, but never below 0;
+- `MinimumSpend(threshold, rule)`: applies the inner `rule` only if the price is at least `threshold`.
+::starter
+def final_price(price, kind, value):
+    if kind == "percent":
+        return price - price * value / 100
+    elif kind == "amount":
+        return max(0, price - value)
+::solution
+class PercentOff:
+    def __init__(self, percent):
+        self.percent = percent
+
+    def apply(self, price):
+        return price - price * self.percent / 100
+
+
+class AmountOff:
+    def __init__(self, amount):
+        self.amount = amount
+
+    def apply(self, price):
+        return max(0, price - self.amount)
+
+
+class MinimumSpend:
+    def __init__(self, threshold, rule):
+        self.threshold = threshold
+        self.rule = rule
+
+    def apply(self, price):
+        return self.rule.apply(price) if price >= self.threshold else price
+
+
+def final_price(price, rules):
+    for rule in rules:
+        price = rule.apply(price)
+    return round(price, 2)
+::tests
+assert final_price(100, []) == 100
+assert final_price(100, [PercentOff(10)]) == 90
+assert final_price(100, [PercentOff(10), AmountOff(5)]) == 85
+assert final_price(3, [AmountOff(5)]) == 0
+assert final_price(60, [MinimumSpend(50, AmountOff(10))]) == 50
+assert final_price(40, [MinimumSpend(50, AmountOff(10))]) == 40
+class _Double:
+    def apply(self, price):
+        return price * 2
+assert final_price(10, [_Double(), PercentOff(50)]) == 10, "final_price must work with any rule object"
+::hints
+- Every rule class has the same method, `apply(self, price)`.
+- `final_price` loops over the rules, replacing `price` with `rule.apply(price)` each time.
+- `MinimumSpend` holds another rule and delegates to it (composition).
+--- exercise code python
+::prompt
+**Dependency inversion.** `OrderService(repository, notifier)` depends only on two abstractions: a repository with `save(order)` and `get(order_id)`, and a notifier with `send(message)`. Write:
+
+- `OrderService.place(order)`: raises `ValueError` if the order (a dict) has no items, otherwise saves it and sends `"Order <id> placed"`;
+- `InMemoryRepository`: stores orders in a dict by their `"id"`; `get` returns `None` for unknown ids;
+- `FakeNotifier`: records sent messages in a `sent` list (useful for tests).
+::starter
+class OrderService:
+    def place(self, order):
+        pass
+::solution
+class InMemoryRepository:
+    def __init__(self):
+        self._orders = {}
+
+    def save(self, order):
+        self._orders[order["id"]] = order
+
+    def get(self, order_id):
+        return self._orders.get(order_id)
+
+
+class FakeNotifier:
+    def __init__(self):
+        self.sent = []
+
+    def send(self, message):
+        self.sent.append(message)
+
+
+class OrderService:
+    def __init__(self, repository, notifier):
+        self.repository = repository
+        self.notifier = notifier
+
+    def place(self, order):
+        if not order.get("items"):
+            raise ValueError("an order needs items")
+        self.repository.save(order)
+        self.notifier.send(f"Order {order['id']} placed")
+::tests
+repo, notifier = InMemoryRepository(), FakeNotifier()
+service = OrderService(repo, notifier)
+service.place({"id": "A1", "items": ["book"]})
+assert repo.get("A1") == {"id": "A1", "items": ["book"]}
+assert repo.get("nope") is None
+assert notifier.sent == ["Order A1 placed"]
+try:
+    service.place({"id": "A2", "items": []})
+except ValueError:
+    pass
+else:
+    raise AssertionError("an order without items should raise ValueError")
+assert repo.get("A2") is None and notifier.sent == ["Order A1 placed"], "a refused order must not be saved or announced"
+class _ListRepo:
+    def __init__(self):
+        self.saved = []
+    def save(self, order):
+        self.saved.append(order["id"])
+r2 = _ListRepo()
+OrderService(r2, FakeNotifier()).place({"id": "Z", "items": [1]})
+assert r2.saved == ["Z"], "OrderService must work with any repository"
+::hints
+- `OrderService.__init__` stores the two collaborators it's given; it never creates them.
+- `place` validates first, then calls `self.repository.save(order)` and `self.notifier.send(...)`.
+- The fake classes are tiny: a dict for the repository, a list for the notifier.
+--- cards
+Single responsibility :: A class should have one reason to change. Describe it in a sentence without "and".
+Open/closed :: Add behaviour by adding code (new classes behind an interface), not by editing working code.
+Liskov substitution :: Subclasses must work anywhere their base class does, without surprises.
+Interface segregation :: Prefer several small interfaces to one big one that forces fake methods.
+Dependency inversion :: High-level code depends on abstractions; concrete details are injected.
+Cohesion and coupling :: Aim for high cohesion (parts belong together) and low coupling (little dependence on others' details).
+
+=== lesson py-patterns | Design patterns the Python way | 105
+A **design pattern** is a named, reusable solution to a common design problem. The 1994 book *Design Patterns* (by the "Gang of Four") catalogued 23 of them for languages like C++ and Java. Knowing the names gives developers a shared vocabulary: "use a strategy here" says a lot in three words.
+
+Python changes the picture. Because **functions are objects**, classes can be created on the fly, and duck typing needs no interfaces, many patterns shrink to a few lines, or disappear into the language. Here are the ones you'll meet most.
+
+## Strategy: interchangeable algorithms
+
+Pick an algorithm at runtime. In Java this means a `Strategy` interface and a class per algorithm. In Python, a strategy is often just a **function**:
+
+```python
+def regular(total):
+    return total
+
+def black_friday(total):
+    return total * 0.7
+
+def bulk(total):
+    return total * 0.9 if total > 100 else total
+
+class Checkout:
+    def __init__(self, pricing=regular):
+        self.pricing = pricing                 # any function: total -> total
+
+    def pay(self, total):
+        return round(self.pricing(total), 2)
+
+Checkout(black_friday).pay(50)    # 35.0
+```
+
+`sorted(items, key=...)` is the strategy pattern you've already used: you pass the comparison strategy in.
+
+## Factory: creating the right object
+
+When the kind of object to create depends on data (a config file, user input, a JSON message), a **factory** decides. A dictionary from names to classes is the Pythonic version:
+
+```python
+SHAPES = {"circle": Circle, "rect": Rect}
+
+def make_shape(spec):
+    kind = spec.pop("type")
+    try:
+        cls = SHAPES[kind]
+    except KeyError:
+        raise ValueError(f"unknown shape: {kind}") from None
+    return cls(**spec)                 # make_shape({"type": "circle", "radius": 2})
+```
+
+Class methods like `Date.from_string` are factories too.
+
+## Observer: "tell me when something happens"
+
+Objects **subscribe** to events, and a **subject** notifies all subscribers when the event happens. Buttons in user interfaces, "webhooks" and message queues all work this way. With callbacks, it's tiny:
+
+```python
+class EventBus:
+    def __init__(self):
+        self._subscribers = {}
+
+    def subscribe(self, event, callback):
+        self._subscribers.setdefault(event, []).append(callback)
+
+    def publish(self, event, data):
+        for callback in self._subscribers.get(event, []):
+            callback(data)
+
+bus = EventBus()
+bus.subscribe("order_placed", lambda order: print("email receipt for", order))
+bus.subscribe("order_placed", lambda order: print("update stock for", order))
+bus.publish("order_placed", "A-17")
+```
+
+(`lambda` makes a small unnamed function; Module 12 explains it.) The publisher doesn't know who's listening: very low coupling.
+
+## Iterator: one item at a time
+
+The **iterator protocol** is how `for` loops work. An **iterable** has `__iter__`, which returns an **iterator**; an iterator has `__next__`, which returns the next item or raises `StopIteration` when there are no more:
+
+```python
+class Countdown:
+    def __init__(self, start):
+        self.current = start
+
+    def __iter__(self):
+        return self                      # this object is its own iterator
+
+    def __next__(self):
+        if self.current <= 0:
+            raise StopIteration
+        self.current -= 1
+        return self.current + 1
+
+for n in Countdown(3):
+    print(n)                             # 3, 2, 1
+```
+
+`for x in obj` calls `iter(obj)` once, then `next(...)` repeatedly until `StopIteration`. Note the subtlety: an object that is **its own iterator** can only be looped over **once**. To be re-iterable (like a list), `__iter__` must return a **fresh** iterator each time. Module 12's **generators** make writing iterators much easier.
+
+## Adapter: making interfaces fit
+
+An **adapter** wraps an object to give it the interface other code expects, like a travel plug adapter:
+
+```python
+class FahrenheitSensor:                 # a third-party class we can't change
+    def read_f(self):
+        return 98.6
+
+class CelsiusAdapter:
+    def __init__(self, sensor):
+        self.sensor = sensor
+
+    def read(self):                      # the interface our code expects
+        return round((self.sensor.read_f() - 32) * 5 / 9, 1)
+```
+
+## Patterns Python mostly doesn't need
+
+- **Singleton** (exactly one instance): in Python, a module is already a single shared object. Put the shared instance at module level.
+- **Command** (an object representing an action): a function, or a function plus arguments, already is one.
+- **Decorator** (wrapping an object to add behaviour): Python has a whole language feature, `@decorator`, for wrapping functions (Module 12). It's related but not identical to the book's pattern.
+
+## A word of caution
+
+Patterns are tools, not goals. Introduce one when the problem it solves actually shows up (the second or third time you'd otherwise edit an `if` chain), not "just in case".
+
+📚 **Go deeper:** Brandon Rhodes, python-patterns.guide (an excellent, free guide to the Gang of Four patterns in Python); Gamma et al., *Design Patterns*; Python Library Reference, "Iterator Types"; Peter Norvig, "Design Patterns in Dynamic Languages".
+--- quiz
+? In Python, what is the simplest way to implement the strategy pattern?
++ Pass a function (the strategy) to the code that uses it
+- Create an abstract class for each algorithm
+- Use a global variable
+- Use multiple inheritance
+> Functions are objects, so they can be passed in directly, like `key=` in `sorted`.
+? What does a factory do?
+- Destroys unused objects
++ Decides which class to instantiate, often from data like a name or config
+- Speeds up object creation
+- Copies objects
+> A dict of name → class is a compact Python factory.
+? In the observer pattern, what does the publisher know about its subscribers?
+- Their classes and internal state
++ Only that they're callables (or have a notify method) to call
+- Everything
+- Nothing; it can't call them
+> That's why observers keep coupling low.
+? What must `__next__` do when there are no more items?
+- Return `None`
++ Raise `StopIteration`
+- Return `False`
+- Restart from the beginning
+> `for` loops stop when they see `StopIteration`.
+? Why can `for n in c` run only once on a `Countdown` whose `__iter__` returns `self`?
++ The object is its own iterator, and once exhausted it stays exhausted
+- `for` loops delete objects
+- `Countdown` is immutable
+- It can run any number of times
+> A re-iterable object returns a fresh iterator from each `__iter__` call.
+--- exercise code python
+::prompt
+**Strategy.** Write three pricing strategies as **functions** that take a total and return the price to pay: `regular` (unchanged), `black_friday` (30% off) and `bulk` (10% off when the total is over 100). Then a `Checkout(pricing=regular)` class whose `pay(total)` applies its strategy and rounds to 2 decimals, and whose strategy can be changed with `set_pricing(func)`.
+::starter
+class Checkout:
+    def pay(self, total, kind="regular"):
+        if kind == "black_friday":
+            return round(total * 0.7, 2)
+        return total
+::solution
+def regular(total):
+    return total
+
+
+def black_friday(total):
+    return total * 0.7
+
+
+def bulk(total):
+    return total * 0.9 if total > 100 else total
+
+
+class Checkout:
+    def __init__(self, pricing=regular):
+        self.pricing = pricing
+
+    def set_pricing(self, func):
+        self.pricing = func
+
+    def pay(self, total):
+        return round(self.pricing(total), 2)
+::tests
+assert Checkout().pay(50) == 50
+assert Checkout(black_friday).pay(50) == 35
+assert Checkout(bulk).pay(200) == 180 and Checkout(bulk).pay(100) == 100
+c = Checkout()
+c.set_pricing(black_friday)
+assert c.pay(10) == 7
+def _staff(total):
+    return total / 2
+c.set_pricing(_staff)
+assert c.pay(9) == 4.5, "any function must work as a strategy"
+::hints
+- Each strategy is a plain function: `def black_friday(total): return total * 0.7`.
+- `Checkout` stores the function in `self.pricing` and calls it: `self.pricing(total)`.
+--- exercise code python
+::prompt
+**Observer.** Write an `EventBus`:
+
+- `subscribe(event, callback)` registers a function to call for that event;
+- `unsubscribe(event, callback)` removes it (do nothing if it isn't registered);
+- `publish(event, data)` calls every callback for the event with `data`, in the order they subscribed, and returns how many were called.
+::starter
+class EventBus:
+    pass
+::solution
+class EventBus:
+    def __init__(self):
+        self._subscribers = {}
+
+    def subscribe(self, event, callback):
+        self._subscribers.setdefault(event, []).append(callback)
+
+    def unsubscribe(self, event, callback):
+        callbacks = self._subscribers.get(event, [])
+        if callback in callbacks:
+            callbacks.remove(callback)
+
+    def publish(self, event, data):
+        callbacks = list(self._subscribers.get(event, []))
+        for callback in callbacks:
+            callback(data)
+        return len(callbacks)
+::tests
+log = []
+def email(order):
+    log.append(f"email {order}")
+def stock(order):
+    log.append(f"stock {order}")
+bus = EventBus()
+bus.subscribe("placed", email)
+bus.subscribe("placed", stock)
+assert bus.publish("placed", "A1") == 2
+assert log == ["email A1", "stock A1"]
+assert bus.publish("cancelled", "A1") == 0
+bus.unsubscribe("placed", email)
+bus.unsubscribe("placed", email)
+bus.unsubscribe("never", stock)
+assert bus.publish("placed", "B2") == 1 and log[-1] == "stock B2"
+assert EventBus().publish("placed", 1) == 0, "each bus has its own subscribers"
+::hints
+- Keep a dict from event name to a list of callbacks (`setdefault` is handy).
+- `publish` loops over that event's list (or an empty list) and calls each callback with `data`.
+--- exercise code python
+::prompt
+**Iterator protocol.** Write:
+
+- `Countdown(start)`, an **iterator** (its `__iter__` returns `self`) producing `start, start-1, ..., 1`;
+- `Repeat(item, times)`, a **re-iterable** iterable: its `__iter__` returns a **new** `RepeatIterator` each time, so it can be looped over again and again.
+::starter
+class Countdown:
+    def __init__(self, start):
+        self.current = start
+::solution
+class Countdown:
+    def __init__(self, start):
+        self.current = start
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        if self.current <= 0:
+            raise StopIteration
+        self.current -= 1
+        return self.current + 1
+
+
+class RepeatIterator:
+    def __init__(self, item, times):
+        self.item = item
+        self.left = times
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        if self.left <= 0:
+            raise StopIteration
+        self.left -= 1
+        return self.item
+
+
+class Repeat:
+    def __init__(self, item, times):
+        self.item = item
+        self.times = times
+
+    def __iter__(self):
+        return RepeatIterator(self.item, self.times)
+::tests
+c = Countdown(3)
+assert list(c) == [3, 2, 1]
+assert list(c) == [], "an iterator is used up after one pass"
+it = iter(Countdown(2))
+assert next(it) == 2 and next(it) == 1
+try:
+    next(it)
+except StopIteration:
+    pass
+else:
+    raise AssertionError("raise StopIteration when finished")
+r = Repeat("hi", 3)
+assert list(r) == ["hi", "hi", "hi"]
+assert list(r) == ["hi", "hi", "hi"], "Repeat must be re-iterable"
+assert [x for x in Repeat(0, 0)] == []
+::hints
+- `__next__` returns the next value or raises `StopIteration`.
+- `Repeat.__iter__` creates and returns a brand-new `RepeatIterator(self.item, self.times)` each time.
+--- cards
+Design pattern :: A named, reusable solution to a common design problem (strategy, factory, observer, iterator, adapter...).
+Strategy in Python :: Pass the algorithm in as a function (or callable object), like key= in sorted().
+Factory :: Code that decides which class to instantiate; often a dict from names to classes.
+Observer :: Subscribers register callbacks; the publisher calls them all when an event happens. Low coupling.
+Iterator protocol :: iter(obj) calls __iter__ (returns an iterator); next(it) calls __next__, which raises StopIteration at the end.
+Iterator vs iterable :: An iterator is used up after one pass; a re-iterable iterable returns a fresh iterator from each __iter__.
+
+=== lesson py-exceptions-oop | Exception hierarchies and context managers | 105
+Libraries and applications define their own families of exceptions. Designed well, they make errors easy to handle precisely, and the `with` statement makes cleanup automatic even when errors happen.
+
+## A base exception for your code
+
+Give your application (or library) one base exception, and derive specific ones from it:
+
+```python
+class BankError(Exception):
+    """Base class for every error raised by the bank module."""
+
+class InsufficientFunds(BankError):
+    def __init__(self, balance, amount):
+        super().__init__(f"balance {balance} is less than {amount}")
+        self.balance = balance                 # extra data for whoever handles it
+        self.amount = amount
+
+class AccountLocked(BankError):
+    pass
+```
+
+Callers can now choose how precise to be:
+
+```python
+try:
+    account.withdraw(500)
+except InsufficientFunds as e:
+    print(f"You need {e.amount - e.balance} more")      # handle one case specially
+except BankError as e:
+    print("Bank problem:", e)                           # anything else from the bank module
+```
+
+Code that catches `BankError` will automatically handle new bank errors added later: the hierarchy is **open for extension**. Real libraries do exactly this: `requests.RequestException`, `sqlite3.Error`, `json.JSONDecodeError` (a subclass of `ValueError`).
+
+## Exceptions carry data
+
+An exception is an object, so it can have attributes, like `balance` and `amount` above. Pass a readable message to `super().__init__(...)` (that's what `str(e)` shows) and keep the details as attributes for code that wants to react to them.
+
+## Translate exceptions at boundaries
+
+Low-level errors shouldn't leak out of a module that's supposed to hide its details. A user store backed by a dictionary raises `KeyError` for a missing user; callers shouldn't need to know it's a dictionary. **Translate** it at the boundary, keeping the cause with `from`:
+
+```python
+class UserNotFound(LookupError):
+    def __init__(self, user_id):
+        super().__init__(f"no user with id {user_id}")
+        self.user_id = user_id
+
+def load_user(db, user_id):
+    try:
+        return db[user_id]
+    except KeyError as e:
+        raise UserNotFound(user_id) from e
+```
+
+If the store later moves to a real database, callers still catch `UserNotFound`, and nothing else changes.
+
+## Context managers: setup and cleanup, guaranteed
+
+Many resources must be **released** after use: files closed, locks released, database transactions committed or rolled back. Forgetting, or skipping it because an exception happened, causes leaks and corrupted data. The `with` statement guarantees it:
+
+```python
+with open("notes.txt") as f:        # the file is opened...
+    data = f.read()
+# ...and closed here, even if read() raised an exception
+```
+
+Any object with `__enter__` and `__exit__` methods works with `with`. That's the **context manager protocol**:
+
+```python
+class Transaction:
+    def __init__(self, account):
+        self.account = account
+
+    def __enter__(self):
+        self.saved = self.account.balance       # setup: remember the state
+        return self.account                     # bound to the "as" name
+
+    def __exit__(self, exc_type, exc, tb):
+        if exc_type is not None:                # an exception happened inside the with block
+            self.account.balance = self.saved   # roll back
+        return False                            # False: let the exception continue upwards
+
+with Transaction(account) as acc:
+    acc.withdraw(30)
+    acc.deposit(-1)          # raises ValueError → the withdrawal is rolled back too
+```
+
+- `__enter__` runs at the start; what it returns is bound by `as`.
+- `__exit__` **always** runs at the end, and receives the exception's type, value and traceback (all `None` if the block finished normally).
+- Returning `True` from `__exit__` would **swallow** the exception; do that only deliberately.
+
+Module 12 shows a shorter way to write context managers with a generator and `contextlib.contextmanager`.
+
+📚 **Go deeper:** Python Tutorial, section 8.6 "User-defined Exceptions"; Python Language Reference, "With Statement Context Managers"; Python Library Reference, `contextlib`; *Effective Python* (3rd ed.), "Define a root exception to insulate callers from APIs".
+--- quiz
+? Why define one base exception (like `BankError`) for a module?
++ Callers can catch every error from the module with one `except`, including ones added later
+- Python requires it
+- It makes exceptions faster
+- So the module can never raise built-in exceptions
+> Specific subclasses can still be caught individually.
+? `InsufficientFunds(BankError)` and `AccountLocked(BankError)` exist. Which clause catches both?
+- `except InsufficientFunds:`
++ `except BankError:`
+- `except AccountLocked:`
+- `except LookupError:`
+> Catching the base class catches every subclass.
+? Why translate a `KeyError` into `UserNotFound` inside `load_user`?
++ So callers don't depend on the storage details (a dict today, a database tomorrow)
+- `KeyError` can't be caught
+- To make the program faster
+- To hide the error completely
+> Translating at the boundary keeps coupling low; `from e` keeps the cause.
+? When does a context manager's `__exit__` run?
+- Only when an exception happens
+- Only when no exception happens
++ Always, at the end of the `with` block
+- Never automatically
+> That's the guarantee that makes `with` safe.
+? What happens if `__exit__` returns `True` after an exception in the `with` block?
+- The exception is re-raised
++ The exception is swallowed (suppressed)
+- The program exits
+- `__enter__` runs again
+> Return `False` (or `None`) unless suppressing is truly intended.
+--- exercise code python
+::prompt
+Design a small exception hierarchy for an account:
+
+- `BankError(Exception)` as the base;
+- `InsufficientFunds(BankError)` taking `balance` and `amount`, storing both as attributes, with the message `"balance 50 is less than 80"`;
+- `AccountLocked(BankError)`;
+- `Account(balance)` with `locked = False`, `lock()`, and `withdraw(amount)` raising `AccountLocked` when locked and `InsufficientFunds` when the amount exceeds the balance;
+- `try_withdraw(account, amount)` returns `"ok"` on success, `"short by N"` for `InsufficientFunds`, and `"error: <message>"` for any other `BankError`.
+::starter
+class BankError(Exception):
+    pass
+::solution
+class BankError(Exception):
+    pass
+
+
+class InsufficientFunds(BankError):
+    def __init__(self, balance, amount):
+        super().__init__(f"balance {balance} is less than {amount}")
+        self.balance = balance
+        self.amount = amount
+
+
+class AccountLocked(BankError):
+    pass
+
+
+class Account:
+    def __init__(self, balance):
+        self.balance = balance
+        self.locked = False
+
+    def lock(self):
+        self.locked = True
+
+    def withdraw(self, amount):
+        if self.locked:
+            raise AccountLocked("the account is locked")
+        if amount > self.balance:
+            raise InsufficientFunds(self.balance, amount)
+        self.balance -= amount
+
+
+def try_withdraw(account, amount):
+    try:
+        account.withdraw(amount)
+    except InsufficientFunds as e:
+        return f"short by {e.amount - e.balance}"
+    except BankError as e:
+        return f"error: {e}"
+    return "ok"
+::tests
+acc = Account(50)
+try:
+    acc.withdraw(80)
+except InsufficientFunds as e:
+    assert (e.balance, e.amount) == (50, 80)
+    assert str(e) == "balance 50 is less than 80"
+else:
+    raise AssertionError("expected InsufficientFunds")
+assert issubclass(InsufficientFunds, BankError) and issubclass(AccountLocked, BankError)
+assert try_withdraw(acc, 20) == "ok" and acc.balance == 30
+assert try_withdraw(acc, 100) == "short by 70"
+acc.lock()
+assert try_withdraw(acc, 1) == "error: the account is locked"
+assert acc.balance == 30
+::hints
+- `InsufficientFunds.__init__` calls `super().__init__(message)` and then stores the two values.
+- In `try_withdraw`, the more specific `except InsufficientFunds` must come before `except BankError`.
+--- exercise code python
+::prompt
+Write a `Transaction` **context manager** for a `Wallet` (given): on entering, it remembers the wallet's balance and returns the wallet; on exit, if an exception happened inside the `with` block it **restores** the old balance. The exception must still propagate (return `False`).
+::starter
+class Wallet:
+    def __init__(self, balance):
+        self.balance = balance
+
+    def spend(self, amount):
+        if amount > self.balance:
+            raise ValueError("not enough money")
+        self.balance -= amount
+
+
+class Transaction:
+    def __init__(self, wallet):
+        self.wallet = wallet
+::solution
+class Wallet:
+    def __init__(self, balance):
+        self.balance = balance
+
+    def spend(self, amount):
+        if amount > self.balance:
+            raise ValueError("not enough money")
+        self.balance -= amount
+
+
+class Transaction:
+    def __init__(self, wallet):
+        self.wallet = wallet
+
+    def __enter__(self):
+        self.saved = self.wallet.balance
+        return self.wallet
+
+    def __exit__(self, exc_type, exc, tb):
+        if exc_type is not None:
+            self.wallet.balance = self.saved
+        return False
+::tests
+w = Wallet(100)
+with Transaction(w) as wallet:
+    assert wallet is w, "__enter__ should return the wallet"
+    wallet.spend(30)
+assert w.balance == 70, "a successful block keeps its changes"
+try:
+    with Transaction(w) as wallet:
+        wallet.spend(20)
+        wallet.spend(500)
+except ValueError:
+    pass
+else:
+    raise AssertionError("the exception must propagate out of the with block")
+assert w.balance == 70, "a failed block must be rolled back completely"
+::hints
+- `__enter__(self)` saves `self.wallet.balance` and returns `self.wallet`.
+- `__exit__(self, exc_type, exc, tb)`: if `exc_type is not None`, restore the saved balance.
+- `return False` so the exception isn't swallowed.
+--- exercise code python
+::prompt
+Translate a low-level error at a module boundary. Write `UserNotFound(LookupError)` that takes a `user_id`, stores it as an attribute and has the message `"no user with id 42"`. Then write `load_user(db, user_id)` that returns `db[user_id]`, but turns a `KeyError` into `UserNotFound`, **chained** with `from`.
+::starter
+def load_user(db, user_id):
+    return db[user_id]
+::solution
+class UserNotFound(LookupError):
+    def __init__(self, user_id):
+        super().__init__(f"no user with id {user_id}")
+        self.user_id = user_id
+
+
+def load_user(db, user_id):
+    try:
+        return db[user_id]
+    except KeyError as e:
+        raise UserNotFound(user_id) from e
+::tests
+db = {1: "Ada", 2: "Alan"}
+assert load_user(db, 2) == "Alan"
+try:
+    load_user(db, 42)
+except UserNotFound as e:
+    assert e.user_id == 42 and str(e) == "no user with id 42"
+    assert isinstance(e.__cause__, KeyError), "chain the KeyError with 'from'"
+else:
+    raise AssertionError("expected UserNotFound")
+try:
+    load_user({}, 7)
+except LookupError:
+    pass
+else:
+    raise AssertionError("UserNotFound should be a LookupError")
+::hints
+- `class UserNotFound(LookupError):` with an `__init__` that calls `super().__init__(message)` and stores `user_id`.
+- In `load_user`: `except KeyError as e: raise UserNotFound(user_id) from e`.
+--- cards
+Root exception :: One base exception per module/library (class AppError(Exception)); specific errors subclass it.
+Exceptions with data :: Pass the message to super().__init__() and store details as attributes for handlers.
+Translating exceptions :: At a module boundary, catch low-level errors and raise domain errors with raise ... from e.
+Context manager :: An object with __enter__ (setup, value for "as") and __exit__ (always runs; gets exception info). Used with with.
+__exit__ return value :: True suppresses the exception; False/None lets it propagate.
+
+=== lesson py-oop-case-study | Case study: building a gradebook step by step | 150
+This lesson is a **guided project**: you'll build a small but real program the way professionals do, in steps, with tests at every stage. The goal isn't just the code; it's the **process**.
+
+## Step 0: understand the problem
+
+A teacher wants a gradebook:
+
+> *Students are enrolled in a course. The teacher records scores (0–100) for each student. They want each student's average, a class report using either letter grades or pass/fail, and a way to save the gradebook and load it again.*
+
+Before writing code, extract the pieces:
+
+- **Nouns** → candidate classes and attributes: *student*, *course*, *score*, *report*, *grading policy*.
+- **Verbs** → methods: *enrol*, *record a score*, *compute an average*, *grade*, *save*, *load*.
+- **Rules** → invariants and errors: scores must be 0–100; you can't record a score for someone who isn't enrolled; enrolling twice is a mistake.
+
+A useful old technique is the **CRC card** (Class, Responsibilities, Collaborators): one index card per class listing what it **knows**, what it **does**, and which classes it **works with**.
+
+| Class | Responsibilities | Collaborators |
+|---|---|---|
+| `Student` | knows its id and name | none |
+| `Course` | knows its students and their scores; enrols, records, averages | `Student` |
+| grading policies | turn an average into a grade | none |
+| `GradebookError` | reports domain mistakes | none |
+
+## Step 1: the core model
+
+Start with the smallest useful piece and **test it**. Students are plain data, so a frozen dataclass fits. The course enforces the rules and raises one domain exception, `GradebookError`, for every mistake. Store scores per student id; averages are computed, not stored, so they can never get out of date.
+
+## Step 2: pluggable grading (strategy + open/closed)
+
+The teacher wants letter grades for one class and pass/fail for another, and next term maybe something else. Rather than an `if policy == ...` chain inside `Course`, make grading a **strategy**: any object with a `grade(average)` method. `Course.report(policy)` uses whatever policy it's given. New policies need no changes to `Course`.
+
+## Step 3: saving and loading (serialisation)
+
+To save, convert the course to plain dictionaries and lists (which the `json` module can write, Module 11) with `to_dict()`, and rebuild it with a `from_dict()` **class method**, an alternative constructor. A good test for this is the **round trip**: `Course.from_dict(c.to_dict())` must behave exactly like `c`.
+
+## Working style, in every step
+
+1. Write or read the tests for the step first, so you know when you're done.
+2. Make the simplest change that passes.
+3. **Refactor** with the tests as a safety net.
+4. Keep each class focused: if a method needs another class's data, consider whether it belongs there.
+
+Each exercise below is one step. Each starter contains a working solution of the previous steps, so you can always continue even if you used a hint.
+
+📚 **Go deeper:** Kent Beck & Ward Cunningham, "A Laboratory For Teaching Object-Oriented Thinking" (the CRC card paper); Martin Fowler, *Refactoring* (2nd ed.); *Python Crash Course* (3rd ed.), the projects in part II for more step-by-step builds.
+--- exercise code python
+::prompt
+**Step 1: the core model.** Write:
+
+- `GradebookError(Exception)`;
+- a frozen dataclass `Student(student_id, name)`;
+- `Course(title)` with:
+  - `enrol(student)`: raises `GradebookError` if a student with that id is already enrolled;
+  - `record(student_id, score)`: raises `GradebookError` for an unknown student or a score outside 0–100;
+  - `average(student_id)`: the mean of that student's scores rounded to 1 decimal, or `None` if they have none (`GradebookError` for an unknown student);
+  - `students()`: the enrolled students sorted by name.
+::starter
+from dataclasses import dataclass
+
+
+class GradebookError(Exception):
+    pass
+::solution
+from dataclasses import dataclass
+
+
+class GradebookError(Exception):
+    pass
+
+
+@dataclass(frozen=True)
+class Student:
+    student_id: int
+    name: str
+
+
+def student_name(student):
+    return student.name
+
+
+class Course:
+    def __init__(self, title):
+        self.title = title
+        self._students = {}
+        self._scores = {}
+
+    def enrol(self, student):
+        if student.student_id in self._students:
+            raise GradebookError(f"student {student.student_id} is already enrolled")
+        self._students[student.student_id] = student
+        self._scores[student.student_id] = []
+
+    def _check(self, student_id):
+        if student_id not in self._students:
+            raise GradebookError(f"no student {student_id} in {self.title}")
+
+    def record(self, student_id, score):
+        self._check(student_id)
+        if not 0 <= score <= 100:
+            raise GradebookError(f"score must be 0-100, got {score}")
+        self._scores[student_id].append(score)
+
+    def average(self, student_id):
+        self._check(student_id)
+        scores = self._scores[student_id]
+        return round(sum(scores) / len(scores), 1) if scores else None
+
+    def students(self):
+        return sorted(self._students.values(), key=student_name)
+::tests
+c = Course("Python 101")
+ada, alan = Student(1, "Ada"), Student(2, "Alan")
+c.enrol(alan)
+c.enrol(ada)
+assert [s.name for s in c.students()] == ["Ada", "Alan"]
+c.record(1, 90)
+c.record(1, 85)
+assert c.average(1) == 87.5
+assert c.average(2) is None
+for bad in [lambda: c.enrol(Student(1, "Again")), lambda: c.record(3, 50), lambda: c.record(1, 101), lambda: c.record(2, -1), lambda: c.average(99)]:
+    try:
+        bad()
+    except GradebookError:
+        pass
+    else:
+        raise AssertionError("every rule violation should raise GradebookError")
+assert c.average(1) == 87.5, "refused scores must not be recorded"
+try:
+    ada.name = "X"
+except Exception:
+    pass
+else:
+    raise AssertionError("Student should be a frozen dataclass")
+::hints
+- Keep two dicts keyed by student id: one for `Student` objects, one for lists of scores.
+- A private helper that raises for unknown ids avoids repeating that check.
+- `sorted(..., key=student_name)`, with a small function `student_name(student)` returning `student.name`, sorts by name.
+--- exercise code python
+::prompt
+**Step 2: pluggable grading.** Add two grading **strategies**, each with a `grade(average)` method:
+
+- `LetterGrades`: A for 90+, B for 80+, C for 70+, D for 60+, else F;
+- `PassFail(pass_mark=50)`: `"pass"` at or above the mark, else `"fail"`.
+
+Then add `Course.report(policy)` returning one line per student (sorted by name) like `"Ada: 87.5 (B)"`, or `"Alan: no scores"` when a student has none. `Course` must work with **any** object that has `grade(average)`.
+::starter
+from dataclasses import dataclass
+
+
+class GradebookError(Exception):
+    pass
+
+
+@dataclass(frozen=True)
+class Student:
+    student_id: int
+    name: str
+
+
+def student_name(student):
+    return student.name
+
+
+class Course:
+    def __init__(self, title):
+        self.title = title
+        self._students = {}
+        self._scores = {}
+
+    def enrol(self, student):
+        if student.student_id in self._students:
+            raise GradebookError(f"student {student.student_id} is already enrolled")
+        self._students[student.student_id] = student
+        self._scores[student.student_id] = []
+
+    def _check(self, student_id):
+        if student_id not in self._students:
+            raise GradebookError(f"no student {student_id} in {self.title}")
+
+    def record(self, student_id, score):
+        self._check(student_id)
+        if not 0 <= score <= 100:
+            raise GradebookError(f"score must be 0-100, got {score}")
+        self._scores[student_id].append(score)
+
+    def average(self, student_id):
+        self._check(student_id)
+        scores = self._scores[student_id]
+        return round(sum(scores) / len(scores), 1) if scores else None
+
+    def students(self):
+        return sorted(self._students.values(), key=student_name)
+::solution
+from dataclasses import dataclass
+
+
+class GradebookError(Exception):
+    pass
+
+
+@dataclass(frozen=True)
+class Student:
+    student_id: int
+    name: str
+
+
+def student_name(student):
+    return student.name
+
+
+class LetterGrades:
+    def grade(self, average):
+        for limit, letter in [(90, "A"), (80, "B"), (70, "C"), (60, "D")]:
+            if average >= limit:
+                return letter
+        return "F"
+
+
+class PassFail:
+    def __init__(self, pass_mark=50):
+        self.pass_mark = pass_mark
+
+    def grade(self, average):
+        return "pass" if average >= self.pass_mark else "fail"
+
+
+class Course:
+    def __init__(self, title):
+        self.title = title
+        self._students = {}
+        self._scores = {}
+
+    def enrol(self, student):
+        if student.student_id in self._students:
+            raise GradebookError(f"student {student.student_id} is already enrolled")
+        self._students[student.student_id] = student
+        self._scores[student.student_id] = []
+
+    def _check(self, student_id):
+        if student_id not in self._students:
+            raise GradebookError(f"no student {student_id} in {self.title}")
+
+    def record(self, student_id, score):
+        self._check(student_id)
+        if not 0 <= score <= 100:
+            raise GradebookError(f"score must be 0-100, got {score}")
+        self._scores[student_id].append(score)
+
+    def average(self, student_id):
+        self._check(student_id)
+        scores = self._scores[student_id]
+        return round(sum(scores) / len(scores), 1) if scores else None
+
+    def students(self):
+        return sorted(self._students.values(), key=student_name)
+
+    def report(self, policy):
+        lines = []
+        for s in self.students():
+            avg = self.average(s.student_id)
+            if avg is None:
+                lines.append(f"{s.name}: no scores")
+            else:
+                lines.append(f"{s.name}: {avg} ({policy.grade(avg)})")
+        return lines
+::tests
+c = Course("Python 101")
+c.enrol(Student(1, "Ada"))
+c.enrol(Student(2, "Alan"))
+c.enrol(Student(3, "Grace"))
+c.record(1, 90)
+c.record(1, 85)
+c.record(3, 42)
+assert c.report(LetterGrades()) == ["Ada: 87.5 (B)", "Alan: no scores", "Grace: 42.0 (F)"]
+assert c.report(PassFail()) == ["Ada: 87.5 (pass)", "Alan: no scores", "Grace: 42.0 (fail)"]
+assert c.report(PassFail(90)) == ["Ada: 87.5 (fail)", "Alan: no scores", "Grace: 42.0 (fail)"]
+assert [LetterGrades().grade(x) for x in [95, 90, 80, 79.9, 60, 59]] == ["A", "A", "B", "C", "D", "F"]
+class _Stars:
+    def grade(self, average):
+        return "*" * int(average // 20)
+assert c.report(_Stars())[0] == "Ada: 87.5 (****)", "any policy object must work"
+::hints
+- Each policy class has one method, `grade(self, average)`.
+- `report` loops over `self.students()`, gets each average, and asks `policy.grade(avg)`; it never checks what kind of policy it has.
+--- exercise code python
+::prompt
+**Step 3: saving and loading.** Add to `Course`:
+
+- `to_dict()` returning plain data: `{"title": ..., "students": [{"id": 1, "name": "Ada", "scores": [90, 85]}, ...]}` with students sorted by id;
+- a class method `from_dict(data)` that rebuilds a `Course` (using `enrol` and `record`, so the rules are checked again).
+
+A course must survive a **round trip**: `Course.from_dict(c.to_dict()).to_dict() == c.to_dict()`, and the data must survive `json.dumps`/`json.loads`.
+::starter
+from dataclasses import dataclass
+
+
+class GradebookError(Exception):
+    pass
+
+
+@dataclass(frozen=True)
+class Student:
+    student_id: int
+    name: str
+
+
+def student_name(student):
+    return student.name
+
+
+class Course:
+    def __init__(self, title):
+        self.title = title
+        self._students = {}
+        self._scores = {}
+
+    def enrol(self, student):
+        if student.student_id in self._students:
+            raise GradebookError(f"student {student.student_id} is already enrolled")
+        self._students[student.student_id] = student
+        self._scores[student.student_id] = []
+
+    def _check(self, student_id):
+        if student_id not in self._students:
+            raise GradebookError(f"no student {student_id} in {self.title}")
+
+    def record(self, student_id, score):
+        self._check(student_id)
+        if not 0 <= score <= 100:
+            raise GradebookError(f"score must be 0-100, got {score}")
+        self._scores[student_id].append(score)
+
+    def average(self, student_id):
+        self._check(student_id)
+        scores = self._scores[student_id]
+        return round(sum(scores) / len(scores), 1) if scores else None
+
+    def students(self):
+        return sorted(self._students.values(), key=student_name)
+::solution
+from dataclasses import dataclass
+
+
+class GradebookError(Exception):
+    pass
+
+
+@dataclass(frozen=True)
+class Student:
+    student_id: int
+    name: str
+
+
+def student_name(student):
+    return student.name
+
+
+class Course:
+    def __init__(self, title):
+        self.title = title
+        self._students = {}
+        self._scores = {}
+
+    def enrol(self, student):
+        if student.student_id in self._students:
+            raise GradebookError(f"student {student.student_id} is already enrolled")
+        self._students[student.student_id] = student
+        self._scores[student.student_id] = []
+
+    def _check(self, student_id):
+        if student_id not in self._students:
+            raise GradebookError(f"no student {student_id} in {self.title}")
+
+    def record(self, student_id, score):
+        self._check(student_id)
+        if not 0 <= score <= 100:
+            raise GradebookError(f"score must be 0-100, got {score}")
+        self._scores[student_id].append(score)
+
+    def average(self, student_id):
+        self._check(student_id)
+        scores = self._scores[student_id]
+        return round(sum(scores) / len(scores), 1) if scores else None
+
+    def students(self):
+        return sorted(self._students.values(), key=student_name)
+
+    def to_dict(self):
+        return {
+            "title": self.title,
+            "students": [
+                {"id": sid, "name": self._students[sid].name, "scores": list(self._scores[sid])}
+                for sid in sorted(self._students)
+            ],
+        }
+
+    @classmethod
+    def from_dict(cls, data):
+        course = cls(data["title"])
+        for s in data["students"]:
+            course.enrol(Student(s["id"], s["name"]))
+            for score in s["scores"]:
+                course.record(s["id"], score)
+        return course
+::tests
+import json as _json
+c = Course("Python 101")
+c.enrol(Student(2, "Alan"))
+c.enrol(Student(1, "Ada"))
+c.record(1, 90)
+c.record(1, 85)
+assert c.to_dict() == {"title": "Python 101", "students": [{"id": 1, "name": "Ada", "scores": [90, 85]}, {"id": 2, "name": "Alan", "scores": []}]}
+copy = Course.from_dict(_json.loads(_json.dumps(c.to_dict())))
+assert isinstance(copy, Course)
+assert copy.to_dict() == c.to_dict(), "a course must survive the round trip"
+assert copy.average(1) == 87.5
+data = c.to_dict()
+data["students"][0]["scores"].append(1)
+assert c.average(1) == 87.5, "to_dict must not expose the course's own lists"
+bad = {"title": "X", "students": [{"id": 1, "name": "Ada", "scores": [150]}]}
+try:
+    Course.from_dict(bad)
+except GradebookError:
+    pass
+else:
+    raise AssertionError("from_dict must re-check the rules")
+::hints
+- `to_dict` builds plain dicts and lists; copy each scores list with `list(...)`.
+- `from_dict` is a `@classmethod`: create `cls(data["title"])`, then call `enrol` and `record` for the data, and return the course.
+--- cards
+CRC card :: Class, Responsibilities, Collaborators: a quick way to design classes from a problem description.
+Round-trip test :: Save then load (to_dict → from_dict) and check you get an equal object back.
+Serialisation :: Converting objects to plain data (dicts, lists, strings, numbers) that can be saved or sent, e.g. as JSON.
+Incremental development :: Build in small, tested steps; refactor with the tests as a safety net.
+
+=== lesson py-m10-test | Module 10 test | 230
+This test is about **design**: SOLID principles, cohesion and coupling, design patterns in their Pythonic form, exception hierarchies, context managers and building a program step by step.
+
+Make sure you can:
+
+- name the SOLID principles and spot violations in code;
+- implement strategy, factory, observer and iterator in Python;
+- design an exception hierarchy with a root exception and translate errors at boundaries;
+- write a context manager with `__enter__` and `__exit__`;
+- plan classes from a problem description.
+--- quiz
+? A `ReportGenerator` class both queries the database and renders HTML. What's the main design problem?
++ It has more than one responsibility (two reasons to change)
+- It's too short
+- It doesn't use multiple inheritance
+- It has no context manager
+> Separate data access from presentation.
+? Which change follows the open/closed principle when adding PayPal to a checkout?
+- Add an `elif method == "paypal"` branch to `checkout()`
++ Add a `PayPalPayment` class implementing the existing payment interface
+- Copy `checkout()` into `checkout_paypal()`
+- Make `checkout()` a global variable
+> New behaviour through a new class; existing code stays unchanged.
+? In Python, the observer pattern is most simply built from...
++ A list of callbacks that are called when the event happens
+- Multiple inheritance
+- A singleton class
+- An abstract factory
+> Subscribers are just callables.
+? What does `for x in obj` call first?
+- `obj.__next__()`
++ `iter(obj)`, which calls `obj.__iter__()`
+- `obj.__getitem__(0)` always
+- `len(obj)`
+> Then it calls `next()` on the returned iterator until `StopIteration`.
+? Inside `__exit__`, how do you know the `with` block raised an exception?
++ `exc_type` is not `None`
+- `__exit__` isn't called in that case
+- The return value of `__enter__` is `None`
+- You can't tell
+> All three exception arguments are `None` after a normal finish.
+? What's the purpose of `raise UserNotFound(uid) from e` in a data-access function?
+- To hide all errors
++ To present a domain error to callers while keeping the low-level cause attached
+- To retry the query
+- To convert the error into a warning
+> Translate at the boundary, chain the cause.
+? Which design depends on abstractions rather than details?
++ `Report(storage)`, where `storage` is any object with `save(text)`
+- `Report` creating `S3Client("my-bucket")` inside its constructor
+- `Report` importing a global database connection
+- `Report` writing directly to `C:\reports`
+> Inject the dependency through an interface.
+? What does YAGNI warn against?
+- Writing tests
++ Building features or flexibility before they're actually needed
+- Using classes
+- Refactoring
+> "You aren't gonna need it."
+--- exercise code python
+::prompt
+Build an extensible text-formatting system (factory + registry + ABC):
+
+- `Formatter(ABC)` with an abstract `apply(text)`;
+- `Upper`, `Title` and `Snake` formatters (`Snake` turns `"Hello World Again"` into `"hello_world_again"`: lowercase, words joined with `_`);
+- a registry: `register(name, cls)` adds a formatter class to a module-level dict `FORMATTERS`; register the three as `"upper"`, `"title"`, `"snake"`;
+- `format_text(text, names)` applies the named formatters in order (creating each with its class), and raises `ValueError("unknown formatter: x")` for unknown names.
+::starter
+from abc import ABC, abstractmethod
+
+FORMATTERS = {}
+::solution
+from abc import ABC, abstractmethod
+
+FORMATTERS = {}
+
+
+class Formatter(ABC):
+    @abstractmethod
+    def apply(self, text):
+        pass
+
+
+class Upper(Formatter):
+    def apply(self, text):
+        return text.upper()
+
+
+class Title(Formatter):
+    def apply(self, text):
+        return text.title()
+
+
+class Snake(Formatter):
+    def apply(self, text):
+        return "_".join(text.lower().split())
+
+
+def register(name, cls):
+    FORMATTERS[name] = cls
+
+
+register("upper", Upper)
+register("title", Title)
+register("snake", Snake)
+
+
+def format_text(text, names):
+    for name in names:
+        if name not in FORMATTERS:
+            raise ValueError(f"unknown formatter: {name}")
+        text = FORMATTERS[name]().apply(text)
+    return text
+::tests
+assert format_text("hello world", ["upper"]) == "HELLO WORLD"
+assert format_text("hello world again", ["title"]) == "Hello World Again"
+assert format_text("Hello World Again", ["snake"]) == "hello_world_again"
+assert format_text("Mixed  CASE words", ["snake", "upper"]) == "MIXED_CASE_WORDS"
+assert format_text("unchanged", []) == "unchanged"
+try:
+    format_text("x", ["upper", "rainbow"])
+except ValueError as e:
+    assert str(e) == "unknown formatter: rainbow"
+else:
+    raise AssertionError("unknown formatter names should raise ValueError")
+class _Reverse(Formatter):
+    def apply(self, text):
+        return text[::-1]
+register("reverse", _Reverse)
+assert format_text("abc", ["reverse", "upper"]) == "CBA", "new formatters must plug in without changing format_text"
+try:
+    Formatter()
+except TypeError:
+    pass
+else:
+    raise AssertionError("Formatter must be abstract")
+::hints
+- Each formatter subclasses `Formatter` and implements `apply`.
+- `register` just stores the class in the dict; call it three times at module level.
+- `format_text` looks each name up in `FORMATTERS`, creates an instance and calls `apply`.
+--- exercise code python
+::prompt
+Combine an observer with an exception hierarchy in an `Inventory`:
+
+- `InventoryError(Exception)` and `OutOfStock(InventoryError)` taking `item`, `wanted` and `available` (stored as attributes; message `"only 2 x apple left, wanted 5"`);
+- `Inventory(low_stock_level=3)` with `add(item, qty)`, `remove(item, qty)` (raises `OutOfStock` without changing anything when there isn't enough; unknown items count as 0), `quantity(item)`;
+- `on_low_stock(callback)` subscribes a function; after a `remove` leaves an item **at or below** the low-stock level, every subscriber is called with `(item, remaining)`.
+::starter
+class InventoryError(Exception):
+    pass
+::solution
+class InventoryError(Exception):
+    pass
+
+
+class OutOfStock(InventoryError):
+    def __init__(self, item, wanted, available):
+        super().__init__(f"only {available} x {item} left, wanted {wanted}")
+        self.item = item
+        self.wanted = wanted
+        self.available = available
+
+
+class Inventory:
+    def __init__(self, low_stock_level=3):
+        self.low_stock_level = low_stock_level
+        self._stock = {}
+        self._listeners = []
+
+    def add(self, item, qty):
+        self._stock[item] = self._stock.get(item, 0) + qty
+
+    def quantity(self, item):
+        return self._stock.get(item, 0)
+
+    def on_low_stock(self, callback):
+        self._listeners.append(callback)
+
+    def remove(self, item, qty):
+        available = self.quantity(item)
+        if qty > available:
+            raise OutOfStock(item, qty, available)
+        self._stock[item] = available - qty
+        if self._stock[item] <= self.low_stock_level:
+            for callback in self._listeners:
+                callback(item, self._stock[item])
+::tests
+alerts = []
+inv = Inventory(low_stock_level=3)
+inv.on_low_stock(lambda item, left: alerts.append((item, left)))
+inv.add("apple", 10)
+inv.remove("apple", 5)
+assert inv.quantity("apple") == 5 and alerts == []
+inv.remove("apple", 2)
+assert alerts == [("apple", 3)], "at the low-stock level, subscribers are notified"
+try:
+    inv.remove("apple", 5)
+except OutOfStock as e:
+    assert (e.item, e.wanted, e.available) == ("apple", 5, 3)
+    assert str(e) == "only 3 x apple left, wanted 5"
+else:
+    raise AssertionError("expected OutOfStock")
+assert inv.quantity("apple") == 3, "a refused removal changes nothing"
+try:
+    inv.remove("pear", 1)
+except InventoryError:
+    pass
+else:
+    raise AssertionError("unknown items have 0 in stock")
+assert inv.quantity("kiwi") == 0
+::hints
+- `OutOfStock.__init__` builds the message, passes it to `super().__init__`, and stores the three values.
+- In `remove`, check availability **before** changing the stock.
+- After a successful removal, if the remaining amount is `<= self.low_stock_level`, call every subscriber.
