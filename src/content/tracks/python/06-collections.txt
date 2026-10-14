@@ -344,6 +344,22 @@ import copy
 deep = copy.deepcopy(grid)
 ```
 
+## How Python frees memory
+
+You never free memory yourself in Python. Every object keeps a **reference count**: how many names, list slots and other objects point to it. When the count drops to zero, nothing can reach the object any more, and CPython frees it straight away.
+
+```python
+import sys
+
+data = [1, 2, 3]
+alias = data
+print(sys.getrefcount(data))   # at least 3: data, alias, and getrefcount's own argument
+del alias                      # removes a NAME, not the object
+print(sys.getrefcount(data))
+```
+
+`del name` only deletes the name; the object disappears when its last reference goes. Objects that refer to each other in a **cycle** (a parent that knows its child and a child that knows its parent) never reach zero on their own, so Python also runs a **garbage collector** (the `gc` module) that finds and frees unreachable cycles from time to time. In everyday code you can ignore all of this; it matters when you hold huge data in long-running programs (drop references you no longer need) or write classes with `__del__` (see the special methods lesson: don't rely on it).
+
 ## Functions receive references too
 
 Passing a list to a function passes a reference, so the function can change the caller's list:
@@ -918,6 +934,19 @@ a <= b     # is a a subset of b?        False
 ```
 
 These make questions like "which customers bought both products?" one-liners.
+
+## frozenset: a set that can't change
+
+A normal set is mutable, so it can't be a dictionary key or an item of another set. `frozenset` is its immutable twin: same operations (`|`, `&`, `-`, `in`), but no `add` or `remove`, and it's hashable:
+
+```python
+weekend = frozenset({"sat", "sun"})
+print("sun" in weekend, weekend | {"fri"})
+
+# frozensets as dictionary keys: who is in which pair of teams?
+shared = {frozenset({"ada", "bob"}): "project X", frozenset({"cy", "dee"}): "project Y"}
+print(shared[frozenset({"bob", "ada"})])     # order doesn't matter
+```
 
 ## Why is `in` so fast for sets?
 

@@ -909,6 +909,56 @@ int("ff", 16)    # 255
 
 **Bitwise operators** work on those binary digits: `&` (and), `|` (or), `^` (exclusive or), `~` (not), and `<<`, `>>` (shift left and right). For example, `6 & 3` is `2` because `110 & 011` = `010`. You'll rarely need them at first, but they appear in certification exams (such as PCEP) and in low-level code.
 
+### Bitwise operators in practice
+
+Each bit of a number can store one yes/no fact, which is how file permissions, feature flags and network protocols pack many settings into one integer:
+
+```python
+READ, WRITE, EXECUTE = 0b100, 0b010, 0b001   # 4, 2, 1
+perms = READ | WRITE                          # combine flags with |
+print(bin(perms), perms)
+print(bool(perms & WRITE), bool(perms & EXECUTE))   # test a flag with &
+perms = perms & ~WRITE                        # clear a flag with & ~
+print(bin(perms))
+print(5 << 1, 5 >> 1, 7 & 1)                 # shifts double/halve; n & 1 is 1 for odd numbers
+```
+
+`chmod 754` on Linux is exactly this: 7 = `111` (read, write, execute) for the owner, 5 = `101` for the group, 4 = `100` for everyone else.
+
+## Exact fractions and complex numbers
+
+Floats can't store 1/3 exactly. The `fractions` module keeps numerator and denominator as whole numbers, so the arithmetic is exact:
+
+```python
+from fractions import Fraction
+
+third = Fraction(1, 3)
+print(third + third + third)          # exactly 1
+print(Fraction(3, 4) * 2, Fraction("0.25"))
+print(0.1 + 0.2 == 0.3, Fraction("0.1") + Fraction("0.2") == Fraction("0.3"))
+```
+
+Fractions are exact but slower; use them for maths with ratios (recipes, music, probability), and `Decimal` (from the `decimal` module) for money.
+
+Python also has **complex numbers** built in, written with `j` for the imaginary unit. They're used in engineering, signal processing and physics:
+
+```python
+z = 3 + 4j
+print(z.real, z.imag, abs(z))         # abs is the distance from 0: 5.0
+print(z * (1 - 2j))
+import cmath
+print(cmath.sqrt(-1))                 # math.sqrt(-1) would raise ValueError
+```
+
+~~~check
+? What is `6 | 1`?
+- 1
+- 6
++ 7
+- 5
+> 6 is `110`; OR-ing with `001` sets the last bit: `111` = 7.
+~~~
+
 📚 **Go deeper:** Python Tutorial, section 3.1.1 "Numbers"; the Python docs page "Floating-Point Arithmetic: Issues and Limitations"; *Think Python* (3rd ed.), chapter 1.
 --- goals
 - use `+ - * / // % **` and predict results, including with negative numbers

@@ -1449,10 +1449,78 @@ class Vector:
 
 Operators should return **new** objects and leave the operands unchanged, like numbers do.
 
+### In-place operators and sum()
+
+`a += b` first tries `a.__iadd__(b)`, which may **change `a` in place**, and falls back to `a = a + b` (a new object) if there's no `__iadd__`. That's why `+=` behaves differently for mutable and immutable values:
+
+```python
+nums = [1, 2]
+same = nums
+nums += [3]            # list.__iadd__ extends the same list
+print(same)            # [1, 2, 3]: the alias sees it
+
+point = (1, 2)
+copy = point
+point += (3,)          # tuples have no __iadd__: a new tuple is made
+print(copy)            # (1, 2)
+```
+
+`sum(items)` starts from `0` and adds each item, so `sum(vectors)` calls `0 + vector`. An `int` doesn't know how to add a `Vector`, so Python tries the **reflected** method `vector.__radd__(0)`. Define `__radd__` (handling `0`) to make your objects work with `sum`:
+
+```python
+class Money:
+    def __init__(self, cents):
+        self.cents = cents
+    def __add__(self, other):
+        return Money(self.cents + other.cents)
+    def __radd__(self, other):          # called for 0 + Money(...) inside sum()
+        return self if other == 0 else self + other
+    def __repr__(self):
+        return f"Money({self.cents})"
+
+print(sum([Money(150), Money(275)]))
+```
+
 ## Truthiness and calling
 
 - `__bool__` decides truthiness: an empty playlist or a zero vector might be falsy. Without it, Python uses `__len__` (0 is falsy), and otherwise every object is truthy.
 - `__call__` makes an instance callable like a function: `obj(args)`.
+
+### Callable objects and bound methods
+
+An object with `__call__` can be called like a function, while keeping state between calls:
+
+```python
+class Counter:
+    def __init__(self):
+        self.calls = 0
+    def __call__(self, text):
+        self.calls += 1
+        return text.upper()
+
+shout = Counter()
+print(shout("hi"), shout("there"), shout.calls)
+```
+
+Methods are objects too. `obj.method` without parentheses is a **bound method**: the function packaged together with its object, ready to be called later (for example as a callback). `Class.method` is the plain function, which needs the object passed explicitly:
+
+```python
+class Greeter:
+    def __init__(self, name):
+        self.name = name
+    def hello(self):
+        return f"Hello from {self.name}"
+
+g = Greeter("Ada")
+later = g.hello                    # bound: remembers g
+print(later())
+print(Greeter.hello(g))            # the same call, spelled out
+print(later.__self__ is g)
+```
+
+### __del__: why you shouldn't rely on it
+
+`__del__` runs when an object is about to be destroyed. It sounds like the right place to close files or connections, but **when** (or even whether) it runs isn't guaranteed: another reference may keep the object alive, objects in cycles are freed later by the garbage collector, and at interpreter shutdown some may never be finalised. For resources, use a `with` statement and a context manager (Module 10), which closes things at a predictable moment.
 
 ## Use operators only when the meaning is obvious
 

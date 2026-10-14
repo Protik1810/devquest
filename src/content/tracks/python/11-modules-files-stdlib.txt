@@ -119,6 +119,29 @@ Python also caches the compiled form of imported modules in `__pycache__` folder
 
 The `platform` module describes the machine a program runs on: `platform.system()` (for example `'Windows'`, `'Linux'`, `'Darwin'` for macOS), `platform.python_version()`, `platform.machine()`.
 
+## Relative imports inside packages
+
+Inside a package, one module can import a sibling with a **relative import**: a dot means "this package", two dots "the parent package":
+
+```
+shop/
+    __init__.py
+    pricing.py      # def with_tax(price): ...
+    cart.py         # from .pricing import with_tax
+    reports/
+        __init__.py
+        daily.py    # from ..cart import Cart
+```
+
+Relative imports keep a package self-contained (it still works if the package is renamed or moved), but they only work **inside a package**. Running `python shop/cart.py` directly fails with "attempted relative import with no known parent package"; run it as a module from the folder above instead: `python -m shop.cart`.
+
+## Exploring and reloading modules
+
+A module is an object you can inspect at the interactive prompt:
+
+- `dir(module)` lists its names; `help(module)` (or `help(module.function)`) shows the docstrings; `python -m pydoc json` prints the same documentation in a terminal.
+- `import` runs a module's code only **once** per program; importing it again just returns the cached module (from `sys.modules`). While experimenting in the REPL, `importlib.reload(module)` re-runs the file after you've edited it. Objects created before the reload keep using the old code, so restart the interpreter when in doubt.
+
 ## Where does Python find modules?
 
 `import x` searches the folders listed in `sys.path`: the folder of the script you're running first, then the standard library, then **site-packages**, where installed third-party packages live. One consequence catches many beginners: **don't name your own file after a module you use**. A file called `random.py` in your folder hides the real `random` module, and `random.randint` suddenly "doesn't exist".
