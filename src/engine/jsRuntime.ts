@@ -751,7 +751,9 @@ function devquestJsRuntime(g: any) {
       }
       if (repeats) shown.push(again(repeats));
       const trace = shown.length >= 2 ? '\n' + shown.join('\n') : '';
-      return { ok: false, output: out, error: describe(err) + (line !== null && line >= 1 && line <= C ? ` (line ${line})` : '') + trace };
+      const e = err as any;
+      const values = err instanceof AssertionError && e.generatedMessage && /Equal$/.test(e.operator) ? `\n  expected: ${inspect(e.expected)}\n  got:      ${inspect(e.actual)}` : '';
+      return { ok: false, output: out, error: describe(err) + (line !== null && line >= 1 && line <= C ? ` (line ${line})` : '') + values + trace };
     }
   }
 
