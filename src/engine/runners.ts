@@ -394,8 +394,12 @@ function runRedis(code: string, check?: CodeCheck): RunResult {
 // Collects the page's errors and console output from the start (so the page's own scripts are included),
 // formatting logged values the way Node and the lessons' JavaScript runner do
 const WEB_EARLY = `<script>window.__dqErrors=[];window.__dqLogs=[];addEventListener('error',function(e){__dqErrors.push(e.message)});
-(function(){var rt={setTimeout:setTimeout.bind(window),clearTimeout:clearTimeout.bind(window),setInterval:setInterval.bind(window),clearInterval:clearInterval.bind(window)};
+(function(){var rt={setTimeout:setTimeout.bind(window),clearTimeout:clearTimeout.bind(window),setInterval:setInterval.bind(window),clearInterval:clearInterval.bind(window),queueMicrotask:queueMicrotask.bind(window),fetch:window.fetch&&window.fetch.bind(window),URL:URL,Response:window.Response,DOMException:window.DOMException,TextEncoder:window.TextEncoder,TextDecoder:window.TextDecoder,performance:window.performance};
 ${jsRuntimeOn('rt')}
+// Pages can fetch the lessons' demo API (https://api.example.com); other URLs use the real fetch
+window.fetch=rt.fetch;
+// Sandboxed previews have no storage of their own: give them an in-memory localStorage and sessionStorage
+['localStorage','sessionStorage'].forEach(function(name){try{window[name].length}catch(e){var data={};Object.defineProperty(window,name,{configurable:true,value:{getItem:function(k){return Object.prototype.hasOwnProperty.call(data,k)?data[k]:null},setItem:function(k,v){data[k]=String(v)},removeItem:function(k){delete data[k]},clear:function(){data={}},key:function(i){var k=Object.keys(data)[i];return k===undefined?null:k},get length(){return Object.keys(data).length}}})}});
 var show=function(a){return typeof a==='string'?a:rt.__dqInspect(a)};
 ['log','info','warn','error','debug'].forEach(function(m){var orig=console[m];console[m]=function(){__dqLogs.push([].map.call(arguments,show).join(' '));return orig.apply(console,arguments)}});})();</script>`;
 
