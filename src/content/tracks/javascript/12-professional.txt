@@ -1,0 +1,1814 @@
+=== module Module 12 · Professional JavaScript
+
+=== lesson js-functional | Functional programming | 85
+## A different way to structure programs
+
+You've written functional code since Module 5: pure functions, callbacks, `map`, `filter` and `reduce`, closures. **Functional programming** (FP) turns those habits into a style: build programs from small **pure** functions that take data and return **new** data, and combine them. JavaScript isn't a purely functional language, but FP ideas run through modern JavaScript: React components, Redux reducers, array pipelines and many libraries are built on them.
+
+The core principles:
+
+- **Pure functions**: output depends only on input; no side effects.
+- **Immutability**: never change data; create new versions.
+- **Functions as values**: pass them, return them, combine them.
+- **Declarative code**: say *what* you want (`filter` the active users), not *how* to loop.
+
+## Imperative versus declarative
+
+```js
+const orders = [
+  { customer: "Ada", total: 120, paid: true },
+  { customer: "Bob", total: 45, paid: false },
+  { customer: "Cy", total: 300, paid: true },
+];
+
+// Imperative: how to do it, step by step
+const bigPaid1 = [];
+for (let i = 0; i < orders.length; i++) {
+  if (orders[i].paid && orders[i].total > 100) {
+    bigPaid1.push(orders[i].customer.toUpperCase());
+  }
+}
+
+// Declarative: what we want
+const bigPaid2 = orders
+  .filter((o) => o.paid && o.total > 100)
+  .map((o) => o.customer.toUpperCase());
+
+console.log(bigPaid1, bigPaid2);
+```
+
+The declarative version has no index variable to get wrong, no array being mutated, and reads like the requirement.
+
+## Composition: pipelines of functions
+
+Small functions combine into bigger ones. `pipe` runs functions left to right (the order you read them); `compose` right to left (the mathematical order):
+
+```js
+const pipe = (...fns) => (input) => fns.reduce((value, fn) => fn(value), input);
+
+const trim = (s) => s.trim();
+const lower = (s) => s.toLowerCase();
+const dashes = (s) => s.replaceAll(/\s+/g, "-");
+const noPunctuation = (s) => s.replaceAll(/[^\w-]/g, "");
+
+const slugify = pipe(trim, lower, noPunctuation, dashes);
+console.log(slugify("  Hello, World! Learn FP  "));
+```
+
+`pipe` itself is a tiny `reduce`: start with the input and feed it through each function in turn. Each step is trivially testable on its own, and steps can be reused in other pipelines.
+
+## Currying and partial application
+
+**Partial application** fixes some of a function's arguments now, leaving a function that takes the rest later. **Currying** turns a function of several arguments into a chain of one-argument functions. They make functions fit nicely into pipelines and `map`:
+
+```js
+const multiply = (a) => (b) => a * b;
+const double = multiply(2);
+console.log([1, 2, 3].map(double));
+
+const hasRole = (role) => (user) => user.roles.includes(role);
+const users = [
+  { name: "Ada", roles: ["admin", "dev"] },
+  { name: "Bob", roles: ["dev"] },
+];
+console.log(users.filter(hasRole("admin")).map((u) => u.name));
+
+const greet = (greeting, name) => `${greeting}, ${name}!`;
+const hello = greet.bind(null, "Hello");
+console.log(hello("Grace"));
+```
+
+`fn.bind(null, firstArg)` is JavaScript's built-in partial application.
+
+## Immutability in practice
+
+Changing shared data is where many bugs come from (Module 6: references). FP avoids it: functions return updated **copies**.
+
+```js
+const state = Object.freeze({
+  user: Object.freeze({ name: "Ada", points: 10 }),
+  history: Object.freeze(["joined"]),
+});
+
+const addPoints = (s, n) => ({
+  ...s,
+  user: { ...s.user, points: s.user.points + n },
+  history: [...s.history, `+${n} points`],
+});
+
+const next = addPoints(state, 5);
+console.log(state.user.points, next.user.points, next.history);
+console.log(state.history === next.history, state.user === next.user);
+```
+
+The unchanged parts could even be **shared** between old and new versions; only the changed path is copied. That makes "undo" trivial (keep old states) and change detection fast (`===`).
+
+Newer array methods help: `toSorted`, `toReversed`, `toSpliced` and `with(index, value)` all return new arrays.
+
+~~~check
+? Which function is pure?
+- `(cart) => { cart.items.push("x"); return cart; }`
++ `(cart) => ({ ...cart, items: [...cart.items, "x"] })`
+- `() => Date.now()`
+- `(msg) => console.log(msg)`
+> It returns new data and changes nothing. The others mutate their input, depend on the clock, or print.
+~~~
+
+## Memoization: caching pure functions
+
+Because a pure function always gives the same output for the same input, its results can be **cached**:
+
+```js
+function memoize(fn) {
+  const cache = new Map();
+  return (arg) => {
+    if (!cache.has(arg)) cache.set(arg, fn(arg));
+    return cache.get(arg);
+  };
+}
+let calls = 0;
+const slowSquare = (n) => {
+  calls++;
+  return n * n;
+};
+const fastSquare = memoize(slowSquare);
+console.log(fastSquare(9), fastSquare(9), fastSquare(9), "calls:", calls);
+```
+
+Only pure functions can be safely memoized: caching a function that reads the clock or a database would return stale answers.
+
+## Where FP fits
+
+FP shines for **data transformation**: turning API responses into view models, computing reports, reducers for state. Object-oriented design shines for **modelling things with identity and behaviour** (a bank account, a game character). Real JavaScript code mixes both: classes or modules on the outside, pure functions doing the work inside. Prefer whichever makes a given piece of code clearest.
+
+📚 **Go deeper:** *Eloquent JavaScript* (4th ed.), chapter 5, "Higher-Order Functions"; MDN, "Functional programming" (glossary) and "Array.prototype.with()"; Kyle Simpson, *Functional-Light JavaScript* (free online).
+--- goals
+- explain pure functions, immutability and declarative code
+- rewrite imperative loops as `filter`/`map`/`reduce` pipelines
+- compose functions with `pipe` and `compose`
+- use currying and partial application to make functions reusable
+- update nested data immutably, and explain the benefits
+- memoize pure functions, and know when caching is unsafe
+--- quiz
+? What does `pipe(f, g, h)(x)` compute?
+- `f(g(h(x)))`
++ `h(g(f(x)))`
+- `f(x) + g(x) + h(x)`
+- `[f(x), g(x), h(x)]`
+> pipe applies the functions left to right: f first, then g, then h.
+? What does `const add = (a) => (b) => a + b; add(2)(3)` give?
++ `5`
+- A function
+- `"23"`
+- An error
+> add(2) returns a function waiting for b; calling it with 3 gives 5.
+? Why can a pure function be memoized safely?
+- It runs faster
++ The same input always gives the same output, so a cached result is always right
+- It has no parameters
+- Memoization makes any function pure
+> Impure functions (clock, random, I/O) would return stale cached answers.
+? After `const next = { ...state, count: state.count + 1 }`, which is true?
+- `state.count` has increased
++ `state` is unchanged and `next` is a new object
+- `next === state`
+- `state` is frozen
+> Spread makes a new object with the change; the original stays the same.
+? Which is more declarative?
+- A `for` loop with an index that pushes matching items into a new array
++ `items.filter(isActive)`
+- A `while (true)` loop with `break`
+- Changing the array in place with `splice`
+> Declarative code states what you want, leaving the how to the method.
+--- exercise code javascript
+::prompt
+Write these small functional tools and use them:
+
+- `pipe(...fns)` returning a function that applies `fns` left to right;
+- `prop(name)` returning a function that reads that property from an object;
+- `where(name, value)` returning a predicate that's true for objects whose property equals `value`;
+- `sumBy(name)` returning a function that adds up a property over an array.
+
+Then define `paidTotal = pipe(...)` (no loops, no new `function` bodies, only your helpers and array methods) that takes an array of orders and returns the total of the paid ones.
+::starter
+const pipe = (...fns) => (input) => input;
+const prop = (name) => (obj) => undefined;
+const where = (name, value) => (obj) => false;
+const sumBy = (name) => (items) => 0;
+
+const paidTotal = pipe();
+::solution
+const pipe = (...fns) => (input) => fns.reduce((value, fn) => fn(value), input);
+const prop = (name) => (obj) => obj[name];
+const where = (name, value) => (obj) => obj[name] === value;
+const sumBy = (name) => (items) => items.map(prop(name)).reduce((a, b) => a + b, 0);
+
+const paidTotal = pipe((orders) => orders.filter(where("paid", true)), sumBy("total"));
+::tests
+assert.strictEqual(pipe((x) => x + 1, (x) => x * 10)(2), 30);
+assert.strictEqual(pipe()(7), 7);
+assert.deepStrictEqual([{ n: 1 }, { n: 2 }].map(prop("n")), [1, 2]);
+assert.deepStrictEqual([{ c: "a" }, { c: "b" }, { c: "a" }].filter(where("c", "a")).length, 2);
+assert.strictEqual(sumBy("x")([{ x: 2 }, { x: 3 }]), 5);
+const __orders = [{ total: 20, paid: true }, { total: 5, paid: false }, { total: 7.5, paid: true }];
+assert.strictEqual(paidTotal(__orders), 27.5);
+assert.strictEqual(paidTotal([]), 0);
+::hints
+- `pipe` is a `reduce` over the functions, starting with the input.
+- Each helper returns a small arrow function that "remembers" its arguments (a closure).
+- `paidTotal`: first keep the paid orders with `filter(where("paid", true))`, then `sumBy("total")`.
+--- exercise code javascript
+::prompt
+Write an **immutable** reducer for a shopping cart, `cartReducer(state, action)`, that never changes `state` (it will be frozen in the checks) and returns a new state for:
+
+- `{ type: "add", id, price }`: add one of the item (quantity 1 if new, otherwise +1);
+- `{ type: "remove", id }`: remove the item completely;
+- `{ type: "setQty", id, qty }`: set the quantity; a quantity of 0 or less removes the item;
+- anything else: return the same `state` object.
+
+State looks like `{ items: [{ id, price, qty }], updatedBy: "lastActionType" }`. Every handled action also sets `updatedBy` to the action's type.
+::starter
+function cartReducer(state, action) {
+}
+::solution
+function cartReducer(state, action) {
+  switch (action.type) {
+    case "add": {
+      const exists = state.items.some((it) => it.id === action.id);
+      const items = exists
+        ? state.items.map((it) => (it.id === action.id ? { ...it, qty: it.qty + 1 } : it))
+        : [...state.items, { id: action.id, price: action.price, qty: 1 }];
+      return { ...state, items, updatedBy: action.type };
+    }
+    case "remove":
+      return { ...state, items: state.items.filter((it) => it.id !== action.id), updatedBy: action.type };
+    case "setQty":
+      return {
+        ...state,
+        items: action.qty <= 0
+          ? state.items.filter((it) => it.id !== action.id)
+          : state.items.map((it) => (it.id === action.id ? { ...it, qty: action.qty } : it)),
+        updatedBy: action.type,
+      };
+    default:
+      return state;
+  }
+}
+::tests
+const __deepFreeze = (o) => { Object.values(o).forEach((v) => typeof v === "object" && v !== null && __deepFreeze(v)); return Object.freeze(o); };
+let __s = __deepFreeze({ items: [], updatedBy: null });
+__s = __deepFreeze(cartReducer(__s, { type: "add", id: "pen", price: 2 }));
+__s = __deepFreeze(cartReducer(__s, { type: "add", id: "pen", price: 2 }));
+__s = __deepFreeze(cartReducer(__s, { type: "add", id: "book", price: 12 }));
+assert.deepStrictEqual(__s, { items: [{ id: "pen", price: 2, qty: 2 }, { id: "book", price: 12, qty: 1 }], updatedBy: "add" });
+const __before = __s;
+__s = __deepFreeze(cartReducer(__s, { type: "setQty", id: "book", qty: 5 }));
+assert.strictEqual(__s.items[1].qty, 5);
+assert.strictEqual(__s.items[0], __before.items[0], "unchanged items can be shared, not copied");
+__s = __deepFreeze(cartReducer(__s, { type: "setQty", id: "pen", qty: 0 }));
+assert.deepStrictEqual(__s.items.map((i) => i.id), ["book"]);
+__s = __deepFreeze(cartReducer(__s, { type: "remove", id: "book" }));
+assert.deepStrictEqual(__s, { items: [], updatedBy: "remove" });
+assert.strictEqual(cartReducer(__s, { type: "unknown" }), __s);
+::hints
+- Spread the state into a new object and replace only `items` and `updatedBy`.
+- Change one item with `map` (spreading that item); remove with `filter`; add with `[...items, newItem]`.
+- The state is frozen: any `push`, `splice` or assignment to it will throw.
+--- cards
+Pure function :: Output depends only on input; no side effects (no mutation, I/O, clock or randomness).
+Declarative style :: Say what you want (filter, map, reduce) rather than how (loops and counters).
+pipe / compose :: pipe(f, g)(x) is g(f(x)); compose(f, g)(x) is f(g(x)).
+Currying :: f(a, b) becomes f(a)(b): one argument at a time.
+Partial application :: Fix some arguments now: const hello = greet.bind(null, "Hello").
+Immutable update :: Return { ...state, changed: newValue }, [...arr, item], arr.map(...), arr.filter(...).
+Memoization :: Cache a pure function's results by input; only safe for pure functions.
+
+=== lesson js-regex | Regular expressions and Unicode text | 90
+## Patterns for text
+
+A **regular expression** (regex) describes a **pattern** of text: "a sequence of digits", "something that looks like an email", "a word starting with a capital letter". They're used to validate input, search, extract parts and replace. Nearly every language has them with very similar syntax, so this is knowledge you'll keep.
+
+```js
+const date = /\d{4}-\d{2}-\d{2}/;
+console.log(date.test("Due on 2026-10-14"));
+console.log(date.test("Due tomorrow"));
+console.log("Due on 2026-10-14".match(date)[0]);
+```
+
+A regex is written between slashes, `/pattern/flags`, or built from a string with `new RegExp("pattern", "flags")`.
+
+## The building blocks
+
+| Pattern | Matches |
+|---|---|
+| `abc` | the exact text "abc" |
+| `.` | any one character (except a new line) |
+| `\d`, `\w`, `\s` | a digit / a word character (letter, digit, `_`) / whitespace |
+| `\D`, `\W`, `\S` | anything that is *not* a digit / word character / whitespace |
+| `[aeiou]`, `[a-z]`, `[^0-9]` | one of these characters / a range / anything *except* these |
+| `^` and `$` | the start and end of the text (or of a line, with the `m` flag) |
+| `\b` | a word boundary |
+| `a\|b` | `a` or `b` |
+| `\.`, `\?`, `\(` | a literal `.`, `?` or `(` (special characters need a backslash) |
+
+**Quantifiers** say how many times the previous item repeats:
+
+| Quantifier | Means |
+|---|---|
+| `*` | 0 or more |
+| `+` | 1 or more |
+| `?` | 0 or 1 (optional) |
+| `{3}`, `{2,4}`, `{2,}` | exactly 3, from 2 to 4, 2 or more |
+
+```js
+const checks = {
+  zip: /^\d{5}$/,
+  hexColour: /^#[0-9a-f]{6}$/i,
+  username: /^[a-z][a-z0-9_]{2,15}$/,
+  price: /^\$\d+(\.\d{2})?$/,
+};
+console.log(checks.zip.test("90210"), checks.zip.test("9021"));
+console.log(checks.hexColour.test("#1E90FF"), checks.hexColour.test("#12345"));
+console.log(checks.username.test("ada_99"), checks.username.test("9lives"));
+console.log(checks.price.test("$12.50"), checks.price.test("$12.5"));
+```
+
+`^` and `$` anchor a pattern to the **whole** text; without them, `/\d{5}/` would also accept "abc123456xyz".
+
+## Flags
+
+| Flag | Effect |
+|---|---|
+| `i` | ignore case |
+| `g` | global: find **all** matches (with `match`, `matchAll`, `replace`) |
+| `m` | multiline: `^` and `$` match at every line |
+| `s` | `.` also matches new lines |
+| `u` | Unicode mode: correct handling of emoji and `\p{...}` classes (use it by default for text) |
+
+## Groups: extracting parts
+
+Parentheses make a **group**, which captures the part it matched. `(?<name>...)` gives the group a name:
+
+```js
+const text = "Order 1042 shipped on 2026-10-14 to Paris";
+const m = text.match(/(?<year>\d{4})-(?<month>\d{2})-(?<day>\d{2})/);
+console.log(m[0], m.index);
+console.log(m.groups.day, m.groups.month, m.groups.year);
+
+for (const match of "x=1, y=22, z=333".matchAll(/(\w)=(\d+)/g)) {
+  console.log(match[1], "is", Number(match[2]));
+}
+```
+
+- `str.match(re)` without `g` returns the first match with its groups (or `null`!); with `g`, an array of all matched texts, without groups.
+- `str.matchAll(re)` (needs `g`) gives every match **with** its groups, for a `for...of` loop.
+- `(?:...)` groups **without** capturing, just to apply a quantifier or `|`: `/(?:Mr|Ms|Dr)\. \w+/`.
+
+## Replacing
+
+```js
+console.log("2026-10-14".replace(/(\d+)-(\d+)-(\d+)/, "$3/$2/$1"));
+console.log("Smith, John".replace(/(?<last>\w+), (?<first>\w+)/, "$<first> $<last>"));
+console.log("hello big world".replace(/\b\w/g, (letter) => letter.toUpperCase()));
+console.log("Call 555-1234 or 555-9876".replaceAll(/\d{3}-\d{4}/g, "[hidden]"));
+```
+
+In the replacement text, `$1`, `$2`... (or `$<name>`) insert groups. A **function** as the replacement receives each match and returns its replacement: the most flexible option.
+
+~~~check
+? What does `"a1b22c".replace(/\d+/g, "#")` give?
+- `a##b###c`
++ `a#b#c`
+- `a#b22c`
+- `#`
+> `\d+` matches each run of digits ("1" and "22") as one match, and `g` replaces them all.
+~~~
+
+## Lookarounds
+
+A **lookahead** `(?=...)` or **lookbehind** `(?<=...)` checks what comes next (or before) without including it in the match; `(?!...)` and `(?<!...)` are the negative versions. A classic use is "a password must contain a digit and a capital letter":
+
+```js
+const strong = /^(?=.*\d)(?=.*[A-Z]).{8,}$/;
+console.log(strong.test("password1"), strong.test("Password1"));
+console.log("Price: $42 and €17".match(/(?<=\$)\d+/)[0]);
+```
+
+## Pitfalls
+
+- **`g` regexes remember their position.** A regex with the `g` flag has a `lastIndex`; calling `test` repeatedly on it continues from there, so the same call can alternate between `true` and `false`. Don't reuse a `g` regex for `test`; create the regex without `g` for yes/no checks.
+- **Escape text you put into a regex.** Building `new RegExp(userText)` from user input breaks on special characters (`a+b`, `1.5`), and lets users inject patterns. Escape it first: `text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")`.
+- **Catastrophic backtracking.** Nested quantifiers like `/(a+)+$/` can take exponential time on some inputs, freezing a page or a server (a "ReDoS" attack). Keep patterns simple, and avoid nesting `+` and `*` inside repeated groups.
+- **Don't parse everything with regex.** HTML, JSON, programming languages and email addresses (fully) need real parsers. A regex for "looks roughly like an email" is fine; one for "is a valid email" doesn't exist.
+
+## Unicode: characters versus code units
+
+JavaScript strings are sequences of UTF-16 **code units**. Most characters are one unit, but emoji and many rare characters are **two** (a *surrogate pair*), and what a person sees as one character can be several code points (a thumbs-up plus a skin tone; a letter plus a combining accent):
+
+```js
+const s = "café 👍🏽";
+console.log(s.length, [...s].length);
+console.log("😀".charCodeAt(0), "😀".codePointAt(0), String.fromCodePoint(128512));
+console.log("é".length, "é".normalize("NFD").length);
+const graphemes = [...new Intl.Segmenter("en", { granularity: "grapheme" }).segment(s)];
+console.log(graphemes.length);
+```
+
+- `.length` counts code units; `[...s]` (or `for...of`) iterates **code points**; `Intl.Segmenter` gives **grapheme clusters**, what users perceive as characters. Use it for "maximum 20 characters" limits on user names.
+- `codePointAt` / `String.fromCodePoint` work with full Unicode values (use them instead of `charCodeAt` / `fromCharCode`, which only see code units).
+- The same visible text can have different encodings ("é" as one code point, or "e" + an accent). `str.normalize()` makes them comparable; normalising and then removing accents with `/\p{Diacritic}/gu` makes accent-insensitive search possible.
+- With the `u` flag, regexes understand Unicode classes: `\p{L}` (any letter, in any alphabet), `\p{Lu}` (uppercase letter), `\p{N}` (number), `\p{Emoji}`.
+
+```js
+console.log("Ünïcödé naïve café".normalize("NFD").replace(/\p{Diacritic}/gu, ""));
+console.log("Grüße, Jürgen! 你好".match(/\p{L}+/gu));
+```
+
+📚 **Go deeper:** *Eloquent JavaScript* (4th ed.), chapter 9, "Regular Expressions"; MDN, "Regular expressions" (JavaScript Guide) and "Intl.Segmenter"; javascript.info, "Regular expressions" (the whole chapter); regex101.com to test and explain patterns.
+--- goals
+- write patterns with character classes, anchors, alternation and quantifiers
+- use the `i`, `g`, `m`, `s` and `u` flags
+- extract data with groups, named groups, `match` and `matchAll`
+- replace text with group references and replacement functions
+- use lookahead and lookbehind
+- avoid the `lastIndex`, escaping and catastrophic-backtracking pitfalls
+- count and compare Unicode text correctly with code points, graphemes and `normalize`
+--- quiz
+? Which pattern matches a string made of exactly three digits, and nothing else?
+- `/\d{3}/`
++ `/^\d{3}$/`
+- `/[0-9]+/`
+- `/^\d+$/`
+> Without ^ and $, the pattern matches three digits anywhere in longer text.
+? What does `"2026-10-14".match(/(\d+)-(\d+)/)[2]` give?
+- `"2026"`
++ `"10"`
+- `"14"`
+- `"10-14"`
+> Index 0 is the whole match, then each group in order: group 2 is the month.
+? What does the `g` flag do with `replace`?
+- Makes the match case-insensitive
++ Replaces every match instead of only the first
+- Matches across lines
+- Enables Unicode
+> g means global.
+? Why might `re.test(s)` give `true`, then `false`, for the same string?
+- Regexes are random
++ The regex has the `g` flag, and `lastIndex` makes the next search continue after the last match
+- The string changed
+- test only works once
+> Don't use g regexes for repeated yes/no checks.
+? What is `"👍".length`?
+- 1
++ 2
+- 4
+- 0
+> The emoji is one code point but two UTF-16 code units.
+? A search should find "café" when the user types "cafe". What helps?
+- `toUpperCase()` on both
++ `normalize("NFD")` and removing diacritics (`/\p{Diacritic}/gu`) on both
+- `trim()`
+- A longer regex
+> Normalising splits accented letters into letter + accent, so the accents can be removed.
+--- exercise code javascript
+::prompt
+Write `parseLog(text)` that reads a server log, one entry per line, like:
+```
+2026-10-14 09:15:02 ERROR [payments] Card declined for order 1042
+2026-10-14 09:16:40 INFO [auth] User ada logged in
+```
+Use **one regular expression with named groups** to return an array of `{ date, time, level, service, message }` for each line that matches (other lines are skipped). Then write `errorsByService(text)` returning an object counting the `ERROR` entries per service.
+::starter
+function parseLog(text) {
+}
+
+function errorsByService(text) {
+}
+::solution
+const LINE = /^(?<date>\d{4}-\d{2}-\d{2}) (?<time>\d{2}:\d{2}:\d{2}) (?<level>[A-Z]+) \[(?<service>[\w-]+)\] (?<message>.*)$/;
+
+function parseLog(text) {
+  return text
+    .split("\n")
+    .map((line) => line.match(LINE))
+    .filter((m) => m !== null)
+    .map((m) => ({ ...m.groups }));
+}
+
+function errorsByService(text) {
+  const counts = {};
+  for (const entry of parseLog(text)) {
+    if (entry.level === "ERROR") counts[entry.service] = (counts[entry.service] ?? 0) + 1;
+  }
+  return counts;
+}
+::tests
+const __log = `2026-10-14 09:15:02 ERROR [payments] Card declined for order 1042
+2026-10-14 09:16:40 INFO [auth] User ada logged in
+this line is garbage
+2026-10-14 09:20:11 ERROR [payments] Timeout talking to the bank
+2026-10-14 09:21:00 ERROR [search-api] Index unavailable
+2026-10-14 09:22:00 WARN [auth] Slow login`;
+const __entries = parseLog(__log);
+assert.strictEqual(__entries.length, 5);
+assert.deepStrictEqual(__entries[0], { date: "2026-10-14", time: "09:15:02", level: "ERROR", service: "payments", message: "Card declined for order 1042" });
+assert.strictEqual(__entries[4].service, "auth");
+assert.deepStrictEqual(errorsByService(__log), { payments: 2, "search-api": 1 });
+assert.deepStrictEqual(parseLog(""), []);
+::hints
+- Named groups: `(?<date>\d{4}-\d{2}-\d{2})`; a literal `[` needs a backslash: `\[`.
+- Anchor the pattern with `^` and `$` so partial lines don't match.
+- `m.groups` is the object you want (spread it into a plain object).
+--- exercise code javascript
+::prompt
+Write `validatePassword(pw)` that returns an array of the problems (in this order, empty if none): `"at least 10 characters"`, `"a lowercase letter"`, `"an uppercase letter"`, `"a digit"`, `"a symbol"` (anything that isn't a letter or digit), and `"no spaces"`. Use a regular expression for each rule. Then write `maskCards(text)` that replaces every 16-digit card number written as four groups of four digits (separated by single spaces or dashes) with `**** **** **** ` followed by its last four digits.
+::starter
+function validatePassword(pw) {
+}
+
+function maskCards(text) {
+}
+::solution
+function validatePassword(pw) {
+  const rules = [
+    [/^.{10,}$/u, "at least 10 characters"],
+    [/\p{Ll}/u, "a lowercase letter"],
+    [/\p{Lu}/u, "an uppercase letter"],
+    [/\d/, "a digit"],
+    [/[^\p{L}\p{N}]/u, "a symbol"],
+  ];
+  const problems = rules.filter(([re]) => !re.test(pw)).map(([, msg]) => msg);
+  if (/\s/.test(pw)) problems.push("no spaces");
+  return problems;
+}
+
+function maskCards(text) {
+  return text.replace(/\b\d{4}([ -])\d{4}\1\d{4}\1(\d{4})\b/g, "**** **** **** $2");
+}
+::tests
+assert.deepStrictEqual(validatePassword("Tr0ub4dor&3x"), []);
+assert.deepStrictEqual(validatePassword("short"), ["at least 10 characters", "an uppercase letter", "a digit", "a symbol"]);
+assert.deepStrictEqual(validatePassword("ALLCAPS123!!"), ["a lowercase letter"]);
+assert.deepStrictEqual(validatePassword("Has space 1!"), ["no spaces"]);
+assert.deepStrictEqual(validatePassword("Ünïcödé9#pw"), []);
+assert.strictEqual(maskCards("Pay with 4111 1111 1111 1234 today"), "Pay with **** **** **** 1234 today");
+assert.strictEqual(maskCards("Cards: 5500-0000-0000-0004 and 3400 0000 0000 0009."), "Cards: **** **** **** 0004 and **** **** **** 0009.");
+assert.strictEqual(maskCards("Order 1234 5678 is not a card"), "Order 1234 5678 is not a card");
+::hints
+- One regex per rule; `test` each, and keep the messages of the rules that fail. Use `\p{Ll}` and `\p{Lu}` (with the `u` flag) so accented letters like "Ü" count.
+- "A symbol": something that's not a letter or digit: `/[^\p{L}\p{N}]/u` (so accented letters count as letters).
+- For the cards, a back-reference `\1` makes the second and third separators the same as the first; capture the last four digits in a group.
+--- exercise code javascript
+::prompt
+Write `truncate(text, max)` that shortens text to at most `max` **user-perceived characters** (graphemes, using `Intl.Segmenter`), adding `…` (one character, counted in the limit) when it had to cut. Then write `searchKey(text)` that makes text accent- and case-insensitive for searching: normalise to NFD, remove diacritics, lowercase, and collapse runs of whitespace into single spaces (trimmed).
+::starter
+function truncate(text, max) {
+}
+
+function searchKey(text) {
+}
+::solution
+const segmenter = new Intl.Segmenter("en", { granularity: "grapheme" });
+
+function truncate(text, max) {
+  const chars = [...segmenter.segment(text)].map((s) => s.segment);
+  if (chars.length <= max) return text;
+  return chars.slice(0, max - 1).join("") + "…";
+}
+
+function searchKey(text) {
+  return text.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase().replace(/\s+/g, " ").trim();
+}
+::tests
+assert.strictEqual(truncate("Hello world", 20), "Hello world");
+assert.strictEqual(truncate("Hello world", 8), "Hello w…");
+assert.strictEqual(truncate("👍🏽👍🏽👍🏽👍🏽", 3), "👍🏽👍🏽…", "an emoji with a skin tone is one character");
+assert.strictEqual(truncate("café", 4), "café");
+assert.strictEqual(searchKey("  Crème   BRÛLÉE "), "creme brulee");
+assert.strictEqual(searchKey("Ångström"), "angstrom");
+assert.ok(searchKey("Café Noir").includes(searchKey("cafe")));
+::hints
+- `[...segmenter.segment(text)]` gives segment objects; their `.segment` property is the grapheme text.
+- Keep `max - 1` graphemes and add "…" only when the text is longer than `max`.
+- searchKey is a chain: `normalize("NFD")`, remove `/\p{Diacritic}/gu`, `toLowerCase()`, replace `/\s+/g` with " ", `trim()`.
+--- cards
+Regular expression :: A text pattern: /pattern/flags or new RegExp(string, flags).
+\d \w \s . :: Digit, word character, whitespace, any character. Capitals (\D \W \S) mean "not".
+Quantifiers :: * (0+), + (1+), ? (0 or 1), {n}, {n,m}.
+^ and $ :: Anchor the pattern to the start and end, so the whole text must match.
+Groups :: (...) captures; (?<name>...) names it (m.groups.name); (?:...) groups without capturing.
+match / matchAll / replace :: First match (or null) / every match with groups (g) / substitute ($1, $<name>, or a function).
+Flags :: i ignore case, g all matches, m multiline, s dot matches new lines, u Unicode.
+lastIndex pitfall :: A g regex remembers its position between test calls. Don't reuse it for yes/no checks.
+Code units vs graphemes :: "👍🏽".length is 4; [...s] counts code points; Intl.Segmenter counts what users see.
+normalize() :: Makes equivalent Unicode spellings identical; NFD + removing \p{Diacritic} strips accents.
+
+=== lesson js-dates-intl | Dates, times and internationalisation | 80
+## Time is harder than it looks
+
+Dates look simple until you meet time zones, daylight saving time, months of different lengths, leap years and the dozens of ways the world writes "14 October 2026". Most date bugs come from a handful of traps; this lesson shows them and the tools that avoid them.
+
+## The Date object
+
+A `Date` is a single moment in time, stored as the number of **milliseconds since 1 January 1970, 00:00 UTC** (the *Unix epoch*):
+
+```js
+const launch = new Date(Date.UTC(2026, 9, 14, 15, 30));
+console.log(launch.getTime());
+console.log(launch.toISOString());
+console.log(launch.getUTCFullYear(), launch.getUTCMonth(), launch.getUTCDate(), launch.getUTCDay());
+console.log(new Date("2026-10-14T15:30:00Z").getTime() === launch.getTime());
+```
+
+- `Date.now()` is the current time in milliseconds; `new Date()` the current moment as a `Date`.
+- ⚠️ **Months count from 0**: `Date.UTC(2026, 9, 14)` is **October** 14. (Days of the month start at 1; days of the week run from 0 = Sunday.) This catches everyone.
+- `toISOString()` gives the standard, sortable, unambiguous format `2026-10-14T15:30:00.000Z` (the `Z` means UTC). Use it to store and send dates; it's also what `JSON.stringify` produces.
+
+## UTC versus local time
+
+A `Date` has no time zone of its own; it's one instant. But methods like `getHours()` and `toString()` show it in the **computer's local time zone**, which differs between your users (and between your laptop and your server). The `getUTC...` methods use UTC, which is the same everywhere:
+
+- **Store and compute in UTC** (timestamps, ISO strings).
+- **Convert to local time only for display**, ideally with `Intl` (below).
+
+Parsing has a trap too: `new Date("2026-10-14")` (date only) is read as **UTC** midnight, but `new Date("2026-10-14T09:00")` (date and time, no `Z`) as **local** time. Include the `Z` or an offset (`+02:00`) when you mean a specific instant. Invalid input doesn't throw; it gives an "Invalid Date" whose `getTime()` is `NaN`:
+
+```js
+const bad = new Date("next Tuesday");
+console.log(bad.getTime(), Number.isNaN(bad.getTime()), String(bad));
+```
+
+## Date arithmetic
+
+Add time by changing a part of the date; JavaScript rolls over months and years for you. Differences are millisecond subtractions:
+
+```js
+const day = 24 * 60 * 60 * 1000;
+const start = new Date(Date.UTC(2026, 0, 30));
+const later = new Date(start);
+later.setUTCDate(later.getUTCDate() + 5);
+console.log(later.toISOString().slice(0, 10));
+
+const deadline = Date.UTC(2026, 11, 25);
+const today = Date.UTC(2026, 9, 14);
+console.log("Days left:", Math.round((deadline - today) / day));
+
+const jan31 = new Date(Date.UTC(2026, 0, 31));
+jan31.setUTCMonth(1);
+console.log(jan31.toISOString().slice(0, 10));
+```
+
+The last line shows a famous surprise: "January 31 plus one month" asks for February 31, which rolls over to **March 3**. Month arithmetic needs a rule (clamp to the month's last day?) that you must choose. `Date` objects are also **mutable** (`setUTCDate` changes the object), so copy before changing: `new Date(original)`.
+
+Also beware adding `24 * 60 * 60 * 1000` to a **local** date across a daylight-saving change: that day has 23 or 25 hours. Working in UTC avoids it.
+
+~~~check
+? What does `new Date(Date.UTC(2026, 1, 1)).toISOString().slice(0, 10)` give?
+- `2026-01-01`
++ `2026-02-01`
+- `2026-01-02`
+- `2026-02-02`
+> Month 1 is February, because months count from 0.
+~~~
+
+## Formatting for people: Intl.DateTimeFormat
+
+`Intl.DateTimeFormat` turns a date into text for any language and time zone, so you never assemble `"14/10/2026"` by hand:
+
+```js
+const when = new Date(Date.UTC(2026, 9, 14, 15, 5));
+const full = new Intl.DateTimeFormat("en-US", { dateStyle: "full", timeStyle: "short", timeZone: "UTC" });
+console.log(full.format(when));
+console.log(new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeZone: "UTC" }).format(when));
+console.log(new Intl.DateTimeFormat("de-DE", { timeZone: "UTC" }).format(when));
+console.log(new Intl.DateTimeFormat("ja-JP", { dateStyle: "long", timeZone: "Asia/Tokyo" }).format(when));
+console.log(when.toLocaleTimeString("en-US", { timeZone: "America/New_York", hour: "numeric", minute: "2-digit" }));
+```
+
+Options choose the parts (`weekday`, `year`, `month`, `day`, `hour`...) and styles (`"long"`, `"short"`, `"numeric"`), and `timeZone` shows the moment as clocks read it in that place (Tokyo is already on the 15th). In a real app you'd usually leave out `timeZone` and the locale, so each user sees their own; the lessons fix them so everyone gets the same output.
+
+## More of Intl
+
+The `Intl` family handles everything that changes between languages and regions:
+
+```js
+const rtf = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
+console.log(rtf.format(-1, "day"), "|", rtf.format(3, "week"), "|", rtf.format(-2, "hour"));
+
+const ordinal = new Intl.PluralRules("en-US", { type: "ordinal" });
+const suffix = { one: "st", two: "nd", few: "rd", other: "th" };
+console.log([1, 2, 3, 4, 11, 21, 22, 103].map((n) => n + suffix[ordinal.select(n)]).join(" "));
+
+console.log(new Intl.ListFormat("en", { type: "conjunction" }).format(["tea", "coffee", "juice"]));
+console.log(["Zoe", "émile", "adam", "Émilie"].sort(new Intl.Collator("fr").compare));
+console.log(["file10", "file2", "file1"].sort(new Intl.Collator("en", { numeric: true }).compare));
+```
+
+- `RelativeTimeFormat`: "yesterday", "in 3 weeks", "2 hours ago".
+- `PluralRules`: which plural form a number takes. English has two cardinal forms, but Arabic has six and Japanese one, so never hard-code `n === 1 ? "item" : "items"` in an app that will be translated.
+- `ListFormat`: "a, b, and c" with each language's rules.
+- `Collator`: alphabetical sorting that respects accents and languages, and **natural** number order (`file2` before `file10`).
+- `NumberFormat` (Module 2) for numbers, currencies and units.
+
+## The future: Temporal
+
+`Date` has many design problems (mutable objects, 0-based months, no time zones). A modern replacement, **Temporal**, with separate types like `Temporal.PlainDate` and `Temporal.ZonedDateTime`, is arriving in browsers and Node.js. Until it's everywhere, many projects use a small library such as **date-fns** or **Luxon**. The rules above (UTC inside, local for display, ISO for storage) stay the same.
+
+📚 **Go deeper:** MDN, "Date" and "Intl"; javascript.info, "Date and time" and "Intl"; tc39.es/proposal-temporal (the Temporal documentation).
+--- goals
+- create dates from timestamps, `Date.UTC` and ISO strings, remembering 0-based months
+- explain UTC versus local time, and store dates in UTC
+- detect invalid dates, and avoid the date-only versus date-time parsing trap
+- add days and compute differences, knowing about month overflow and daylight saving
+- format dates for any locale and time zone with `Intl.DateTimeFormat`
+- use `RelativeTimeFormat`, `PluralRules`, `ListFormat` and `Collator`
+--- quiz
+? What month is `new Date(Date.UTC(2026, 0, 1))`?
++ January
+- December 2025
+- February
+- Invalid
+> Months count from 0, so 0 is January.
+? Which format is best for storing a date in a database or JSON?
+- `"14/10/2026"`
+- `"Oct 14, 2026 3:05 PM"`
++ An ISO string like `"2026-10-14T15:05:00.000Z"`, or a timestamp
+- The local time as shown to the user
+> ISO 8601 in UTC is unambiguous and sorts correctly as text.
+? What does `new Date("not a date")` do?
+- Throws a SyntaxError
+- Returns `null`
++ Returns an Invalid Date whose `getTime()` is NaN
+- Returns today's date
+> Check with Number.isNaN(date.getTime()).
+? A user in Tokyo and one in London view the same moment. Why do they see different dates?
++ Display converts the instant to each user's time zone
+- Dates are stored differently in each country
+- JavaScript has a bug
+- Tokyo uses a different calendar
+> One instant, different local clocks.
+? Which sorts `["file10", "file2"]` as `["file2", "file10"]`?
+- `.sort()`
++ `.sort(new Intl.Collator("en", { numeric: true }).compare)`
+- `.sort((a, b) => a - b)`
+- `.reverse()`
+> A numeric collator compares digit runs as numbers.
+--- exercise code javascript
+::prompt
+Write three date helpers that work in **UTC** (dates are `"YYYY-MM-DD"` strings in and out):
+
+- `addDays(dateText, n)`: the date `n` days later (or earlier, for negative `n`);
+- `daysBetween(a, b)`: whole days from `a` to `b` (negative if `b` is earlier);
+- `addMonths(dateText, n)`: the same day `n` months later, but **clamped** to the last day of the target month (so `"2026-01-31"` plus one month is `"2026-02-28"`, not March 3).
+::starter
+function addDays(dateText, n) {
+}
+
+function daysBetween(a, b) {
+}
+
+function addMonths(dateText, n) {
+}
+::solution
+const DAY = 24 * 60 * 60 * 1000;
+const parse = (text) => new Date(text + "T00:00:00Z");
+const format = (date) => date.toISOString().slice(0, 10);
+
+function addDays(dateText, n) {
+  const d = parse(dateText);
+  d.setUTCDate(d.getUTCDate() + n);
+  return format(d);
+}
+
+function daysBetween(a, b) {
+  return Math.round((parse(b) - parse(a)) / DAY);
+}
+
+function addMonths(dateText, n) {
+  const d = parse(dateText);
+  const day = d.getUTCDate();
+  const target = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + n, 1));
+  const lastDay = new Date(Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0)).getUTCDate();
+  target.setUTCDate(Math.min(day, lastDay));
+  return format(target);
+}
+::tests
+assert.strictEqual(addDays("2026-02-27", 2), "2026-03-01");
+assert.strictEqual(addDays("2024-02-28", 1), "2024-02-29");
+assert.strictEqual(addDays("2026-01-01", -1), "2025-12-31");
+assert.strictEqual(daysBetween("2026-10-14", "2026-12-25"), 72);
+assert.strictEqual(daysBetween("2026-12-25", "2026-10-14"), -72);
+assert.strictEqual(addMonths("2026-01-31", 1), "2026-02-28");
+assert.strictEqual(addMonths("2024-01-31", 1), "2024-02-29");
+assert.strictEqual(addMonths("2026-10-14", 3), "2027-01-14");
+assert.strictEqual(addMonths("2026-03-31", -1), "2026-02-28");
+::hints
+- Parse with `new Date(text + "T00:00:00Z")` and format with `toISOString().slice(0, 10)`.
+- Day 0 of the next month is the last day of this month: `Date.UTC(year, month + 1, 0)`.
+- addMonths: go to the 1st of the target month, find its last day, then set the day to `Math.min(originalDay, lastDay)`.
+--- exercise code javascript
+::prompt
+Write `timeAgo(date, now)` that describes how long ago `date` was compared to `now` (both `Date` objects), using `Intl.RelativeTimeFormat("en", { numeric: "auto" })`, choosing the biggest sensible unit: seconds under a minute, minutes under an hour, hours under a day, days under a week, weeks under 30 days, months under 365 days, and years otherwise (rounding down). Future dates work too ("in 3 days"). Then write `formatEvent(date, locale, timeZone)` returning the date formatted with `Intl.DateTimeFormat` using `dateStyle: "medium"` and `timeStyle: "short"` in that locale and time zone.
+::starter
+function timeAgo(date, now) {
+}
+
+function formatEvent(date, locale, timeZone) {
+}
+::solution
+const rtf = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
+const UNITS = [
+  ["year", 365 * 86400],
+  ["month", 30 * 86400],
+  ["week", 7 * 86400],
+  ["day", 86400],
+  ["hour", 3600],
+  ["minute", 60],
+];
+
+function timeAgo(date, now) {
+  const seconds = (date - now) / 1000;
+  for (const [unit, size] of UNITS) {
+    if (Math.abs(seconds) >= size) return rtf.format(Math.trunc(seconds / size), unit);
+  }
+  return rtf.format(Math.trunc(seconds), "second");
+}
+
+function formatEvent(date, locale, timeZone) {
+  return new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short", timeZone }).format(date);
+}
+::tests
+const __now = new Date(Date.UTC(2026, 9, 14, 12, 0, 0));
+const __ago = (s) => new Date(__now.getTime() - s * 1000);
+assert.strictEqual(timeAgo(__ago(30), __now), "30 seconds ago");
+assert.strictEqual(timeAgo(__ago(5 * 60), __now), "5 minutes ago");
+assert.strictEqual(timeAgo(__ago(3 * 3600), __now), "3 hours ago");
+assert.strictEqual(timeAgo(__ago(86400), __now), "yesterday");
+assert.strictEqual(timeAgo(__ago(10 * 86400), __now), "last week");
+assert.strictEqual(timeAgo(__ago(60 * 86400), __now), "2 months ago");
+assert.strictEqual(timeAgo(__ago(800 * 86400), __now), "2 years ago");
+assert.strictEqual(timeAgo(__ago(-3 * 86400), __now), "in 3 days");
+assert.strictEqual(formatEvent(__now, "en-US", "UTC").replace(/\s/g, " "), "Oct 14, 2026, 12:00 PM");
+assert.strictEqual(formatEvent(__now, "en-GB", "Asia/Tokyo").replace(/\s/g, " "), "14 Oct 2026, 21:00");
+::hints
+- Work in seconds: `(date - now) / 1000` is negative for the past.
+- Try units from the largest down; the first whose size fits (`Math.abs(seconds) >= size`) wins. `Math.trunc` rounds towards zero.
+- formatEvent: `new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short", timeZone }).format(date)`.
+--- cards
+Date :: One instant: milliseconds since 1970-01-01T00:00Z. Date.now() is now; getTime() reads the number.
+Months from 0 :: Date.UTC(2026, 9, 14) is 14 October. Days of the week: 0 is Sunday.
+toISOString() :: "2026-10-14T15:30:00.000Z": unambiguous, sortable, what JSON uses. Store this (or a timestamp).
+UTC vs local :: getUTC... methods are the same everywhere; getHours() etc. use the computer's time zone.
+Invalid Date :: new Date("nonsense") doesn't throw; check Number.isNaN(d.getTime()).
+Month overflow :: Jan 31 + 1 month = Mar 3 with setMonth. Clamp to the last day yourself.
+Intl.DateTimeFormat :: Formats a date for a locale and time zone: { dateStyle, timeStyle, timeZone }.
+Intl.RelativeTimeFormat / PluralRules / ListFormat / Collator :: "3 days ago" / plural forms / "a, b, and c" / language-aware and numeric sorting.
+
+=== lesson js-security-performance | Security and performance | 90
+## Two things users never see, until they go wrong
+
+Users don't notice security until their data leaks, or performance until the page freezes. Both are part of a professional's job from the first line of code, not an afterthought. This lesson collects the JavaScript-specific essentials.
+
+## Never trust input
+
+Everything that comes from outside your code is **untrusted**: form fields, URL parameters, API responses, uploaded files, even data in your own database (it came from users at some point). Validate it (type, length, format, range) where it **enters** your system, and remember that client-side checks are a convenience: the server must check again.
+
+## Injection: when data becomes code
+
+Most serious vulnerabilities share one cause: **text from a user is treated as code**.
+
+- **XSS** (cross-site scripting): user text inserted as HTML (`innerHTML`) runs as script in other users' browsers. Use `textContent`, or escape HTML when you must build markup:
+
+```js
+function escapeHtml(text) {
+  return text
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+const comment = `<img src=x onerror="alert('hacked')">`;
+console.log(`<p>${escapeHtml(comment)}</p>`);
+```
+
+  Frameworks like React escape text automatically; their escape hatches (`dangerouslySetInnerHTML`) are named to scare you. A **Content Security Policy** (an HTTP header) is a second line of defence: it tells the browser which scripts may run at all.
+- **`eval` and `new Function`** run a string as JavaScript. With any user input involved, that's remote code execution. You'll almost never need them; linters forbid them.
+- **SQL injection**: building a query by gluing in user text (`"... WHERE name = '" + name + "'"`) lets an attacker rewrite the query. Always use **parameterised queries** (`db.query("SELECT * FROM users WHERE name = $1", [name])`), which every database library supports. The same goes for shell commands built from user text.
+
+## Prototype pollution
+
+A JavaScript-specific attack: a "deep merge" or "set by path" function that copies keys from user-supplied JSON can be tricked with the key `__proto__`:
+
+```js
+function naiveMerge(target, source) {
+  for (const key of Object.keys(source)) {
+    if (typeof source[key] === "object" && source[key] !== null) {
+      if (typeof target[key] !== "object" || target[key] === null) target[key] = {};
+      naiveMerge(target[key], source[key]);
+    } else {
+      target[key] = source[key];
+    }
+  }
+  return target;
+}
+const attack = JSON.parse('{"__proto__": {"isAdmin": true}}');
+naiveMerge({}, attack);
+const someone = {};
+console.log(someone.isAdmin);
+```
+
+Writing to `target["__proto__"]` reached `Object.prototype`, so **every object in the program** now has `isAdmin: true`. Defences: skip the keys `__proto__`, `constructor` and `prototype` when copying; use `Map` for user-keyed data; create dictionaries with `Object.create(null)`; validate input against a schema.
+
+~~~check
+? Why is `element.innerHTML = userBio` dangerous?
+- It's slow
++ HTML or script in the bio would be interpreted and could run in other users' browsers (XSS)
+- innerHTML can't show emoji
+- It only works once
+> Treating user text as markup is the root of XSS. Use textContent.
+~~~
+
+## Secrets and dependencies
+
+- **Never put secrets in code** (API keys, database passwords): not in front-end JavaScript (anyone can read it in the browser), and not in a Git repository (history keeps them forever, and bots scan GitHub for keys within minutes). Keep them in **environment variables** (`process.env.API_KEY`), loaded from a `.env` file that's listed in `.gitignore`, and in your hosting platform's secret settings.
+- **Dependencies are code you run.** Prefer few, well-maintained packages; run `npm audit`; update regularly; review what a new package pulls in (Module 11).
+- **Use HTTPS everywhere**, set cookies with `HttpOnly`, `Secure` and `SameSite`, and never store passwords: servers store **hashes** made with a slow password-hashing function (bcrypt, scrypt, Argon2), never plain text or a fast hash.
+
+The OWASP Top 10 (owasp.org) lists the most common web security risks; every web developer should read it once.
+
+## Performance: measure first
+
+The first rule of performance: **don't guess, measure.** Programmers are famously bad at predicting which part of their code is slow.
+
+```js
+function time(label, fn) {
+  const start = performance.now();
+  const result = fn();
+  console.log(label, `${(performance.now() - start).toFixed(1)} ms`);
+  return result;
+}
+const ids = Array.from({ length: 20000 }, (_, i) => i * 7);
+const lookups = Array.from({ length: 20000 }, (_, i) => i * 3);
+time("array includes", () => lookups.filter((x) => ids.includes(x)).length);
+const idSet = new Set(ids);
+time("Set has       ", () => lookups.filter((x) => idSet.has(x)).length);
+```
+
+`performance.now()` gives high-resolution milliseconds; `console.time(label)` / `console.timeEnd(label)` is a shortcut. In the browser, the developer tools' **Performance** panel records exactly where time goes, and **Lighthouse** audits a whole page's loading speed.
+
+The example shows the most common real-world speed-up: the `includes` inside `filter` is a loop inside a loop (O(n²): 400 million comparisons); a `Set` makes each lookup instant (O(n) in total). **Choosing the right data structure** beats every micro-optimisation.
+
+## Common performance wins
+
+- **Avoid repeated work**: compute once outside the loop, cache (memoize) pure functions, build lookup Maps instead of searching arrays repeatedly.
+- **Batch DOM changes**: build elements first and insert them in one `append(...)` or `replaceChildren(...)`; avoid reading layout (`offsetHeight`) and writing styles alternately in a loop ("layout thrashing").
+- **Do less on rapid events**: debounce input, throttle scroll (Module 10).
+- **Keep the main thread free**: move heavy computation to a **Web Worker** (DevQuest runs your code in one), split long tasks, and stream large data instead of loading it whole.
+- **Load less**: lazy-load images (`<img loading="lazy">`) and rarely used code (`import()`), and keep an eye on bundle size.
+- **Avoid memory leaks**: remove event listeners and clear intervals you no longer need; don't let caches grow forever (limit their size, or use `WeakMap` keyed by objects that may disappear).
+
+And the counterweight: **premature optimisation** makes code harder to read for no measurable gain. Write clear code first, measure, then optimise the part that matters.
+
+📚 **Go deeper:** OWASP Top 10 and the OWASP Cheat Sheet Series (cheatsheetseries.owasp.org), especially "Cross Site Scripting Prevention"; MDN, "Content Security Policy" and "Web performance"; web.dev, "Learn Performance".
+--- goals
+- validate untrusted input at the boundary, and repeat validation on the server
+- prevent XSS, `eval` injection and SQL injection
+- recognise and prevent prototype pollution
+- keep secrets out of code and repositories, and manage dependency risk
+- measure performance with `performance.now` and browser tools before optimising
+- fix common performance problems: wrong data structures, repeated work, DOM thrashing, blocking the main thread, memory leaks
+--- quiz
+? What's the safe way to run a database query with a name typed by a user?
+- `"SELECT * FROM users WHERE name = '" + name + "'"`
++ A parameterised query: `db.query("SELECT * FROM users WHERE name = $1", [name])`
+- Escape quotes with `replaceAll("'", "")`
+- Run it in a try/catch
+> Parameters keep data separate from the query's code.
+? Where should a secret API key used by a Node.js server live?
+- In a `const` in the source code
+- In the front-end JavaScript
++ In an environment variable (from a `.env` file that isn't committed, or the host's secret settings)
+- In a public GitHub repository, if it's private enough
+> Secrets in code end up in Git history and browsers.
+? What does prototype pollution change?
+- One object's prototype only
++ `Object.prototype`, so every object in the program inherits the injected property
+- The prototype of arrays only
+- Nothing; it's harmless
+> Writing through __proto__ reaches the shared prototype of all objects.
+? A page is slow. What should you do first?
++ Measure where the time goes (Performance panel, `performance.now`)
+- Rewrite the code in a faster style
+- Remove all comments
+- Add more caching everywhere
+> Optimise the measured bottleneck, not a guessed one.
+? A loop checks `bigArray.includes(x)` for each of 50,000 items. What's the usual fix?
+- Use a `for` loop instead of `filter`
++ Put the array's items in a `Set` once, and use `set.has(x)`
+- Sort the array first, then use includes
+- Use `indexOf` instead
+> Set lookups are constant time, turning O(n²) into O(n).
+--- exercise code javascript
+::prompt
+Write `safeMerge(target, source)` that deep-merges plain objects like the naive version in the lesson, but is **immune to prototype pollution**: it must skip the keys `__proto__`, `constructor` and `prototype` at every level, and only recurse into plain objects (arrays are copied as they are). It returns `target`.
+::starter
+function safeMerge(target, source) {
+}
+::solution
+const FORBIDDEN = new Set(["__proto__", "constructor", "prototype"]);
+const isPlainObject = (v) => typeof v === "object" && v !== null && !Array.isArray(v);
+
+function safeMerge(target, source) {
+  for (const key of Object.keys(source)) {
+    if (FORBIDDEN.has(key)) continue;
+    const value = source[key];
+    if (isPlainObject(value)) {
+      if (!isPlainObject(target[key]) || !Object.hasOwn(target, key)) target[key] = {};
+      safeMerge(target[key], value);
+    } else {
+      target[key] = value;
+    }
+  }
+  return target;
+}
+::tests
+const __cfg = safeMerge({ ui: { theme: "light", size: 12 }, tags: ["a"] }, { ui: { theme: "dark" }, tags: ["b", "c"], debug: true });
+assert.deepStrictEqual(__cfg, { ui: { theme: "dark", size: 12 }, tags: ["b", "c"], debug: true });
+safeMerge({}, JSON.parse('{"__proto__": {"polluted": true}}'));
+safeMerge({}, JSON.parse('{"a": {"__proto__": {"polluted": true}}}'));
+safeMerge({}, JSON.parse('{"constructor": {"prototype": {"polluted": true}}}'));
+assert.strictEqual({}.polluted, undefined, "Object.prototype must not be polluted");
+assert.strictEqual(Object.prototype.polluted, undefined);
+::hints
+- Skip forbidden keys with a `Set` and `continue`.
+- Recurse only when the source value is a plain object (not null, not an array).
+- Make sure `target[key]` is an own plain object before recursing into it; otherwise create a fresh `{}`.
+--- exercise code javascript
+::prompt
+This function finds which customer ids appear in **both** lists. It's correct but far too slow for large lists (a loop inside a loop). Rewrite `commonIds(a, b)` to run in linear time with a `Set`, returning the common ids in the order they appear in `a`, without duplicates. The checks time it with 100,000 ids in each list.
+::starter
+function commonIds(a, b) {
+  const result = [];
+  for (const id of a) {
+    if (b.includes(id) && !result.includes(id)) result.push(id);
+  }
+  return result;
+}
+::solution
+function commonIds(a, b) {
+  const inB = new Set(b);
+  const seen = new Set();
+  const result = [];
+  for (const id of a) {
+    if (inB.has(id) && !seen.has(id)) {
+      seen.add(id);
+      result.push(id);
+    }
+  }
+  return result;
+}
+::tests
+assert.deepStrictEqual(commonIds([3, 1, 2, 3, 5], [5, 3, 9]), [3, 5]);
+assert.deepStrictEqual(commonIds([], [1]), []);
+const __a = Array.from({ length: 100000 }, (_, i) => i * 2);
+const __b = Array.from({ length: 100000 }, (_, i) => i * 3);
+const __t = performance.now();
+const __r = commonIds(__a, __b);
+const __ms = performance.now() - __t;
+assert.strictEqual(__r.length, 33334);
+assert.strictEqual(__r[1], 6);
+assert.ok(__ms < 300, `commonIds took ${Math.round(__ms)} ms for 100,000 ids; it should be well under 300 ms`);
+::hints
+- Turn `b` into a `Set` once: `const inB = new Set(b);`.
+- A second `Set` remembers which ids you've already added, replacing `result.includes`.
+--- cards
+Untrusted input :: Anything from outside your code (forms, URLs, APIs, files). Validate where it enters; servers re-validate.
+XSS :: User text treated as HTML/script. Use textContent, escape HTML, add a Content Security Policy.
+SQL injection :: Gluing user text into queries. Always use parameterised queries.
+eval / new Function :: Run strings as code. Avoid, especially with any user input.
+Prototype pollution :: Writing to __proto__ via merges of user JSON changes every object. Skip __proto__/constructor/prototype.
+Secrets :: Environment variables and .env (git-ignored), never in code, repositories or front-end JS.
+Measure first :: performance.now(), console.time, the Performance panel and Lighthouse before optimising.
+Performance wins :: Right data structure (Set/Map), avoid repeated work, batch DOM updates, workers, lazy loading.
+
+=== lesson js-ts | TypeScript: JavaScript with types | 85
+## The bugs JavaScript lets through
+
+Many of the bugs in this course were **type** bugs: a string where a number was expected (`"5" + 3`), a misspelt property that quietly gave `undefined`, a function called with the wrong arguments, a possibly-`null` value used as if it were always there. JavaScript only discovers these when the code runs, and often silently.
+
+**TypeScript** is JavaScript with **type annotations** checked by a compiler *before* the code runs. Every JavaScript program is valid TypeScript; you add types where they help. The compiler (`tsc`) checks them, then **removes them**, producing ordinary JavaScript. Most professional JavaScript today is written in TypeScript: it's the default in Angular, recommended for React, Vue and Node projects, and used by VS Code itself.
+
+```ts
+function totalPrice(items: { price: number; qty: number }[], taxRate: number): number {
+  return items.reduce((sum, item) => sum + item.price * item.qty, 0) * (1 + taxRate);
+}
+console.log(totalPrice([{ price: 10, qty: 2 }], 0.2));
+```
+
+With this, `totalPrice([{ price: "10", qty: 2 }], 0.2)` or `totalPrice(items)` (missing argument) are **compile errors**, shown as red squiggles in your editor before you ever run anything, and `item.prcie` is an error instead of `undefined`. (DevQuest runs TypeScript by removing the types, so it doesn't report type errors itself; the TypeScript course adds a real type checker. Install TypeScript locally to see them: `npm install --save-dev typescript` and `npx tsc`.)
+
+## Basic types and inference
+
+```ts
+let title: string = "DevQuest";
+let level: number = 3;
+let done: boolean = false;
+let tags: string[] = ["js", "ts"];
+let point: [number, number] = [3, 4];
+let anything: unknown = JSON.parse('{"a": 1}');
+
+let score = 10;
+const name = "Ada";
+console.log(title, level, done, tags, point, anything, score, name);
+```
+
+You rarely need to write types for variables: TypeScript **infers** them from the value (`score` is a `number`, so `score = "ten"` is an error). Annotate function **parameters** and public APIs; let inference do the rest.
+
+Prefer `unknown` over `any` for values you don't know yet (like parsed JSON): `any` switches type checking off, while `unknown` forces you to check the value before using it.
+
+## Describing objects: type and interface
+
+```ts
+type User = {
+  id: number;
+  name: string;
+  email?: string;
+  readonly createdAt: string;
+};
+
+interface Product {
+  sku: string;
+  price: number;
+}
+
+function describe(user: User): string {
+  return `${user.name} <${user.email ?? "no email"}>`;
+}
+console.log(describe({ id: 1, name: "Ada", createdAt: "2026-10-14" }));
+```
+
+`?` marks an optional property; `readonly` one that can't be reassigned. `type` and `interface` are mostly interchangeable for objects (interfaces can be extended and merged; `type` can also name unions and other types). Teams pick one style.
+
+## Unions and narrowing
+
+A **union** type says a value is one of several types. TypeScript then makes you **narrow** it (check which one it is) before using type-specific features:
+
+```ts
+type Shape =
+  | { kind: "circle"; r: number }
+  | { kind: "rect"; w: number; h: number };
+
+function area(shape: Shape): number {
+  switch (shape.kind) {
+    case "circle":
+      return Math.PI * shape.r ** 2;
+    case "rect":
+      return shape.w * shape.h;
+  }
+}
+
+function label(id: string | number): string {
+  return typeof id === "number" ? `#${id.toFixed(0)}` : id.toUpperCase();
+}
+
+console.log(area({ kind: "rect", w: 2, h: 3 }).toFixed(1), label(7), label("ab"));
+```
+
+The `kind` property makes `Shape` a **discriminated union**: inside `case "circle"`, TypeScript knows `shape.r` exists. Add a new shape kind and forget a case, and the compiler tells you. That's the "replace conditionals" lesson from Module 9, checked by the computer. Literal types like `"circle"` and unions like `"small" | "medium" | "large"` replace error-prone magic strings.
+
+`strictNullChecks` (part of `"strict": true`, which every project should enable) makes `null` and `undefined` their own types, so "Cannot read properties of undefined" becomes a compile-time error unless you've checked first.
+
+## Generics: types with parameters
+
+Some functions work for **any** type, but should keep track of **which** one:
+
+```ts
+function first<T>(items: T[]): T | undefined {
+  return items[0];
+}
+function groupBy<T, K extends string>(items: T[], key: (item: T) => K): Record<K, T[]> {
+  const groups = {} as Record<K, T[]>;
+  for (const item of items) (groups[key(item)] ??= []).push(item);
+  return groups;
+}
+const n = first([3, 1, 2]);
+const s = first(["a", "b"]);
+console.log(n, s, groupBy([1, 2, 3, 4], (x) => (x % 2 ? "odd" : "even")));
+```
+
+`T` is a **type parameter**: `first([3, 1, 2])` returns a `number | undefined`, `first(["a"])` a `string | undefined`. `Array<T>`, `Promise<T>`, `Map<K, V>` are all generic types you've been using.
+
+## Types and classes
+
+```ts
+class Account {
+  private balance = 0;
+
+  constructor(public readonly owner: string) {}
+
+  deposit(amount: number): number {
+    if (amount <= 0) throw new RangeError("Deposits must be positive");
+    this.balance += amount;
+    return this.balance;
+  }
+}
+const acc = new Account("Ada");
+console.log(acc.owner, acc.deposit(50));
+```
+
+`public readonly owner` in the constructor's parameters declares and assigns a property in one go. TypeScript's `private` is checked only at compile time; JavaScript's `#private` (Module 8) is enforced at runtime too. Classes can `implements` an interface, making the "interfaces by agreement" from Module 9 checked.
+
+## Using TypeScript in a project
+
+- `npm install --save-dev typescript`, then `npx tsc --init` creates `tsconfig.json`; turn on `"strict": true`.
+- `npx tsc` type-checks and compiles; `npx tsc --noEmit` only checks (common when a bundler like Vite or a runtime strips the types itself). Node.js 22.6+ can run `.ts` files directly by stripping types, like DevQuest does.
+- Libraries ship type definitions (or have them in `@types/...` packages), giving you autocomplete and checks for code you didn't write.
+- Types describe your code; they don't validate data at runtime. Data from outside (JSON, forms) still needs runtime checks (libraries like Zod do both at once).
+
+The TypeScript course in DevQuest goes much deeper: advanced types, utility types, type-level programming and real projects.
+
+📚 **Go deeper:** the TypeScript Handbook (typescriptlang.org/docs); Boris Cherny, *Programming TypeScript*; MDN, "TypeScript" (glossary).
+--- goals
+- explain what TypeScript checks, and that types are removed before the code runs
+- annotate variables, parameters and return values, and rely on inference
+- describe objects with `type` and `interface`, including optional and readonly properties
+- use union types, literal types and narrowing, including discriminated unions
+- write simple generic functions
+- set up TypeScript in a project with `tsconfig.json` and `strict` mode
+--- quiz
+? What happens to type annotations when TypeScript code runs?
+- The browser checks them
++ They're removed; only plain JavaScript runs
+- They're converted into runtime checks
+- They make the code faster
+> Types exist only for the compiler; the output is JavaScript.
+? Which is the better type for the result of `JSON.parse` before you've checked it?
+- `any`
++ `unknown`
+- `object`
+- `string`
+> unknown forces you to narrow the value before using it; any disables checking.
+? `function f(x: string | number)`. Which check lets you call `x.toUpperCase()`?
++ `if (typeof x === "string")`
+- `if (x)`
+- `if (x !== null)`
+- `if (x.length)`
+> typeof narrows the union to string inside the if.
+? What does `email?: string` mean in a type?
+- The email must be a string or null
++ The property is optional: it may be missing (undefined)
+- The email is private
+- The email can be any type
+> ? marks optional properties.
+? Why are discriminated unions (a `kind` property) useful?
+- They make objects smaller
++ TypeScript narrows the type in each `case`, and can tell you when a case is missing
+- They are required for classes
+- They replace functions
+> One literal property identifies which variant you have.
+? What does `strict: true` in tsconfig.json do?
+- Runs the code in strict mode only
++ Turns on the strictest checks, including treating null and undefined as separate types
+- Disallows JavaScript files
+- Makes all properties readonly
+> Every new project should enable it.
+--- exercise code typescript
+::prompt
+Write typed functions for a small library catalogue. Define `type Book = { title: string; author: string; year: number; tags?: string[] }` and write:
+
+- `byAuthor(books: Book[], author: string): Book[]` (case-insensitive match);
+- `newest(books: Book[]): Book | undefined` (the book with the highest year);
+- `tagCounts(books: Book[]): Record<string, number>` (how many books have each tag; books without tags are skipped).
+::starter
+type Book = { title: string; author: string; year: number; tags?: string[] };
+
+function byAuthor(books: Book[], author: string): Book[] {
+  return [];
+}
+
+function newest(books: Book[]): Book | undefined {
+  return undefined;
+}
+
+function tagCounts(books: Book[]): Record<string, number> {
+  return {};
+}
+::solution
+type Book = { title: string; author: string; year: number; tags?: string[] };
+
+function byAuthor(books: Book[], author: string): Book[] {
+  return books.filter((b) => b.author.toLowerCase() === author.toLowerCase());
+}
+
+function newest(books: Book[]): Book | undefined {
+  return books.reduce<Book | undefined>((best, b) => (best === undefined || b.year > best.year ? b : best), undefined);
+}
+
+function tagCounts(books: Book[]): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const book of books) {
+    for (const tag of book.tags ?? []) counts[tag] = (counts[tag] ?? 0) + 1;
+  }
+  return counts;
+}
+::tests
+const __books: Book[] = [
+  { title: "Dune", author: "Frank Herbert", year: 1965, tags: ["sci-fi", "classic"] },
+  { title: "Emma", author: "Jane Austen", year: 1815, tags: ["classic"] },
+  { title: "Children of Dune", author: "Frank Herbert", year: 1976 },
+];
+assert.deepStrictEqual(byAuthor(__books, "frank herbert").map((b) => b.title), ["Dune", "Children of Dune"]);
+assert.strictEqual(newest(__books)?.title, "Children of Dune");
+assert.strictEqual(newest([]), undefined);
+assert.deepStrictEqual(tagCounts(__books), { "sci-fi": 1, classic: 2 });
+::hints
+- `filter` with both names lowercased.
+- `reduce` keeping the best book so far; start from `undefined` (give reduce the type `<Book | undefined>`).
+- `book.tags ?? []` handles books without tags.
+--- exercise code typescript
+::prompt
+Model payment results as a **discriminated union** and handle every case:
+
+```ts
+type Payment =
+  | { status: "paid"; amount: number; at: string }
+  | { status: "failed"; reason: string }
+  | { status: "pending" };
+```
+
+Write `describePayment(p: Payment): string` returning `"Paid $12.50 on 2026-10-14"` (two decimals), `"Failed: <reason>"` or `"Waiting for the bank..."`, using a `switch` on `status`. Then write a generic `latest<T extends { at: string }>(items: T[]): T | undefined` that returns the item with the greatest `at` (ISO date strings compare correctly as text).
+::starter
+type Payment =
+  | { status: "paid"; amount: number; at: string }
+  | { status: "failed"; reason: string }
+  | { status: "pending" };
+
+function describePayment(p: Payment): string {
+  return "";
+}
+
+function latest<T extends { at: string }>(items: T[]): T | undefined {
+  return undefined;
+}
+::solution
+type Payment =
+  | { status: "paid"; amount: number; at: string }
+  | { status: "failed"; reason: string }
+  | { status: "pending" };
+
+function describePayment(p: Payment): string {
+  switch (p.status) {
+    case "paid":
+      return `Paid $${p.amount.toFixed(2)} on ${p.at}`;
+    case "failed":
+      return `Failed: ${p.reason}`;
+    case "pending":
+      return "Waiting for the bank...";
+  }
+}
+
+function latest<T extends { at: string }>(items: T[]): T | undefined {
+  let best: T | undefined;
+  for (const item of items) {
+    if (best === undefined || item.at > best.at) best = item;
+  }
+  return best;
+}
+::tests
+assert.strictEqual(describePayment({ status: "paid", amount: 12.5, at: "2026-10-14" }), "Paid $12.50 on 2026-10-14");
+assert.strictEqual(describePayment({ status: "failed", reason: "card declined" }), "Failed: card declined");
+assert.strictEqual(describePayment({ status: "pending" }), "Waiting for the bank...");
+const __events = [{ at: "2026-01-05", id: 1 }, { at: "2026-03-01", id: 2 }, { at: "2025-12-31", id: 3 }];
+assert.strictEqual(latest(__events)?.id, 2);
+assert.strictEqual(latest([]), undefined);
+::hints
+- In each `case`, TypeScript knows which variant `p` is, so `p.amount` or `p.reason` are available.
+- For `latest`, keep the best item so far and compare the `at` strings with `>`.
+--- cards
+TypeScript :: JavaScript plus type annotations checked by a compiler (tsc) before running; types are then removed.
+Type inference :: TS works out types from values: let n = 5 is a number. Annotate parameters and public APIs.
+unknown vs any :: unknown must be checked before use; any turns checking off. Prefer unknown.
+type / interface :: Name object shapes: { id: number; email?: string; readonly createdAt: string }.
+Union and narrowing :: string | number; check with typeof, ===, in or a kind property to use one branch.
+Discriminated union :: Variants share a literal property (kind/status) so switch statements narrow, and missing cases are reported.
+Generics :: function first<T>(items: T[]): T | undefined keeps track of the element type.
+strict mode (tsconfig) :: "strict": true enables strict null checks and the other safety checks. Always turn it on.
+
+=== lesson js-tooling | Tools of a professional JavaScript developer | 80
+## More than a language
+
+Knowing JavaScript is half the job. The other half is the **toolchain** professionals use to write, check, test, build and ship it. You don't need to master every tool now, but you should recognise them, know what problem each solves, and be able to set up a modern project.
+
+## Starting a project
+
+```
+npm create vite@latest my-app
+cd my-app
+npm install
+npm run dev
+```
+
+**Vite** creates a ready-made project (plain JavaScript, TypeScript, React, Vue, Svelte...), and runs a **dev server** that reloads the page the instant you save a file. `npm run build` produces an optimised version for production: a **bundler** combines your modules, removes unused code ("tree shaking"), minifies it and adds content hashes to file names for caching. DevQuest itself is built with Vite.
+
+## Formatting and linting
+
+- **Prettier** formats code automatically (indentation, quotes, line breaks), so nobody argues about style and diffs only show real changes. Editors run it on save.
+- **ESLint** finds likely bugs and bad patterns: unused variables, `==` instead of `===`, a missing `await`, unreachable code, a `React` hook used wrongly. Rules can be errors (block CI) or warnings.
+
+```
+npm install --save-dev prettier eslint @eslint/js
+npx prettier --write .
+npx eslint .
+```
+
+Together they turn whole categories of code review comments into automatic checks.
+
+## Environment configuration
+
+Configuration that differs between your laptop, the test server and production (API URLs, keys, feature flags) goes in **environment variables**, not in code:
+
+```
+# .env  (listed in .gitignore, never committed)
+API_URL=https://api.example.com
+API_KEY=sk_test_123
+```
+
+Node reads them as `process.env.API_KEY` (Node 20.6+ can load a `.env` file with `node --env-file=.env app.js`); Vite exposes `VITE_...` variables to the browser code as `import.meta.env.VITE_API_URL` (anything sent to the browser is public!). Commit a `.env.example` with the names but fake values, so others know what to set.
+
+## Testing at every level
+
+| Level | Tests | Typical tools |
+|---|---|---|
+| **Unit** | single functions and classes, in isolation | Vitest, Jest, `node:test` |
+| **Integration** | several parts together: API + database, component + store | the same runners, plus test databases |
+| **End-to-end (E2E)** | the real app in a real browser, like a user | Playwright, Cypress |
+
+Many fast unit tests, fewer integration tests, a handful of slow E2E tests for critical journeys (sign-up, checkout): the **testing pyramid**.
+
+## Continuous integration
+
+**CI** runs your checks automatically on every push and pull request, so broken code never reaches the main branch. With GitHub Actions, it's a file in your repository, `.github/workflows/ci.yml`:
+
+```
+name: CI
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npx eslint .
+      - run: npm test
+      - run: npm run build
+```
+
+Teams add **pre-commit hooks** (Husky with lint-staged) to run formatting and linting before each commit, and **deployment** steps that publish the app when the main branch passes.
+
+## Debugging and source maps
+
+Bundled, minified code is unreadable, but **source maps** link it back to your original files, so the browser's debugger and error stack traces show your real code and line numbers. Error-monitoring services (Sentry, for example) use them to report production crashes with the exact line.
+
+## The wider ecosystem
+
+You'll meet these names constantly; here's what they are:
+
+- **Front-end frameworks**: React (most used), Vue, Svelte, Angular, Solid. Full-stack frameworks built on them: Next.js, Nuxt, SvelteKit, Remix. They all apply the "render from state" idea of Module 11.
+- **Back end on Node**: Express (minimal, classic), Fastify (fast), NestJS (structured, Angular-like); ORMs and query builders such as Prisma and Drizzle to talk to databases.
+- **Other runtimes**: Deno and Bun run JavaScript and TypeScript like Node, with built-in tooling.
+- **Mobile and desktop**: React Native and Capacitor (mobile), Electron and Tauri (desktop). DevQuest uses Electron and Capacitor.
+- **Hosting**: static sites on GitHub Pages, Netlify, Vercel or Cloudflare Pages; Node servers on platforms such as Render or Fly.io, or in containers (Docker) on any cloud.
+
+The DevQuest career paths (Frontend, Full-Stack, Backend) take these further.
+
+## A professional workflow, end to end
+
+1. Create a branch for a change.
+2. Write a test that describes the new behaviour (or the bug).
+3. Write the code; the editor formats and lints as you type; TypeScript checks types.
+4. Run the tests locally; commit (hooks run); push.
+5. Open a pull request; CI runs lint, type checks, tests and a build; colleagues review.
+6. Merge; CI deploys; monitoring watches for errors.
+
+Every tool on this page exists to make one of those steps faster or safer.
+
+📚 **Go deeper:** Vite documentation ("Getting Started"); ESLint "Getting Started"; Prettier "Install"; GitHub Docs, "Building and testing Node.js"; Playwright documentation, "Writing tests"; the DevQuest Git and DevOps tracks.
+--- goals
+- create and run a project with Vite, and explain bundling and tree shaking
+- explain what Prettier and ESLint each do, and run them
+- keep configuration in environment variables and `.env` files that aren't committed
+- describe unit, integration and end-to-end tests and the testing pyramid
+- read a CI workflow that installs, lints, tests and builds on every push
+- name the main frameworks, runtimes and hosting options in the JavaScript ecosystem
+--- quiz
+? What is the difference between Prettier and ESLint?
++ Prettier formats code's appearance; ESLint finds likely bugs and bad patterns
+- They do the same thing
+- ESLint formats; Prettier finds bugs
+- Prettier is for TypeScript only
+> Formatting versus correctness rules; teams use both.
+? What does a bundler's "tree shaking" do?
+- Sorts the files alphabetically
++ Removes code that's never imported or used from the production build
+- Shakes out syntax errors
+- Translates TypeScript to Java
+> Smaller downloads: only what's used is shipped.
+? Which kind of test checks the real app in a real browser, like a user?
+- Unit test
+- Integration test
++ End-to-end test
+- Lint check
+> E2E tools such as Playwright drive a browser.
+? Where should `API_KEY=...` for local development live?
+- In the source code
+- In package.json
++ In a `.env` file listed in `.gitignore`
+- In a public README
+> Environment files keep configuration and secrets out of the repository.
+? What does CI do on every push?
+- Deploys straight to production without checks
++ Runs the project's checks (install, lint, tests, build) automatically and reports failures
+- Formats the developer's computer
+- Writes the tests
+> Continuous integration keeps the main branch working.
+--- exercise code javascript
+::prompt
+Write `parseEnv(text)` that parses a `.env` file into an object, like the `dotenv` package does (simplified):
+
+- each line is `KEY=value`; keys are letters, digits and underscores; spaces around the key and the `=` are ignored;
+- empty lines and lines starting with `#` are skipped;
+- a value may be wrapped in single or double quotes, which are removed (and inside double quotes, `\n` becomes a real new line);
+- an unquoted value ends at a ` #` comment, and is trimmed;
+- a line that isn't a valid assignment throws an `Error` with the message `Invalid line <n>` (lines counted from 1).
+::starter
+function parseEnv(text) {
+}
+::solution
+function parseEnv(text) {
+  const env = {};
+  text.split("\n").forEach((raw, i) => {
+    const line = raw.trim();
+    if (line === "" || line.startsWith("#")) return;
+    const m = line.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/);
+    if (!m) throw new Error(`Invalid line ${i + 1}`);
+    let value = m[2];
+    if (value.startsWith('"') && value.endsWith('"') && value.length >= 2) {
+      value = value.slice(1, -1).replaceAll("\\n", "\n");
+    } else if (value.startsWith("'") && value.endsWith("'") && value.length >= 2) {
+      value = value.slice(1, -1);
+    } else {
+      value = value.split(" #")[0].trim();
+    }
+    env[m[1]] = value;
+  });
+  return env;
+}
+::tests
+const __env = parseEnv(`# settings
+API_URL=https://api.example.com
+PORT = 8080   # the port
+
+DEBUG=true
+GREETING="Hello\\nWorld"
+NAME='Ada Lovelace'
+EMPTY=`);
+assert.deepStrictEqual(__env, { API_URL: "https://api.example.com", PORT: "8080", DEBUG: "true", GREETING: "Hello\nWorld", NAME: "Ada Lovelace", EMPTY: "" });
+assert.throws(() => parseEnv("GOOD=1\nthis is wrong"), { message: "Invalid line 2" });
+assert.throws(() => parseEnv("1BAD=x"), /Invalid line 1/);
+assert.deepStrictEqual(parseEnv(""), {});
+::hints
+- Split into lines and trim; skip blanks and comments.
+- One regex for `KEY = value`: `/^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/`.
+- Then handle the three kinds of value: double-quoted (convert `\n`), single-quoted, and unquoted (cut at " #", trim).
+--- exercise code javascript
+::prompt
+Write a tiny **linter**: `lint(source)` takes JavaScript source code as text and returns an array of problems `{ line, rule, message }`, in line order, for these rules (checked line by line with regular expressions; it doesn't need to understand strings or comments):
+
+- `no-var`: a line declaring a variable with `var ` → message `Use let or const instead of var`;
+- `eqeqeq`: `==` or `!=` that isn't part of `===` / `!==` → message `Use === and !== instead of == and !=`;
+- `no-console`: a call to `console.log(` → message `Remove console.log before committing`;
+- `max-len`: a line longer than 100 characters → message `Line is longer than 100 characters`.
+
+A line can have several problems; list them in the rule order above.
+::starter
+function lint(source) {
+}
+::solution
+const RULES = [
+  ["no-var", /\bvar\s/, "Use let or const instead of var"],
+  ["eqeqeq", /(?<![=!])[=!]=(?!=)/, "Use === and !== instead of == and !="],
+  ["no-console", /\bconsole\.log\(/, "Remove console.log before committing"],
+];
+
+function lint(source) {
+  const problems = [];
+  source.split("\n").forEach((text, i) => {
+    for (const [rule, re, message] of RULES) {
+      if (re.test(text)) problems.push({ line: i + 1, rule, message });
+    }
+    if (text.length > 100) problems.push({ line: i + 1, rule: "max-len", message: "Line is longer than 100 characters" });
+  });
+  return problems;
+}
+::tests
+const __src = [
+  "var total = 0;",
+  "if (total == 0) console.log('zero');",
+  "if (a === b && c !== d) {}",
+  "const x = y != null;",
+  "const long = '" + "x".repeat(100) + "';",
+  "let ok = a <= b && b >= c;",
+].join("\n");
+assert.deepStrictEqual(lint(__src), [
+  { line: 1, rule: "no-var", message: "Use let or const instead of var" },
+  { line: 2, rule: "eqeqeq", message: "Use === and !== instead of == and !=" },
+  { line: 2, rule: "no-console", message: "Remove console.log before committing" },
+  { line: 4, rule: "eqeqeq", message: "Use === and !== instead of == and !=" },
+  { line: 5, rule: "max-len", message: "Line is longer than 100 characters" },
+]);
+assert.deepStrictEqual(lint("const variable = 1;"), [], "a name containing 'var' isn't a var declaration");
+::hints
+- Keep the rules in an array of `[name, regex, message]` and test each line against each rule.
+- `\bvar\s` finds the keyword but not words like `variable`.
+- For `==`/`!=`: a lookbehind and lookahead exclude `===`, `!==` and also `<=`/`>=`: `/(?<![=!])[=!]=(?!=)/`.
+--- cards
+Vite :: Creates projects (npm create vite@latest), runs a fast dev server, and bundles for production.
+Bundler :: Combines modules into optimised files: tree shaking, minification, hashed names. (Vite, esbuild, webpack.)
+Prettier / ESLint :: Automatic formatting / automatic detection of likely bugs and bad patterns.
+.env :: Local configuration and secrets as KEY=value, git-ignored; read with process.env.KEY.
+Testing pyramid :: Many unit tests, some integration tests, few end-to-end tests (Playwright).
+CI :: Automated checks (install, lint, test, build) on every push and pull request, e.g. GitHub Actions.
+Source maps :: Map bundled code back to your source files for debugging and error reports.
+
+=== lesson js-m12-test | Module 12 test | 200 | exam
+This test covers Module 12: functional programming, regular expressions and Unicode, dates and `Intl`, security and performance, TypeScript and the professional toolchain.
+
+Before you start, check that you can:
+
+- write pure functions, pipelines and immutable updates;
+- write and debug regular expressions with groups, flags and lookarounds;
+- handle dates in UTC and format them with `Intl`;
+- recognise XSS, injection and prototype pollution, and fix slow code by measuring first;
+- read and write basic TypeScript types, unions and generics;
+- describe what each tool in a modern project does.
+
+## Practise more
+
+- Code Dojo: every JavaScript challenge; try them again with TypeScript types.
+--- goals
+- write clean, functional, well-typed JavaScript
+- process text and dates correctly for any language
+- keep code secure and fast, using professional tools
+--- quiz
+? What does `pipe(trim, toUpper)("  hi ")` give with obvious definitions?
++ `"HI"`
+- `"  HI "`
+- `"hi"`
+- An error
+> trim first, then uppercase.
+? What does `"a-1 b-22".match(/(\w)-(\d+)/g)` return?
+- `[["a", "1"], ["b", "22"]]`
++ `["a-1", "b-22"]`
+- `["a", "1"]`
+- `null`
+> With g, match returns the matched texts without groups; use matchAll for groups.
+? Which is the most reliable way to store "14 October 2026, 15:30 in London"?
+- `"14/10/2026 15:30"`
++ `"2026-10-14T14:30:00Z"` (the instant in UTC, ISO format)
+- `"Oct 14 3:30 PM"`
+- The number 20261014
+> Store an unambiguous instant; format it for each user when displaying.
+? Which code is vulnerable to XSS?
+- `el.textContent = comment`
++ `` el.innerHTML = `<p>${comment}</p>` `` with `comment` from a user
+- `el.append(document.createTextNode(comment))`
+- `el.setAttribute("title", comment)`
+> Interpolating user text into HTML lets tags and scripts in.
+? In TypeScript, what's the type of `x` inside `if (typeof x === "number")` when `x: string | number`?
++ `number`
+- `string | number`
+- `string`
+- `unknown`
+> typeof checks narrow the union.
+? A function with a loop inside a loop takes 8 seconds on 50,000 items. What's the likely fix?
+- Use `var` instead of `let`
++ Replace the inner search with a Set or Map lookup
+- Run it twice
+- Add try/catch
+> Constant-time lookups turn O(n²) into O(n).
+? What does `npm run build` usually do in a Vite project?
+- Starts the dev server
++ Creates an optimised production bundle
+- Runs the tests
+- Publishes the package to npm
+> build bundles, minifies and tree-shakes for production.
+--- exercise code javascript
+::prompt
+Write `templateRender(template, data)` for a tiny, **safe** template engine. Placeholders look like `{{ name }}` (spaces optional) and may use dotted paths like `{{ user.address.city }}`. Each placeholder is replaced by the value at that path, **HTML-escaped** (`&`, `<`, `>`, `"`, `'`), or by an empty string if the value is missing (`null` or `undefined`). Placeholders written with three braces, `{{{ html }}}`, insert the value **without** escaping (for trusted HTML). Use regular expressions with replacement functions, and make sure a path like `{{ __proto__.polluted }}` or `{{ constructor }}` can't read inherited properties (only own properties count).
+::starter
+function templateRender(template, data) {
+}
+::solution
+const escapeHtml = (text) =>
+  String(text).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
+
+function lookup(data, path) {
+  let value = data;
+  for (const key of path.split(".")) {
+    if (value === null || typeof value !== "object" || !Object.hasOwn(value, key)) return "";
+    value = value[key];
+  }
+  return value ?? "";
+}
+
+function templateRender(template, data) {
+  return template
+    .replace(/\{\{\{\s*([\w.]+)\s*\}\}\}/g, (_, path) => String(lookup(data, path)))
+    .replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_, path) => escapeHtml(lookup(data, path)));
+}
+::tests
+const __data = { name: "Ada", user: { address: { city: "London" } }, bio: "<b>math</b> & poetry", raw: "<em>hi</em>", zero: 0, nothing: null };
+assert.strictEqual(templateRender("Hello, {{name}}!", __data), "Hello, Ada!");
+assert.strictEqual(templateRender("{{ user.address.city }} / {{user.address.zip}}", __data), "London / ");
+assert.strictEqual(templateRender("<p>{{ bio }}</p>", __data), "<p>&lt;b&gt;math&lt;/b&gt; &amp; poetry</p>");
+assert.strictEqual(templateRender("{{{ raw }}} vs {{ raw }}", __data), "<em>hi</em> vs &lt;em&gt;hi&lt;/em&gt;");
+assert.strictEqual(templateRender("[{{zero}}][{{nothing}}][{{missing.deep}}]", __data), "[0][][]");
+assert.strictEqual(templateRender("{{ constructor }}{{ __proto__ }}{{ name.length }}", __data), "");
+assert.strictEqual(templateRender("Say \"{{ name }}\" and 'hi'", { name: `O'Neil "Ace"` }), "Say \"O&#39;Neil &quot;Ace&quot;\" and 'hi'");
+::hints
+- Handle triple braces first (their content isn't escaped), then double braces.
+- Walk the dotted path one key at a time; stop with "" as soon as a key isn't an own property (`Object.hasOwn`).
+- `value ?? ""` keeps 0 but turns null and undefined into "".
+--- exercise code javascript
+::prompt
+Write `weeklyReport(events, now)` for a team dashboard. `events` is an array of `{ user, type, at }` where `at` is an ISO timestamp and `type` is `"commit"`, `"review"` or `"deploy"`. Consider only events in the 7 days before `now` (a `Date`): from exactly 7×24 hours earlier, inclusive, to `now`, exclusive. Return an array of lines:
+
+- one per user who had events, sorted by number of events (most first, then alphabetically): `"ada: 3 commits, 1 review"`, listing only the types they have, in the order commits, reviews, deploys, with correct singular/plural (`1 review`, `2 reviews`);
+- a final line `"Total: <n> events, busiest day <weekday>"`, where the busiest day is the UTC weekday name (from `Intl.DateTimeFormat("en-US", { weekday: "long", timeZone: "UTC" })`) with the most events (the earliest such day if tied).
+
+With no events in range, return `["Total: 0 events"]`.
+::starter
+function weeklyReport(events, now) {
+}
+::solution
+const WEEK = 7 * 24 * 60 * 60 * 1000;
+const weekday = new Intl.DateTimeFormat("en-US", { weekday: "long", timeZone: "UTC" });
+const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
+function weeklyReport(events, now) {
+  const end = now.getTime();
+  const recent = events.filter((e) => {
+    const t = new Date(e.at).getTime();
+    return t >= end - WEEK && t < end;
+  });
+  if (recent.length === 0) return ["Total: 0 events"];
+  const byUser = new Map();
+  for (const e of recent) {
+    const counts = byUser.get(e.user) ?? { commit: 0, review: 0, deploy: 0, total: 0 };
+    counts[e.type]++;
+    counts.total++;
+    byUser.set(e.user, counts);
+  }
+  const lines = [...byUser]
+    .sort((a, b) => b[1].total - a[1].total || a[0].localeCompare(b[0]))
+    .map(([user, c]) => {
+      const parts = ["commit", "review", "deploy"].filter((type) => c[type] > 0).map((type) => plural(c[type], type));
+      return `${user}: ${parts.join(", ")}`;
+    });
+  const byDay = new Map();
+  for (const e of [...recent].sort((a, b) => a.at.localeCompare(b.at))) {
+    const day = weekday.format(new Date(e.at));
+    byDay.set(day, (byDay.get(day) ?? 0) + 1);
+  }
+  let busiest = null;
+  for (const [day, n] of byDay) if (busiest === null || n > byDay.get(busiest)) busiest = day;
+  lines.push(`Total: ${recent.length} events, busiest day ${busiest}`);
+  return lines;
+}
+::tests
+const __now = new Date("2026-10-15T00:00:00Z");
+const __events = [
+  { user: "ada", type: "commit", at: "2026-10-12T09:00:00Z" },
+  { user: "ada", type: "commit", at: "2026-10-12T15:00:00Z" },
+  { user: "bob", type: "review", at: "2026-10-13T10:00:00Z" },
+  { user: "ada", type: "review", at: "2026-10-14T23:59:59Z" },
+  { user: "cy", type: "deploy", at: "2026-10-08T00:00:00Z" },
+  { user: "cy", type: "deploy", at: "2026-10-07T23:59:59Z" },
+  { user: "dee", type: "commit", at: "2026-10-15T00:00:00Z" },
+  { user: "bob", type: "commit", at: "2026-10-13T11:00:00Z" },
+];
+assert.deepStrictEqual(weeklyReport(__events, __now), [
+  "ada: 2 commits, 1 review",
+  "bob: 1 commit, 1 review",
+  "cy: 1 deploy",
+  "Total: 6 events, busiest day Monday",
+]);
+assert.deepStrictEqual(weeklyReport([], __now), ["Total: 0 events"]);
+::hints
+- Work with timestamps: keep events with `end - WEEK <= t < end`.
+- Count per user in a Map of `{ commit, review, deploy, total }`, then sort by total (and name).
+- Weekday names: `new Intl.DateTimeFormat("en-US", { weekday: "long", timeZone: "UTC" }).format(date)`. Count per day in time order, so the first day to reach the maximum wins ties.
