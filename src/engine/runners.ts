@@ -390,7 +390,7 @@ function runRedis(code: string, check?: CodeCheck): RunResult {
 }
 
 // ---------- Web (HTML/CSS/JS) ----------
-// Tests run inside a sandboxed iframe (scripts only, no same-origin access) and report back via postMessage.
+// Tests run inside a sandboxed iframe (scripts and forms, no same-origin access) and report back via postMessage.
 // Collects the page's errors and console output from the start (so the page's own scripts are included),
 // formatting logged values the way Node and the lessons' JavaScript runner do
 const WEB_EARLY = `<script>window.__dqErrors=[];window.__dqLogs=[];addEventListener('error',function(e){__dqErrors.push(e.message)});
@@ -437,7 +437,7 @@ export function runWeb(html: string, tests?: string, timeoutMs = /<script[^>]+sr
   const id = Math.random().toString(36).slice(2);
   const frame = document.createElement('iframe');
   const vendors = ensureVendors(html).catch(() => undefined);
-  frame.setAttribute('sandbox', 'allow-scripts');
+  frame.setAttribute('sandbox', 'allow-scripts allow-forms');
   frame.style.cssText = 'position:fixed;left:-10000px;top:0;width:1024px;height:768px;border:0;';
   return new Promise((resolve) => {
     const done = (r: RunResult) => {

@@ -102,7 +102,7 @@ export function WebPreview({ code, height = 300 }: { code: string; height?: numb
         <span className="dot g" />
         <span className="muted small">live preview</span>
       </div>
-      <iframe title="preview" sandbox="allow-scripts allow-modals" srcDoc={instrumentHtml(doc)} style={{ height }} />
+      <iframe title="preview" sandbox="allow-scripts allow-modals allow-forms" srcDoc={instrumentHtml(doc)} style={{ height }} />
     </div>
   );
 }

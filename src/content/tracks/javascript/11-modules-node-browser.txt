@@ -1,0 +1,2385 @@
+=== module Module 11 · Modules, Node.js and the browser
+
+=== lesson js-modules | Modules: import and export | 85
+## One file is not enough
+
+Real programs have thousands of lines. Keeping them in one file makes every name global to everything, every change risky, and nothing reusable. **Modules** split a program into files, each with its own scope, that explicitly **export** what others may use and **import** what they need.
+
+Modern JavaScript has a built-in module system, **ES modules** (ESM), used by browsers, Node.js and every modern tool. In DevQuest, write several files in one editor by starting each with a marker line `// file: name.js`; the program starts from `main.js`. On your computer, these would simply be separate files in one folder.
+
+```js
+// file: math.js
+export const PI = 3.14159;
+
+export function circleArea(r) {
+  return PI * r ** 2;
+}
+
+function secretHelper() {
+  return "not exported, so nobody else can use me";
+}
+
+// file: main.js
+import { PI, circleArea } from "./math.js";
+
+console.log(PI, circleArea(2).toFixed(2));
+```
+
+- `export` in front of a declaration makes it available to other modules. Everything else (`secretHelper`) stays **private** to its file.
+- `import { ... } from "./math.js"` brings in exported names. The path is relative to the importing file; `./` means "the same folder", `../` "the folder above". Include the `.js` extension (browsers and Node require it for your own files).
+- Each module has its **own scope**: a `const` at the top of `math.js` isn't a global, and two modules can both have a variable called `total` without clashing.
+- Modules are always in **strict mode**, and may use **top-level `await`**.
+
+## Named and default exports
+
+A module can have many **named** exports and at most one **default** export, the module's "main thing":
+
+```js
+// file: shapes.js
+export default class Circle {
+  constructor(r) {
+    this.r = r;
+  }
+  get area() {
+    return Math.PI * this.r ** 2;
+  }
+}
+export const unitCircle = new Circle(1);
+
+// file: main.js
+import Circle, { unitCircle } from "./shapes.js";
+import * as shapes from "./shapes.js";
+import { unitCircle as unit } from "./shapes.js";
+
+console.log(new Circle(2).area.toFixed(1), unitCircle.area.toFixed(2));
+console.log(Object.keys(shapes), unit === unitCircle);
+```
+
+| Syntax | Imports |
+|---|---|
+| `import Circle from "./shapes.js"` | the default export, under any name you choose |
+| `import { unitCircle } from "./shapes.js"` | a named export, by its exact name |
+| `import { unitCircle as unit } from ...` | a named export, renamed |
+| `import * as shapes from ...` | everything, as one object (a *namespace*) |
+
+On the exporting side you can also export a list at the end of a file, `export { area, PI as pi };`, or re-export from another module, `export { slugify } from "./strings.js";`. That's how libraries offer one tidy entry file (`index.js`) that gathers everything.
+
+Many teams prefer **named exports only**: the name is the same everywhere it's used, editors can auto-import it, and typos are errors. Importing a name that doesn't exist fails immediately:
+
+```js
+// file: math.js
+export const add = (a, b) => a + b;
+// file: main.js
+import { ad } from "./math.js";
+console.log(ad(1, 2));
+```
+
+## A module runs once
+
+The first `import` of a module runs its code; every later import, from anywhere, gets the **same** module instance. That makes a module a natural place for shared state and one-time setup:
+
+```js
+// file: counter.js
+console.log("counter.js runs (only once)");
+let count = 0;
+export function increment() {
+  count++;
+  return count;
+}
+// file: a.js
+import { increment } from "./counter.js";
+export const fromA = increment();
+// file: main.js
+import { fromA } from "./a.js";
+import { increment } from "./counter.js";
+console.log(fromA, increment(), increment());
+```
+
+Imports are also **live, read-only views**: you can't assign to an imported name (`count = 5` is an error in the importing module), but if the exporting module changes its variable, importers see the new value.
+
+~~~check
+? `utils.js` contains `const secret = 42;` with no `export`. What happens with `import { secret } from "./utils.js";`?
+- It works: modules share all their variables
++ It fails: only exported names can be imported
+- `secret` is `undefined`
+- It imports 42 but read-only
+> Anything not exported stays private to its module.
+~~~
+
+## Loading on demand: dynamic import()
+
+`import(path)` is a function-like expression that loads a module **when it's called** and returns a promise of its namespace object. Use it for code that isn't always needed, such as a big charting library only loaded when the user opens the charts page:
+
+```js
+// file: main.js
+const wantsReport = true;
+if (wantsReport) {
+  const { default: makeReport } = await import("./report.js");
+  console.log(makeReport([3, 5, 8]));
+}
+// file: report.js
+export default function makeReport(values) {
+  return `Total: ${values.reduce((a, b) => a + b, 0)}`;
+}
+```
+
+Bundlers split dynamically imported modules into separate files ("code splitting"), so web pages start faster.
+
+## Modules in the browser
+
+A page loads a module with `type="module"`:
+
+```
+<script type="module" src="main.js"></script>
+```
+
+Module scripts are deferred (they run after the page has been parsed) and follow the import graph themselves. Without `type="module"`, `import` statements are a SyntaxError: the classic beginner trap. (Opening an HTML file straight from your disk, with a `file://` address, also blocks module loading for security reasons; use a small local server such as `npx serve` or VS Code's Live Server.)
+
+## CommonJS: Node's older module system
+
+Before ES modules existed (2015), Node.js invented its own system, **CommonJS**, and a huge amount of code and many tutorials still use it:
+
+```
+// math.cjs
+function add(a, b) { return a + b; }
+module.exports = { add };
+
+// main.cjs
+const { add } = require("./math.cjs");
+```
+
+Differences: `require()` is an ordinary function call that loads modules synchronously, can be called anywhere (even inside an `if`), and returns whatever `module.exports` is. In Node, a `.js` file is treated as an ES module when the nearest `package.json` says `"type": "module"` (or the file ends in `.mjs`), and as CommonJS otherwise (or with `.cjs`). New projects should use ES modules; be able to read `require` when you meet it.
+
+## Designing modules
+
+- **One clear responsibility per module**, like classes: `money.js`, `cart.js`, `api-client.js`.
+- **Export a small surface**: the fewer exported names, the more you can change inside freely.
+- **Avoid circular imports** (A imports B and B imports A): they work in simple cases but lead to confusing "used before initialised" errors. A cycle usually means some code belongs in a third module.
+- **Keep side effects out of module top level** when you can: a module that does work just by being imported (connecting to a database, changing globals) is surprising. Export functions that do the work when called.
+
+📚 **Go deeper:** javascript.info, "Modules, introduction", "Export and Import" and "Dynamic imports"; MDN, "JavaScript modules"; *Eloquent JavaScript* (4th ed.), chapter 10, "Modules"; Node.js documentation, "Modules: ECMAScript modules".
+--- goals
+- split code into ES modules with `export` and `import`
+- use named exports, a default export, renaming and namespace imports
+- explain that a module runs once and that imports are live, read-only bindings
+- load modules on demand with dynamic `import()`
+- load modules in a web page with `<script type="module">`
+- read CommonJS code (`require`, `module.exports`) and know when Node uses each system
+- design modules with a small public surface and no circular imports
+--- quiz
+? How do you import the default export of `logger.js` under the name `log`?
++ `import log from "./logger.js";`
+- `import { log } from "./logger.js";`
+- `import { default } from "./logger.js";`
+- `require log from "./logger.js";`
+> A default import takes any name you choose, without braces.
+? A module `a.js` is imported by three other modules. How many times does its top-level code run?
+- Three times
++ Once
+- Never, until a function is called
+- Once per function exported
+> Modules are evaluated once and then shared.
+? What's wrong with `<script src="app.js"></script>` when app.js starts with `import`?
+- Nothing
++ It needs `type="module"`, otherwise `import` is a SyntaxError
+- The file must be called app.mjs
+- Browsers don't support import
+> Only module scripts may use import and export.
+? What does `import * as utils from "./utils.js"` give you?
+- Only the default export
++ An object with all of the module's exports as properties
+- A copy of the file's text
+- Every variable in utils.js, exported or not
+> A namespace import collects the exports into one object.
+? Which statement about CommonJS is true?
+- It's the newest module system
++ It uses `require()` and `module.exports`, and is still common in older Node.js code
+- It only works in browsers
+- It forbids exporting functions
+> ES modules are the standard; CommonJS is Node's original system.
+? Why use `import()` (dynamic import) instead of a normal `import` at the top?
+- It's faster in every case
++ To load a module only when it's actually needed, for example on a rarely used page
+- Because top-level imports can't load classes
+- To import a module twice
+> Dynamic imports load on demand and let bundlers split code.
+--- exercise code javascript
+::prompt
+Split this program into **three modules**. Create `money.js` exporting `formatPrice(cents)` (returns e.g. `"$4.50"`), `cart.js` exporting a **default** class `Cart` with `add(name, cents)` and a `total` getter, and `main.js` that imports both. Running it prints `Coffee $3.50, Bagel $2.75` and then `Total: $6.25`. Nothing else may be exported, and `cart.js` imports `formatPrice` itself for its `toString()`.
+::starter
+// file: money.js
+
+// file: cart.js
+
+// file: main.js
+const cart = new Cart();
+cart.add("Coffee", 350).add("Bagel", 275);
+console.log(String(cart));
+console.log("Total:", formatPrice(cart.total));
+::solution
+// file: money.js
+export function formatPrice(cents) {
+  return `$${(cents / 100).toFixed(2)}`;
+}
+
+// file: cart.js
+import { formatPrice } from "./money.js";
+
+export default class Cart {
+  items = [];
+  add(name, cents) {
+    this.items.push({ name, cents });
+    return this;
+  }
+  get total() {
+    return this.items.reduce((sum, item) => sum + item.cents, 0);
+  }
+  toString() {
+    return this.items.map((item) => `${item.name} ${formatPrice(item.cents)}`).join(", ");
+  }
+}
+
+// file: main.js
+import Cart from "./cart.js";
+import { formatPrice } from "./money.js";
+
+const cart = new Cart();
+cart.add("Coffee", 350).add("Bagel", 275);
+console.log(String(cart));
+console.log("Total:", formatPrice(cart.total));
+::tests
+const __money = __dqRequire("./money.js");
+const __cart = __dqRequire("./cart.js");
+assert.deepStrictEqual(Object.keys(__money), ["formatPrice"], "money.js should export only formatPrice");
+assert.deepStrictEqual(Object.keys(__cart), ["default"], "cart.js should only have a default export");
+assert.strictEqual(__money.formatPrice(5), "$0.05");
+const __c = new __cart.default();
+__c.add("A", 100);
+assert.strictEqual(__c.total, 100);
+::hints
+- `export function formatPrice(cents) { ... }` in money.js.
+- `export default class Cart { ... }` in cart.js, which starts with `import { formatPrice } from "./money.js";`.
+- main.js: `import Cart from "./cart.js";` (no braces for a default import) and `import { formatPrice } from "./money.js";`.
+--- exercise code javascript
+::prompt
+Create a small library with an **index file that re-exports** from two modules, so users can import everything from one place:
+
+- `strings.js` exports `capitalize(s)` and `slugify(s)` (lowercase, trimmed, spaces to `-`);
+- `numbers.js` exports `clamp(n, min, max)` and `sum(...nums)`;
+- `index.js` re-exports all four (`export { ... } from "./strings.js";` etc.);
+- `main.js` imports from `./index.js` only, and prints `Ada hello-world 100 6`.
+::starter
+// file: strings.js
+
+// file: numbers.js
+
+// file: index.js
+
+// file: main.js
+console.log(capitalize("ada"), slugify("  Hello World "), clamp(150, 0, 100), sum(1, 2, 3));
+::solution
+// file: strings.js
+export const capitalize = (s) => s[0].toUpperCase() + s.slice(1);
+export const slugify = (s) => s.trim().toLowerCase().replaceAll(" ", "-");
+
+// file: numbers.js
+export const clamp = (n, min, max) => Math.min(Math.max(n, min), max);
+export const sum = (...nums) => nums.reduce((a, b) => a + b, 0);
+
+// file: index.js
+export { capitalize, slugify } from "./strings.js";
+export { clamp, sum } from "./numbers.js";
+
+// file: main.js
+import { capitalize, slugify, clamp, sum } from "./index.js";
+
+console.log(capitalize("ada"), slugify("  Hello World "), clamp(150, 0, 100), sum(1, 2, 3));
+::tests
+const __index = __dqRequire("./index.js");
+assert.deepStrictEqual(Object.keys(__index).sort(), ["capitalize", "clamp", "slugify", "sum"]);
+assert.strictEqual(__index.clamp(-5, 0, 10), 0);
+assert.strictEqual(__index.slugify("A B C"), "a-b-c");
+assert.ok(!/strings\.js|numbers\.js/.test(String(__dqMods["main.js"])), "main.js should import from ./index.js only");
+::hints
+- Re-export with `export { capitalize, slugify } from "./strings.js";`: no import needed in index.js.
+- main.js has a single import line, from "./index.js".
+--- cards
+ES module :: A file with its own scope that shares values with export and receives them with import. Always strict.
+Named export :: export const x = 1; / export function f() {} → import { x, f } from "./file.js".
+Default export :: export default class C {} → import C from "./file.js" (any name, no braces).
+Namespace import :: import * as utils from "./utils.js" gives one object with all the exports.
+Re-export :: export { a, b } from "./x.js"; gathers a library's exports into one index file.
+Dynamic import :: const mod = await import("./x.js"); loads a module on demand.
+<script type="module"> :: How a web page loads an ES module (and lets it use import).
+CommonJS :: Node's older system: const x = require("./x"); module.exports = { ... }.
+
+=== lesson js-npm | Packages and npm | 80
+## Standing on other people's shoulders
+
+Nobody writes everything from scratch. Need to parse dates, talk to a database, run tests or build a website? Someone has published a **package** for it. **npm** (the Node Package Manager) is both the tool that installs packages and the registry (npmjs.com) that hosts more than two million of them: the largest software library in the world. It's installed together with Node.js.
+
+## Starting a project: package.json
+
+Every JavaScript project has a `package.json` at its root, describing it. Create one with:
+
+```
+npm init -y
+```
+
+A typical one, a bit later in the project's life:
+
+```json
+{
+  "name": "budget-tracker",
+  "version": "1.2.0",
+  "type": "module",
+  "scripts": {
+    "start": "node src/main.js",
+    "test": "node --test",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "date-fns": "^4.1.0"
+  },
+  "devDependencies": {
+    "eslint": "^9.12.0"
+  }
+}
+```
+
+- `"type": "module"` makes `.js` files ES modules (otherwise Node treats them as CommonJS).
+- `scripts` are named commands: `npm run lint`, and the special shortcuts `npm start` and `npm test`. Scripts can use any installed tool by name.
+- `dependencies` are packages your code needs to **run**; `devDependencies` are only needed while **developing** (test runners, linters, bundlers).
+
+## Installing packages
+
+```
+npm install date-fns
+npm install --save-dev eslint
+npm install
+```
+
+The first command downloads `date-fns` into a folder called `node_modules` and records it in `package.json`; the second adds a dev dependency; the third, with no name, installs everything listed in `package.json` (what you run after cloning a project). Then you import a package by its **name**, without `./`:
+
+```
+import { format, addDays } from "date-fns";
+console.log(format(addDays(new Date(2026, 0, 31), 1), "yyyy-MM-dd"));
+```
+
+Rules every team follows:
+
+- **Never commit `node_modules`** (it can contain tens of thousands of files); put it in `.gitignore`. Anyone can recreate it with `npm install`.
+- **Do commit `package-lock.json`**. It records the exact version of every package (including the packages your packages depend on), so every developer and every server installs exactly the same code. `npm ci` installs strictly from the lock file, which is what CI pipelines use.
+- `npx some-tool` runs a package's command without installing it permanently: `npx serve` starts a quick web server.
+
+(DevQuest can't install packages: its sandbox has no internet access to the registry. It includes a few of Node's built-in modules, covered next lesson.)
+
+## Semantic versioning
+
+Package versions follow **semver**: `MAJOR.MINOR.PATCH`, such as `4.1.0`.
+
+| Part | Increases when... | Safe to upgrade? |
+|---|---|---|
+| PATCH (4.1.**1**) | bugs are fixed | yes |
+| MINOR (4.**2**.0) | features are added, nothing breaks | yes |
+| MAJOR (**5**.0.0) | something **breaking** changes | read the changelog first |
+
+In `package.json`, `"^4.1.0"` (the caret, npm's default) means "4.1.0 or any newer 4.x.y", so you get fixes and features but never a breaking major version. `"~4.1.0"` allows only patches (4.1.x); `"4.1.0"` pins one exact version. Versions starting with `0.` are special: `0.x` packages may break things in any minor release.
+
+~~~check
+? A project depends on `"^2.3.1"`. Which version can `npm install` choose?
+- 3.0.0
++ 2.9.4
+- 2.3.0
+- 1.9.9
+> The caret allows newer minor and patch versions within major version 2, starting from 2.3.1.
+~~~
+
+## Choosing packages wisely
+
+Every dependency is code you didn't write but are responsible for. Before adding one, check:
+
+- **Do you need it?** Modern JavaScript has `fetch`, `structuredClone`, `Intl`, array methods... A five-line function is often better than a package.
+- **Is it maintained?** Recent releases, open issues being answered, a real repository.
+- **Is it popular and trusted?** Weekly downloads, who maintains it.
+- **What does it pull in?** Some small packages bring dozens of dependencies with them.
+- **Licence**: MIT, Apache-2.0 and BSD are permissive; check before using anything else in a commercial product.
+
+Supply-chain attacks (malicious code slipped into a package, or a lookalike package name such as `lodahs`) are real. `npm audit` lists known vulnerabilities in your dependencies, and `npm outdated` shows what's behind. Keep dependencies few and up to date.
+
+## The tools behind a modern project
+
+Most front-end projects use npm packages for their whole toolchain, which you'll meet in Module 12: a **bundler/dev server** (Vite) that serves and optimises the code, **TypeScript** for types, **ESLint** to catch mistakes, **Prettier** to format code, and a **test runner** (Vitest or Node's own). They're all `devDependencies`, all started through `scripts`. DevQuest itself is built exactly this way.
+
+📚 **Go deeper:** npm documentation, "About package.json", "About semantic versioning" and "npm-install"; semver.org; Node.js documentation, "Packages" (the "type" field); *Eloquent JavaScript* (4th ed.), chapter 10, "Packages".
+--- goals
+- create a project with `npm init` and read every part of `package.json`
+- install runtime and development dependencies, and run scripts with `npm run`
+- explain `node_modules`, `package-lock.json` and `npm ci`, and what to commit
+- read semantic versions and the `^` and `~` ranges
+- judge whether a package is worth depending on, and check for vulnerabilities
+--- quiz
+? Where should a test runner like Vitest be listed?
+- dependencies
++ devDependencies
+- scripts
+- It shouldn't be installed with npm
+> Tools needed only during development are dev dependencies.
+? Which file should you NOT commit to Git?
+- package.json
+- package-lock.json
++ the node_modules folder
+- .gitignore
+> node_modules is recreated by npm install; the lock file guarantees the same versions.
+? What does a MAJOR version change (2.x → 3.0.0) signal?
+- Only bug fixes
+- New features, fully compatible
++ Breaking changes that may require changes in your code
+- Nothing; version numbers are random
+> Read the changelog before upgrading a major version.
+? `"scripts": { "dev": "vite" }`. How do you run it?
++ `npm run dev`
+- `npm dev vite`
+- `node dev`
+- `npx run dev`
+> Custom scripts run with npm run <name>; start and test have shortcuts.
+? What does `npm ci` do differently from `npm install`?
+- It installs the newest versions available
++ It installs exactly what package-lock.json records, failing if it doesn't match package.json
+- It only installs dev dependencies
+- It deletes package.json
+> Clean, reproducible installs for CI servers.
+--- exercise code javascript
+::prompt
+Write `satisfiesCaret(version, range)` that checks whether a version like `"2.9.4"` satisfies a caret range like `"^2.3.1"`, following npm's rules for versions 1.0.0 and above: same MAJOR, and the version is not lower than the range's version. Then write `outdated(pkg, latest)`, which takes a `package.json`-style object and an object of latest versions, and returns the names of dependencies (and devDependencies) whose latest version does **not** satisfy their range (meaning: a new major version is out), sorted alphabetically.
+::starter
+function satisfiesCaret(version, range) {
+}
+
+function outdated(pkg, latest) {
+}
+::solution
+function parse(v) {
+  return v.split(".").map(Number);
+}
+
+function satisfiesCaret(version, range) {
+  const [ma, mi, pa] = parse(version);
+  const [rma, rmi, rpa] = parse(range.slice(1));
+  if (ma !== rma) return false;
+  if (mi !== rmi) return mi > rmi;
+  return pa >= rpa;
+}
+
+function outdated(pkg, latest) {
+  const all = { ...(pkg.dependencies ?? {}), ...(pkg.devDependencies ?? {}) };
+  return Object.entries(all)
+    .filter(([name, range]) => name in latest && !satisfiesCaret(latest[name], range))
+    .map(([name]) => name)
+    .sort();
+}
+::tests
+assert.strictEqual(satisfiesCaret("2.9.4", "^2.3.1"), true);
+assert.strictEqual(satisfiesCaret("2.3.1", "^2.3.1"), true);
+assert.strictEqual(satisfiesCaret("2.3.0", "^2.3.1"), false);
+assert.strictEqual(satisfiesCaret("2.2.9", "^2.3.1"), false);
+assert.strictEqual(satisfiesCaret("3.0.0", "^2.3.1"), false);
+assert.strictEqual(satisfiesCaret("2.10.0", "^2.9.0"), true, "compare numbers, not text: 10 > 9");
+const __pkg = { dependencies: { react: "^18.2.0", "date-fns": "^4.1.0" }, devDependencies: { vite: "^5.4.0", eslint: "^9.1.0" } };
+assert.deepStrictEqual(outdated(__pkg, { react: "19.0.0", "date-fns": "4.1.3", vite: "7.0.1", eslint: "9.12.0" }), ["react", "vite"]);
+assert.deepStrictEqual(outdated({ name: "x" }, {}), []);
+::hints
+- Split versions on "." and convert each part with `Number`, so 10 compares as bigger than 9.
+- Different major: no. Same major: compare minor, then patch.
+- Merge both dependency objects with spread (either may be missing: use `?? {}`).
+--- cards
+npm :: Node's package manager and the registry of packages (npmjs.com). Installed with Node.js.
+package.json :: Describes a project: name, version, type, scripts, dependencies and devDependencies.
+dependencies vs devDependencies :: Needed to run the app vs only needed while developing (tests, linters, bundlers).
+node_modules :: Where installed packages live. Never commit it; recreate it with npm install.
+package-lock.json :: Exact versions of every installed package. Commit it; npm ci installs exactly from it.
+Semantic versioning :: MAJOR.MINOR.PATCH: breaking changes / new features / bug fixes.
+^1.4.2 vs ~1.4.2 :: Caret: any 1.x.y from 1.4.2. Tilde: any 1.4.x from 1.4.2.
+npx :: Runs a package's command without installing it: npx serve.
+
+=== lesson js-node | Node.js: files, processes and the command line | 90
+## JavaScript outside the browser
+
+**Node.js** (2009) took Chrome's V8 engine out of the browser and gave it access to the computer: files, network, processes. It made JavaScript a general-purpose language: web servers (Express, Fastify, NestJS), command-line tools (npm itself, ESLint, Vite), desktop apps (Electron, which DevQuest uses) and scripts.
+
+Node has no `document` or `window`, but it has a large **standard library** of built-in modules, imported with the `node:` prefix. DevQuest includes a small, sandboxed version of the most common ones (`node:fs` works on an in-memory disk, so nothing on your computer is touched), so the examples here run as they would in Node.
+
+## A program's surroundings: process
+
+The global `process` object describes the running program:
+
+```js
+console.log(process.argv);
+console.log(process.cwd(), process.platform);
+console.log(process.env.HOME ?? "no HOME variable here");
+process.stdout.write("write without a new line... ");
+process.stdout.write("then finish the line\n");
+```
+
+- `process.argv` holds the **command-line arguments**: `node app.js report --verbose` gives `["/path/to/node", "/path/to/app.js", "report", "--verbose"]`, so your own arguments start at index 2: `process.argv.slice(2)`.
+- `process.env` holds **environment variables**: configuration such as `process.env.PORT` or API keys, kept outside the code.
+- `process.exit(code)` ends the program at once; by convention `0` means success and anything else failure, which scripts and CI systems check.
+
+## Reading and writing files: node:fs
+
+```js
+// file: notes.txt
+buy milk
+call the plumber
+learn Node.js
+// file: main.js
+import { readFileSync, writeFileSync, existsSync } from "node:fs";
+
+const text = readFileSync("notes.txt", "utf8");
+const lines = text.split("\n");
+console.log(`${lines.length} notes, the first is "${lines[0]}"`);
+
+const numbered = lines.map((line, i) => `${i + 1}. ${line}`).join("\n");
+writeFileSync("numbered.txt", numbered);
+console.log(existsSync("numbered.txt"));
+console.log(readFileSync("numbered.txt", "utf8"));
+```
+
+(The `// file: notes.txt` section is how DevQuest creates a file for the program to read.) Pass `"utf8"` to get text; without an encoding, Node gives you raw bytes (a `Buffer`). A missing file throws an error with `code: "ENOENT"` ("error, no entry"), the most common file error:
+
+```js
+import { readFileSync } from "node:fs";
+try {
+  readFileSync("missing.json", "utf8");
+} catch (error) {
+  console.log(error.code, "-", error.message);
+}
+```
+
+## Sync or async?
+
+Every `fs` function comes in two styles:
+
+- `readFileSync` (synchronous) **blocks** until the file is read. Fine in scripts and command-line tools that do one thing at a time.
+- `readFile` from `node:fs/promises` (asynchronous) returns a promise, so the program can do other work meanwhile. **Use this in servers**: a server that blocks on a file read stops answering every other user for that moment.
+
+```js
+// file: users.json
+[{ "name": "Ada", "role": "admin" }, { "name": "Bob", "role": "user" }]
+// file: main.js
+import { readFile, writeFile, mkdir, readdir } from "node:fs/promises";
+
+const users = JSON.parse(await readFile("users.json", "utf8"));
+const admins = users.filter((u) => u.role === "admin");
+await mkdir("reports", { recursive: true });
+await writeFile("reports/admins.json", JSON.stringify(admins, null, 2));
+console.log(await readdir("reports"));
+console.log(await readFile("reports/admins.json", "utf8"));
+```
+
+## Paths: node:path
+
+Never glue paths together with `+ "/" +`: Windows uses `\`, other systems `/`. `node:path` handles it:
+
+```js
+import path from "node:path";
+
+console.log(path.join("reports", "2026", "..", "summary.txt"));
+console.log(path.basename("/home/ada/photos/cat.jpg"), path.extname("cat.jpg"));
+console.log(path.dirname("/home/ada/photos/cat.jpg"));
+console.log(path.parse("/home/ada/notes.txt"));
+```
+
+(On Windows, `path.join` produces backslashes; DevQuest behaves like Linux and macOS.)
+
+## Asking questions in the terminal: node:readline
+
+Browsers have `prompt()`; Node programs read lines from the terminal with `readline`. Type answers in DevQuest's input box, as before:
+
+```js
+import * as readline from "node:readline/promises";
+
+const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+const name = await rl.question("What's your name? ");
+const lang = await rl.question("Favourite language? ");
+rl.close();
+console.log(`Hello ${name}! ${lang} is a fine choice.`);
+```
+
+## Events: node:events
+
+Many Node objects (servers, streams, processes) are **event emitters**, the observer pattern from Module 9. You can make your own:
+
+```js
+import { EventEmitter } from "node:events";
+
+class Downloader extends EventEmitter {
+  async download(files) {
+    for (const [i, file] of files.entries()) {
+      await new Promise((r) => setTimeout(r, 20));
+      this.emit("progress", file, Math.round(((i + 1) / files.length) * 100));
+    }
+    this.emit("done", files.length);
+  }
+}
+
+const d = new Downloader();
+d.on("progress", (file, percent) => console.log(`${file}: ${percent}%`));
+d.once("done", (count) => console.log(`Finished ${count} files`));
+await d.download(["a.zip", "b.zip", "c.zip"]);
+```
+
+## Servers, briefly
+
+Node's best-known job is serving web requests. With the built-in `node:http` module, a complete server is a few lines (this one can't run inside DevQuest, which has no network ports; try it on your computer and open http://localhost:3000):
+
+```
+import http from "node:http";
+
+const server = http.createServer((request, response) => {
+  response.writeHead(200, { "Content-Type": "application/json" });
+  response.end(JSON.stringify({ message: "Hello from Node!", path: request.url }));
+});
+server.listen(3000, () => console.log("Listening on http://localhost:3000"));
+```
+
+Real applications use a framework such as **Express** or **Fastify** on top of this for routing, parsing request bodies and middleware. The Web Development and backend career paths build on exactly this.
+
+## Streams, briefly
+
+`readFileSync` loads a whole file into memory, which fails for a 20 GB log file. **Streams** process data piece by piece: `fs.createReadStream(path)` gives chunks as they're read, and `for await (const line of readline.createInterface({ input: stream }))` reads a huge file line by line with almost no memory. Network sockets, HTTP bodies and compression all use streams.
+
+📚 **Go deeper:** Node.js documentation, "Introduction to Node.js" (nodejs.org/learn) and the API docs for `process`, `fs`, `path`, `readline` and `events`; *Eloquent JavaScript* (4th ed.), chapter 20, "Node.js".
+--- goals
+- explain what Node.js adds to JavaScript, and import built-in modules with `node:`
+- read command-line arguments and environment variables from `process`, and use exit codes
+- read and write files with `node:fs`, synchronously and with promises, and handle ENOENT
+- build paths safely with `node:path`
+- ask questions in the terminal with `node:readline/promises`
+- create and listen to events with `EventEmitter`
+- describe how an HTTP server and streams work in Node
+--- quiz
+? `node report.js 2026 --csv` is run. What is `process.argv.slice(2)`?
+- `["report.js", "2026", "--csv"]`
++ `["2026", "--csv"]`
+- `["--csv"]`
+- `"2026 --csv"`
+> argv[0] is node, argv[1] the script, then your arguments.
+? What does `error.code === "ENOENT"` mean after a file operation?
++ The file or folder doesn't exist
+- The file is empty
+- Permission was denied
+- The disk is full
+> "Error, no entry": the most common file error.
+? Why should a web server use `fs/promises` instead of `readFileSync`?
+- readFileSync can't read text
++ A synchronous read blocks the whole server, so no other request is handled until it finishes
+- Promises read files faster
+- readFileSync is deprecated
+> Async I/O keeps the single thread free for other requests.
+? Which builds a file path that works on Windows, macOS and Linux?
+- `dir + "/" + file`
++ `path.join(dir, file)`
+- `` `${dir}\\${file}` ``
+- `dir.concat(file)`
+> path.join uses the right separator for the system.
+? What does `process.exit(1)` tell the shell or CI system that ran the program?
+- Everything went fine
++ The program failed
+- The program will restart
+- One file was processed
+> Exit code 0 means success; non-zero means failure.
+--- exercise code javascript
+::prompt
+Write a command-line **word counter**. `main.js` reads the file named by the first command-line argument (the starter sets `process.argv` for you, as if the program was run with `node main.js essay.txt`), and prints the number of lines, words and characters, then the three most frequent words (lowercase, ignoring `.,!?`) with their counts. If the file doesn't exist, print `Error: no such file essay.txt` instead and exit with `process.exit(1)`.
+::starter
+// file: essay.txt
+JavaScript runs everywhere. JavaScript runs in browsers,
+and Node runs JavaScript on servers. Learn it, and
+you can build almost anything!
+// file: main.js
+process.argv = ["node", "main.js", "essay.txt"];
+import { readFileSync } from "node:fs";
+
+const fileName = process.argv[2];
+// read the file, count, and print
+::solution
+// file: essay.txt
+JavaScript runs everywhere. JavaScript runs in browsers,
+and Node runs JavaScript on servers. Learn it, and
+you can build almost anything!
+// file: main.js
+process.argv = ["node", "main.js", "essay.txt"];
+import { readFileSync } from "node:fs";
+
+const fileName = process.argv[2];
+let text;
+try {
+  text = readFileSync(fileName, "utf8");
+} catch (error) {
+  if (error.code !== "ENOENT") throw error;
+  console.log(`Error: no such file ${fileName}`);
+  process.exit(1);
+}
+const words = text.split(/\s+/).filter((w) => w !== "");
+console.log(`Lines: ${text.split("\n").length}`);
+console.log(`Words: ${words.length}`);
+console.log(`Characters: ${text.length}`);
+const counts = new Map();
+for (const word of words) {
+  const clean = word.toLowerCase().replace(/[.,!?]/g, "");
+  counts.set(clean, (counts.get(clean) ?? 0) + 1);
+}
+const top = [...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, 3);
+for (const [word, count] of top) console.log(`${word}: ${count}`);
+::expected
+Lines: 3
+Words: 21
+Characters: 138
+javascript: 3
+runs: 3
+and: 2
+::hints
+- `readFileSync(fileName, "utf8")` inside `try`; in `catch`, check `error.code === "ENOENT"`.
+- Words: split on whitespace with `text.split(/\s+/)` (a regular expression, Module 12) and drop empty strings.
+- Count with a Map, sort by count (then alphabetically), and take the first three.
+--- exercise code javascript
+::prompt
+Write an `async function backupNotes(dir)` using `node:fs/promises` and `node:path`: it reads every `.txt` file in the folder `dir` (use `readdir` and `path.extname`), and writes a single file `backup/<dir>.json` (create the `backup` folder with `mkdir(..., { recursive: true })`) containing an object that maps each file name to its text. It returns the number of files backed up. Files that aren't `.txt` are ignored.
+::starter
+// file: notes/todo.txt
+buy milk
+// file: notes/ideas.txt
+a game about cats
+// file: notes/photo.png
+(not text)
+// file: main.js
+import { readdir, readFile, writeFile, mkdir } from "node:fs/promises";
+import path from "node:path";
+
+async function backupNotes(dir) {
+}
+
+console.log(await backupNotes("notes"));
+console.log(await readFile("backup/notes.json", "utf8"));
+::solution
+// file: notes/todo.txt
+buy milk
+// file: notes/ideas.txt
+a game about cats
+// file: notes/photo.png
+(not text)
+// file: main.js
+import { readdir, readFile, writeFile, mkdir } from "node:fs/promises";
+import path from "node:path";
+
+async function backupNotes(dir) {
+  const names = (await readdir(dir)).filter((name) => path.extname(name) === ".txt");
+  const backup = {};
+  for (const name of names) {
+    backup[name] = await readFile(path.join(dir, name), "utf8");
+  }
+  await mkdir("backup", { recursive: true });
+  await writeFile(path.join("backup", `${dir}.json`), JSON.stringify(backup));
+  return names.length;
+}
+
+console.log(await backupNotes("notes"));
+console.log(await readFile("backup/notes.json", "utf8"));
+::expected
+2
+{"ideas.txt":"a game about cats","todo.txt":"buy milk"}
+::hints
+- `(await readdir(dir))` gives the names in the folder; keep those whose `path.extname(name)` is ".txt".
+- Read each with `readFile(path.join(dir, name), "utf8")`.
+- `await mkdir("backup", { recursive: true })` before writing.
+--- cards
+Node.js :: JavaScript outside the browser (V8 + system access): servers, CLIs, scripts, desktop apps.
+node: imports :: Built-in modules: import { readFile } from "node:fs/promises"; import path from "node:path".
+process.argv / env / exit :: Command-line arguments (from index 2), environment variables, end with an exit code (0 = success).
+fs sync vs promises :: readFileSync blocks (fine for scripts); fs/promises doesn't (use in servers).
+ENOENT :: The error code for "no such file or directory".
+path.join / basename / extname :: Build and pick apart file paths portably.
+EventEmitter :: Node's observer: emitter.on("event", fn), emitter.emit("event", data).
+Streams :: Process data in chunks instead of loading it all into memory.
+
+=== lesson js-dom | The DOM: changing web pages | 90
+## The page as a tree of objects
+
+When a browser loads HTML, it builds the **DOM** (Document Object Model): a tree of objects, one for every element, piece of text and comment. JavaScript changes a page by changing this tree; the browser redraws the screen to match.
+
+```
+<body>
+  <h1>Shopping</h1>
+  <ul id="list">
+    <li>Milk</li>
+    <li class="done">Bread</li>
+  </ul>
+</body>
+```
+
+becomes a tree: `body` has two children, `h1` and `ul`; the `ul` has two `li` children, each containing a text node. Every element object has properties (`id`, `className`, `textContent`...) and methods, and links to its relatives: `parentElement`, `children`, `firstElementChild`, `nextElementSibling`.
+
+The global `document` object is the entry point. The examples in this module are whole web pages: press **▶ Show page** to see them, with anything they log shown underneath.
+
+## Finding elements
+
+```html
+<!doctype html>
+<html>
+  <body>
+    <h1 id="title">Shopping</h1>
+    <ul id="list">
+      <li>Milk</li>
+      <li class="done">Bread</li>
+      <li>Eggs</li>
+    </ul>
+    <script>
+      const title = document.querySelector("#title");
+      const firstItem = document.querySelector("#list li");
+      const allItems = document.querySelectorAll("#list li");
+      const done = document.querySelector(".done");
+      console.log(title.textContent, "|", firstItem.textContent, "|", allItems.length, "|", done.textContent);
+      for (const li of allItems) console.log("item:", li.textContent);
+    </script>
+  </body>
+</html>
+```
+
+`querySelector(css)` returns the **first** element matching a CSS selector (or `null`); `querySelectorAll(css)` returns **all** of them, as a list you can loop over with `for...of` (spread it, `[...list]`, to use array methods like `map`). Any CSS selector works: `#id`, `.class`, `tag`, `ul > li`, `input[type=email]`, `li:nth-child(2)`. You'll also see the older `getElementById("title")`.
+
+A script must run **after** the elements it uses exist. Put `<script>` at the end of `<body>` (as here), or add `defer` to a script in `<head>`, which waits until the page is parsed. A script that runs too early gets `null` from `querySelector`, and then `Cannot read properties of null` errors.
+
+## Changing content and attributes
+
+```html
+<!doctype html>
+<html>
+  <body>
+    <h1 id="title">Old title</h1>
+    <p id="intro">Plain text</p>
+    <a id="link" href="https://example.com">a link</a>
+    <img id="pic" alt="placeholder" width="40" height="40">
+    <script>
+      document.querySelector("#title").textContent = "New title";
+      const intro = document.querySelector("#intro");
+      intro.innerHTML = "Text with <strong>bold</strong> in it";
+      const link = document.querySelector("#link");
+      link.href = "https://developer.mozilla.org";
+      link.textContent = "MDN";
+      link.setAttribute("target", "_blank");
+      document.querySelector("#pic").alt = "A picture";
+      console.log(link.getAttribute("href"), link.dataset.kind ?? "no data-kind");
+    </script>
+  </body>
+</html>
+```
+
+- `textContent` gets or sets the **text** inside an element.
+- `innerHTML` gets or sets the **HTML** inside it, parsing tags.
+- Standard attributes are properties: `link.href`, `img.src`, `input.value`, `button.disabled`. For any attribute, use `getAttribute` / `setAttribute`; custom `data-*` attributes appear in `element.dataset` (`data-user-id` becomes `dataset.userId`).
+
+⚠️ **Security rule: never put user-supplied text into `innerHTML`.** If a user's "name" is `<img src=x onerror="steal()">`, `innerHTML` would run their code in your page: a **cross-site scripting (XSS)** attack, one of the most common web vulnerabilities. Use `textContent` for text; it never interprets tags.
+
+## Creating and removing elements
+
+```html
+<!doctype html>
+<html>
+  <body>
+    <ul id="list"></ul>
+    <script>
+      const list = document.querySelector("#list");
+      const fruits = ["Apple", "Banana", "Cherry"];
+      for (const fruit of fruits) {
+        const li = document.createElement("li");
+        li.textContent = fruit;
+        list.append(li);
+      }
+      const first = document.createElement("li");
+      first.textContent = "Avocado (added first)";
+      list.prepend(first);
+      list.children[2].remove();
+      console.log([...list.children].map((li) => li.textContent));
+    </script>
+  </body>
+</html>
+```
+
+`document.createElement(tag)` makes a new element that's not yet on the page; `parent.append(child)` (or `prepend`, `before`, `after`) inserts it; `element.remove()` takes it out. When you build many elements, a common pattern is a function that turns one data item into one element, called in a loop: you'll write those in the exercises.
+
+~~~check
+? A comment box shows what users type. Which line is safe?
+- `box.innerHTML = userComment;`
++ `box.textContent = userComment;`
+- `box.innerHTML = "<p>" + userComment + "</p>";`
+- `document.write(userComment);`
+> textContent never treats the text as HTML, so injected tags can't run.
+~~~
+
+## Classes and styles
+
+Change how things look by toggling **CSS classes**, rather than setting styles one by one: the CSS stays in the stylesheet, and JavaScript only says *which state* an element is in.
+
+```html
+<!doctype html>
+<html>
+  <head>
+    <style>
+      .done { text-decoration: line-through; color: gray; }
+      .highlight { background: gold; }
+    </style>
+  </head>
+  <body>
+    <ul>
+      <li id="a">Buy milk</li>
+      <li id="b">Learn the DOM</li>
+    </ul>
+    <script>
+      const a = document.querySelector("#a");
+      a.classList.add("done");
+      const b = document.querySelector("#b");
+      b.classList.toggle("highlight");
+      b.style.padding = "4px";
+      console.log(a.classList.contains("done"), b.className, b.style.padding);
+    </script>
+  </body>
+</html>
+```
+
+`classList.add`, `remove`, `toggle` and `contains` manage classes. `element.style.property` sets an inline style (CSS names in camelCase: `backgroundColor`); `getComputedStyle(element)` reads the final style after all CSS rules apply.
+
+## Layout and animation
+
+Elements also report their size and position: `element.getBoundingClientRect()` gives `{ x, y, width, height }` on screen, and `offsetWidth`/`offsetHeight` the size. For smooth animation, change things once per screen refresh with `requestAnimationFrame(callback)`, which calls back just before the browser draws the next frame (about 60 times per second):
+
+```html
+<!doctype html>
+<html>
+  <body>
+    <div id="ball" style="width:30px;height:30px;border-radius:50%;background:tomato;position:relative"></div>
+    <script>
+      const ball = document.querySelector("#ball");
+      const start = performance.now();
+      function frame(now) {
+        const t = (now - start) / 1000;
+        ball.style.left = `${100 + Math.sin(t * 2) * 100}px`;
+        if (t < 10) requestAnimationFrame(frame);
+      }
+      requestAnimationFrame(frame);
+    </script>
+  </body>
+</html>
+```
+
+Basing the position on the **elapsed time** (not on "move 2 pixels per frame") keeps the speed the same on fast and slow screens. For simple effects, CSS transitions and animations are even better: the browser runs them without any JavaScript.
+
+## Rendering data: the core of every front end
+
+Most front-end code follows one pattern: keep the **data** in JavaScript, and write a function that **renders** the page from it. When the data changes, render again:
+
+```html
+<!doctype html>
+<html>
+  <body>
+    <ul id="todos"></ul>
+    <p id="count"></p>
+    <script>
+      const todos = [
+        { text: "Learn the DOM", done: true },
+        { text: "Learn events", done: false },
+      ];
+      function render() {
+        const list = document.querySelector("#todos");
+        list.replaceChildren(
+          ...todos.map((t) => {
+            const li = document.createElement("li");
+            li.textContent = (t.done ? "✓ " : "○ ") + t.text;
+            return li;
+          }),
+        );
+        document.querySelector("#count").textContent = `${todos.filter((t) => !t.done).length} left`;
+      }
+      render();
+      todos.push({ text: "Build an app", done: false });
+      render();
+    </script>
+  </body>
+</html>
+```
+
+`replaceChildren(...)` swaps out all the old children at once. Frameworks such as React, Vue and Svelte are, at heart, very clever versions of this `render()` function: you describe the page for the current data, and they work out the smallest set of DOM changes.
+
+📚 **Go deeper:** MDN, "Introduction to the DOM", "Locating DOM elements using selectors" and "Cross-site scripting (XSS)"; javascript.info, "Document" (the whole chapter); *Eloquent JavaScript* (4th ed.), chapter 14, "The Document Object Model".
+--- goals
+- describe the DOM as a tree of objects built from HTML
+- find elements with `querySelector` and `querySelectorAll`, after the page has loaded
+- change text, HTML and attributes, and use `data-*` attributes
+- explain XSS and use `textContent` for any user-supplied text
+- create, insert and remove elements
+- toggle CSS classes and set styles, and animate with `requestAnimationFrame`
+- render a page from data with a `render()` function
+--- quiz
+? What does `document.querySelector(".item")` return when three elements have the class `item`?
++ The first matching element
+- All three, as a list
+- The last one
+- `null`
+> querySelector returns the first match; querySelectorAll returns them all.
+? Why does a script in `<head>` (without `defer`) often get `null` from `querySelector("#app")`?
+- Scripts in head can't use the DOM
++ It runs before the browser has parsed the body, so `#app` doesn't exist yet
+- querySelector only works on classes
+- `#app` must be written `app`
+> Put scripts at the end of body, or use defer.
+? Which is the XSS risk?
+- `el.textContent = name`
++ `el.innerHTML = name`, with `name` typed by a user
+- `el.classList.add("active")`
+- `document.createElement("li")`
+> innerHTML parses the text as HTML, so injected tags and scripts can run.
+? How do you add a new `<li>` to the end of a list `ul`?
+- `ul.innerText += "<li>"`
++ `const li = document.createElement("li"); ul.append(li);`
+- `ul.children.push(li)`
+- `document.add("li", ul)`
+> Create the element, then insert it.
+? An element has `data-product-id="42"`. How do you read it?
+- `el.productId`
++ `el.dataset.productId`
+- `el.data["product-id"]`
+- `el.getData("productId")`
+> data-* attributes appear in dataset, with dashes turned into camelCase.
+? Why is `requestAnimationFrame` better than `setInterval(move, 16)` for animation?
++ It runs right before each screen refresh, and pauses in background tabs
+- It's the only way to change styles
+- setInterval can't change the DOM
+- It runs faster than the screen refresh
+> It syncs with the display, giving smooth movement without wasted work.
+--- exercise code web
+::prompt
+Complete `renderProducts(products)` so it fills the `<ul id="products">` with one `<li class="product">` per product, showing `"Name - $price"` with two decimals (e.g. `Keyboard - $49.00`). Products that are out of stock (`stock` is 0) also get the class `sold-out`, and the paragraph `#summary` must say `"2 of 3 in stock"` (for the data given). Use `textContent`, not `innerHTML`.
+::starter
+<!doctype html>
+<html>
+  <head>
+    <style>.sold-out { color: gray; text-decoration: line-through; }</style>
+  </head>
+  <body>
+    <ul id="products"></ul>
+    <p id="summary"></p>
+    <script>
+      const products = [
+        { name: "Keyboard", price: 49, stock: 3 },
+        { name: "Mouse", price: 25.5, stock: 0 },
+        { name: "Monitor", price: 189, stock: 1 },
+      ];
+      function renderProducts(products) {
+        // build the list and the summary here
+      }
+      renderProducts(products);
+    </script>
+  </body>
+</html>
+::solution
+<!doctype html>
+<html>
+  <head>
+    <style>.sold-out { color: gray; text-decoration: line-through; }</style>
+  </head>
+  <body>
+    <ul id="products"></ul>
+    <p id="summary"></p>
+    <script>
+      const products = [
+        { name: "Keyboard", price: 49, stock: 3 },
+        { name: "Mouse", price: 25.5, stock: 0 },
+        { name: "Monitor", price: 189, stock: 1 },
+      ];
+      function renderProducts(products) {
+        const list = document.querySelector("#products");
+        list.replaceChildren(
+          ...products.map((p) => {
+            const li = document.createElement("li");
+            li.className = "product";
+            li.textContent = `${p.name} - $${p.price.toFixed(2)}`;
+            if (p.stock === 0) li.classList.add("sold-out");
+            return li;
+          }),
+        );
+        const inStock = products.filter((p) => p.stock > 0).length;
+        document.querySelector("#summary").textContent = `${inStock} of ${products.length} in stock`;
+      }
+      renderProducts(products);
+    </script>
+  </body>
+</html>
+::tests
+const items = $$('#products li.product');
+assert(items.length === 3, 'expected 3 li.product elements, found ' + items.length);
+assert(items[0].textContent === 'Keyboard - $49.00', 'first item should read "Keyboard - $49.00", got "' + items[0].textContent + '"');
+assert(items[1].textContent === 'Mouse - $25.50', 'second item should read "Mouse - $25.50"');
+assert(items[1].classList.contains('sold-out') && !items[0].classList.contains('sold-out'), 'only out-of-stock products get the sold-out class');
+assert($('#summary').textContent === '2 of 3 in stock', 'the summary should say "2 of 3 in stock"');
+renderProducts([{ name: '<b>Bold</b>', price: 1, stock: 1 }]);
+assert($$('#products li').length === 1, 'calling renderProducts again should replace the list, not add to it');
+assert($('#products li').textContent === '<b>Bold</b> - $1.00' && !$('#products b'), 'use textContent so names are shown as text, never as HTML');
+::hints
+- For each product: `document.createElement("li")`, set `className` and `textContent`, and `classList.add("sold-out")` when needed.
+- `list.replaceChildren(...items)` replaces the old content, so calling the function twice doesn't duplicate items.
+- Price: `p.price.toFixed(2)`; in a template literal, `$${...}` prints a dollar sign before the value.
+--- exercise code web
+::prompt
+The page has a table of scores. Write `highlightTop(n)` that adds the class `top` to the rows (`tr` inside `tbody`) of the `n` highest scores, and returns the names of those players, best first. Read the scores from the table cells (`querySelectorAll`, `textContent`, `Number(...)`); don't change the HTML.
+::starter
+<!doctype html>
+<html>
+  <head><style>.top { background: gold; }</style></head>
+  <body>
+    <table>
+      <thead><tr><th>Player</th><th>Score</th></tr></thead>
+      <tbody>
+        <tr><td>Ada</td><td>88</td></tr>
+        <tr><td>Bob</td><td>95</td></tr>
+        <tr><td>Cy</td><td>72</td></tr>
+        <tr><td>Dee</td><td>91</td></tr>
+      </tbody>
+    </table>
+    <script>
+      function highlightTop(n) {
+      }
+      console.log(highlightTop(2));
+    </script>
+  </body>
+</html>
+::solution
+<!doctype html>
+<html>
+  <head><style>.top { background: gold; }</style></head>
+  <body>
+    <table>
+      <thead><tr><th>Player</th><th>Score</th></tr></thead>
+      <tbody>
+        <tr><td>Ada</td><td>88</td></tr>
+        <tr><td>Bob</td><td>95</td></tr>
+        <tr><td>Cy</td><td>72</td></tr>
+        <tr><td>Dee</td><td>91</td></tr>
+      </tbody>
+    </table>
+    <script>
+      function highlightTop(n) {
+        const rows = [...document.querySelectorAll("tbody tr")].map((tr) => ({
+          tr,
+          name: tr.cells[0].textContent,
+          score: Number(tr.cells[1].textContent),
+        }));
+        const best = rows.sort((a, b) => b.score - a.score).slice(0, n);
+        for (const row of best) row.tr.classList.add("top");
+        return best.map((row) => row.name);
+      }
+      console.log(highlightTop(2));
+    </script>
+  </body>
+</html>
+::tests
+const top = $$('tbody tr.top').map((tr) => tr.cells[0].textContent).sort();
+assert(top.join() === 'Bob,Dee', 'Bob and Dee should be highlighted, got: ' + top.join());
+$$('tr.top').forEach((tr) => tr.classList.remove('top'));
+const names = highlightTop(3);
+assert(JSON.stringify(names) === '["Bob","Dee","Ada"]', 'highlightTop(3) should return ["Bob","Dee","Ada"], got ' + JSON.stringify(names));
+assert($$('tbody tr.top').length === 3, 'three rows should be highlighted');
+assert($$('thead tr.top').length === 0, 'the header row must never be highlighted');
+::hints
+- `[...document.querySelectorAll("tbody tr")]` gives an array of rows; `tr.cells[1].textContent` is a score as text.
+- Keep the row element together with its name and score in an object, sort by score, and take the first n.
+--- cards
+DOM :: The tree of objects the browser builds from HTML. Changing it changes the page.
+querySelector / querySelectorAll :: First element matching a CSS selector (or null) / all of them.
+textContent vs innerHTML :: Text (safe) vs HTML that gets parsed (never with user input: XSS).
+createElement / append / remove :: Make a new element, insert it, take one out.
+classList :: add / remove / toggle / contains CSS classes on an element.
+dataset :: data-user-id="7" is element.dataset.userId.
+XSS :: Cross-site scripting: user text treated as HTML runs attacker code in your page.
+render() pattern :: Keep data in JS; a function rebuilds the DOM from the data whenever it changes.
+requestAnimationFrame :: Calls back before the next screen repaint; base movement on elapsed time.
+
+=== lesson js-events | Events | 85
+## Reacting to the user
+
+Pages come alive by **reacting**: to clicks, key presses, typing, scrolling, the page finishing loading. The browser fires an **event** for each of these, and you register a function, an **event listener** (or handler), to run when it happens:
+
+```html
+<!doctype html>
+<html>
+  <body>
+    <button id="like">👍 Like</button>
+    <span id="count">0</span>
+    <script>
+      let likes = 0;
+      const button = document.querySelector("#like");
+      button.addEventListener("click", () => {
+        likes++;
+        document.querySelector("#count").textContent = likes;
+        console.log("clicked", likes);
+      });
+    </script>
+  </body>
+</html>
+```
+
+Click the button in the preview. `element.addEventListener(type, listener)` can be called several times for the same event; all listeners run, in order. `removeEventListener(type, sameFunction)` removes one (keep a reference to the function to do that). You'll see `onclick="..."` attributes in old HTML: avoid them, they mix behaviour into markup and allow only one handler.
+
+## The event object
+
+Every listener receives an **event object** with details about what happened:
+
+```html
+<!doctype html>
+<html>
+  <body>
+    <button id="a">Click me</button>
+    <input id="name" placeholder="Type here">
+    <p id="out"></p>
+    <script>
+      document.querySelector("#a").addEventListener("click", (event) => {
+        console.log(event.type, event.target.id, event.clientX >= 0, event.shiftKey);
+      });
+      document.querySelector("#name").addEventListener("input", (event) => {
+        document.querySelector("#out").textContent = `Hello, ${event.target.value}!`;
+      });
+    </script>
+  </body>
+</html>
+```
+
+- `event.type`: which event (`"click"`).
+- `event.target`: the element the event happened on.
+- Mouse/pointer events: `clientX`/`clientY` (position), `button`; keyboard events: `key` (`"Enter"`, `"a"`, `"ArrowLeft"`), plus `shiftKey`, `ctrlKey`, `altKey`, `metaKey` on both.
+
+## Common events
+
+| Event | Fires when |
+|---|---|
+| `click`, `dblclick` | an element is clicked (also by keyboard on buttons) |
+| `pointerdown`, `pointermove`, `pointerup` | mouse, pen or touch is pressed, moves, is released |
+| `keydown`, `keyup` | a key is pressed / released (`event.key`) |
+| `input` | a field's value changes, on every keystroke |
+| `change` | a field's value is committed (select picked, checkbox ticked, input left) |
+| `submit` | a form is submitted (next lesson) |
+| `focus`, `blur` | an element gains / loses keyboard focus |
+| `scroll`, `resize` | the page or an element scrolls / the window is resized |
+| `DOMContentLoaded`, `load` | the HTML is parsed / everything, including images, has loaded |
+
+## Default actions
+
+Many events have a built-in **default action**: clicking a link navigates, submitting a form reloads the page, pressing space scrolls. `event.preventDefault()` cancels it, so your code can handle the event instead:
+
+```html
+<!doctype html>
+<html>
+  <body>
+    <a id="link" href="https://example.com">Go somewhere</a>
+    <p id="msg"></p>
+    <script>
+      document.querySelector("#link").addEventListener("click", (event) => {
+        event.preventDefault();
+        document.querySelector("#msg").textContent = "Navigation cancelled: handled in JavaScript instead.";
+      });
+    </script>
+  </body>
+</html>
+```
+
+## Propagation and event delegation
+
+An event doesn't only fire on its target: it **bubbles up** through every ancestor, from the button to its list, to `body`, to `document`. A listener on a parent hears events from all its children:
+
+```html
+<!doctype html>
+<html>
+  <body>
+    <ul id="list">
+      <li><button data-id="1">Delete 1</button></li>
+      <li><button data-id="2">Delete 2</button></li>
+      <li><button data-id="3">Delete 3</button></li>
+    </ul>
+    <script>
+      const list = document.querySelector("#list");
+      list.addEventListener("click", (event) => {
+        const button = event.target.closest("button");
+        if (!button) return;
+        console.log("delete item", button.dataset.id);
+        button.closest("li").remove();
+      });
+    </script>
+  </body>
+</html>
+```
+
+This is **event delegation**: one listener on the container instead of one per item. It also works for items added **later**, which per-item listeners would miss. `event.target.closest("button")` finds the button even when the click landed on an icon inside it. (`event.stopPropagation()` stops the bubbling, but is rarely the right fix; prefer checking `event.target`.)
+
+~~~check
+? A list gets new items over time. What's the simplest way to handle clicks on any item, including new ones?
+- Add a listener to each item when the page loads
++ One listener on the list, using `event.target` (event delegation)
+- `setInterval` checking for clicks
+- `onclick` attributes in the HTML
+> Events bubble up to the list; one listener covers every current and future item.
+~~~
+
+## Keyboard input
+
+```html
+<!doctype html>
+<html>
+  <body>
+    <p>Click here, then use the arrow keys.</p>
+    <div id="box" style="width:30px;height:30px;background:steelblue;position:relative;left:0;top:0"></div>
+    <script>
+      const pos = { x: 0, y: 0 };
+      const box = document.querySelector("#box");
+      document.addEventListener("keydown", (event) => {
+        const moves = { ArrowLeft: [-10, 0], ArrowRight: [10, 0], ArrowUp: [0, -10], ArrowDown: [0, 10] };
+        const move = moves[event.key];
+        if (!move) return;
+        event.preventDefault();
+        pos.x += move[0];
+        pos.y += move[1];
+        box.style.left = pos.x + "px";
+        box.style.top = pos.y + "px";
+      });
+    </script>
+  </body>
+</html>
+```
+
+`event.key` gives the character or key name, regardless of the keyboard layout. A lookup table (`moves`) beats a long `if` chain.
+
+## Events and the event loop
+
+Event handlers are **tasks** in the event loop from Module 10: they run one at a time, when the current code has finished. A slow handler freezes the page until it returns; keep handlers short, and start async work (`fetch`) from them rather than computing everything there. Rapid events like `input`, `scroll` and `pointermove` are where **debouncing** and **throttling** (Module 10) earn their keep.
+
+## Accessibility
+
+Use real `<button>` elements for things that are clicked: they can be focused with Tab and pressed with Enter or Space for free, and screen readers announce them as buttons. A `<div>` with a click listener works for mouse users only. Good event handling and good HTML go together.
+
+📚 **Go deeper:** MDN, "Introduction to events", "Event bubbling" and "Event reference"; javascript.info, "Introduction to Events" (the whole chapter); *Eloquent JavaScript* (4th ed.), chapter 15, "Handling Events".
+--- goals
+- register and remove event listeners with `addEventListener`
+- read the event object: `type`, `target`, pointer position, `key` and modifier keys
+- choose the right event: click, input, change, keydown, submit, load...
+- cancel default actions with `preventDefault`
+- explain bubbling, and handle many elements with event delegation and `closest`
+- keep handlers short, and make clickable things real buttons
+--- quiz
+? Which event fires on every keystroke in a text field?
+- `change`
++ `input`
+- `submit`
+- `keypress`
+> input fires whenever the value changes; change only when it's committed.
+? What does `event.preventDefault()` do on a link's click?
+- Removes the link
++ Stops the browser navigating, so your code can handle the click
+- Stops other listeners from running
+- Reloads the page
+> It cancels the event's default action.
+? A click on a `<span>` inside a `<button>` inside a `<li>`. Which listeners hear it (without stopPropagation)?
+- Only the span's
+- Only the button's
++ The span's, then the button's, the li's and all further ancestors'
+- Only the li's
+> Events bubble from the target up through every ancestor.
+? In a delegated listener on a `<ul>`, how do you find which `<li>` was clicked, even if the click hit an icon inside it?
++ `event.target.closest("li")`
+- `event.li`
+- `this.children[0]`
+- `event.currentTarget`
+> closest walks up from the target to the nearest matching ancestor.
+? Why use `<button>` instead of `<div onclick>`?
+- Divs can't receive clicks
++ Buttons work with the keyboard and screen readers automatically
+- Buttons are faster
+- Divs can't be styled
+> Accessibility comes for free with the right element.
+--- exercise code web
+::prompt
+Make the counter work: clicking `#plus` adds the current **step** (the number in `#step`, read when clicking) to the counter, `#minus` subtracts it, and `#reset` sets it back to 0. Show the value in `#value`. The counter may never go below 0. Also, pressing the `+` or `-` key anywhere on the page should do the same as the buttons.
+::starter
+<!doctype html>
+<html>
+  <body>
+    <p>Value: <span id="value">0</span></p>
+    <label>Step <input id="step" type="number" value="1"></label>
+    <button id="minus">−</button>
+    <button id="plus">+</button>
+    <button id="reset">Reset</button>
+    <script>
+      let value = 0;
+      // listeners here
+    </script>
+  </body>
+</html>
+::solution
+<!doctype html>
+<html>
+  <body>
+    <p>Value: <span id="value">0</span></p>
+    <label>Step <input id="step" type="number" value="1"></label>
+    <button id="minus">−</button>
+    <button id="plus">+</button>
+    <button id="reset">Reset</button>
+    <script>
+      let value = 0;
+      const show = () => {
+        document.querySelector("#value").textContent = value;
+      };
+      const step = () => Number(document.querySelector("#step").value) || 0;
+      const change = (sign) => {
+        value = Math.max(0, value + sign * step());
+        show();
+      };
+      document.querySelector("#plus").addEventListener("click", () => change(1));
+      document.querySelector("#minus").addEventListener("click", () => change(-1));
+      document.querySelector("#reset").addEventListener("click", () => {
+        value = 0;
+        show();
+      });
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "+") change(1);
+        if (event.key === "-") change(-1);
+      });
+    </script>
+  </body>
+</html>
+::tests
+const v = () => $('#value').textContent;
+click($('#plus')); click($('#plus'));
+assert(v() === '2', 'two clicks on + should give 2, got ' + v());
+type($('#step'), '5');
+click($('#plus'));
+assert(v() === '7', 'with step 5, + should give 7, got ' + v());
+click($('#minus')); click($('#minus'));
+assert(v() === '0', 'the value must never go below 0, got ' + v());
+press(document.body, '+');
+assert(v() === '5', 'pressing the + key should add the step, got ' + v());
+press(document.body, '-');
+assert(v() === '0', 'pressing the - key should subtract the step');
+click($('#plus')); click($('#reset'));
+assert(v() === '0', 'reset should set the value to 0');
+::hints
+- Read the step inside the click handler: `Number(document.querySelector("#step").value)`.
+- One helper `change(sign)` used by both buttons and the keys avoids repeating the logic; `Math.max(0, ...)` stops at zero.
+- Listen for `keydown` on `document` and check `event.key`.
+--- exercise code web
+::prompt
+Build a to-do list with **event delegation**. Typing text in `#new` and clicking `#add` adds an `<li>` containing a `<span>` with the text and a `<button class="delete">✕</button>`; empty or whitespace-only text is ignored and the input is cleared after adding. Use **one** click listener on `#list` for all delete buttons (including ones added later), and clicking an item's text (the span) toggles the class `done` on its `<li>`. Keep `#left` showing how many items are not done, e.g. `2 left`.
+::starter
+<!doctype html>
+<html>
+  <head><style>.done span { text-decoration: line-through; color: gray; }</style></head>
+  <body>
+    <input id="new" placeholder="What needs doing?">
+    <button id="add">Add</button>
+    <ul id="list"></ul>
+    <p id="left">0 left</p>
+    <script>
+      // your code here
+    </script>
+  </body>
+</html>
+::solution
+<!doctype html>
+<html>
+  <head><style>.done span { text-decoration: line-through; color: gray; }</style></head>
+  <body>
+    <input id="new" placeholder="What needs doing?">
+    <button id="add">Add</button>
+    <ul id="list"></ul>
+    <p id="left">0 left</p>
+    <script>
+      const list = document.querySelector("#list");
+      const input = document.querySelector("#new");
+      const updateLeft = () => {
+        const left = list.querySelectorAll("li:not(.done)").length;
+        document.querySelector("#left").textContent = `${left} left`;
+      };
+      document.querySelector("#add").addEventListener("click", () => {
+        const text = input.value.trim();
+        input.value = "";
+        if (!text) return;
+        const li = document.createElement("li");
+        const span = document.createElement("span");
+        span.textContent = text;
+        const del = document.createElement("button");
+        del.className = "delete";
+        del.textContent = "✕";
+        li.append(span, " ", del);
+        list.append(li);
+        updateLeft();
+      });
+      list.addEventListener("click", (event) => {
+        const li = event.target.closest("li");
+        if (!li) return;
+        if (event.target.closest(".delete")) li.remove();
+        else if (event.target.closest("span")) li.classList.toggle("done");
+        updateLeft();
+      });
+    </script>
+  </body>
+</html>
+::tests
+const add = (text) => { type($('#new'), text); click($('#add')); };
+add('Learn events'); add('   '); add('Build an app'); add('Use delegation');
+assert($$('#list li').length === 3, 'whitespace-only text must be ignored: expected 3 items, got ' + $$('#list li').length);
+assert($('#new').value === '', 'the input should be cleared after adding');
+assert($('#left').textContent === '3 left', 'expected "3 left", got "' + $('#left').textContent + '"');
+click($$('#list li span')[0]);
+assert($$('#list li')[0].classList.contains('done'), 'clicking the text should toggle done');
+assert($('#left').textContent === '2 left', 'a done item no longer counts: expected "2 left"');
+click($$('#list li .delete')[1]);
+assert($$('#list li').length === 2 && $$('#list li span')[1].textContent === 'Use delegation', 'the delete button removes its own item');
+const lis = $$('#list li');
+assert(lis.every((li) => li.querySelector('span') && li.querySelector('button.delete')), 'each item needs a span and a button.delete');
+const html = document.documentElement.outerHTML;
+assert(!/querySelectorAll\(['"]\.delete['"]\)\.forEach/.test(html), 'use one delegated listener on #list instead of a listener per button');
+::hints
+- Create the li, span and button with `createElement`, and set the text with `textContent`.
+- One `list.addEventListener("click", ...)`: `event.target.closest(".delete")` means delete; `closest("span")` means toggle.
+- `list.querySelectorAll("li:not(.done)").length` counts the items still to do.
+--- cards
+addEventListener(type, fn) :: Runs fn every time the event happens on that element. Several listeners can share an event.
+Event object :: type, target, clientX/clientY, key, shiftKey/ctrlKey... passed to every listener.
+input vs change :: input: on every keystroke. change: when the value is committed.
+preventDefault() :: Cancels the browser's default action (following a link, submitting a form).
+Bubbling :: Events travel from the target up through every ancestor.
+Event delegation :: One listener on a container handles events from all its children, including future ones (event.target.closest(...)).
+DOMContentLoaded / load :: HTML parsed / everything (images, styles) loaded.
+
+=== lesson js-forms | Forms, validation and storage | 85
+## Forms: how users give you data
+
+Sign-ups, searches, checkouts, settings: forms are how users give data to an application. HTML provides the controls; JavaScript reads them, validates them, and decides what to do on submit.
+
+```html
+<!doctype html>
+<html>
+  <body>
+    <form id="signup">
+      <label>Name <input name="name" required></label>
+      <label>Email <input name="email" type="email" required></label>
+      <label>Plan
+        <select name="plan">
+          <option value="free">Free</option>
+          <option value="pro">Pro</option>
+        </select>
+      </label>
+      <label><input name="news" type="checkbox"> Send me news</label>
+      <button>Sign up</button>
+    </form>
+    <p id="result"></p>
+    <script>
+      const form = document.querySelector("#signup");
+      form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        const data = new FormData(form);
+        const values = Object.fromEntries(data);
+        document.querySelector("#result").textContent = JSON.stringify(values);
+        console.log(values);
+      });
+    </script>
+  </body>
+</html>
+```
+
+Fill it in and press Sign up. Important pieces:
+
+- Listen for the form's **`submit`** event, not the button's click: it also fires when the user presses Enter in a field.
+- `event.preventDefault()` stops the browser's default action (sending the form and reloading the page), so JavaScript can handle it, for example by sending the data with `fetch`.
+- `new FormData(form)` collects every named field; `Object.fromEntries(formData)` turns it into a plain object. Each field needs a `name` attribute to be included.
+- Field values are **always strings** (`"3"`, not 3); an unchecked checkbox is simply missing. Convert as needed.
+
+## Reading individual controls
+
+| Control | Read with |
+|---|---|
+| text, email, password, textarea | `input.value` (a string) |
+| number, range | `input.value` (a string) or `input.valueAsNumber` |
+| checkbox | `checkbox.checked` (true/false) |
+| radio buttons | `form.elements.size.value` (the checked one in the group named `size`) |
+| select | `select.value` (the selected option's value) |
+| file | `input.files` (a list of `File` objects) |
+
+`form.elements.name` reaches any named field of a form.
+
+## Built-in validation
+
+HTML can validate many things without any JavaScript, using attributes: `required`, `type="email"`, `type="url"`, `min`/`max` (numbers and dates), `minlength`/`maxlength`, and `pattern` (a regular expression). The browser refuses to submit an invalid form and shows a message next to the first problem.
+
+From JavaScript you can use the same machinery, the **Constraint Validation API**:
+
+- `input.checkValidity()` / `form.checkValidity()` return true or false;
+- `input.validity` tells you why (`valueMissing`, `typeMismatch`, `tooShort`, `patternMismatch`...);
+- `input.setCustomValidity("message")` marks a field invalid with your own message (and `""` makes it valid again), for rules HTML can't express:
+
+```html
+<!doctype html>
+<html>
+  <body>
+    <form id="f" novalidate>
+      <label>Password <input id="pw" type="password" minlength="8" required></label>
+      <label>Repeat <input id="pw2" type="password" required></label>
+      <button>Save</button>
+    </form>
+    <p id="msg"></p>
+    <script>
+      const form = document.querySelector("#f");
+      const pw = document.querySelector("#pw");
+      const pw2 = document.querySelector("#pw2");
+      form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        pw2.setCustomValidity(pw.value === pw2.value ? "" : "The passwords don't match");
+        const problems = [pw, pw2].filter((input) => !input.checkValidity()).map((input) => input.validationMessage);
+        document.querySelector("#msg").textContent = problems.length ? problems.join(" / ") : "Saved!";
+      });
+    </script>
+  </body>
+</html>
+```
+
+(`novalidate` turns off the browser's own pop-up messages so the page shows its messages itself; the rules still apply.)
+
+⚠️ **Client-side validation is for the user's convenience, not for security.** Anyone can bypass your JavaScript (open the developer tools, or send requests directly). The server must validate everything again.
+
+~~~check
+? What type is the value of `<input type="number" name="age">` in `Object.fromEntries(new FormData(form))`?
+- A number
++ A string
+- A boolean
+- It depends on what was typed
+> Form data is always text. Convert with Number() (or use input.valueAsNumber).
+~~~
+
+## Storing data in the browser
+
+Web pages forget everything when they're reloaded, unless they store data. **Web Storage** keeps small amounts of data in the browser, per website:
+
+- `localStorage` keeps data **until it's deleted**, even after the browser is closed;
+- `sessionStorage` keeps it only **for the current tab**, until the tab is closed.
+
+Both store **strings only**, so objects go through JSON (Module 6):
+
+```html
+<!doctype html>
+<html>
+  <body>
+    <label><input id="dark" type="checkbox"> Dark mode</label>
+    <p id="visits"></p>
+    <script>
+      const settings = JSON.parse(localStorage.getItem("settings") ?? '{"dark": false, "visits": 0}');
+      settings.visits++;
+      localStorage.setItem("settings", JSON.stringify(settings));
+      const box = document.querySelector("#dark");
+      box.checked = settings.dark;
+      box.addEventListener("change", () => {
+        settings.dark = box.checked;
+        localStorage.setItem("settings", JSON.stringify(settings));
+        document.body.style.background = settings.dark ? "#222" : "";
+        document.body.style.color = settings.dark ? "#eee" : "";
+      });
+      document.querySelector("#visits").textContent = `Visits on this device: ${settings.visits}`;
+      console.log(localStorage.getItem("settings"));
+    </script>
+  </body>
+</html>
+```
+
+The methods are `setItem(key, text)`, `getItem(key)` (or `null` if missing, hence the `??` default), `removeItem(key)` and `clear()`. (DevQuest's previews run in a sealed sandbox, so their storage resets every run; on a real website it persists.) Remember:
+
+- Storage holds about 5 MB per site and is synchronous, so keep it small: preferences, drafts, a cart.
+- **Never store secrets** (passwords, tokens if avoidable): any script on the page, including an injected one, can read it.
+- For larger or structured data (thousands of records, offline apps), browsers have **IndexedDB**, an asynchronous database; most people use it through a small library such as `idb`.
+- **Cookies** are the other classic storage, mainly for the server's benefit (sessions): they're sent with every request.
+
+DevQuest itself saves your progress with `localStorage` (plus a file on disk in the desktop app).
+
+📚 **Go deeper:** MDN, "Web forms" (Learn), "Client-side form validation", "FormData" and "Web Storage API"; HTML5 Cookbook, chapter 3 "Forms"; javascript.info, "Forms, controls" and "LocalStorage, sessionStorage"; *Eloquent JavaScript* (4th ed.), chapter 18, "HTTP and Forms".
+--- goals
+- handle a form's `submit` event and prevent the default page reload
+- collect field values with `FormData` and read individual controls of every type
+- validate with HTML attributes and the Constraint Validation API, including custom messages
+- explain why validation must be repeated on the server
+- save and load data with `localStorage` and JSON, and know what not to store there
+--- quiz
+? Why listen for `submit` on the form instead of `click` on its button?
++ `submit` also fires when the user presses Enter in a field
+- Buttons can't have click listeners
+- `click` fires twice
+- `submit` is faster
+> One listener covers every way the form can be submitted.
+? How do you check whether a checkbox is ticked?
+- `checkbox.value === "on"`
++ `checkbox.checked`
+- `checkbox.selected`
+- `checkbox.value === true`
+> checked is a boolean; value is the text sent when it's ticked.
+? Is client-side validation enough to protect a server from bad data?
+- Yes, if it uses `pattern`
+- Yes, with `setCustomValidity`
++ No: requests can be sent without your page, so the server must validate again
+- Only for numbers
+> Client-side checks help honest users; servers must not trust incoming data.
+? What does `localStorage.setItem("cart", { items: 2 })` store?
+- The object
++ The string "[object Object]"
+- Nothing; it throws
+- `{"items":2}`
+> Storage keeps strings. Use JSON.stringify to store objects.
+? Which storage is cleared when the tab is closed?
+- localStorage
++ sessionStorage
+- IndexedDB
+- Cookies, always
+> sessionStorage lasts for the tab's session only.
+--- exercise code web
+::prompt
+Make the sign-up form validate itself on submit (prevent the reload). Rules, shown in `#errors` as one `<li>` per problem, in this order:
+
+- **name**: required (after trimming) → `Name is required`
+- **email**: must contain `@` and a `.` after it → `Email looks invalid`
+- **age**: a whole number from 13 to 120 → `Age must be 13 to 120`
+
+If there are no problems, clear the errors and show `Welcome, <name>!` in `#result` (and nothing in `#result` otherwise). Read the values with `FormData`.
+::starter
+<!doctype html>
+<html>
+  <body>
+    <form id="signup" novalidate>
+      <input name="name" placeholder="Name">
+      <input name="email" placeholder="Email">
+      <input name="age" placeholder="Age">
+      <button>Join</button>
+    </form>
+    <ul id="errors"></ul>
+    <p id="result"></p>
+    <script>
+      // your code here
+    </script>
+  </body>
+</html>
+::solution
+<!doctype html>
+<html>
+  <body>
+    <form id="signup" novalidate>
+      <input name="name" placeholder="Name">
+      <input name="email" placeholder="Email">
+      <input name="age" placeholder="Age">
+      <button>Join</button>
+    </form>
+    <ul id="errors"></ul>
+    <p id="result"></p>
+    <script>
+      const form = document.querySelector("#signup");
+      function validate({ name, email, age }) {
+        const errors = [];
+        if (!name.trim()) errors.push("Name is required");
+        const at = email.indexOf("@");
+        if (at < 1 || !email.slice(at).includes(".")) errors.push("Email looks invalid");
+        const n = Number(age);
+        if (!Number.isInteger(n) || n < 13 || n > 120 || age.trim() === "") errors.push("Age must be 13 to 120");
+        return errors;
+      }
+      form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        const values = Object.fromEntries(new FormData(form));
+        const errors = validate(values);
+        document.querySelector("#errors").replaceChildren(
+          ...errors.map((text) => {
+            const li = document.createElement("li");
+            li.textContent = text;
+            return li;
+          }),
+        );
+        document.querySelector("#result").textContent = errors.length ? "" : `Welcome, ${values.name.trim()}!`;
+      });
+    </script>
+  </body>
+</html>
+::tests
+const form = $('#signup');
+const fill = (name, email, age) => { form.elements.name.value = name; form.elements.email.value = email; form.elements.age.value = age; form.requestSubmit(); };
+const errs = () => $$('#errors li').map((li) => li.textContent);
+fill('', 'nope', '9');
+assert(JSON.stringify(errs()) === JSON.stringify(['Name is required', 'Email looks invalid', 'Age must be 13 to 120']), 'all three errors, in order; got ' + JSON.stringify(errs()));
+assert($('#result').textContent === '', 'no welcome message while there are errors');
+fill('Ada', 'ada@example', '36');
+assert(JSON.stringify(errs()) === '["Email looks invalid"]', 'an email needs a dot after the @');
+fill('  Ada ', 'ada@example.com', '12.5');
+assert(JSON.stringify(errs()) === '["Age must be 13 to 120"]', 'the age must be a whole number');
+fill('  Ada ', 'ada@example.com', '36');
+assert(errs().length === 0, 'valid input should clear the errors');
+assert($('#result').textContent === 'Welcome, Ada!', 'expected "Welcome, Ada!", got "' + $('#result').textContent + '"');
+::hints
+- `form.addEventListener("submit", (event) => { event.preventDefault(); ... })`.
+- `Object.fromEntries(new FormData(form))` gives `{ name, email, age }` as strings.
+- A separate `validate(values)` function returning an array of messages keeps the handler short; render them with `replaceChildren`.
+--- exercise code web
+::prompt
+Build a **draft saver** for a note: whatever is typed in the `<textarea id="note">` is saved to `localStorage` under the key `"draft"` on every `input` event, together with the time it was saved, as JSON `{ "text": ..., "savedAt": ... }` (use `Date.now()`). When the page loads, restore the text from a saved draft if there is one. The `#clear` button removes the draft from storage and empties the textarea. `#status` shows `Saved` after saving, `Restored` after restoring, and `Cleared` after clearing.
+::starter
+<!doctype html>
+<html>
+  <body>
+    <textarea id="note" rows="4" cols="40"></textarea>
+    <button id="clear">Clear draft</button>
+    <p id="status"></p>
+    <script>
+      // your code here
+    </script>
+  </body>
+</html>
+::solution
+<!doctype html>
+<html>
+  <body>
+    <textarea id="note" rows="4" cols="40"></textarea>
+    <button id="clear">Clear draft</button>
+    <p id="status"></p>
+    <script>
+      const note = document.querySelector("#note");
+      const status = document.querySelector("#status");
+      const saved = JSON.parse(localStorage.getItem("draft") ?? "null");
+      if (saved) {
+        note.value = saved.text;
+        status.textContent = "Restored";
+      }
+      note.addEventListener("input", () => {
+        localStorage.setItem("draft", JSON.stringify({ text: note.value, savedAt: Date.now() }));
+        status.textContent = "Saved";
+      });
+      document.querySelector("#clear").addEventListener("click", () => {
+        localStorage.removeItem("draft");
+        note.value = "";
+        status.textContent = "Cleared";
+      });
+    </script>
+  </body>
+</html>
+::tests
+type($('#note'), 'Remember the milk');
+const draft = JSON.parse(localStorage.getItem('draft'));
+assert(draft && draft.text === 'Remember the milk', 'the draft text should be saved as JSON under "draft"');
+assert(typeof draft.savedAt === 'number', 'savedAt should be a number from Date.now()');
+assert($('#status').textContent === 'Saved', 'status should say Saved');
+click($('#clear'));
+assert(localStorage.getItem('draft') === null && $('#note').value === '', 'clear should remove the draft and empty the textarea');
+assert($('#status').textContent === 'Cleared', 'status should say Cleared');
+localStorage.setItem('draft', JSON.stringify({ text: 'from last time', savedAt: 1 }));
+const src = document.documentElement.outerHTML;
+assert(/getItem\(\s*["']draft["']\s*\)/.test(src), 'on load, read the saved draft with localStorage.getItem("draft")');
+::hints
+- On load: `JSON.parse(localStorage.getItem("draft") ?? "null")` gives the saved object or null.
+- In the input listener: `localStorage.setItem("draft", JSON.stringify({ text: note.value, savedAt: Date.now() }))`.
+- `localStorage.removeItem("draft")` in the clear handler.
+--- cards
+submit event :: Fires when a form is submitted (button or Enter). Call event.preventDefault() to handle it in JS.
+FormData :: new FormData(form) collects named fields; Object.fromEntries(fd) makes a plain object. Values are strings.
+Validation attributes :: required, type="email", min/max, minlength/maxlength, pattern.
+Constraint Validation API :: checkValidity(), validity, validationMessage, setCustomValidity(msg).
+Client vs server validation :: Client-side checks are for convenience; the server must validate again.
+localStorage / sessionStorage :: Per-site string storage: forever / for the tab. setItem, getItem (null if missing), removeItem.
+Storage + JSON :: localStorage.setItem(k, JSON.stringify(v)); JSON.parse(localStorage.getItem(k) ?? "default").
+
+=== lesson js-canvas | Drawing with canvas and SVG | 80
+## Two ways to draw
+
+Web pages can draw graphics in two ways:
+
+- **SVG** (Scalable Vector Graphics): shapes described as elements in the page, like HTML. Each circle or path is a DOM element you can style with CSS, attach events to, and change later. Great for icons, diagrams and charts with a modest number of shapes. It stays sharp at any size.
+- **Canvas**: a rectangle of pixels you paint with JavaScript commands. Once painted, a shape is just pixels: there are no elements to update, you redraw the picture. Great for games, animations, image editing and charts with thousands of points.
+
+## SVG basics
+
+```html
+<!doctype html>
+<html>
+  <body>
+    <svg width="220" height="120" viewBox="0 0 220 120">
+      <rect x="10" y="10" width="80" height="50" rx="8" fill="steelblue" />
+      <circle cx="150" cy="40" r="30" fill="tomato" />
+      <line x1="10" y1="100" x2="200" y2="100" stroke="black" stroke-width="2" />
+      <text x="110" y="90" text-anchor="middle" font-family="sans-serif">Hello SVG</text>
+    </svg>
+    <script>
+      const circle = document.querySelector("circle");
+      circle.addEventListener("click", () => circle.setAttribute("fill", "gold"));
+      console.log(circle.getAttribute("r"));
+    </script>
+  </body>
+</html>
+```
+
+The coordinate system starts at the **top-left** corner, with y growing **downwards** (true for canvas too). SVG shapes are DOM elements: select them, change attributes, listen for clicks. To create SVG elements from JavaScript, use `document.createElementNS("http://www.w3.org/2000/svg", "circle")` (they belong to a different namespace than HTML).
+
+## Canvas basics
+
+```html
+<!doctype html>
+<html>
+  <body>
+    <canvas id="c" width="300" height="150" style="border:1px solid #ccc"></canvas>
+    <script>
+      const canvas = document.querySelector("#c");
+      const ctx = canvas.getContext("2d");
+
+      ctx.fillStyle = "steelblue";
+      ctx.fillRect(10, 10, 100, 60);
+
+      ctx.strokeStyle = "tomato";
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(130, 20);
+      ctx.lineTo(200, 120);
+      ctx.lineTo(260, 30);
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.arc(60, 115, 25, 0, Math.PI * 2);
+      ctx.fillStyle = "gold";
+      ctx.fill();
+
+      ctx.fillStyle = "black";
+      ctx.font = "16px sans-serif";
+      ctx.fillText("Canvas!", 180, 140);
+    </script>
+  </body>
+</html>
+```
+
+- `canvas.getContext("2d")` gives the **drawing context**, the object with all the drawing methods.
+- `fillRect` and `strokeRect` draw rectangles directly.
+- Other shapes are **paths**: `beginPath()`, then `moveTo`, `lineTo`, `arc` (angles in radians: a full circle is `2 * Math.PI`), `quadraticCurveTo`..., then `fill()` or `stroke()`.
+- Styles are **state** on the context (`fillStyle`, `strokeStyle`, `lineWidth`, `font`) that apply to everything drawn afterwards. `ctx.save()` and `ctx.restore()` remember and bring back the state, which is handy around transformations (`translate`, `rotate`, `scale`).
+- `ctx.drawImage(image, x, y)` draws an image; `ctx.getImageData` reads pixels back.
+
+## A bar chart
+
+Data plus a loop gives a chart. Scaling the values to fit the canvas is the main idea:
+
+```html
+<!doctype html>
+<html>
+  <body>
+    <canvas id="chart" width="320" height="160"></canvas>
+    <script>
+      const sales = [["Mon", 12], ["Tue", 19], ["Wed", 7], ["Thu", 15], ["Fri", 23]];
+      const ctx = document.querySelector("#chart").getContext("2d");
+      const max = Math.max(...sales.map(([, v]) => v));
+      const barWidth = 40, gap = 20, bottom = 140, height = 120;
+      sales.forEach(([day, value], i) => {
+        const x = 20 + i * (barWidth + gap);
+        const h = (value / max) * height;
+        ctx.fillStyle = value === max ? "tomato" : "steelblue";
+        ctx.fillRect(x, bottom - h, barWidth, h);
+        ctx.fillStyle = "black";
+        ctx.font = "12px sans-serif";
+        ctx.fillText(day, x + 8, bottom + 14);
+        ctx.fillText(String(value), x + 12, bottom - h - 4);
+      });
+    </script>
+  </body>
+</html>
+```
+
+Because the y axis points down, a bar of height `h` starts at `bottom - h`.
+
+## Animation: clear, update, draw
+
+Canvas animation is a loop: each frame, clear the canvas, update the positions, and draw everything again, scheduled with `requestAnimationFrame`:
+
+```html
+<!doctype html>
+<html>
+  <body>
+    <canvas id="game" width="300" height="150" style="background:#111"></canvas>
+    <script>
+      const ctx = document.querySelector("#game").getContext("2d");
+      const ball = { x: 50, y: 50, vx: 120, vy: 90, r: 10 };
+      let last = performance.now();
+      function frame(now) {
+        const dt = (now - last) / 1000;
+        last = now;
+        ball.x += ball.vx * dt;
+        ball.y += ball.vy * dt;
+        if (ball.x < ball.r || ball.x > 300 - ball.r) ball.vx *= -1;
+        if (ball.y < ball.r || ball.y > 150 - ball.r) ball.vy *= -1;
+        ctx.clearRect(0, 0, 300, 150);
+        ctx.beginPath();
+        ctx.arc(ball.x, ball.y, ball.r, 0, Math.PI * 2);
+        ctx.fillStyle = "lime";
+        ctx.fill();
+        requestAnimationFrame(frame);
+      }
+      requestAnimationFrame(frame);
+    </script>
+  </body>
+</html>
+```
+
+Velocities in pixels **per second**, multiplied by the time since the last frame (`dt`), keep the speed independent of the screen's refresh rate. This loop (input, update, draw) is the heart of every game, from Pong to 3D engines (which use canvas's 3D sibling, **WebGL** / **WebGPU**).
+
+## Which to choose?
+
+| Need | Choose |
+|---|---|
+| A logo, icons, a diagram, a chart with interactive parts | SVG |
+| Thousands of moving things, games, pixel effects | Canvas |
+| Charts in a real project | a library (Chart.js uses canvas; D3 usually SVG) |
+
+📚 **Go deeper:** MDN, "Canvas tutorial" and "SVG tutorial"; HTML5 Cookbook, chapter on canvas; *Eloquent JavaScript* (4th ed.), chapter 17, "Drawing on Canvas".
+--- goals
+- choose between SVG (elements) and canvas (pixels) for a drawing task
+- draw and change SVG shapes with attributes and events
+- draw rectangles, paths, arcs and text on a canvas, using the context's state
+- scale data to canvas coordinates to draw a chart
+- animate with a clear-update-draw loop and `requestAnimationFrame`, using elapsed time
+--- quiz
+? Where is the point (0, 0) on a canvas or in SVG?
++ The top-left corner, with y growing downwards
+- The bottom-left corner, with y growing upwards
+- The centre
+- It depends on the browser
+> Screen coordinates start at the top left.
+? You need a chart where each bar shows a tooltip when hovered. Which is simpler?
++ SVG, because each bar is an element you can attach events to
+- Canvas, because it's faster
+- Neither can do it
+- An image file
+> SVG shapes are DOM elements with their own events.
+? What must you call before drawing a new shape with `moveTo`/`lineTo` on a canvas?
+- `ctx.clear()`
++ `ctx.beginPath()`
+- `ctx.newShape()`
+- Nothing
+> beginPath starts a fresh path; otherwise new lines join the previous path.
+? In a canvas animation loop, what usually happens each frame?
+- Only the moved shapes are erased
++ Clear the canvas, update positions, draw everything again
+- A new canvas element is created
+- The DOM is rebuilt
+> Canvas keeps no shapes, only pixels, so you redraw the scene.
+? Why multiply velocities by `dt` (seconds since the last frame)?
+- To make the animation slower
++ So objects move at the same speed whatever the screen's frame rate
+- Because requestAnimationFrame requires it
+- To save battery
+> Frame rates vary (60, 120, 144 Hz); time-based movement doesn't.
+--- exercise code web
+::prompt
+Draw a **bar chart** of `data` on the canvas: one bar per value, each `barWidth` (30) pixels wide with `gap` (10) pixels between bars, starting at x = 10, standing on the bottom edge of the canvas (y = 150), and scaled so the **largest** value is exactly 140 pixels tall. Fill the bars with `#1e90ff` (dodger blue), except the largest one, which is `#ff6347` (tomato). Write it as a function `drawChart(ctx, data)` so it can be called again with other data (it should clear the canvas first).
+::starter
+<!doctype html>
+<html>
+  <body>
+    <canvas id="chart" width="300" height="150"></canvas>
+    <script>
+      const data = [4, 8, 15, 16, 23, 42];
+      const barWidth = 30, gap = 10;
+      function drawChart(ctx, data) {
+      }
+      drawChart(document.querySelector("#chart").getContext("2d"), data);
+    </script>
+  </body>
+</html>
+::solution
+<!doctype html>
+<html>
+  <body>
+    <canvas id="chart" width="300" height="150"></canvas>
+    <script>
+      const data = [4, 8, 15, 16, 23, 42];
+      const barWidth = 30, gap = 10;
+      function drawChart(ctx, data) {
+        ctx.clearRect(0, 0, 300, 150);
+        const max = Math.max(...data);
+        data.forEach((value, i) => {
+          const h = (value / max) * 140;
+          ctx.fillStyle = value === max ? "#ff6347" : "#1e90ff";
+          ctx.fillRect(10 + i * (barWidth + gap), 150 - h, barWidth, h);
+        });
+      }
+      drawChart(document.querySelector("#chart").getContext("2d"), data);
+    </script>
+  </body>
+</html>
+::tests
+const ctx = $('#chart').getContext('2d');
+const px = (x, y) => Array.from(ctx.getImageData(x, y, 1, 1).data).slice(0, 3).join(',');
+const blue = '30,144,255', red = '255,99,71', empty = '0,0,0';
+assert(px(25, 148) === blue, 'the first bar should be dodger blue near the bottom at x=25');
+assert(px(225, 15) === red, 'the tallest bar (42) should reach 140px high, tomato coloured');
+assert(px(225, 8) === empty, 'the tallest bar must be exactly 140px tall, not more');
+assert(px(25, 125) === empty && px(25, 140) === blue, 'the first bar (4) should be about 13px tall');
+assert(px(45, 148) === empty, 'there should be a gap between bars');
+drawChart(ctx, [10, 5]);
+assert(px(25, 15) === red && px(225, 148) === empty, 'drawChart should clear the canvas and draw the new data');
+::hints
+- Scale: `h = (value / max) * 140`, where `max = Math.max(...data)`.
+- Bar i starts at `x = 10 + i * (barWidth + gap)` and `y = 150 - h`.
+- `ctx.clearRect(0, 0, 300, 150)` first; set `ctx.fillStyle` before each `fillRect`.
+--- cards
+SVG :: Vector shapes as DOM elements (<rect>, <circle>, <path>...): styleable, clickable, sharp at any size.
+Canvas :: A bitmap you paint with ctx = canvas.getContext("2d"); shapes become pixels, so you redraw to change.
+Canvas paths :: beginPath(), moveTo, lineTo, arc (radians), then fill() or stroke().
+Context state :: fillStyle, strokeStyle, lineWidth, font apply to later drawing; save() / restore() bring state back.
+Coordinates :: (0, 0) is the top-left; y grows downwards.
+Animation loop :: Each frame: clear, update positions (speed × dt), draw; schedule with requestAnimationFrame.
+
+=== lesson js-m11-test | Module 11 test | 200 | exam
+This test covers Module 11: ES modules, npm and packages, Node.js (process, files, paths, events), the DOM, events, forms and storage, and drawing with canvas and SVG.
+
+Before you start, check that you can:
+
+- split code into modules with named and default exports;
+- read a `package.json`, install packages, and read semantic versions;
+- write Node programs that read arguments and files;
+- find, create and change DOM elements safely (no `innerHTML` with user input);
+- handle events with delegation, and forms with `FormData` and validation;
+- store data with `localStorage` and JSON, and draw on a canvas.
+
+## Practise more
+
+- Project: [Kanban Task Board](#/projects/web-kanban) combines the DOM, events and state.
+--- goals
+- build programs from modules and packages
+- write Node.js scripts that work with files and the command line
+- build interactive web pages with the DOM, events, forms and storage
+--- quiz
+? How do you import a package called `chalk` that's been installed with npm?
++ `import chalk from "chalk";`
+- `import chalk from "./chalk.js";`
+- `import chalk from "node:chalk";`
+- `require.install("chalk")`
+> Packages are imported by name; ./ is for your own files and node: for Node's built-ins.
+? In `package.json`, what does `"type": "module"` change?
+- It makes the package private
++ Node treats .js files as ES modules (import/export) instead of CommonJS
+- It installs TypeScript
+- It enables browser support
+> Without it, Node treats .js files as CommonJS.
+? What's printed?
+```js
+import { readFileSync } from "node:fs";
+try {
+  readFileSync("nope.txt", "utf8");
+} catch (e) {
+  console.log(e.code);
+}
+```
+- `404`
++ `ENOENT`
+- `undefined`
+- `NotFound`
+> ENOENT is Node's code for a missing file or folder.
+? Which code shows a user's chosen nickname safely?
+- `el.innerHTML = nickname`
++ `el.textContent = nickname`
+- `el.outerHTML = nickname`
+- `document.write(nickname)`
+> textContent never parses HTML.
+? A `<ul>` gets new `<li>` items over time, each with a delete button. Where should the click listener go?
+- On each button, added once at page load
++ On the `<ul>`, checking `event.target.closest("button")`
+- On `window`, checking the mouse position
+- Nowhere; use `onclick` attributes
+> Delegation handles current and future items with one listener.
+? A form has `<input name="qty" type="number">`. After `const data = Object.fromEntries(new FormData(form))`, what is `typeof data.qty`?
+- "number"
++ "string"
+- "object"
+- "undefined"
+> All form data is text.
+? What does `localStorage.getItem("missing")` return when the key doesn't exist?
+- `undefined`
++ `null`
+- `""`
+- It throws
+> null means "no such key"; that's why defaults use ?? "...".
+? A drawing app must let users click and drag individual shapes. Which is more natural?
++ SVG
+- Canvas
+- localStorage
+- A table
+> SVG shapes are elements with their own events; on canvas you'd have to work out which shape was hit yourself.
+--- exercise code web
+::prompt
+Build a small **expense tracker** page:
+
+- the form `#add` has fields `what` (text) and `amount` (number). On submit (no page reload), add an expense if `what` isn't empty and `amount` is a positive number; otherwise show `Enter a description and a positive amount` in `#error` (and clear `#error` after a valid entry);
+- show the expenses in `#list`, one `<li>` each as `"Lunch: $12.50"`, each with a `<button class="remove">` that removes that expense (use **one** delegated listener);
+- show the total in `#total` as `Total: $12.50`;
+- save the expenses array to `localStorage` under `"expenses"` (as JSON) after every change, and load it when the page starts.
+
+Keep the data in an array and write one `render()` function that rebuilds the list and total from it.
+::starter
+<!doctype html>
+<html>
+  <body>
+    <form id="add" novalidate>
+      <input name="what" placeholder="What">
+      <input name="amount" type="number" step="0.01" placeholder="Amount">
+      <button>Add</button>
+    </form>
+    <p id="error"></p>
+    <ul id="list"></ul>
+    <p id="total">Total: $0.00</p>
+    <script>
+      // your code here
+    </script>
+  </body>
+</html>
+::solution
+<!doctype html>
+<html>
+  <body>
+    <form id="add" novalidate>
+      <input name="what" placeholder="What">
+      <input name="amount" type="number" step="0.01" placeholder="Amount">
+      <button>Add</button>
+    </form>
+    <p id="error"></p>
+    <ul id="list"></ul>
+    <p id="total">Total: $0.00</p>
+    <script>
+      const expenses = JSON.parse(localStorage.getItem("expenses") ?? "[]");
+      const list = document.querySelector("#list");
+      const money = (n) => `$${n.toFixed(2)}`;
+      function save() {
+        localStorage.setItem("expenses", JSON.stringify(expenses));
+      }
+      function render() {
+        list.replaceChildren(
+          ...expenses.map((e, i) => {
+            const li = document.createElement("li");
+            li.textContent = `${e.what}: ${money(e.amount)} `;
+            const button = document.createElement("button");
+            button.className = "remove";
+            button.dataset.index = i;
+            button.textContent = "Remove";
+            li.append(button);
+            return li;
+          }),
+        );
+        const total = expenses.reduce((sum, e) => sum + e.amount, 0);
+        document.querySelector("#total").textContent = `Total: ${money(total)}`;
+      }
+      document.querySelector("#add").addEventListener("submit", (event) => {
+        event.preventDefault();
+        const form = event.target;
+        const what = form.elements.what.value.trim();
+        const amount = Number(form.elements.amount.value);
+        if (!what || !(amount > 0)) {
+          document.querySelector("#error").textContent = "Enter a description and a positive amount";
+          return;
+        }
+        document.querySelector("#error").textContent = "";
+        expenses.push({ what, amount });
+        form.reset();
+        save();
+        render();
+      });
+      list.addEventListener("click", (event) => {
+        const button = event.target.closest(".remove");
+        if (!button) return;
+        expenses.splice(Number(button.dataset.index), 1);
+        save();
+        render();
+      });
+      render();
+    </script>
+  </body>
+</html>
+::tests
+const form = $('#add');
+const add = (what, amount) => { form.elements.what.value = what; form.elements.amount.value = amount; form.requestSubmit(); };
+add('Lunch', '12.5');
+add('Coffee', '3.2');
+assert($$('#list li').length === 2, 'two expenses should be listed');
+assert($$('#list li')[0].textContent.startsWith('Lunch: $12.50'), 'items should read like "Lunch: $12.50"');
+assert($('#total').textContent === 'Total: $15.70', 'expected "Total: $15.70", got "' + $('#total').textContent + '"');
+add('', '5');
+assert($('#error').textContent === 'Enter a description and a positive amount', 'an empty description must show the error');
+add('Refund', '-4');
+assert($$('#list li').length === 2, 'negative amounts are not allowed');
+add('Book', '20');
+assert($('#error').textContent === '', 'a valid entry clears the error');
+const saved = JSON.parse(localStorage.getItem('expenses') ?? 'null');
+assert(Array.isArray(saved) && saved.length === 3 && saved[2].what === 'Book' && saved[2].amount === 20, 'expenses must be saved to localStorage as a JSON array of { what, amount }');
+click($$('#list .remove')[0]);
+assert($$('#list li').length === 2 && $$('#list li')[0].textContent.startsWith('Coffee'), 'remove should delete that expense');
+assert($('#total').textContent === 'Total: $23.20', 'the total should update after removing');
+assert(JSON.parse(localStorage.getItem('expenses')).length === 2, 'removing must also update storage');
+::hints
+- Load once at the start: `const expenses = JSON.parse(localStorage.getItem("expenses") ?? "[]");`.
+- After every change: update the array, then `save()` and `render()`.
+- Give each remove button `data-index`, and in the delegated listener `expenses.splice(index, 1)`.
+--- exercise code javascript
+::prompt
+A Node.js **CSV report** tool, in modules. `report.js` exports a function `summarize(csvText)` that takes CSV text with a header row `category,amount` and returns an array of `{ category, total }`, totals rounded to 2 decimals, sorted by total (highest first). `main.js` reads the file named in `process.argv[2]` with `node:fs`, calls `summarize`, and prints one line per category like `food: 42.50`. Lines that are blank are skipped; a line with a non-numeric amount makes `summarize` throw an `Error` whose message includes the line number (counting the header as line 1), e.g. `Bad amount on line 4`. For the sample file, the program prints `food: 42.50`, `travel: 30.00` and `fun: 15.25`.
+::starter
+// file: spending.csv
+category,amount
+food,12.50
+travel,30
+food,30
+
+fun,15.25
+// file: report.js
+export function summarize(csvText) {
+}
+// file: main.js
+process.argv = ["node", "main.js", "spending.csv"];
+import { readFileSync } from "node:fs";
+import { summarize } from "./report.js";
+::solution
+// file: spending.csv
+category,amount
+food,12.50
+travel,30
+food,30
+
+fun,15.25
+// file: report.js
+export function summarize(csvText) {
+  const totals = new Map();
+  const lines = csvText.split("\n");
+  lines.forEach((line, i) => {
+    if (i === 0 || line.trim() === "") return;
+    const [category, amountText] = line.split(",");
+    const amount = Number(amountText);
+    if (amountText === undefined || amountText.trim() === "" || Number.isNaN(amount)) throw new Error(`Bad amount on line ${i + 1}`);
+    totals.set(category, (totals.get(category) ?? 0) + amount);
+  });
+  return [...totals]
+    .map(([category, total]) => ({ category, total: Math.round(total * 100) / 100 }))
+    .sort((a, b) => b.total - a.total);
+}
+// file: main.js
+process.argv = ["node", "main.js", "spending.csv"];
+import { readFileSync } from "node:fs";
+import { summarize } from "./report.js";
+
+const text = readFileSync(process.argv[2], "utf8");
+for (const { category, total } of summarize(text)) {
+  console.log(`${category}: ${total.toFixed(2)}`);
+}
+::tests
+const { summarize: __s } = __dqRequire("./report.js");
+assert.deepStrictEqual(__s("category,amount\nfood,1.105\nfood,2\nfun,10"), [{ category: "fun", total: 10 }, { category: "food", total: 3.11 }]);
+assert.deepStrictEqual(__s("category,amount\n"), []);
+assert.throws(() => __s("category,amount\nfood,10\n\nfood,lots"), /line 4/);
+::hints
+- Split the text into lines; skip line 0 (the header) and blank lines.
+- Add amounts per category in a Map, then turn it into an array of objects, round, and sort.
+- `main.js`: `readFileSync(process.argv[2], "utf8")`, then print each category with `toFixed(2)`.
