@@ -9,7 +9,7 @@ nothing is copied from the books. Chapter titles below are for planning only.
 | Language | Book | Compared | Result |
 |---|---|---|---|
 | Python | Learning Python (4th ed.) | yes | Course covered all chapters. Added: bitwise operators in practice, fractions and complex numbers, reference counting and garbage collection, frozenset, in-place operators and `__radd__`, callable objects and bound methods, `__del__`, relative imports, exploring and reloading modules. |
-| JavaScript | Eloquent JavaScript (4th ed.) | yes | Modules 1-10 cover chapters 1-11. Added to the plan: forms and client-side storage, drawing with canvas and SVG, character codes and Symbols, a "tiny programming language" capstone, the DOM and events chapters' layout/animation and propagation topics. |
+| JavaScript | Eloquent JavaScript (4th ed.) | yes | All chapters covered (74 lessons). Added from the comparison: forms and client-side storage, drawing with canvas and SVG, Symbols, Unicode code points and graphemes, layout and requestAnimationFrame, event propagation, and a "build a tiny programming language" capstone (the book's Egg project idea, with an original design). |
 | TypeScript, SQL, Java, C, C++, C#, Go, Kotlin, Rust, Swift, Dart, PHP, Ruby, R, Bash, PowerShell, Lua, Solidity | see below | when that course is built | One language at a time, in the agreed order. |
 
 Books without PDF bookmarks (The Rust Programming Language, The Swift Programming Language, the Kotlin reference, C: The Complete Reference) will have their contents pages read when their courses are built. *Programming C#* (2nd ed.) could not be opened on this computer: it may be a OneDrive online-only file ("Always keep on this device" fixes that).

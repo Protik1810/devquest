@@ -1,0 +1,2701 @@
+=== module Capstone projects
+
+=== lesson js-capstone-app | Capstone 1: a habit tracker web app | 400
+Time to build a complete application from start to finish, the way professional developers do: **plan, build in small tested steps, then polish**. You'll build a habit tracker that runs in the browser: users add habits, tick them off each day, see their streaks and weekly progress, and find everything still there when they come back.
+
+## How a task like this is approached
+
+1. **Clarify the requirements as user stories.** *"As a user, I can add a habit (like 'Read 20 minutes') so I can track it."* *"As a user, I tick a habit off for today, and can undo a mistake."* *"As a user, I see my current streak, so I'm motivated not to break it."* *"As a user, I see how many days this week I've done each habit compared with my goal."* *"As a user, my habits are still there tomorrow."*
+2. **Separate the model from the page.** The rules (what a streak is, what counts as this week, which names are allowed) live in plain JavaScript classes with no DOM code at all, so they can be tested quickly and reused (a mobile app or a server could use the same model). The page only renders the model and turns clicks into method calls: the "render from state" pattern from Module 11.
+3. **Decide the hard rules up front.** Days are `"YYYY-MM-DD"` strings in UTC (Module 12: they're unambiguous, compare correctly as text, and survive JSON). "Today" is **injected** rather than read from the clock inside the model, so tests are deterministic. Invalid input raises one domain error, `HabitError`.
+4. **Build in vertical slices**, each fully working and tested before the next:
+   - Step 1: the model (`Habit`, `Tracker`), tested in isolation;
+   - Step 2: the user interface: rendering, a form and delegated events;
+   - Step 3: persistence with `localStorage`, plus the weekly progress view.
+5. **Refactor as you go**, keeping functions small and named after what they do.
+
+Each step's starter contains a working solution to the previous steps, so you can always continue. By the end you'll have written a few hundred lines of real, tested JavaScript: a small but genuine product.
+
+## The rules of a streak
+
+Streaks need a precise definition, or every developer implements a different one:
+
+- If the habit is done **today**, the streak counts consecutive done days going back from today.
+- If it isn't done today yet but was done **yesterday**, the streak is still alive: count back from yesterday (the user still has today to keep it going).
+- Otherwise the streak is 0.
+
+Writing the rule down first, then turning each sentence into a test, is exactly how professionals avoid ambiguous requirements.
+
+📚 **Go deeper:** MDN, "Client-side storage"; Martin Fowler, "Presentation Domain Data Layering" (martinfowler.com); *Eloquent JavaScript* (4th ed.), chapter 19, "Project: A Pixel Art Editor" (another state-driven app).
+--- goals
+- turn requirements into user stories, rules and a small design
+- keep the domain model separate from the user interface
+- build a real browser app in three tested vertical slices
+- render from state, handle events with delegation, and persist with localStorage
+--- exercise code javascript
+::prompt
+**Step 1: the model.** Write:
+
+- `HabitError extends Error` (with `name` set to `"HabitError"`);
+- a helper `addDays(day, n)` for `"YYYY-MM-DD"` strings (UTC);
+- `class Habit`: `constructor(name, { goalPerWeek = 7 } = {})` trims the name and throws a `HabitError` if it's empty or longer than 40 characters, or if `goalPerWeek` isn't a whole number from 1 to 7. It keeps the checked days in a private `Set`, with methods `check(day)` and `uncheck(day)` (both return `true` if something changed), `isDone(day)`, `streak(today)` (the rules in the lesson) and `doneThisWeek(today)` (how many of the 7 days ending with `today` are done). `toJSON()` returns `{ name, goalPerWeek, days }` with the days sorted, and `static fromJSON(data)` rebuilds a habit.
+- `class Tracker` with a private `Map` of habits: `add(name, options)` (throws a `HabitError` for a duplicate name, ignoring case; returns the habit), `remove(name)`, `get(name)`, a getter `habits` (sorted by name), and `toJSON()` / `static fromJSON(data)` (`data` is an array of habit objects).
+::starter
+class HabitError extends Error {}
+
+function addDays(day, n) {
+}
+
+class Habit {
+}
+
+class Tracker {
+}
+::solution
+class HabitError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "HabitError";
+  }
+}
+
+function addDays(day, n) {
+  const d = new Date(day + "T00:00:00Z");
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+class Habit {
+  #days = new Set();
+
+  constructor(name, { goalPerWeek = 7 } = {}) {
+    const clean = String(name ?? "").trim();
+    if (!clean || clean.length > 40) throw new HabitError("A habit needs a name of 1 to 40 characters");
+    if (!Number.isInteger(goalPerWeek) || goalPerWeek < 1 || goalPerWeek > 7) throw new HabitError("The weekly goal must be 1 to 7 days");
+    this.name = clean;
+    this.goalPerWeek = goalPerWeek;
+  }
+
+  check(day) {
+    if (this.#days.has(day)) return false;
+    this.#days.add(day);
+    return true;
+  }
+
+  uncheck(day) {
+    return this.#days.delete(day);
+  }
+
+  isDone(day) {
+    return this.#days.has(day);
+  }
+
+  streak(today) {
+    let day = this.isDone(today) ? today : addDays(today, -1);
+    let count = 0;
+    while (this.isDone(day)) {
+      count++;
+      day = addDays(day, -1);
+    }
+    return count;
+  }
+
+  doneThisWeek(today) {
+    let count = 0;
+    for (let i = 0; i < 7; i++) if (this.isDone(addDays(today, -i))) count++;
+    return count;
+  }
+
+  toJSON() {
+    return { name: this.name, goalPerWeek: this.goalPerWeek, days: [...this.#days].sort() };
+  }
+
+  static fromJSON({ name, goalPerWeek, days = [] }) {
+    const habit = new Habit(name, { goalPerWeek });
+    for (const day of days) habit.check(day);
+    return habit;
+  }
+}
+
+class Tracker {
+  #habits = new Map();
+
+  add(name, options) {
+    const habit = new Habit(name, options);
+    const key = habit.name.toLowerCase();
+    if (this.#habits.has(key)) throw new HabitError(`You already track "${habit.name}"`);
+    this.#habits.set(key, habit);
+    return habit;
+  }
+
+  remove(name) {
+    return this.#habits.delete(String(name).trim().toLowerCase());
+  }
+
+  get(name) {
+    return this.#habits.get(String(name).trim().toLowerCase());
+  }
+
+  get habits() {
+    return [...this.#habits.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  toJSON() {
+    return this.habits.map((h) => h.toJSON());
+  }
+
+  static fromJSON(data) {
+    const tracker = new Tracker();
+    for (const item of data) {
+      const habit = Habit.fromJSON(item);
+      tracker.#habits.set(habit.name.toLowerCase(), habit);
+    }
+    return tracker;
+  }
+}
+::tests
+assert.strictEqual(addDays("2026-02-28", 1), "2026-03-01");
+const __h = new Habit("  Read 20 minutes ", { goalPerWeek: 5 });
+assert.strictEqual(__h.name, "Read 20 minutes");
+assert.strictEqual(__h.check("2026-10-14"), true);
+assert.strictEqual(__h.check("2026-10-14"), false, "checking the same day twice changes nothing");
+for (const d of ["2026-10-13", "2026-10-12", "2026-10-10"]) __h.check(d);
+assert.strictEqual(__h.streak("2026-10-14"), 3);
+assert.strictEqual(__h.streak("2026-10-15"), 3, "not done today but done yesterday: the streak is still alive");
+assert.strictEqual(__h.streak("2026-10-16"), 0);
+assert.strictEqual(__h.doneThisWeek("2026-10-14"), 4);
+assert.strictEqual(__h.doneThisWeek("2026-10-20"), 1);
+assert.strictEqual(__h.uncheck("2026-10-13"), true);
+assert.strictEqual(__h.streak("2026-10-14"), 1);
+assert.deepStrictEqual(__h.toJSON(), { name: "Read 20 minutes", goalPerWeek: 5, days: ["2026-10-10", "2026-10-12", "2026-10-14"] });
+assert.throws(() => new Habit("   "), HabitError);
+assert.throws(() => new Habit("x".repeat(41)), HabitError);
+assert.throws(() => new Habit("Run", { goalPerWeek: 8 }), (e) => e instanceof HabitError && e.name === "HabitError");
+const __t = new Tracker();
+__t.add("Walk");
+__t.add("drink water", { goalPerWeek: 7 });
+assert.throws(() => __t.add("WALK"), /already/);
+assert.deepStrictEqual(__t.habits.map((h) => h.name), ["drink water", "Walk"]);
+__t.get("walk").check("2026-10-14");
+const __copy = Tracker.fromJSON(JSON.parse(JSON.stringify(__t)));
+assert.deepStrictEqual(__copy.toJSON(), __t.toJSON());
+assert.strictEqual(__copy.get("Walk").isDone("2026-10-14"), true);
+assert.strictEqual(__t.remove("walk"), true);
+assert.strictEqual(__t.get("Walk"), undefined);
+::hints
+- Streak: start at today if it's done, otherwise at yesterday, and count back while the day is done.
+- Keep the Map keyed by the lowercased name, so duplicates and lookups ignore case.
+- `toJSON` makes `JSON.stringify` work automatically; `fromJSON` re-checks every saved day.
+--- exercise code web
+::prompt
+**Step 2: the user interface.** The page contains the Step 1 model. Add the UI (in the second `<script>`):
+
+- submitting the form `#new-habit` (fields `name` and `goal`) adds a habit with that weekly goal (no page reload); a `HabitError` shows its message in `#error` (clear it after a successful add); the form is reset after adding;
+- `render()` rebuilds `#habits`: one `<li data-name="...">` per habit (in the tracker's order) containing a `<span class="name">` with the name, a `<span class="streak">` with `🔥 <streak>`, a `<button class="check">` reading `Done today` (or `Undo` when it's done today), and a `<button class="remove">`;
+- **one** delegated click listener on `#habits` handles the check/undo and remove buttons, then re-renders;
+- `#summary` shows `<done> of <total> done today`.
+
+Use `today()` (given) for the current day: the checks set `window.TODAY` to control it.
+::starter
+<!doctype html>
+<html>
+  <body>
+    <h1>Habits</h1>
+    <form id="new-habit" novalidate>
+      <input name="name" placeholder="New habit">
+      <select name="goal">
+        <option value="7">Every day</option>
+        <option value="5">5 days a week</option>
+        <option value="3">3 days a week</option>
+      </select>
+      <button>Add</button>
+    </form>
+    <p id="error"></p>
+    <ul id="habits"></ul>
+    <p id="summary"></p>
+    <script>
+      class HabitError extends Error {
+        constructor(message) { super(message); this.name = "HabitError"; }
+      }
+      function addDays(day, n) {
+        const d = new Date(day + "T00:00:00Z");
+        d.setUTCDate(d.getUTCDate() + n);
+        return d.toISOString().slice(0, 10);
+      }
+      class Habit {
+        #days = new Set();
+        constructor(name, { goalPerWeek = 7 } = {}) {
+          const clean = String(name ?? "").trim();
+          if (!clean || clean.length > 40) throw new HabitError("A habit needs a name of 1 to 40 characters");
+          if (!Number.isInteger(goalPerWeek) || goalPerWeek < 1 || goalPerWeek > 7) throw new HabitError("The weekly goal must be 1 to 7 days");
+          this.name = clean;
+          this.goalPerWeek = goalPerWeek;
+        }
+        check(day) { if (this.#days.has(day)) return false; this.#days.add(day); return true; }
+        uncheck(day) { return this.#days.delete(day); }
+        isDone(day) { return this.#days.has(day); }
+        streak(today) {
+          let day = this.isDone(today) ? today : addDays(today, -1);
+          let count = 0;
+          while (this.isDone(day)) { count++; day = addDays(day, -1); }
+          return count;
+        }
+        doneThisWeek(today) {
+          let count = 0;
+          for (let i = 0; i < 7; i++) if (this.isDone(addDays(today, -i))) count++;
+          return count;
+        }
+        toJSON() { return { name: this.name, goalPerWeek: this.goalPerWeek, days: [...this.#days].sort() }; }
+        static fromJSON({ name, goalPerWeek, days = [] }) {
+          const habit = new Habit(name, { goalPerWeek });
+          for (const day of days) habit.check(day);
+          return habit;
+        }
+      }
+      class Tracker {
+        #habits = new Map();
+        add(name, options) {
+          const habit = new Habit(name, options);
+          const key = habit.name.toLowerCase();
+          if (this.#habits.has(key)) throw new HabitError(`You already track "${habit.name}"`);
+          this.#habits.set(key, habit);
+          return habit;
+        }
+        remove(name) { return this.#habits.delete(String(name).trim().toLowerCase()); }
+        get(name) { return this.#habits.get(String(name).trim().toLowerCase()); }
+        get habits() { return [...this.#habits.values()].sort((a, b) => a.name.localeCompare(b.name)); }
+        toJSON() { return this.habits.map((h) => h.toJSON()); }
+        static fromJSON(data) {
+          const tracker = new Tracker();
+          for (const item of data) tracker.#habits.set(item.name.toLowerCase(), Habit.fromJSON(item));
+          return tracker;
+        }
+      }
+    </script>
+    <script>
+      const today = () => window.TODAY ?? new Date().toISOString().slice(0, 10);
+      const tracker = new Tracker();
+
+      function render() {
+        // build #habits and #summary from the tracker
+      }
+
+      // the form's submit listener and the delegated click listener go here
+
+      render();
+    </script>
+  </body>
+</html>
+::solution
+<!doctype html>
+<html>
+  <body>
+    <h1>Habits</h1>
+    <form id="new-habit" novalidate>
+      <input name="name" placeholder="New habit">
+      <select name="goal">
+        <option value="7">Every day</option>
+        <option value="5">5 days a week</option>
+        <option value="3">3 days a week</option>
+      </select>
+      <button>Add</button>
+    </form>
+    <p id="error"></p>
+    <ul id="habits"></ul>
+    <p id="summary"></p>
+    <script>
+      class HabitError extends Error {
+        constructor(message) { super(message); this.name = "HabitError"; }
+      }
+      function addDays(day, n) {
+        const d = new Date(day + "T00:00:00Z");
+        d.setUTCDate(d.getUTCDate() + n);
+        return d.toISOString().slice(0, 10);
+      }
+      class Habit {
+        #days = new Set();
+        constructor(name, { goalPerWeek = 7 } = {}) {
+          const clean = String(name ?? "").trim();
+          if (!clean || clean.length > 40) throw new HabitError("A habit needs a name of 1 to 40 characters");
+          if (!Number.isInteger(goalPerWeek) || goalPerWeek < 1 || goalPerWeek > 7) throw new HabitError("The weekly goal must be 1 to 7 days");
+          this.name = clean;
+          this.goalPerWeek = goalPerWeek;
+        }
+        check(day) { if (this.#days.has(day)) return false; this.#days.add(day); return true; }
+        uncheck(day) { return this.#days.delete(day); }
+        isDone(day) { return this.#days.has(day); }
+        streak(today) {
+          let day = this.isDone(today) ? today : addDays(today, -1);
+          let count = 0;
+          while (this.isDone(day)) { count++; day = addDays(day, -1); }
+          return count;
+        }
+        doneThisWeek(today) {
+          let count = 0;
+          for (let i = 0; i < 7; i++) if (this.isDone(addDays(today, -i))) count++;
+          return count;
+        }
+        toJSON() { return { name: this.name, goalPerWeek: this.goalPerWeek, days: [...this.#days].sort() }; }
+        static fromJSON({ name, goalPerWeek, days = [] }) {
+          const habit = new Habit(name, { goalPerWeek });
+          for (const day of days) habit.check(day);
+          return habit;
+        }
+      }
+      class Tracker {
+        #habits = new Map();
+        add(name, options) {
+          const habit = new Habit(name, options);
+          const key = habit.name.toLowerCase();
+          if (this.#habits.has(key)) throw new HabitError(`You already track "${habit.name}"`);
+          this.#habits.set(key, habit);
+          return habit;
+        }
+        remove(name) { return this.#habits.delete(String(name).trim().toLowerCase()); }
+        get(name) { return this.#habits.get(String(name).trim().toLowerCase()); }
+        get habits() { return [...this.#habits.values()].sort((a, b) => a.name.localeCompare(b.name)); }
+        toJSON() { return this.habits.map((h) => h.toJSON()); }
+        static fromJSON(data) {
+          const tracker = new Tracker();
+          for (const item of data) tracker.#habits.set(item.name.toLowerCase(), Habit.fromJSON(item));
+          return tracker;
+        }
+      }
+    </script>
+    <script>
+      const today = () => window.TODAY ?? new Date().toISOString().slice(0, 10);
+      const tracker = new Tracker();
+
+      function habitItem(habit) {
+        const li = document.createElement("li");
+        li.dataset.name = habit.name;
+        const name = document.createElement("span");
+        name.className = "name";
+        name.textContent = habit.name;
+        const streak = document.createElement("span");
+        streak.className = "streak";
+        streak.textContent = `🔥 ${habit.streak(today())}`;
+        const check = document.createElement("button");
+        check.className = "check";
+        check.textContent = habit.isDone(today()) ? "Undo" : "Done today";
+        const remove = document.createElement("button");
+        remove.className = "remove";
+        remove.textContent = "Remove";
+        li.append(name, " ", streak, " ", check, " ", remove);
+        return li;
+      }
+
+      function render() {
+        const habits = tracker.habits;
+        document.querySelector("#habits").replaceChildren(...habits.map(habitItem));
+        const done = habits.filter((h) => h.isDone(today())).length;
+        document.querySelector("#summary").textContent = `${done} of ${habits.length} done today`;
+      }
+
+      document.querySelector("#new-habit").addEventListener("submit", (event) => {
+        event.preventDefault();
+        const form = event.target;
+        try {
+          tracker.add(form.elements.name.value, { goalPerWeek: Number(form.elements.goal.value) });
+          document.querySelector("#error").textContent = "";
+          form.reset();
+        } catch (error) {
+          if (!(error instanceof HabitError)) throw error;
+          document.querySelector("#error").textContent = error.message;
+        }
+        render();
+      });
+
+      document.querySelector("#habits").addEventListener("click", (event) => {
+        const li = event.target.closest("li");
+        if (!li) return;
+        const habit = tracker.get(li.dataset.name);
+        if (event.target.closest(".check")) {
+          if (habit.isDone(today())) habit.uncheck(today());
+          else habit.check(today());
+        } else if (event.target.closest(".remove")) {
+          tracker.remove(habit.name);
+        } else {
+          return;
+        }
+        render();
+      });
+
+      render();
+    </script>
+  </body>
+</html>
+::tests
+window.TODAY = '2026-10-14';
+const form = $('#new-habit');
+const add = (name, goal = '7') => { form.elements.name.value = name; form.elements.goal.value = goal; form.requestSubmit(); };
+add('Walk');
+add('Read', '5');
+add('  ');
+assert($('#error').textContent.length > 0, 'an invalid name should show the HabitError message in #error');
+add('walk');
+assert(/already/.test($('#error').textContent), 'a duplicate should show the "already" message');
+assert($$('#habits li').length === 2, 'two habits should be listed, got ' + $$('#habits li').length);
+assert($$('#habits li .name').map((s) => s.textContent).join() === 'Read,Walk', 'habits are listed in the tracker order (by name)');
+assert(tracker.get('Read').goalPerWeek === 5, 'the goal select sets goalPerWeek');
+add('Stretch');
+assert($('#error').textContent === '', 'a successful add clears the error');
+assert(form.elements.name.value === '', 'the form is reset after adding');
+tracker.get('Walk').check('2026-10-13');
+tracker.get('Walk').check('2026-10-12');
+render();
+const walk = () => $('#habits li[data-name="Walk"]');
+assert(walk().querySelector('.streak').textContent === '🔥 2', 'Walk was done the two previous days: streak 2');
+click(walk().querySelector('.check'));
+assert(walk().querySelector('.streak').textContent === '🔥 3', 'after ticking today, the streak is 3');
+assert(walk().querySelector('.check').textContent === 'Undo', 'a done habit shows Undo');
+assert($('#summary').textContent === '1 of 3 done today', 'expected "1 of 3 done today", got "' + $('#summary').textContent + '"');
+click(walk().querySelector('.check'));
+assert(walk().querySelector('.check').textContent === 'Done today', 'Undo unticks today');
+click($('#habits li[data-name="Read"] .remove'));
+assert($$('#habits li').length === 2 && !$('#habits li[data-name="Read"]'), 'remove deletes the habit');
+::hints
+- `render()` uses `tracker.habits` and a helper that builds one `<li>` (with `dataset.name`) per habit; finish with `replaceChildren`.
+- The submit handler wraps `tracker.add(...)` in `try`/`catch` and shows `error.message` for a `HabitError`.
+- The click handler finds the `li` with `event.target.closest("li")`, the habit with `tracker.get(li.dataset.name)`, and checks which button was clicked with `closest(".check")` / `closest(".remove")`.
+--- exercise code web
+::prompt
+**Step 3: persistence and weekly progress.**
+
+- Save the tracker to `localStorage` under the key `"habits"` (as JSON) after **every** change, with a `save()` function. Write a `load()` function that returns the saved tracker (or an empty one if nothing is saved, or if the saved text is invalid), and use it to create `tracker` when the page starts.
+- Each habit's `<li>` gets a `<progress class="week">` element with `max` set to the habit's weekly goal and `value` set to the days done this week (capped at the goal), plus a `<span class="week-label">` reading `3/5 this week`.
+- Habits that have reached their weekly goal get the class `goal-met` on their `<li>`.
+
+The starter is the Step 2 solution with a `save()` placeholder.
+::starter
+<!doctype html>
+<html>
+  <head><style>.goal-met { background: #e6ffe6; }</style></head>
+  <body>
+    <h1>Habits</h1>
+    <form id="new-habit" novalidate>
+      <input name="name" placeholder="New habit">
+      <select name="goal">
+        <option value="7">Every day</option>
+        <option value="5">5 days a week</option>
+        <option value="3">3 days a week</option>
+      </select>
+      <button>Add</button>
+    </form>
+    <p id="error"></p>
+    <ul id="habits"></ul>
+    <p id="summary"></p>
+    <script>
+      class HabitError extends Error {
+        constructor(message) { super(message); this.name = "HabitError"; }
+      }
+      function addDays(day, n) {
+        const d = new Date(day + "T00:00:00Z");
+        d.setUTCDate(d.getUTCDate() + n);
+        return d.toISOString().slice(0, 10);
+      }
+      class Habit {
+        #days = new Set();
+        constructor(name, { goalPerWeek = 7 } = {}) {
+          const clean = String(name ?? "").trim();
+          if (!clean || clean.length > 40) throw new HabitError("A habit needs a name of 1 to 40 characters");
+          if (!Number.isInteger(goalPerWeek) || goalPerWeek < 1 || goalPerWeek > 7) throw new HabitError("The weekly goal must be 1 to 7 days");
+          this.name = clean;
+          this.goalPerWeek = goalPerWeek;
+        }
+        check(day) { if (this.#days.has(day)) return false; this.#days.add(day); return true; }
+        uncheck(day) { return this.#days.delete(day); }
+        isDone(day) { return this.#days.has(day); }
+        streak(today) {
+          let day = this.isDone(today) ? today : addDays(today, -1);
+          let count = 0;
+          while (this.isDone(day)) { count++; day = addDays(day, -1); }
+          return count;
+        }
+        doneThisWeek(today) {
+          let count = 0;
+          for (let i = 0; i < 7; i++) if (this.isDone(addDays(today, -i))) count++;
+          return count;
+        }
+        toJSON() { return { name: this.name, goalPerWeek: this.goalPerWeek, days: [...this.#days].sort() }; }
+        static fromJSON({ name, goalPerWeek, days = [] }) {
+          const habit = new Habit(name, { goalPerWeek });
+          for (const day of days) habit.check(day);
+          return habit;
+        }
+      }
+      class Tracker {
+        #habits = new Map();
+        add(name, options) {
+          const habit = new Habit(name, options);
+          const key = habit.name.toLowerCase();
+          if (this.#habits.has(key)) throw new HabitError(`You already track "${habit.name}"`);
+          this.#habits.set(key, habit);
+          return habit;
+        }
+        remove(name) { return this.#habits.delete(String(name).trim().toLowerCase()); }
+        get(name) { return this.#habits.get(String(name).trim().toLowerCase()); }
+        get habits() { return [...this.#habits.values()].sort((a, b) => a.name.localeCompare(b.name)); }
+        toJSON() { return this.habits.map((h) => h.toJSON()); }
+        static fromJSON(data) {
+          const tracker = new Tracker();
+          for (const item of data) tracker.#habits.set(item.name.toLowerCase(), Habit.fromJSON(item));
+          return tracker;
+        }
+      }
+    </script>
+    <script>
+      const today = () => window.TODAY ?? new Date().toISOString().slice(0, 10);
+      const tracker = new Tracker();
+
+      function save() {
+      }
+
+      function habitItem(habit) {
+        const li = document.createElement("li");
+        li.dataset.name = habit.name;
+        const name = document.createElement("span");
+        name.className = "name";
+        name.textContent = habit.name;
+        const streak = document.createElement("span");
+        streak.className = "streak";
+        streak.textContent = `🔥 ${habit.streak(today())}`;
+        const check = document.createElement("button");
+        check.className = "check";
+        check.textContent = habit.isDone(today()) ? "Undo" : "Done today";
+        const remove = document.createElement("button");
+        remove.className = "remove";
+        remove.textContent = "Remove";
+        li.append(name, " ", streak, " ", check, " ", remove);
+        return li;
+      }
+
+      function render() {
+        const habits = tracker.habits;
+        document.querySelector("#habits").replaceChildren(...habits.map(habitItem));
+        const done = habits.filter((h) => h.isDone(today())).length;
+        document.querySelector("#summary").textContent = `${done} of ${habits.length} done today`;
+      }
+
+      document.querySelector("#new-habit").addEventListener("submit", (event) => {
+        event.preventDefault();
+        const form = event.target;
+        try {
+          tracker.add(form.elements.name.value, { goalPerWeek: Number(form.elements.goal.value) });
+          document.querySelector("#error").textContent = "";
+          form.reset();
+        } catch (error) {
+          if (!(error instanceof HabitError)) throw error;
+          document.querySelector("#error").textContent = error.message;
+        }
+        render();
+      });
+
+      document.querySelector("#habits").addEventListener("click", (event) => {
+        const li = event.target.closest("li");
+        if (!li) return;
+        const habit = tracker.get(li.dataset.name);
+        if (event.target.closest(".check")) {
+          if (habit.isDone(today())) habit.uncheck(today());
+          else habit.check(today());
+        } else if (event.target.closest(".remove")) {
+          tracker.remove(habit.name);
+        } else {
+          return;
+        }
+        render();
+      });
+
+      render();
+    </script>
+  </body>
+</html>
+::solution
+<!doctype html>
+<html>
+  <head><style>.goal-met { background: #e6ffe6; }</style></head>
+  <body>
+    <h1>Habits</h1>
+    <form id="new-habit" novalidate>
+      <input name="name" placeholder="New habit">
+      <select name="goal">
+        <option value="7">Every day</option>
+        <option value="5">5 days a week</option>
+        <option value="3">3 days a week</option>
+      </select>
+      <button>Add</button>
+    </form>
+    <p id="error"></p>
+    <ul id="habits"></ul>
+    <p id="summary"></p>
+    <script>
+      class HabitError extends Error {
+        constructor(message) { super(message); this.name = "HabitError"; }
+      }
+      function addDays(day, n) {
+        const d = new Date(day + "T00:00:00Z");
+        d.setUTCDate(d.getUTCDate() + n);
+        return d.toISOString().slice(0, 10);
+      }
+      class Habit {
+        #days = new Set();
+        constructor(name, { goalPerWeek = 7 } = {}) {
+          const clean = String(name ?? "").trim();
+          if (!clean || clean.length > 40) throw new HabitError("A habit needs a name of 1 to 40 characters");
+          if (!Number.isInteger(goalPerWeek) || goalPerWeek < 1 || goalPerWeek > 7) throw new HabitError("The weekly goal must be 1 to 7 days");
+          this.name = clean;
+          this.goalPerWeek = goalPerWeek;
+        }
+        check(day) { if (this.#days.has(day)) return false; this.#days.add(day); return true; }
+        uncheck(day) { return this.#days.delete(day); }
+        isDone(day) { return this.#days.has(day); }
+        streak(today) {
+          let day = this.isDone(today) ? today : addDays(today, -1);
+          let count = 0;
+          while (this.isDone(day)) { count++; day = addDays(day, -1); }
+          return count;
+        }
+        doneThisWeek(today) {
+          let count = 0;
+          for (let i = 0; i < 7; i++) if (this.isDone(addDays(today, -i))) count++;
+          return count;
+        }
+        toJSON() { return { name: this.name, goalPerWeek: this.goalPerWeek, days: [...this.#days].sort() }; }
+        static fromJSON({ name, goalPerWeek, days = [] }) {
+          const habit = new Habit(name, { goalPerWeek });
+          for (const day of days) habit.check(day);
+          return habit;
+        }
+      }
+      class Tracker {
+        #habits = new Map();
+        add(name, options) {
+          const habit = new Habit(name, options);
+          const key = habit.name.toLowerCase();
+          if (this.#habits.has(key)) throw new HabitError(`You already track "${habit.name}"`);
+          this.#habits.set(key, habit);
+          return habit;
+        }
+        remove(name) { return this.#habits.delete(String(name).trim().toLowerCase()); }
+        get(name) { return this.#habits.get(String(name).trim().toLowerCase()); }
+        get habits() { return [...this.#habits.values()].sort((a, b) => a.name.localeCompare(b.name)); }
+        toJSON() { return this.habits.map((h) => h.toJSON()); }
+        static fromJSON(data) {
+          const tracker = new Tracker();
+          for (const item of data) tracker.#habits.set(item.name.toLowerCase(), Habit.fromJSON(item));
+          return tracker;
+        }
+      }
+    </script>
+    <script>
+      const today = () => window.TODAY ?? new Date().toISOString().slice(0, 10);
+
+      function load() {
+        try {
+          return Tracker.fromJSON(JSON.parse(localStorage.getItem("habits") ?? "[]"));
+        } catch {
+          return new Tracker();
+        }
+      }
+      const tracker = load();
+
+      function save() {
+        localStorage.setItem("habits", JSON.stringify(tracker));
+      }
+
+      function habitItem(habit) {
+        const li = document.createElement("li");
+        li.dataset.name = habit.name;
+        const name = document.createElement("span");
+        name.className = "name";
+        name.textContent = habit.name;
+        const streak = document.createElement("span");
+        streak.className = "streak";
+        streak.textContent = `🔥 ${habit.streak(today())}`;
+        const week = habit.doneThisWeek(today());
+        const progress = document.createElement("progress");
+        progress.className = "week";
+        progress.max = habit.goalPerWeek;
+        progress.value = Math.min(week, habit.goalPerWeek);
+        const label = document.createElement("span");
+        label.className = "week-label";
+        label.textContent = `${week}/${habit.goalPerWeek} this week`;
+        if (week >= habit.goalPerWeek) li.classList.add("goal-met");
+        const check = document.createElement("button");
+        check.className = "check";
+        check.textContent = habit.isDone(today()) ? "Undo" : "Done today";
+        const remove = document.createElement("button");
+        remove.className = "remove";
+        remove.textContent = "Remove";
+        li.append(name, " ", streak, " ", progress, " ", label, " ", check, " ", remove);
+        return li;
+      }
+
+      function render() {
+        const habits = tracker.habits;
+        document.querySelector("#habits").replaceChildren(...habits.map(habitItem));
+        const done = habits.filter((h) => h.isDone(today())).length;
+        document.querySelector("#summary").textContent = `${done} of ${habits.length} done today`;
+      }
+
+      document.querySelector("#new-habit").addEventListener("submit", (event) => {
+        event.preventDefault();
+        const form = event.target;
+        try {
+          tracker.add(form.elements.name.value, { goalPerWeek: Number(form.elements.goal.value) });
+          document.querySelector("#error").textContent = "";
+          form.reset();
+          save();
+        } catch (error) {
+          if (!(error instanceof HabitError)) throw error;
+          document.querySelector("#error").textContent = error.message;
+        }
+        render();
+      });
+
+      document.querySelector("#habits").addEventListener("click", (event) => {
+        const li = event.target.closest("li");
+        if (!li) return;
+        const habit = tracker.get(li.dataset.name);
+        if (event.target.closest(".check")) {
+          if (habit.isDone(today())) habit.uncheck(today());
+          else habit.check(today());
+        } else if (event.target.closest(".remove")) {
+          tracker.remove(habit.name);
+        } else {
+          return;
+        }
+        save();
+        render();
+      });
+
+      render();
+    </script>
+  </body>
+</html>
+::tests
+window.TODAY = '2026-10-14';
+const form = $('#new-habit');
+const add = (name, goal = '7') => { form.elements.name.value = name; form.elements.goal.value = goal; form.requestSubmit(); };
+add('Read', '3');
+add('Walk');
+const stored = () => JSON.parse(localStorage.getItem('habits') ?? 'null');
+assert(Array.isArray(stored()) && stored().length === 2, 'adding habits must save them to localStorage under "habits"');
+for (const d of ['2026-10-12', '2026-10-13']) tracker.get('Read').check(d);
+render();
+click($('#habits li[data-name="Read"] .check'));
+assert(stored().find((h) => h.name === 'Read').days.length === 3, 'ticking a habit must be saved too');
+const read = $('#habits li[data-name="Read"]');
+const bar = read.querySelector('progress.week');
+assert(bar && bar.max === 3 && bar.value === 3, 'Read: progress max 3 (its goal) and value 3');
+assert(read.querySelector('.week-label').textContent === '3/3 this week', 'the label should read "3/3 this week"');
+assert(read.classList.contains('goal-met'), 'Read has met its weekly goal');
+const walk = $('#habits li[data-name="Walk"]');
+assert(walk.querySelector('.week-label').textContent === '0/7 this week' && !walk.classList.contains('goal-met'), 'Walk: 0/7, goal not met');
+click($('#habits li[data-name="Walk"] .remove'));
+assert(stored().length === 1, 'removing must be saved');
+localStorage.setItem('habits', JSON.stringify([{ name: 'Yoga', goalPerWeek: 3, days: ['2026-10-14'] }]));
+assert(load().get('Yoga')?.isDone('2026-10-14') === true, 'load() should rebuild the tracker from localStorage "habits"');
+localStorage.setItem('habits', '{not json');
+assert(load().habits.length === 0, 'invalid saved data should give an empty tracker (try/catch around JSON.parse)');
+localStorage.removeItem('habits');
+assert(load().habits.length === 0, 'nothing saved gives an empty tracker');
+::hints
+- `save()` is one line: `localStorage.setItem("habits", JSON.stringify(tracker))` (the tracker's `toJSON` does the work). Call it after every change.
+- Load with `Tracker.fromJSON(JSON.parse(localStorage.getItem("habits") ?? "[]"))` inside `try`/`catch`, falling back to `new Tracker()`.
+- In `habitItem`, compute `habit.doneThisWeek(today())` once and use it for the progress element, the label and the `goal-met` class.
+--- cards
+User story :: "As a <user>, I can <action>, so that <benefit>": a requirement written from the user's point of view.
+Model / view separation :: Domain rules in plain classes (no DOM); the page renders the model and turns events into method calls.
+Vertical slice :: A thin, complete, tested piece of functionality, built before the next one.
+Injected "today" :: Pass the current date in, so date logic is testable and deterministic.
+Persist after every change :: save() after each change; load with a safe fallback when the page starts.
+
+=== lesson js-capstone-cli | Capstone 2: a command-line task manager | 400
+Your second capstone runs in **Node.js**: a command-line to-do manager, the kind of small tool developers write for themselves all the time. It's used like this:
+
+```
+node main.js add "Write the report" --due=2026-10-20 --urgent
+node main.js list
+node main.js done 1
+node main.js remove 2
+node main.js list --all
+```
+
+Tasks are saved in a JSON file between runs, so the program must read and write files safely, handle bad input with clear messages and **exit codes**, and keep its logic testable.
+
+## The design
+
+Three modules, each with one job:
+
+1. **`args.js`**: turns the raw `process.argv` array into a structured command: `{ command: "add", positional: ["Write the report"], flags: { due: "2026-10-20", urgent: true } }`. Parsing input is a separate concern from acting on it.
+2. **`store.js`**: a `TaskStore` class that loads tasks from a JSON file, changes them, and saves them back. It knows nothing about the command line.
+3. **`cli.js`**: `run(argv, store)` connects the two: it parses, calls the store, and **returns** the lines to print and an exit code instead of printing directly. That one decision makes the whole CLI testable without capturing the console. `main.js` is then three lines: run, print, set `process.exitCode`.
+
+This "functional core, imperative shell" shape (pure logic inside, input/output at the edges) is how professionals keep command-line tools, servers and scripts testable.
+
+## Exit codes and error messages
+
+Command-line tools communicate with exit codes: 0 means success, anything else failure (scripts, `&&` chains and CI rely on it). By convention: `1` for an operation that failed (no task with that id), `2` for incorrect usage (unknown command, missing argument). Error messages go to the user in plain words and suggest what to do: `Unknown command "lsit". Try: add, list, done, remove, help`.
+
+📚 **Go deeper:** Node.js documentation, `process.argv`, `process.exitCode` and `util.parseArgs`; the Command Line Interface Guidelines (clig.dev); Gary Bernhardt, "Functional Core, Imperative Shell".
+--- goals
+- design a command-line tool as small modules with single responsibilities
+- parse command-line arguments, including flags with values
+- store data in a JSON file with `node:fs`, handling missing and corrupt files
+- return output and exit codes from a testable `run` function
+--- exercise code javascript
+::prompt
+**Step 1: argument parsing.** In `args.js`, export `parseArgs(argv)` that takes the arguments **after** the script name (`process.argv.slice(2)`) and returns `{ command, positional, flags }`:
+
+- the first argument that doesn't start with `-` is the `command` (or `null` if there is none); later ones go into `positional`, in order;
+- `--name=value` sets `flags.name` to the string value; `--name` alone sets it to `true`; `--no-name` sets it to `false`;
+- `-v` (one dash, one letter) sets `flags.v` to `true`; `-abc` sets `a`, `b` and `c`;
+- a lone `--` means "everything after this is positional", even if it starts with `-`.
+::starter
+// file: args.js
+export function parseArgs(argv) {
+}
+
+// file: main.js
+import { parseArgs } from "./args.js";
+console.log(parseArgs(["add", "Write the report", "--due=2026-10-20", "--urgent"]));
+::solution
+// file: args.js
+export function parseArgs(argv) {
+  const result = { command: null, positional: [], flags: {} };
+  let onlyPositional = false;
+  for (const arg of argv) {
+    if (!onlyPositional && arg === "--") {
+      onlyPositional = true;
+    } else if (!onlyPositional && arg.startsWith("--")) {
+      const body = arg.slice(2);
+      const eq = body.indexOf("=");
+      if (eq >= 0) result.flags[body.slice(0, eq)] = body.slice(eq + 1);
+      else if (body.startsWith("no-")) result.flags[body.slice(3)] = false;
+      else result.flags[body] = true;
+    } else if (!onlyPositional && /^-[A-Za-z]+$/.test(arg)) {
+      for (const letter of arg.slice(1)) result.flags[letter] = true;
+    } else if (result.command === null) {
+      result.command = arg;
+    } else {
+      result.positional.push(arg);
+    }
+  }
+  return result;
+}
+
+// file: main.js
+import { parseArgs } from "./args.js";
+console.log(parseArgs(["add", "Write the report", "--due=2026-10-20", "--urgent"]));
+::tests
+const { parseArgs: __p } = __dqRequire("./args.js");
+assert.deepStrictEqual(__p(["add", "Write the report", "--due=2026-10-20", "--urgent"]), { command: "add", positional: ["Write the report"], flags: { due: "2026-10-20", urgent: true } });
+assert.deepStrictEqual(__p([]), { command: null, positional: [], flags: {} });
+assert.deepStrictEqual(__p(["--all", "list"]), { command: "list", positional: [], flags: { all: true } });
+assert.deepStrictEqual(__p(["list", "--no-color", "-av"]), { command: "list", positional: [], flags: { color: false, a: true, v: true } });
+assert.deepStrictEqual(__p(["add", "--", "--not-a-flag", "-x"]), { command: "add", positional: ["--not-a-flag", "-x"], flags: {} });
+assert.deepStrictEqual(__p(["add", "--title=a=b"]), { command: "add", positional: [], flags: { title: "a=b" } });
+::hints
+- Loop over the arguments, deciding for each: `--`, a long flag (`--...`), short flags (`-abc`), or a word.
+- For `--name=value`, split at the **first** `=` only: values may contain `=`.
+- Keep a boolean that turns on after `--`, so later arguments are always positional.
+--- exercise code javascript
+::prompt
+**Step 2: the task store.** In `store.js`, export a class `TaskStore` and an error class `TaskError` (with `name` `"TaskError"`):
+
+- `constructor(path)`; `load()` reads the JSON file at `path` with `node:fs` (a **missing** file means no tasks; a file that isn't valid JSON throws a `TaskError` saying `Corrupt task file: <path>`); `save()` writes the tasks as pretty JSON (2 spaces).
+- `add(title, { due = null, urgent = false } = {})` trims the title (empty: `TaskError`), validates `due` (`null` or a `YYYY-MM-DD` string, else `TaskError`), gives the task the next id (1 + the highest id so far), stores `{ id, title, due, urgent, done: false }` and returns it.
+- `done(id)` marks a task done (unknown id: `TaskError` `No task with id <id>`); `remove(id)` deletes one (same error); both return the task.
+- `list({ all = false } = {})` returns pending tasks (or all, with `all`), sorted: urgent first, then by due date (tasks without a due date last), then by id.
+::starter
+// file: store.js
+import { readFileSync, writeFileSync } from "node:fs";
+
+export class TaskError extends Error {}
+
+export class TaskStore {
+}
+
+// file: main.js
+import { TaskStore } from "./store.js";
+const store = new TaskStore("tasks.json");
+store.load();
+store.add("Write the report", { due: "2026-10-20", urgent: true });
+store.save();
+console.log(store.list());
+::solution
+// file: store.js
+import { readFileSync, writeFileSync } from "node:fs";
+
+export class TaskError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "TaskError";
+  }
+}
+
+export class TaskStore {
+  #tasks = [];
+
+  constructor(path) {
+    this.path = path;
+  }
+
+  load() {
+    let text;
+    try {
+      text = readFileSync(this.path, "utf8");
+    } catch (error) {
+      if (error.code === "ENOENT") {
+        this.#tasks = [];
+        return this;
+      }
+      throw error;
+    }
+    try {
+      this.#tasks = JSON.parse(text);
+    } catch {
+      throw new TaskError(`Corrupt task file: ${this.path}`);
+    }
+    return this;
+  }
+
+  save() {
+    writeFileSync(this.path, JSON.stringify(this.#tasks, null, 2));
+  }
+
+  add(title, { due = null, urgent = false } = {}) {
+    const clean = String(title ?? "").trim();
+    if (!clean) throw new TaskError("A task needs a title");
+    if (due !== null && !/^\d{4}-\d{2}-\d{2}$/.test(due)) throw new TaskError(`Due dates look like 2026-10-20, not "${due}"`);
+    const id = this.#tasks.reduce((max, t) => Math.max(max, t.id), 0) + 1;
+    const task = { id, title: clean, due, urgent: Boolean(urgent), done: false };
+    this.#tasks.push(task);
+    return task;
+  }
+
+  #find(id) {
+    const task = this.#tasks.find((t) => t.id === Number(id));
+    if (!task) throw new TaskError(`No task with id ${id}`);
+    return task;
+  }
+
+  done(id) {
+    const task = this.#find(id);
+    task.done = true;
+    return task;
+  }
+
+  remove(id) {
+    const task = this.#find(id);
+    this.#tasks = this.#tasks.filter((t) => t !== task);
+    return task;
+  }
+
+  list({ all = false } = {}) {
+    return this.#tasks
+      .filter((t) => all || !t.done)
+      .toSorted((a, b) => Number(b.urgent) - Number(a.urgent) || (a.due ?? "9999").localeCompare(b.due ?? "9999") || a.id - b.id);
+  }
+}
+
+// file: main.js
+import { TaskStore } from "./store.js";
+const store = new TaskStore("tasks.json");
+store.load();
+store.add("Write the report", { due: "2026-10-20", urgent: true });
+store.save();
+console.log(store.list());
+::tests
+const { TaskStore: __S, TaskError: __E } = __dqRequire("./store.js");
+const __fs = __dqBuiltin("node:fs");
+__fs.rmSync("t1.json", { force: true });
+const __s = new __S("t1.json").load();
+assert.deepStrictEqual(__s.list(), [], "a missing file means no tasks");
+assert.deepStrictEqual(__s.add("  Buy milk "), { id: 1, title: "Buy milk", due: null, urgent: false, done: false });
+__s.add("Pay rent", { due: "2026-11-01" });
+__s.add("Fix bug", { due: "2026-10-20", urgent: true });
+__s.add("Call mum", { due: "2026-10-15" });
+assert.deepStrictEqual(__s.list().map((t) => t.id), [3, 4, 2, 1], "urgent first, then by due date, undated last");
+__s.done(4);
+assert.deepStrictEqual(__s.list().map((t) => t.id), [3, 2, 1]);
+assert.deepStrictEqual(__s.list({ all: true }).map((t) => t.id), [3, 4, 2, 1]);
+__s.save();
+const __again = new __S("t1.json").load();
+assert.strictEqual(__again.list({ all: true }).length, 4, "saved tasks are loaded back");
+assert.match(__fs.readFileSync("t1.json", "utf8"), /\n  /, "save pretty JSON with 2-space indentation");
+__again.remove(1);
+assert.strictEqual(__again.add("Next").id, 5, "ids continue after the highest existing id");
+assert.throws(() => __again.done(99), (e) => e instanceof __E && e.name === "TaskError" && e.message === "No task with id 99");
+assert.throws(() => __again.add("   "), __E);
+assert.throws(() => __again.add("x", { due: "next week" }), __E);
+__fs.writeFileSync("bad.json", "{oops");
+assert.throws(() => new __S("bad.json").load(), { message: "Corrupt task file: bad.json" });
+::hints
+- `load()`: catch the read error; `error.code === "ENOENT"` means "no file yet". Parse in a second `try` and throw your own `TaskError` if it fails.
+- The next id: `Math.max` over existing ids (0 if none) plus 1, so deleted ids aren't reused.
+- Sorting: urgent first (`Number(b.urgent) - Number(a.urgent)`), then due dates as strings (use "9999" for missing ones), then ids.
+--- exercise code javascript
+::prompt
+**Step 3: the command runner.** In `cli.js`, export `run(argv, store)` that executes one command and **returns** `{ lines, code }` (the lines to print and the exit code) instead of printing. Commands (`argv` is `process.argv.slice(2)`):
+
+- `add <title> [--due=YYYY-MM-DD] [--urgent]` → saves, lines `Added task <id>: <title>`;
+- `list [--all]` → one line per task: `<id>. [ ] <title>` (or `[x]` when done), followed by ` (due <date>)` if it has one and ` !` if urgent; or `No tasks.` if empty;
+- `done <id>` / `remove <id>` → `Completed task <id>: <title>` / `Removed task <id>: <title>`;
+- `help` or no command → a usage line `Usage: tasks <add|list|done|remove|help> [options]`;
+- missing arguments or an unknown command → code **2** with a helpful message (`Unknown command "<cmd>". Try: add, list, done, remove, help`, or `Usage: tasks add <title> ...` style messages starting with `Usage:`); a `TaskError` → code **1** with `Error: <message>`. Every change is saved.
+
+`main.js` (given) prints the lines and sets `process.exitCode`.
+::starter
+// file: args.js
+export function parseArgs(argv) {
+  const result = { command: null, positional: [], flags: {} };
+  let onlyPositional = false;
+  for (const arg of argv) {
+    if (!onlyPositional && arg === "--") onlyPositional = true;
+    else if (!onlyPositional && arg.startsWith("--")) {
+      const body = arg.slice(2);
+      const eq = body.indexOf("=");
+      if (eq >= 0) result.flags[body.slice(0, eq)] = body.slice(eq + 1);
+      else if (body.startsWith("no-")) result.flags[body.slice(3)] = false;
+      else result.flags[body] = true;
+    } else if (!onlyPositional && /^-[A-Za-z]+$/.test(arg)) {
+      for (const letter of arg.slice(1)) result.flags[letter] = true;
+    } else if (result.command === null) result.command = arg;
+    else result.positional.push(arg);
+  }
+  return result;
+}
+
+// file: store.js
+export class TaskError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "TaskError";
+  }
+}
+export class TaskStore {
+  #tasks = [];
+  saves = 0;
+  add(title, { due = null, urgent = false } = {}) {
+    const clean = String(title ?? "").trim();
+    if (!clean) throw new TaskError("A task needs a title");
+    if (due !== null && !/^\d{4}-\d{2}-\d{2}$/.test(due)) throw new TaskError(`Due dates look like 2026-10-20, not "${due}"`);
+    const id = this.#tasks.reduce((max, t) => Math.max(max, t.id), 0) + 1;
+    const task = { id, title: clean, due, urgent: Boolean(urgent), done: false };
+    this.#tasks.push(task);
+    return task;
+  }
+  #find(id) {
+    const task = this.#tasks.find((t) => t.id === Number(id));
+    if (!task) throw new TaskError(`No task with id ${id}`);
+    return task;
+  }
+  done(id) { const t = this.#find(id); t.done = true; return t; }
+  remove(id) { const t = this.#find(id); this.#tasks = this.#tasks.filter((x) => x !== t); return t; }
+  list({ all = false } = {}) {
+    return this.#tasks.filter((t) => all || !t.done)
+      .toSorted((a, b) => Number(b.urgent) - Number(a.urgent) || (a.due ?? "9999").localeCompare(b.due ?? "9999") || a.id - b.id);
+  }
+  save() { this.saves++; }
+}
+
+// file: cli.js
+import { parseArgs } from "./args.js";
+import { TaskError } from "./store.js";
+
+export function run(argv, store) {
+  return { lines: [], code: 0 };
+}
+
+// file: main.js
+import { run } from "./cli.js";
+import { TaskStore } from "./store.js";
+const store = new TaskStore();
+for (const argv of [["add", "Write the report", "--due=2026-10-20", "--urgent"], ["add", "Buy milk"], ["list"], ["done", "2"], ["list", "--all"], ["lsit"]]) {
+  const { lines, code } = run(argv, store);
+  console.log(`$ tasks ${argv.join(" ")}`);
+  for (const line of lines) console.log(line);
+  process.exitCode = code;
+}
+::solution
+// file: args.js
+export function parseArgs(argv) {
+  const result = { command: null, positional: [], flags: {} };
+  let onlyPositional = false;
+  for (const arg of argv) {
+    if (!onlyPositional && arg === "--") onlyPositional = true;
+    else if (!onlyPositional && arg.startsWith("--")) {
+      const body = arg.slice(2);
+      const eq = body.indexOf("=");
+      if (eq >= 0) result.flags[body.slice(0, eq)] = body.slice(eq + 1);
+      else if (body.startsWith("no-")) result.flags[body.slice(3)] = false;
+      else result.flags[body] = true;
+    } else if (!onlyPositional && /^-[A-Za-z]+$/.test(arg)) {
+      for (const letter of arg.slice(1)) result.flags[letter] = true;
+    } else if (result.command === null) result.command = arg;
+    else result.positional.push(arg);
+  }
+  return result;
+}
+
+// file: store.js
+export class TaskError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "TaskError";
+  }
+}
+export class TaskStore {
+  #tasks = [];
+  saves = 0;
+  add(title, { due = null, urgent = false } = {}) {
+    const clean = String(title ?? "").trim();
+    if (!clean) throw new TaskError("A task needs a title");
+    if (due !== null && !/^\d{4}-\d{2}-\d{2}$/.test(due)) throw new TaskError(`Due dates look like 2026-10-20, not "${due}"`);
+    const id = this.#tasks.reduce((max, t) => Math.max(max, t.id), 0) + 1;
+    const task = { id, title: clean, due, urgent: Boolean(urgent), done: false };
+    this.#tasks.push(task);
+    return task;
+  }
+  #find(id) {
+    const task = this.#tasks.find((t) => t.id === Number(id));
+    if (!task) throw new TaskError(`No task with id ${id}`);
+    return task;
+  }
+  done(id) { const t = this.#find(id); t.done = true; return t; }
+  remove(id) { const t = this.#find(id); this.#tasks = this.#tasks.filter((x) => x !== t); return t; }
+  list({ all = false } = {}) {
+    return this.#tasks.filter((t) => all || !t.done)
+      .toSorted((a, b) => Number(b.urgent) - Number(a.urgent) || (a.due ?? "9999").localeCompare(b.due ?? "9999") || a.id - b.id);
+  }
+  save() { this.saves++; }
+}
+
+// file: cli.js
+import { parseArgs } from "./args.js";
+import { TaskError } from "./store.js";
+
+const COMMANDS = ["add", "list", "done", "remove", "help"];
+const USAGE = "Usage: tasks <add|list|done|remove|help> [options]";
+
+const formatTask = (t) => `${t.id}. [${t.done ? "x" : " "}] ${t.title}${t.due ? ` (due ${t.due})` : ""}${t.urgent ? " !" : ""}`;
+
+export function run(argv, store) {
+  const { command, positional, flags } = parseArgs(argv);
+  const usage = (text) => ({ lines: [text], code: 2 });
+  try {
+    switch (command) {
+      case null:
+      case "help":
+        return { lines: [USAGE], code: 0 };
+      case "add": {
+        if (!positional[0]) return usage("Usage: tasks add <title> [--due=YYYY-MM-DD] [--urgent]");
+        const due = typeof flags.due === "string" ? flags.due : null;
+        const task = store.add(positional[0], { due, urgent: flags.urgent === true });
+        store.save();
+        return { lines: [`Added task ${task.id}: ${task.title}`], code: 0 };
+      }
+      case "list": {
+        const tasks = store.list({ all: flags.all === true });
+        return { lines: tasks.length ? tasks.map(formatTask) : ["No tasks."], code: 0 };
+      }
+      case "done":
+      case "remove": {
+        if (!positional[0]) return usage(`Usage: tasks ${command} <id>`);
+        const task = store[command](positional[0]);
+        store.save();
+        return { lines: [`${command === "done" ? "Completed" : "Removed"} task ${task.id}: ${task.title}`], code: 0 };
+      }
+      default:
+        return usage(`Unknown command "${command}". Try: ${COMMANDS.join(", ")}`);
+    }
+  } catch (error) {
+    if (!(error instanceof TaskError)) throw error;
+    return { lines: [`Error: ${error.message}`], code: 1 };
+  }
+}
+
+// file: main.js
+import { run } from "./cli.js";
+import { TaskStore } from "./store.js";
+const store = new TaskStore();
+for (const argv of [["add", "Write the report", "--due=2026-10-20", "--urgent"], ["add", "Buy milk"], ["list"], ["done", "2"], ["list", "--all"], ["lsit"]]) {
+  const { lines, code } = run(argv, store);
+  console.log(`$ tasks ${argv.join(" ")}`);
+  for (const line of lines) console.log(line);
+  process.exitCode = code;
+}
+::tests
+const { run: __run } = __dqRequire("./cli.js");
+const { TaskStore: __S } = __dqRequire("./store.js");
+const __st = new __S();
+assert.deepStrictEqual(__run(["add", "Write the report", "--due=2026-10-20", "--urgent"], __st), { lines: ["Added task 1: Write the report"], code: 0 });
+assert.deepStrictEqual(__run(["add", "Buy milk"], __st), { lines: ["Added task 2: Buy milk"], code: 0 });
+assert.deepStrictEqual(__run(["list"], __st), { lines: ["1. [ ] Write the report (due 2026-10-20) !", "2. [ ] Buy milk"], code: 0 });
+assert.deepStrictEqual(__run(["done", "2"], __st), { lines: ["Completed task 2: Buy milk"], code: 0 });
+assert.deepStrictEqual(__run(["list"], __st).lines, ["1. [ ] Write the report (due 2026-10-20) !"]);
+assert.deepStrictEqual(__run(["list", "--all"], __st).lines, ["1. [ ] Write the report (due 2026-10-20) !", "2. [x] Buy milk"]);
+assert.strictEqual(__st.saves, 3, "every change (add, add, done) must be saved, and nothing else");
+assert.deepStrictEqual(__run(["done", "9"], __st), { lines: ["Error: No task with id 9"], code: 1 });
+assert.deepStrictEqual(__run(["add", "x", "--due=soon"], __st).code, 1);
+assert.deepStrictEqual(__run(["lsit"], __st), { lines: ['Unknown command "lsit". Try: add, list, done, remove, help'], code: 2 });
+assert.strictEqual(__run(["add"], __st).code, 2);
+assert.match(__run(["add"], __st).lines[0], /^Usage:/);
+assert.strictEqual(__run(["remove"], __st).code, 2);
+assert.deepStrictEqual(__run([], __st), { lines: ["Usage: tasks <add|list|done|remove|help> [options]"], code: 0 });
+assert.deepStrictEqual(__run(["remove", "1"], __st).lines, ["Removed task 1: Write the report"]);
+assert.deepStrictEqual(__run(["remove", "2"], __st).lines, ["Removed task 2: Buy milk"]);
+assert.deepStrictEqual(__run(["list", "--all"], __st).lines, ["No tasks."]);
+::hints
+- Parse once with `parseArgs(argv)`, then `switch (command)`.
+- Wrap the whole switch in `try`/`catch`: a `TaskError` becomes `{ lines: ["Error: ..."], code: 1 }`.
+- Format a task with a small helper: `` `${t.id}. [${t.done ? "x" : " "}] ${t.title}` `` plus the optional due date and `!`.
+--- cards
+Functional core, imperative shell :: Pure, testable logic inside; input/output (argv, files, printing) at the edges.
+run(argv) returning { lines, code } :: Makes a CLI testable without capturing the console.
+Exit codes :: 0 success, 1 a failed operation, 2 incorrect usage. Scripts and CI check them.
+Corrupt vs missing files :: ENOENT means "start empty"; invalid JSON is an error to report clearly.
+
+=== lesson js-capstone-interpreter | Capstone 3: build a tiny programming language | 450
+You've written thousands of lines of JavaScript; now you'll build a **programming language** of your own, with JavaScript. It's called **Calc**: a calculator language with variables, functions, comparisons and recursion:
+
+```
+let r = 2
+pi * r ^ 2
+fn square(n) = n * n
+fn fact(n) = if(n < 2, 1, n * fact(n - 1))
+fact(10)
+```
+
+This is a classic project for a reason. Every language you'll ever use (JavaScript in V8, Python, SQL in a database, even spreadsheet formulas) runs through the same three stages, and building them yourself demystifies them for good:
+
+1. **Tokenizer** (lexer): turns text into **tokens**, the words of the language: numbers, names, operators. `let r = 2` becomes `keyword:let`, `name:r`, `op:=`, `number:2`.
+2. **Parser**: turns the token list into a tree that shows the program's structure, an **abstract syntax tree** (AST). `1 + 2 * 3` becomes "add 1 to (multiply 2 by 3)", because `*` binds tighter than `+`.
+3. **Interpreter** (evaluator): walks the tree and computes values, keeping variables and functions in an **environment**.
+
+Then you'll wrap it in a **REPL** (read-eval-print loop) in Node, like the `node` prompt itself.
+
+## The grammar
+
+A language is defined by its **grammar**. Calc's, from the loosest-binding rule to the tightest:
+
+```
+program    := statement (";" or new line) statement ...
+statement  := "let" NAME "=" expr  |  "fn" NAME "(" NAME, ... ")" "=" expr  |  expr
+expr       := sum ( ("<" | ">" | "<=" | ">=" | "==" | "!=") sum )?
+sum        := term ( ("+" | "-") term )*
+term       := unary ( ("*" | "/" | "%") unary )*
+unary      := "-" unary  |  power
+power      := value ( "^" unary )?
+value      := NUMBER  |  NAME  |  NAME "(" expr, ... ")"  |  "(" expr ")"
+```
+
+Each rule becomes one function in a **recursive descent parser**: `sum()` calls `term()`, which calls `unary()`, and so on down; `value()` calls `expr()` again for parentheses, which is where the recursion comes from. Precedence falls out of the structure: because `sum` is built from `term`s, multiplication is always grouped first.
+
+Two details worth noticing:
+
+- `^` is **right-associative** (`2 ^ 3 ^ 2` is `2 ^ 9`), so `power` parses its right side with `unary()` again instead of looping. And `-2 ^ 2` is `-(2 ^ 2)` = -4, as in maths.
+- `if(cond, a, b)` looks like a function call, but it's a **special form**: only the chosen branch may be evaluated. Otherwise `fact` would recurse forever and `if(0, 1 / 0, 7)` would fail. Eloquent JavaScript's "Egg" language uses the same trick.
+
+## Design notes
+
+- Errors are one class, `CalcError`, that knows the **line and column** where things went wrong: good error messages are what separate a toy language from a usable one.
+- The AST is plain objects (`{ type: "binary", op: "+", left, right }`), easy to print and test.
+- An **environment** maps names to values and has a `parent` link. Function calls get a new environment whose parent is the one where the function was defined: the **lexical scope** and closures from Module 5, now implemented by you.
+- Infinite recursion must not crash the host: count call depth and stop with a clear error.
+
+The four steps are four modules: `lexer.js`, `parser.js`, `interpreter.js` and the REPL in `main.js`. Each step's starter contains the previous steps' solutions.
+
+📚 **Go deeper:** *Eloquent JavaScript* (4th ed.), chapter 12, "Project: A Programming Language"; Robert Nystrom, *Crafting Interpreters* (free at craftinginterpreters.com); the AST Explorer website (astexplorer.net) shows real JavaScript ASTs.
+--- goals
+- turn source text into tokens with positions for error messages
+- write a recursive descent parser that respects precedence and associativity
+- evaluate an abstract syntax tree with environments, closures and special forms
+- protect an interpreter from runaway recursion
+- wrap it all in an interactive REPL built from ES modules
+--- exercise code javascript
+::prompt
+**Step 1: the tokenizer.** In `lexer.js`, export `CalcError` (a subclass of `Error` with `name` `"CalcError"`, and `line`/`col` properties; when a line is given, the message ends with ` (line L, column C)`) and `tokenize(source)` returning an array of `{ type, value, line, col }`:
+
+- numbers like `42` or `3.5` → type `"number"`, value a **number**;
+- names (`[A-Za-z_]` then letters, digits or `_`) → `"name"`, except `let` and `fn`, which are `"keyword"`;
+- operators `<=`, `>=`, `==`, `!=` (two characters) and `+ - * / % ^ = ( ) , ; < >` → `"op"`;
+- a **new line** becomes an `op` token with value `";"` (statements end at line breaks);
+- spaces and tabs are skipped; `#` starts a comment until the end of the line;
+- anything else throws `CalcError` with the message `Unexpected character "<ch>"` and its position.
+
+`line` and `col` start at 1 and give the position of the token's first character.
+::starter
+// file: lexer.js
+export class CalcError extends Error {}
+
+export function tokenize(source) {
+}
+
+// file: main.js
+import { tokenize } from "./lexer.js";
+for (const token of tokenize("let r = 2\npi * r ^ 2")) console.log(token);
+::solution
+// file: lexer.js
+export class CalcError extends Error {
+  constructor(message, line = null, col = null) {
+    super(line === null ? message : `${message} (line ${line}, column ${col})`);
+    this.name = "CalcError";
+    this.line = line;
+    this.col = col;
+  }
+}
+
+const KEYWORDS = new Set(["let", "fn"]);
+const TWO_CHAR = ["<=", ">=", "==", "!="];
+const ONE_CHAR = "+-*/%^=(),;<>";
+
+export function tokenize(source) {
+  const tokens = [];
+  let i = 0;
+  let line = 1;
+  let col = 1;
+  const push = (type, value, length) => {
+    tokens.push({ type, value, line, col });
+    i += length;
+    col += length;
+  };
+  while (i < source.length) {
+    const ch = source[i];
+    if (ch === "\n") {
+      tokens.push({ type: "op", value: ";", line, col });
+      i++;
+      line++;
+      col = 1;
+      continue;
+    }
+    if (ch === " " || ch === "\t" || ch === "\r") {
+      i++;
+      col++;
+      continue;
+    }
+    if (ch === "#") {
+      while (i < source.length && source[i] !== "\n") {
+        i++;
+        col++;
+      }
+      continue;
+    }
+    const rest = source.slice(i);
+    const number = rest.match(/^\d+(\.\d+)?/);
+    if (number) {
+      push("number", Number(number[0]), number[0].length);
+      continue;
+    }
+    const word = rest.match(/^[A-Za-z_]\w*/);
+    if (word) {
+      push(KEYWORDS.has(word[0]) ? "keyword" : "name", word[0], word[0].length);
+      continue;
+    }
+    if (TWO_CHAR.includes(rest.slice(0, 2))) {
+      push("op", rest.slice(0, 2), 2);
+      continue;
+    }
+    if (ONE_CHAR.includes(ch)) {
+      push("op", ch, 1);
+      continue;
+    }
+    throw new CalcError(`Unexpected character "${ch}"`, line, col);
+  }
+  return tokens;
+}
+
+// file: main.js
+import { tokenize } from "./lexer.js";
+for (const token of tokenize("let r = 2\npi * r ^ 2")) console.log(token);
+::tests
+const { tokenize: __t, CalcError: __E } = __dqRequire("./lexer.js");
+const __types = (src) => __t(src).map((k) => `${k.type}:${k.value}`);
+assert.deepStrictEqual(__types("let x = 3.5 * (y + 2)"), ["keyword:let", "name:x", "op:=", "number:3.5", "op:*", "op:(", "name:y", "op:+", "number:2", "op:)"]);
+assert.strictEqual(typeof __t("42")[0].value, "number", "number tokens hold numbers, not text");
+assert.deepStrictEqual(__t("a <= 10")[1], { type: "op", value: "<=", line: 1, col: 3 });
+assert.deepStrictEqual(__types("fn f(a, b) = a != b"), ["keyword:fn", "name:f", "op:(", "name:a", "op:,", "name:b", "op:)", "op:=", "name:a", "op:!=", "name:b"]);
+assert.deepStrictEqual(__types("1 # comment\n2;3"), ["number:1", "op:;", "number:2", "op:;", "number:3"]);
+assert.deepStrictEqual(__t("x\n  y")[2], { type: "name", value: "y", line: 2, col: 3 });
+assert.deepStrictEqual(__t(""), []);
+assert.throws(() => __t("2 @ 3"), (e) => e instanceof __E && e.name === "CalcError" && e.message === 'Unexpected character "@" (line 1, column 3)' && e.line === 1 && e.col === 3);
+::hints
+- Walk through the text with an index `i`, tracking `line` and `col` as you go (a new line resets `col` to 1).
+- Use small regexes anchored with `^` on the rest of the text: `/^\d+(\.\d+)?/` for numbers, `/^[A-Za-z_]\w*/` for names.
+- Check two-character operators before one-character ones, or `<=` would become `<` and `=`.
+--- exercise code javascript
+::prompt
+**Step 2: the parser.** In `parser.js`, export `parse(tokens)` that returns `{ type: "program", body: [...statements] }` using the grammar in the lesson, with these node shapes:
+
+- statements: `{ type: "let", name, value }`, `{ type: "fn", name, params: [...names], body }`, `{ type: "expr", expr }`;
+- expressions: `{ type: "num", value }`, `{ type: "var", name }`, `{ type: "unary", op: "-", arg }`, `{ type: "binary", op, left, right }`, `{ type: "call", name, args: [...] }`.
+
+Statements are separated by `;` tokens (empty statements are skipped). On a syntax error, throw a `CalcError` (import it from `lexer.js`) whose message is `Expected <what> but found "<token>"` with the token's position, or `Expected <what> but reached the end`: for example `Expected ")" but reached the end`, `Expected a name but found "="`, `Expected a value but found ")"`, `Expected the end of the statement but found "2"`.
+::starter
+// file: lexer.js
+export class CalcError extends Error {
+  constructor(message, line = null, col = null) {
+    super(line === null ? message : `${message} (line ${line}, column ${col})`);
+    this.name = "CalcError";
+    this.line = line;
+    this.col = col;
+  }
+}
+const KEYWORDS = new Set(["let", "fn"]);
+const TWO_CHAR = ["<=", ">=", "==", "!="];
+const ONE_CHAR = "+-*/%^=(),;<>";
+export function tokenize(source) {
+  const tokens = [];
+  let i = 0, line = 1, col = 1;
+  const push = (type, value, length) => { tokens.push({ type, value, line, col }); i += length; col += length; };
+  while (i < source.length) {
+    const ch = source[i];
+    if (ch === "\n") { tokens.push({ type: "op", value: ";", line, col }); i++; line++; col = 1; continue; }
+    if (ch === " " || ch === "\t" || ch === "\r") { i++; col++; continue; }
+    if (ch === "#") { while (i < source.length && source[i] !== "\n") { i++; col++; } continue; }
+    const rest = source.slice(i);
+    const number = rest.match(/^\d+(\.\d+)?/);
+    if (number) { push("number", Number(number[0]), number[0].length); continue; }
+    const word = rest.match(/^[A-Za-z_]\w*/);
+    if (word) { push(KEYWORDS.has(word[0]) ? "keyword" : "name", word[0], word[0].length); continue; }
+    if (TWO_CHAR.includes(rest.slice(0, 2))) { push("op", rest.slice(0, 2), 2); continue; }
+    if (ONE_CHAR.includes(ch)) { push("op", ch, 1); continue; }
+    throw new CalcError(`Unexpected character "${ch}"`, line, col);
+  }
+  return tokens;
+}
+
+// file: parser.js
+import { CalcError } from "./lexer.js";
+
+export function parse(tokens) {
+}
+
+// file: main.js
+import { tokenize } from "./lexer.js";
+import { parse } from "./parser.js";
+console.log(JSON.stringify(parse(tokenize("1 + 2 * 3")), null, 1));
+::solution
+// file: lexer.js
+export class CalcError extends Error {
+  constructor(message, line = null, col = null) {
+    super(line === null ? message : `${message} (line ${line}, column ${col})`);
+    this.name = "CalcError";
+    this.line = line;
+    this.col = col;
+  }
+}
+const KEYWORDS = new Set(["let", "fn"]);
+const TWO_CHAR = ["<=", ">=", "==", "!="];
+const ONE_CHAR = "+-*/%^=(),;<>";
+export function tokenize(source) {
+  const tokens = [];
+  let i = 0, line = 1, col = 1;
+  const push = (type, value, length) => { tokens.push({ type, value, line, col }); i += length; col += length; };
+  while (i < source.length) {
+    const ch = source[i];
+    if (ch === "\n") { tokens.push({ type: "op", value: ";", line, col }); i++; line++; col = 1; continue; }
+    if (ch === " " || ch === "\t" || ch === "\r") { i++; col++; continue; }
+    if (ch === "#") { while (i < source.length && source[i] !== "\n") { i++; col++; } continue; }
+    const rest = source.slice(i);
+    const number = rest.match(/^\d+(\.\d+)?/);
+    if (number) { push("number", Number(number[0]), number[0].length); continue; }
+    const word = rest.match(/^[A-Za-z_]\w*/);
+    if (word) { push(KEYWORDS.has(word[0]) ? "keyword" : "name", word[0], word[0].length); continue; }
+    if (TWO_CHAR.includes(rest.slice(0, 2))) { push("op", rest.slice(0, 2), 2); continue; }
+    if (ONE_CHAR.includes(ch)) { push("op", ch, 1); continue; }
+    throw new CalcError(`Unexpected character "${ch}"`, line, col);
+  }
+  return tokens;
+}
+
+// file: parser.js
+import { CalcError } from "./lexer.js";
+
+const COMPARE = ["<", ">", "<=", ">=", "==", "!="];
+
+export function parse(tokens) {
+  let pos = 0;
+  const peek = () => tokens[pos];
+  const isOp = (value) => peek()?.type === "op" && peek().value === value;
+  const fail = (what) => {
+    const token = peek();
+    if (!token) throw new CalcError(`Expected ${what} but reached the end`);
+    throw new CalcError(`Expected ${what} but found "${token.value}"`, token.line, token.col);
+  };
+  const expectOp = (value) => {
+    if (!isOp(value)) fail(`"${value}"`);
+    pos++;
+  };
+  const expectName = () => {
+    if (peek()?.type !== "name") fail("a name");
+    return tokens[pos++].value;
+  };
+
+  function list(item) {
+    const items = [];
+    if (!isOp(")")) {
+      items.push(item());
+      while (isOp(",")) {
+        pos++;
+        items.push(item());
+      }
+    }
+    expectOp(")");
+    return items;
+  }
+
+  function statement() {
+    const token = peek();
+    if (token.type === "keyword" && token.value === "let") {
+      pos++;
+      const name = expectName();
+      expectOp("=");
+      return { type: "let", name, value: expr() };
+    }
+    if (token.type === "keyword" && token.value === "fn") {
+      pos++;
+      const name = expectName();
+      expectOp("(");
+      const params = list(expectName);
+      expectOp("=");
+      return { type: "fn", name, params, body: expr() };
+    }
+    return { type: "expr", expr: expr() };
+  }
+
+  function expr() {
+    const left = sum();
+    if (peek()?.type === "op" && COMPARE.includes(peek().value)) {
+      const op = tokens[pos++].value;
+      return { type: "binary", op, left, right: sum() };
+    }
+    return left;
+  }
+
+  function sum() {
+    let left = term();
+    while (isOp("+") || isOp("-")) {
+      const op = tokens[pos++].value;
+      left = { type: "binary", op, left, right: term() };
+    }
+    return left;
+  }
+
+  function term() {
+    let left = unary();
+    while (isOp("*") || isOp("/") || isOp("%")) {
+      const op = tokens[pos++].value;
+      left = { type: "binary", op, left, right: unary() };
+    }
+    return left;
+  }
+
+  function unary() {
+    if (isOp("-")) {
+      pos++;
+      return { type: "unary", op: "-", arg: unary() };
+    }
+    return power();
+  }
+
+  function power() {
+    const base = value();
+    if (isOp("^")) {
+      pos++;
+      return { type: "binary", op: "^", left: base, right: unary() };
+    }
+    return base;
+  }
+
+  function value() {
+    const token = peek();
+    if (token?.type === "number") {
+      pos++;
+      return { type: "num", value: token.value };
+    }
+    if (token?.type === "name") {
+      pos++;
+      if (isOp("(")) {
+        pos++;
+        return { type: "call", name: token.value, args: list(expr) };
+      }
+      return { type: "var", name: token.value };
+    }
+    if (isOp("(")) {
+      pos++;
+      const inner = expr();
+      expectOp(")");
+      return inner;
+    }
+    fail("a value");
+  }
+
+  const body = [];
+  while (pos < tokens.length) {
+    if (isOp(";")) {
+      pos++;
+      continue;
+    }
+    body.push(statement());
+    if (pos < tokens.length && !isOp(";")) fail("the end of the statement");
+  }
+  return { type: "program", body };
+}
+
+// file: main.js
+import { tokenize } from "./lexer.js";
+import { parse } from "./parser.js";
+console.log(JSON.stringify(parse(tokenize("1 + 2 * 3")), null, 1));
+::tests
+const { tokenize: __t } = __dqRequire("./lexer.js");
+const { parse: __p } = __dqRequire("./parser.js");
+const __ast = (src) => __p(__t(src)).body;
+assert.deepStrictEqual(__p(__t("1 + 2 * 3")), { type: "program", body: [{ type: "expr", expr: { type: "binary", op: "+", left: { type: "num", value: 1 }, right: { type: "binary", op: "*", left: { type: "num", value: 2 }, right: { type: "num", value: 3 } } } }] });
+const __show = (n) => (n.type === "num" ? String(n.value) : n.type === "var" ? n.name : n.type === "unary" ? `(-${__show(n.arg)})` : n.type === "call" ? `${n.name}(${n.args.map(__show).join(",")})` : `(${__show(n.left)}${n.op}${__show(n.right)})`);
+const __s = (src) => __show(__ast(src)[0].expr);
+assert.strictEqual(__s("(1 + 2) * 3"), "((1+2)*3)");
+assert.strictEqual(__s("10 - 4 - 3"), "((10-4)-3)", "- is left-associative");
+assert.strictEqual(__s("2 ^ 3 ^ 2"), "(2^(3^2))", "^ is right-associative");
+assert.strictEqual(__s("-2 ^ 2"), "(-(2^2))");
+assert.strictEqual(__s("2 * -x"), "(2*(-x))");
+assert.strictEqual(__s("max(1, x + 1) < 3"), "(max(1,(x+1))<3)");
+assert.strictEqual(__s("f()"), "f()");
+assert.deepStrictEqual(__ast("let y = 2; fn add(a, b) = a + b"), [
+  { type: "let", name: "y", value: { type: "num", value: 2 } },
+  { type: "fn", name: "add", params: ["a", "b"], body: { type: "binary", op: "+", left: { type: "var", name: "a" }, right: { type: "var", name: "b" } } },
+]);
+assert.strictEqual(__ast("1\n\n2;;").length, 2);
+assert.throws(() => __ast("(1 + 2"), { message: 'Expected ")" but reached the end' });
+assert.throws(() => __ast("let = 3"), { message: 'Expected a name but found "=" (line 1, column 5)' });
+assert.throws(() => __ast("1 2"), /^CalcError|Expected the end of the statement but found "2"/);
+assert.throws(() => __ast("3 + )"), { message: 'Expected a value but found ")" (line 1, column 5)' });
+assert.throws(() => __ast("3 +"), { message: "Expected a value but reached the end" });
+::hints
+- Keep a position `pos` into the token array, with small helpers: `peek()`, `isOp(value)`, `expectOp(value)`, `expectName()` and `fail(what)`.
+- One function per grammar rule. Loops (`while (isOp("+") ...)`) give left-associativity; calling `unary()` for the right side of `^` gives right-associativity.
+- `value()`: a number, a name (followed by `(` it's a call), or `(` expr `)`; anything else is "Expected a value".
+--- exercise code javascript
+::prompt
+**Step 3: the interpreter.** In `interpreter.js`, export `createEnvironment()` and `run(program, env = createEnvironment())`.
+
+- An environment is `{ vars: Map, fns: Map, parent }`; the global one starts with the variable `pi`. Lookups walk up the `parent` chain.
+- `run` executes the statements in order and returns one result per statement: `{ type: "let", name, value }` (and stores the variable), `{ type: "fn", name, params }` (and stores the function with the environment it was defined in), or `{ type: "value", value }`.
+- Operators: `+ - * / % ^` and comparisons (which give `1` for true and `0` for false). Dividing (or `%`) by zero throws `CalcError("Division by zero")`.
+- Calls: user functions get a new environment (parameters as variables, parent = the function's defining environment); a wrong number of arguments throws `` `${name} expects 1 argument, got 2` `` (plural "arguments" for other counts). Built-ins: `sqrt`, `abs`, `round`, `floor`, `max`, `min`. `if(cond, a, b)` is a **special form**: evaluate `cond`, then **only** the chosen branch (non-zero is true).
+- Unknown names throw `Unknown variable "x"` / `Unknown function "f"`. More than 500 nested calls throw `CalcError("Too much recursion (more than 500 nested calls)")`.
+::starter
+// file: lexer.js
+export class CalcError extends Error {
+  constructor(message, line = null, col = null) {
+    super(line === null ? message : `${message} (line ${line}, column ${col})`);
+    this.name = "CalcError";
+    this.line = line;
+    this.col = col;
+  }
+}
+const KEYWORDS = new Set(["let", "fn"]);
+const TWO_CHAR = ["<=", ">=", "==", "!="];
+const ONE_CHAR = "+-*/%^=(),;<>";
+export function tokenize(source) {
+  const tokens = [];
+  let i = 0, line = 1, col = 1;
+  const push = (type, value, length) => { tokens.push({ type, value, line, col }); i += length; col += length; };
+  while (i < source.length) {
+    const ch = source[i];
+    if (ch === "\n") { tokens.push({ type: "op", value: ";", line, col }); i++; line++; col = 1; continue; }
+    if (ch === " " || ch === "\t" || ch === "\r") { i++; col++; continue; }
+    if (ch === "#") { while (i < source.length && source[i] !== "\n") { i++; col++; } continue; }
+    const rest = source.slice(i);
+    const number = rest.match(/^\d+(\.\d+)?/);
+    if (number) { push("number", Number(number[0]), number[0].length); continue; }
+    const word = rest.match(/^[A-Za-z_]\w*/);
+    if (word) { push(KEYWORDS.has(word[0]) ? "keyword" : "name", word[0], word[0].length); continue; }
+    if (TWO_CHAR.includes(rest.slice(0, 2))) { push("op", rest.slice(0, 2), 2); continue; }
+    if (ONE_CHAR.includes(ch)) { push("op", ch, 1); continue; }
+    throw new CalcError(`Unexpected character "${ch}"`, line, col);
+  }
+  return tokens;
+}
+
+// file: parser.js
+import { CalcError } from "./lexer.js";
+const COMPARE = ["<", ">", "<=", ">=", "==", "!="];
+export function parse(tokens) {
+  let pos = 0;
+  const peek = () => tokens[pos];
+  const isOp = (value) => peek()?.type === "op" && peek().value === value;
+  const fail = (what) => {
+    const token = peek();
+    if (!token) throw new CalcError(`Expected ${what} but reached the end`);
+    throw new CalcError(`Expected ${what} but found "${token.value}"`, token.line, token.col);
+  };
+  const expectOp = (value) => { if (!isOp(value)) fail(`"${value}"`); pos++; };
+  const expectName = () => { if (peek()?.type !== "name") fail("a name"); return tokens[pos++].value; };
+  function list(item) {
+    const items = [];
+    if (!isOp(")")) { items.push(item()); while (isOp(",")) { pos++; items.push(item()); } }
+    expectOp(")");
+    return items;
+  }
+  function statement() {
+    const token = peek();
+    if (token.type === "keyword" && token.value === "let") { pos++; const name = expectName(); expectOp("="); return { type: "let", name, value: expr() }; }
+    if (token.type === "keyword" && token.value === "fn") { pos++; const name = expectName(); expectOp("("); const params = list(expectName); expectOp("="); return { type: "fn", name, params, body: expr() }; }
+    return { type: "expr", expr: expr() };
+  }
+  function expr() {
+    const left = sum();
+    if (peek()?.type === "op" && COMPARE.includes(peek().value)) { const op = tokens[pos++].value; return { type: "binary", op, left, right: sum() }; }
+    return left;
+  }
+  function sum() { let left = term(); while (isOp("+") || isOp("-")) { const op = tokens[pos++].value; left = { type: "binary", op, left, right: term() }; } return left; }
+  function term() { let left = unary(); while (isOp("*") || isOp("/") || isOp("%")) { const op = tokens[pos++].value; left = { type: "binary", op, left, right: unary() }; } return left; }
+  function unary() { if (isOp("-")) { pos++; return { type: "unary", op: "-", arg: unary() }; } return power(); }
+  function power() { const base = value(); if (isOp("^")) { pos++; return { type: "binary", op: "^", left: base, right: unary() }; } return base; }
+  function value() {
+    const token = peek();
+    if (token?.type === "number") { pos++; return { type: "num", value: token.value }; }
+    if (token?.type === "name") { pos++; if (isOp("(")) { pos++; return { type: "call", name: token.value, args: list(expr) }; } return { type: "var", name: token.value }; }
+    if (isOp("(")) { pos++; const inner = expr(); expectOp(")"); return inner; }
+    fail("a value");
+  }
+  const body = [];
+  while (pos < tokens.length) {
+    if (isOp(";")) { pos++; continue; }
+    body.push(statement());
+    if (pos < tokens.length && !isOp(";")) fail("the end of the statement");
+  }
+  return { type: "program", body };
+}
+
+// file: interpreter.js
+import { CalcError } from "./lexer.js";
+
+export function createEnvironment() {
+}
+
+export function run(program, env = createEnvironment()) {
+}
+
+// file: main.js
+import { tokenize } from "./lexer.js";
+import { parse } from "./parser.js";
+import { run } from "./interpreter.js";
+console.log(run(parse(tokenize("fn fact(n) = if(n < 2, 1, n * fact(n - 1)); fact(10)"))));
+::solution
+// file: lexer.js
+export class CalcError extends Error {
+  constructor(message, line = null, col = null) {
+    super(line === null ? message : `${message} (line ${line}, column ${col})`);
+    this.name = "CalcError";
+    this.line = line;
+    this.col = col;
+  }
+}
+const KEYWORDS = new Set(["let", "fn"]);
+const TWO_CHAR = ["<=", ">=", "==", "!="];
+const ONE_CHAR = "+-*/%^=(),;<>";
+export function tokenize(source) {
+  const tokens = [];
+  let i = 0, line = 1, col = 1;
+  const push = (type, value, length) => { tokens.push({ type, value, line, col }); i += length; col += length; };
+  while (i < source.length) {
+    const ch = source[i];
+    if (ch === "\n") { tokens.push({ type: "op", value: ";", line, col }); i++; line++; col = 1; continue; }
+    if (ch === " " || ch === "\t" || ch === "\r") { i++; col++; continue; }
+    if (ch === "#") { while (i < source.length && source[i] !== "\n") { i++; col++; } continue; }
+    const rest = source.slice(i);
+    const number = rest.match(/^\d+(\.\d+)?/);
+    if (number) { push("number", Number(number[0]), number[0].length); continue; }
+    const word = rest.match(/^[A-Za-z_]\w*/);
+    if (word) { push(KEYWORDS.has(word[0]) ? "keyword" : "name", word[0], word[0].length); continue; }
+    if (TWO_CHAR.includes(rest.slice(0, 2))) { push("op", rest.slice(0, 2), 2); continue; }
+    if (ONE_CHAR.includes(ch)) { push("op", ch, 1); continue; }
+    throw new CalcError(`Unexpected character "${ch}"`, line, col);
+  }
+  return tokens;
+}
+
+// file: parser.js
+import { CalcError } from "./lexer.js";
+const COMPARE = ["<", ">", "<=", ">=", "==", "!="];
+export function parse(tokens) {
+  let pos = 0;
+  const peek = () => tokens[pos];
+  const isOp = (value) => peek()?.type === "op" && peek().value === value;
+  const fail = (what) => {
+    const token = peek();
+    if (!token) throw new CalcError(`Expected ${what} but reached the end`);
+    throw new CalcError(`Expected ${what} but found "${token.value}"`, token.line, token.col);
+  };
+  const expectOp = (value) => { if (!isOp(value)) fail(`"${value}"`); pos++; };
+  const expectName = () => { if (peek()?.type !== "name") fail("a name"); return tokens[pos++].value; };
+  function list(item) {
+    const items = [];
+    if (!isOp(")")) { items.push(item()); while (isOp(",")) { pos++; items.push(item()); } }
+    expectOp(")");
+    return items;
+  }
+  function statement() {
+    const token = peek();
+    if (token.type === "keyword" && token.value === "let") { pos++; const name = expectName(); expectOp("="); return { type: "let", name, value: expr() }; }
+    if (token.type === "keyword" && token.value === "fn") { pos++; const name = expectName(); expectOp("("); const params = list(expectName); expectOp("="); return { type: "fn", name, params, body: expr() }; }
+    return { type: "expr", expr: expr() };
+  }
+  function expr() {
+    const left = sum();
+    if (peek()?.type === "op" && COMPARE.includes(peek().value)) { const op = tokens[pos++].value; return { type: "binary", op, left, right: sum() }; }
+    return left;
+  }
+  function sum() { let left = term(); while (isOp("+") || isOp("-")) { const op = tokens[pos++].value; left = { type: "binary", op, left, right: term() }; } return left; }
+  function term() { let left = unary(); while (isOp("*") || isOp("/") || isOp("%")) { const op = tokens[pos++].value; left = { type: "binary", op, left, right: unary() }; } return left; }
+  function unary() { if (isOp("-")) { pos++; return { type: "unary", op: "-", arg: unary() }; } return power(); }
+  function power() { const base = value(); if (isOp("^")) { pos++; return { type: "binary", op: "^", left: base, right: unary() }; } return base; }
+  function value() {
+    const token = peek();
+    if (token?.type === "number") { pos++; return { type: "num", value: token.value }; }
+    if (token?.type === "name") { pos++; if (isOp("(")) { pos++; return { type: "call", name: token.value, args: list(expr) }; } return { type: "var", name: token.value }; }
+    if (isOp("(")) { pos++; const inner = expr(); expectOp(")"); return inner; }
+    fail("a value");
+  }
+  const body = [];
+  while (pos < tokens.length) {
+    if (isOp(";")) { pos++; continue; }
+    body.push(statement());
+    if (pos < tokens.length && !isOp(";")) fail("the end of the statement");
+  }
+  return { type: "program", body };
+}
+
+// file: interpreter.js
+import { CalcError } from "./lexer.js";
+
+const BUILTINS = { sqrt: Math.sqrt, abs: Math.abs, round: Math.round, floor: Math.floor, max: Math.max, min: Math.min };
+const MAX_DEPTH = 500;
+let depth = 0;
+
+export function createEnvironment() {
+  return { vars: new Map([["pi", Math.PI]]), fns: new Map(), parent: null };
+}
+
+function lookup(env, name) {
+  for (let e = env; e; e = e.parent) if (e.vars.has(name)) return e.vars.get(name);
+  throw new CalcError(`Unknown variable "${name}"`);
+}
+
+function findFunction(env, name) {
+  for (let e = env; e; e = e.parent) if (e.fns.has(name)) return e.fns.get(name);
+  return null;
+}
+
+function binary(op, a, b) {
+  switch (op) {
+    case "+": return a + b;
+    case "-": return a - b;
+    case "*": return a * b;
+    case "/":
+    case "%":
+      if (b === 0) throw new CalcError("Division by zero");
+      return op === "/" ? a / b : a % b;
+    case "^": return a ** b;
+    case "<": return a < b ? 1 : 0;
+    case ">": return a > b ? 1 : 0;
+    case "<=": return a <= b ? 1 : 0;
+    case ">=": return a >= b ? 1 : 0;
+    case "==": return a === b ? 1 : 0;
+    case "!=": return a !== b ? 1 : 0;
+    default: throw new CalcError(`Unknown operator ${op}`);
+  }
+}
+
+function call(node, env) {
+  if (node.name === "if") {
+    if (node.args.length !== 3) throw new CalcError(`if expects 3 arguments, got ${node.args.length}`);
+    return evaluate(node.args[0], env) !== 0 ? evaluate(node.args[1], env) : evaluate(node.args[2], env);
+  }
+  const fn = findFunction(env, node.name);
+  if (fn) {
+    const n = fn.params.length;
+    if (node.args.length !== n) throw new CalcError(`${node.name} expects ${n} argument${n === 1 ? "" : "s"}, got ${node.args.length}`);
+    const scope = { vars: new Map(fn.params.map((p, i) => [p, evaluate(node.args[i], env)])), fns: new Map(), parent: fn.closure };
+    if (++depth > MAX_DEPTH) {
+      depth = 0;
+      throw new CalcError(`Too much recursion (more than ${MAX_DEPTH} nested calls)`);
+    }
+    try {
+      return evaluate(fn.body, scope);
+    } finally {
+      depth = Math.max(0, depth - 1);
+    }
+  }
+  if (Object.hasOwn(BUILTINS, node.name)) return BUILTINS[node.name](...node.args.map((a) => evaluate(a, env)));
+  throw new CalcError(`Unknown function "${node.name}"`);
+}
+
+function evaluate(node, env) {
+  switch (node.type) {
+    case "num": return node.value;
+    case "var": return lookup(env, node.name);
+    case "unary": return -evaluate(node.arg, env);
+    case "binary": return binary(node.op, evaluate(node.left, env), evaluate(node.right, env));
+    case "call": return call(node, env);
+    default: throw new CalcError(`Unknown node ${node.type}`);
+  }
+}
+
+export function run(program, env = createEnvironment()) {
+  const results = [];
+  for (const statement of program.body) {
+    if (statement.type === "let") {
+      const value = evaluate(statement.value, env);
+      env.vars.set(statement.name, value);
+      results.push({ type: "let", name: statement.name, value });
+    } else if (statement.type === "fn") {
+      env.fns.set(statement.name, { params: statement.params, body: statement.body, closure: env });
+      results.push({ type: "fn", name: statement.name, params: statement.params });
+    } else {
+      results.push({ type: "value", value: evaluate(statement.expr, env) });
+    }
+  }
+  return results;
+}
+
+// file: main.js
+import { tokenize } from "./lexer.js";
+import { parse } from "./parser.js";
+import { run } from "./interpreter.js";
+console.log(run(parse(tokenize("fn fact(n) = if(n < 2, 1, n * fact(n - 1)); fact(10)"))));
+::tests
+const { tokenize: __t } = __dqRequire("./lexer.js");
+const { parse: __p } = __dqRequire("./parser.js");
+const { run: __run, createEnvironment: __env } = __dqRequire("./interpreter.js");
+const __vals = (src, env) => __run(__p(__t(src)), env).filter((r) => r.type === "value").map((r) => r.value);
+assert.deepStrictEqual(__run(__p(__t("let y = 4; fn half(n) = n / 2; half(y)"))), [{ type: "let", name: "y", value: 4 }, { type: "fn", name: "half", params: ["n"] }, { type: "value", value: 2 }]);
+assert.deepStrictEqual(__vals("1 + 2 * 3; (1 + 2) * 3; 2 ^ 10; 7 % 3; -2 ^ 2; 3 > 2; 3 == 4; 2 <= 2"), [7, 9, 1024, 1, -4, 1, 0, 1]);
+assert.deepStrictEqual(__vals("max(3, 9, 4); sqrt(16); round(2.5); abs(-3)"), [9, 4, 3, 3]);
+assert.strictEqual(Number(__vals("let r = 2; pi * r ^ 2")[0].toFixed(4)), 12.5664);
+assert.deepStrictEqual(__vals("fn fact(n) = if(n < 2, 1, n * fact(n - 1)); fact(10)"), [3628800]);
+assert.deepStrictEqual(__vals("let a = 10; fn addA(x) = x + a; let a = 20; addA(1)"), [21]);
+assert.deepStrictEqual(__vals("fn x2(pi) = pi * 2; x2(5); pi > 3"), [10, 1], "parameters shadow globals without changing them");
+assert.deepStrictEqual(__vals("if(0, 1 / 0, 7)"), [7], "if must only evaluate the branch it picks");
+const __e = __env();
+__run(__p(__t("let total = 5")), __e);
+assert.deepStrictEqual(__vals("total * 2", __e), [10], "an environment keeps variables between runs");
+assert.throws(() => __vals("1 / 0"), { name: "CalcError", message: "Division by zero" });
+assert.throws(() => __vals("5 % 0"), { message: "Division by zero" });
+assert.throws(() => __vals("y + 1"), { message: 'Unknown variable "y"' });
+assert.throws(() => __vals("nope(1)"), { message: 'Unknown function "nope"' });
+assert.throws(() => __vals("fn sq(n) = n * n; sq(1, 2)"), { message: "sq expects 1 argument, got 2" });
+assert.throws(() => __vals("fn add(a, b) = a + b; add(1)"), { message: "add expects 2 arguments, got 1" });
+assert.throws(() => __vals("fn f(n) = f(n + 1); f(0)"), /Too much recursion/);
+assert.deepStrictEqual(__vals("fn g(n) = if(n == 0, 0, 1 + g(n - 1)); g(400)"), [400], "400 nested calls are allowed");
+::hints
+- `evaluate(node, env)` is one `switch` on `node.type`; binary operators go to a helper with another `switch`.
+- Calls: check for `if` first (evaluate only one branch), then user functions (new environment whose parent is the function's `closure`), then the built-ins.
+- Count nested calls with a variable that goes up before evaluating a function body and down in `finally`.
+--- exercise code javascript
+::prompt
+**Step 4: the REPL.** Write `main.js`: a read-eval-print loop using `node:readline/promises`. Print the banner `Calc 1.0. Type exit to quit.`, then repeatedly ask with the prompt `> ` and run each line in **one shared environment**:
+
+- `let` results print `<name> = <value>`; `fn` results print `defined <name>(<params joined with ", ">)`; values print `= <value>`;
+- numbers are printed as integers when whole, otherwise rounded to 10 decimal places (so `0.1 + 0.2` prints `= 0.3`);
+- a `CalcError` prints `Error: <message>` and the loop continues;
+- empty lines are ignored; `exit` (or the end of the input, when `rl.question` rejects) ends the loop, then print `Bye!`.
+::starter
+// file: lexer.js
+export class CalcError extends Error {
+  constructor(message, line = null, col = null) {
+    super(line === null ? message : `${message} (line ${line}, column ${col})`);
+    this.name = "CalcError";
+    this.line = line;
+    this.col = col;
+  }
+}
+const KEYWORDS = new Set(["let", "fn"]);
+const TWO_CHAR = ["<=", ">=", "==", "!="];
+const ONE_CHAR = "+-*/%^=(),;<>";
+export function tokenize(source) {
+  const tokens = [];
+  let i = 0, line = 1, col = 1;
+  const push = (type, value, length) => { tokens.push({ type, value, line, col }); i += length; col += length; };
+  while (i < source.length) {
+    const ch = source[i];
+    if (ch === "\n") { tokens.push({ type: "op", value: ";", line, col }); i++; line++; col = 1; continue; }
+    if (ch === " " || ch === "\t" || ch === "\r") { i++; col++; continue; }
+    if (ch === "#") { while (i < source.length && source[i] !== "\n") { i++; col++; } continue; }
+    const rest = source.slice(i);
+    const number = rest.match(/^\d+(\.\d+)?/);
+    if (number) { push("number", Number(number[0]), number[0].length); continue; }
+    const word = rest.match(/^[A-Za-z_]\w*/);
+    if (word) { push(KEYWORDS.has(word[0]) ? "keyword" : "name", word[0], word[0].length); continue; }
+    if (TWO_CHAR.includes(rest.slice(0, 2))) { push("op", rest.slice(0, 2), 2); continue; }
+    if (ONE_CHAR.includes(ch)) { push("op", ch, 1); continue; }
+    throw new CalcError(`Unexpected character "${ch}"`, line, col);
+  }
+  return tokens;
+}
+
+// file: parser.js
+import { CalcError } from "./lexer.js";
+const COMPARE = ["<", ">", "<=", ">=", "==", "!="];
+export function parse(tokens) {
+  let pos = 0;
+  const peek = () => tokens[pos];
+  const isOp = (value) => peek()?.type === "op" && peek().value === value;
+  const fail = (what) => {
+    const token = peek();
+    if (!token) throw new CalcError(`Expected ${what} but reached the end`);
+    throw new CalcError(`Expected ${what} but found "${token.value}"`, token.line, token.col);
+  };
+  const expectOp = (value) => { if (!isOp(value)) fail(`"${value}"`); pos++; };
+  const expectName = () => { if (peek()?.type !== "name") fail("a name"); return tokens[pos++].value; };
+  function list(item) {
+    const items = [];
+    if (!isOp(")")) { items.push(item()); while (isOp(",")) { pos++; items.push(item()); } }
+    expectOp(")");
+    return items;
+  }
+  function statement() {
+    const token = peek();
+    if (token.type === "keyword" && token.value === "let") { pos++; const name = expectName(); expectOp("="); return { type: "let", name, value: expr() }; }
+    if (token.type === "keyword" && token.value === "fn") { pos++; const name = expectName(); expectOp("("); const params = list(expectName); expectOp("="); return { type: "fn", name, params, body: expr() }; }
+    return { type: "expr", expr: expr() };
+  }
+  function expr() {
+    const left = sum();
+    if (peek()?.type === "op" && COMPARE.includes(peek().value)) { const op = tokens[pos++].value; return { type: "binary", op, left, right: sum() }; }
+    return left;
+  }
+  function sum() { let left = term(); while (isOp("+") || isOp("-")) { const op = tokens[pos++].value; left = { type: "binary", op, left, right: term() }; } return left; }
+  function term() { let left = unary(); while (isOp("*") || isOp("/") || isOp("%")) { const op = tokens[pos++].value; left = { type: "binary", op, left, right: unary() }; } return left; }
+  function unary() { if (isOp("-")) { pos++; return { type: "unary", op: "-", arg: unary() }; } return power(); }
+  function power() { const base = value(); if (isOp("^")) { pos++; return { type: "binary", op: "^", left: base, right: unary() }; } return base; }
+  function value() {
+    const token = peek();
+    if (token?.type === "number") { pos++; return { type: "num", value: token.value }; }
+    if (token?.type === "name") { pos++; if (isOp("(")) { pos++; return { type: "call", name: token.value, args: list(expr) }; } return { type: "var", name: token.value }; }
+    if (isOp("(")) { pos++; const inner = expr(); expectOp(")"); return inner; }
+    fail("a value");
+  }
+  const body = [];
+  while (pos < tokens.length) {
+    if (isOp(";")) { pos++; continue; }
+    body.push(statement());
+    if (pos < tokens.length && !isOp(";")) fail("the end of the statement");
+  }
+  return { type: "program", body };
+}
+
+// file: interpreter.js
+import { CalcError } from "./lexer.js";
+const BUILTINS = { sqrt: Math.sqrt, abs: Math.abs, round: Math.round, floor: Math.floor, max: Math.max, min: Math.min };
+const MAX_DEPTH = 500;
+let depth = 0;
+export function createEnvironment() {
+  return { vars: new Map([["pi", Math.PI]]), fns: new Map(), parent: null };
+}
+function lookup(env, name) {
+  for (let e = env; e; e = e.parent) if (e.vars.has(name)) return e.vars.get(name);
+  throw new CalcError(`Unknown variable "${name}"`);
+}
+function findFunction(env, name) {
+  for (let e = env; e; e = e.parent) if (e.fns.has(name)) return e.fns.get(name);
+  return null;
+}
+function binary(op, a, b) {
+  switch (op) {
+    case "+": return a + b;
+    case "-": return a - b;
+    case "*": return a * b;
+    case "/": case "%":
+      if (b === 0) throw new CalcError("Division by zero");
+      return op === "/" ? a / b : a % b;
+    case "^": return a ** b;
+    case "<": return a < b ? 1 : 0;
+    case ">": return a > b ? 1 : 0;
+    case "<=": return a <= b ? 1 : 0;
+    case ">=": return a >= b ? 1 : 0;
+    case "==": return a === b ? 1 : 0;
+    case "!=": return a !== b ? 1 : 0;
+    default: throw new CalcError(`Unknown operator ${op}`);
+  }
+}
+function call(node, env) {
+  if (node.name === "if") {
+    if (node.args.length !== 3) throw new CalcError(`if expects 3 arguments, got ${node.args.length}`);
+    return evaluate(node.args[0], env) !== 0 ? evaluate(node.args[1], env) : evaluate(node.args[2], env);
+  }
+  const fn = findFunction(env, node.name);
+  if (fn) {
+    const n = fn.params.length;
+    if (node.args.length !== n) throw new CalcError(`${node.name} expects ${n} argument${n === 1 ? "" : "s"}, got ${node.args.length}`);
+    const scope = { vars: new Map(fn.params.map((p, i) => [p, evaluate(node.args[i], env)])), fns: new Map(), parent: fn.closure };
+    if (++depth > MAX_DEPTH) { depth = 0; throw new CalcError(`Too much recursion (more than ${MAX_DEPTH} nested calls)`); }
+    try { return evaluate(fn.body, scope); } finally { depth = Math.max(0, depth - 1); }
+  }
+  if (Object.hasOwn(BUILTINS, node.name)) return BUILTINS[node.name](...node.args.map((a) => evaluate(a, env)));
+  throw new CalcError(`Unknown function "${node.name}"`);
+}
+function evaluate(node, env) {
+  switch (node.type) {
+    case "num": return node.value;
+    case "var": return lookup(env, node.name);
+    case "unary": return -evaluate(node.arg, env);
+    case "binary": return binary(node.op, evaluate(node.left, env), evaluate(node.right, env));
+    case "call": return call(node, env);
+    default: throw new CalcError(`Unknown node ${node.type}`);
+  }
+}
+export function run(program, env = createEnvironment()) {
+  const results = [];
+  for (const statement of program.body) {
+    if (statement.type === "let") { const value = evaluate(statement.value, env); env.vars.set(statement.name, value); results.push({ type: "let", name: statement.name, value }); }
+    else if (statement.type === "fn") { env.fns.set(statement.name, { params: statement.params, body: statement.body, closure: env }); results.push({ type: "fn", name: statement.name, params: statement.params }); }
+    else results.push({ type: "value", value: evaluate(statement.expr, env) });
+  }
+  return results;
+}
+
+// file: main.js
+import * as readline from "node:readline/promises";
+import { tokenize, CalcError } from "./lexer.js";
+import { parse } from "./parser.js";
+import { run, createEnvironment } from "./interpreter.js";
+
+console.log("Calc 1.0. Type exit to quit.");
+::solution
+// file: lexer.js
+export class CalcError extends Error {
+  constructor(message, line = null, col = null) {
+    super(line === null ? message : `${message} (line ${line}, column ${col})`);
+    this.name = "CalcError";
+    this.line = line;
+    this.col = col;
+  }
+}
+const KEYWORDS = new Set(["let", "fn"]);
+const TWO_CHAR = ["<=", ">=", "==", "!="];
+const ONE_CHAR = "+-*/%^=(),;<>";
+export function tokenize(source) {
+  const tokens = [];
+  let i = 0, line = 1, col = 1;
+  const push = (type, value, length) => { tokens.push({ type, value, line, col }); i += length; col += length; };
+  while (i < source.length) {
+    const ch = source[i];
+    if (ch === "\n") { tokens.push({ type: "op", value: ";", line, col }); i++; line++; col = 1; continue; }
+    if (ch === " " || ch === "\t" || ch === "\r") { i++; col++; continue; }
+    if (ch === "#") { while (i < source.length && source[i] !== "\n") { i++; col++; } continue; }
+    const rest = source.slice(i);
+    const number = rest.match(/^\d+(\.\d+)?/);
+    if (number) { push("number", Number(number[0]), number[0].length); continue; }
+    const word = rest.match(/^[A-Za-z_]\w*/);
+    if (word) { push(KEYWORDS.has(word[0]) ? "keyword" : "name", word[0], word[0].length); continue; }
+    if (TWO_CHAR.includes(rest.slice(0, 2))) { push("op", rest.slice(0, 2), 2); continue; }
+    if (ONE_CHAR.includes(ch)) { push("op", ch, 1); continue; }
+    throw new CalcError(`Unexpected character "${ch}"`, line, col);
+  }
+  return tokens;
+}
+
+// file: parser.js
+import { CalcError } from "./lexer.js";
+const COMPARE = ["<", ">", "<=", ">=", "==", "!="];
+export function parse(tokens) {
+  let pos = 0;
+  const peek = () => tokens[pos];
+  const isOp = (value) => peek()?.type === "op" && peek().value === value;
+  const fail = (what) => {
+    const token = peek();
+    if (!token) throw new CalcError(`Expected ${what} but reached the end`);
+    throw new CalcError(`Expected ${what} but found "${token.value}"`, token.line, token.col);
+  };
+  const expectOp = (value) => { if (!isOp(value)) fail(`"${value}"`); pos++; };
+  const expectName = () => { if (peek()?.type !== "name") fail("a name"); return tokens[pos++].value; };
+  function list(item) {
+    const items = [];
+    if (!isOp(")")) { items.push(item()); while (isOp(",")) { pos++; items.push(item()); } }
+    expectOp(")");
+    return items;
+  }
+  function statement() {
+    const token = peek();
+    if (token.type === "keyword" && token.value === "let") { pos++; const name = expectName(); expectOp("="); return { type: "let", name, value: expr() }; }
+    if (token.type === "keyword" && token.value === "fn") { pos++; const name = expectName(); expectOp("("); const params = list(expectName); expectOp("="); return { type: "fn", name, params, body: expr() }; }
+    return { type: "expr", expr: expr() };
+  }
+  function expr() {
+    const left = sum();
+    if (peek()?.type === "op" && COMPARE.includes(peek().value)) { const op = tokens[pos++].value; return { type: "binary", op, left, right: sum() }; }
+    return left;
+  }
+  function sum() { let left = term(); while (isOp("+") || isOp("-")) { const op = tokens[pos++].value; left = { type: "binary", op, left, right: term() }; } return left; }
+  function term() { let left = unary(); while (isOp("*") || isOp("/") || isOp("%")) { const op = tokens[pos++].value; left = { type: "binary", op, left, right: unary() }; } return left; }
+  function unary() { if (isOp("-")) { pos++; return { type: "unary", op: "-", arg: unary() }; } return power(); }
+  function power() { const base = value(); if (isOp("^")) { pos++; return { type: "binary", op: "^", left: base, right: unary() }; } return base; }
+  function value() {
+    const token = peek();
+    if (token?.type === "number") { pos++; return { type: "num", value: token.value }; }
+    if (token?.type === "name") { pos++; if (isOp("(")) { pos++; return { type: "call", name: token.value, args: list(expr) }; } return { type: "var", name: token.value }; }
+    if (isOp("(")) { pos++; const inner = expr(); expectOp(")"); return inner; }
+    fail("a value");
+  }
+  const body = [];
+  while (pos < tokens.length) {
+    if (isOp(";")) { pos++; continue; }
+    body.push(statement());
+    if (pos < tokens.length && !isOp(";")) fail("the end of the statement");
+  }
+  return { type: "program", body };
+}
+
+// file: interpreter.js
+import { CalcError } from "./lexer.js";
+const BUILTINS = { sqrt: Math.sqrt, abs: Math.abs, round: Math.round, floor: Math.floor, max: Math.max, min: Math.min };
+const MAX_DEPTH = 500;
+let depth = 0;
+export function createEnvironment() {
+  return { vars: new Map([["pi", Math.PI]]), fns: new Map(), parent: null };
+}
+function lookup(env, name) {
+  for (let e = env; e; e = e.parent) if (e.vars.has(name)) return e.vars.get(name);
+  throw new CalcError(`Unknown variable "${name}"`);
+}
+function findFunction(env, name) {
+  for (let e = env; e; e = e.parent) if (e.fns.has(name)) return e.fns.get(name);
+  return null;
+}
+function binary(op, a, b) {
+  switch (op) {
+    case "+": return a + b;
+    case "-": return a - b;
+    case "*": return a * b;
+    case "/": case "%":
+      if (b === 0) throw new CalcError("Division by zero");
+      return op === "/" ? a / b : a % b;
+    case "^": return a ** b;
+    case "<": return a < b ? 1 : 0;
+    case ">": return a > b ? 1 : 0;
+    case "<=": return a <= b ? 1 : 0;
+    case ">=": return a >= b ? 1 : 0;
+    case "==": return a === b ? 1 : 0;
+    case "!=": return a !== b ? 1 : 0;
+    default: throw new CalcError(`Unknown operator ${op}`);
+  }
+}
+function call(node, env) {
+  if (node.name === "if") {
+    if (node.args.length !== 3) throw new CalcError(`if expects 3 arguments, got ${node.args.length}`);
+    return evaluate(node.args[0], env) !== 0 ? evaluate(node.args[1], env) : evaluate(node.args[2], env);
+  }
+  const fn = findFunction(env, node.name);
+  if (fn) {
+    const n = fn.params.length;
+    if (node.args.length !== n) throw new CalcError(`${node.name} expects ${n} argument${n === 1 ? "" : "s"}, got ${node.args.length}`);
+    const scope = { vars: new Map(fn.params.map((p, i) => [p, evaluate(node.args[i], env)])), fns: new Map(), parent: fn.closure };
+    if (++depth > MAX_DEPTH) { depth = 0; throw new CalcError(`Too much recursion (more than ${MAX_DEPTH} nested calls)`); }
+    try { return evaluate(fn.body, scope); } finally { depth = Math.max(0, depth - 1); }
+  }
+  if (Object.hasOwn(BUILTINS, node.name)) return BUILTINS[node.name](...node.args.map((a) => evaluate(a, env)));
+  throw new CalcError(`Unknown function "${node.name}"`);
+}
+function evaluate(node, env) {
+  switch (node.type) {
+    case "num": return node.value;
+    case "var": return lookup(env, node.name);
+    case "unary": return -evaluate(node.arg, env);
+    case "binary": return binary(node.op, evaluate(node.left, env), evaluate(node.right, env));
+    case "call": return call(node, env);
+    default: throw new CalcError(`Unknown node ${node.type}`);
+  }
+}
+export function run(program, env = createEnvironment()) {
+  const results = [];
+  for (const statement of program.body) {
+    if (statement.type === "let") { const value = evaluate(statement.value, env); env.vars.set(statement.name, value); results.push({ type: "let", name: statement.name, value }); }
+    else if (statement.type === "fn") { env.fns.set(statement.name, { params: statement.params, body: statement.body, closure: env }); results.push({ type: "fn", name: statement.name, params: statement.params }); }
+    else results.push({ type: "value", value: evaluate(statement.expr, env) });
+  }
+  return results;
+}
+
+// file: main.js
+import * as readline from "node:readline/promises";
+import { tokenize, CalcError } from "./lexer.js";
+import { parse } from "./parser.js";
+import { run, createEnvironment } from "./interpreter.js";
+
+const format = (n) => (Number.isInteger(n) ? String(n) : String(Number(n.toFixed(10))));
+
+function show(result) {
+  if (result.type === "let") return `${result.name} = ${format(result.value)}`;
+  if (result.type === "fn") return `defined ${result.name}(${result.params.join(", ")})`;
+  return `= ${format(result.value)}`;
+}
+
+console.log("Calc 1.0. Type exit to quit.");
+const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+const env = createEnvironment();
+while (true) {
+  let line;
+  try {
+    line = await rl.question("> ");
+  } catch {
+    break;
+  }
+  if (line.trim() === "exit") break;
+  if (line.trim() === "") continue;
+  try {
+    for (const result of run(parse(tokenize(line)), env)) console.log(show(result));
+  } catch (error) {
+    if (!(error instanceof CalcError)) throw error;
+    console.log(`Error: ${error.message}`);
+  }
+}
+rl.close();
+console.log("Bye!");
+::stdin
+let x = 5
+x * 2 + 1
+fn square(n) = n ^ 2
+square(x) - 0.5
+
+1 / 0
+0.1 + 0.2
+exit
+::expected
+Calc 1.0. Type exit to quit.
+> let x = 5
+x = 5
+> x * 2 + 1
+= 11
+> fn square(n) = n ^ 2
+defined square(n)
+> square(x) - 0.5
+= 24.5
+>
+> 1 / 0
+Error: Division by zero
+> 0.1 + 0.2
+= 0.3
+> exit
+Bye!
+::cases
+>>> fn fact(n) = if(n < 2, 1, n * fact(n - 1))
+>>> fact(12)
+>>> let = 3
+>>> nope(2)
+Calc 1.0. Type exit to quit.
+> fn fact(n) = if(n < 2, 1, n * fact(n - 1))
+defined fact(n)
+> fact(12)
+= 479001600
+> let = 3
+Error: Expected a name but found "=" (line 1, column 5)
+> nope(2)
+Error: Unknown function "nope"
+>
+Bye!
+::hints
+- Loop forever; `await rl.question("> ")` inside `try`, and `break` in the `catch` (that's how the end of the input shows up).
+- One environment created before the loop keeps variables and functions between lines.
+- A small `format(n)` helper: whole numbers as they are, others via `Number(n.toFixed(10))`.
+--- cards
+Tokenizer (lexer) :: Turns source text into tokens: numbers, names, keywords, operators, with positions.
+Parser :: Turns tokens into an abstract syntax tree (AST) following the grammar.
+Recursive descent :: One function per grammar rule; rules call each other (and themselves) to parse nested structure.
+Precedence and associativity :: Lower rules bind tighter (term before sum); loops give left-associativity, recursion right.
+Interpreter :: Walks the AST and computes values, keeping variables in environments.
+Environment chain :: Scopes linked to their parent; function calls get a new scope whose parent is where the function was defined (closures).
+Special form :: Syntax that looks like a call but controls evaluation itself, like if(cond, a, b).
+REPL :: Read, evaluate, print, loop: an interactive prompt for a language.
+
+=== lesson js-capstone-solo | Capstone 4: build it from a spec | 450
+In the real world, nobody hands you a starter with the functions already named and hints at every step. You get a **specification**: a description of what the software must do, often incomplete, and you design and build it yourself. This final capstone works exactly like that. Read the spec, decide on your design, write your own tests for the rules, and submit. Hidden checks then test every rule in the spec, including the edge cases.
+
+## The product: a link shortener
+
+Your company wants an internal link shortener (like bit.ly). Implement it as a JavaScript module: no user interface, just the core service that a web server would call.
+
+### The spec
+
+**Errors.** All errors are instances of `ShortenerError` (a subclass of `Error`), with these subclasses, each with its `name` set to its class name: `InvalidUrlError`, `ConflictError`, `NotFoundError`, `ExpiredError`, `PermissionError`, `RateLimitError`.
+
+**`new LinkShortener({ now, random, codeLength })`**, all options optional:
+
+- `now`: a function returning the current time in milliseconds (default `Date.now`);
+- `random`: a function returning a number in [0, 1) (default `Math.random`);
+- `codeLength`: the length of generated codes (default 6).
+
+**`shorten(url, { owner, custom, ttlDays })`** creates a short link and returns `{ code, url, owner, createdAt, expiresAt }`:
+
+1. `url` must be a valid absolute URL (use `new URL(url)`) with the protocol `http:` or `https:`; otherwise throw `InvalidUrlError`. Store the URL exactly as given.
+2. `owner` is required (a non-empty string); otherwise throw `InvalidUrlError`.
+3. If `custom` is given, it's the code: 3 to 20 characters, only letters, digits, `-` and `_` (otherwise `InvalidUrlError`), and it must not be taken by any link, expired or not (otherwise `ConflictError`). Codes are case-sensitive.
+4. Otherwise, generate a code of `codeLength` characters, each chosen as `ALPHABET[Math.floor(random() * 62)]` with `ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"`. If the code is already taken, generate another.
+5. If the same owner already shortened the same URL (without a custom code) and that link hasn't expired, return the **existing** link instead of creating a new one (without counting towards the rate limit).
+6. `ttlDays` (optional, a positive number) sets `expiresAt` to `createdAt + ttlDays × 86,400,000`; without it, `expiresAt` is `null`.
+7. Rate limit: an owner may create at most 5 links in any 60-second window (links created at times `t` with `now - t < 60000`); a sixth throws `RateLimitError`.
+
+**`resolve(code)`** returns the link's URL and counts a visit (with its time). An unknown code throws `NotFoundError`; a link whose `expiresAt` is not null and is `<= now()` throws `ExpiredError`.
+
+**`stats(code)`** returns `{ visits, lastVisitAt }` (`lastVisitAt` is `null` before the first visit); unknown codes throw `NotFoundError`.
+
+**`linksBy(owner)`** returns that owner's codes, oldest first.
+
+**`delete(code, owner)`** deletes a link; unknown code: `NotFoundError`; a different owner: `PermissionError`. A deleted code can be used again as a custom code.
+
+## How to approach it
+
+1. **Read the whole spec twice** and list every rule; each becomes at least one test.
+2. **Design**: what state does the class need? (Probably a `Map` from code to link, plus something per owner for the rate limit.)
+3. **Write your own tests** with `test()` and `assert` for the tricky rules (rate limit windows, expiry at exactly `expiresAt`, idempotent shortening) using a **fake clock**: `let t = 0; const s = new LinkShortener({ now: () => t });` then move `t` forward.
+4. Build it in small steps, running your tests after each.
+
+There's no starter code beyond an empty file: the design is yours.
+
+📚 **Go deeper:** the System Design track's "Design a URL shortener" (a classic interview question about scaling this service); MDN, "URL" and "URL API"; *The Pragmatic Programmer*, topic 37 "Listen to Your Lizard Brain" (on ambiguous requirements).
+--- goals
+- turn a written specification into a design and an implementation
+- write your own tests for the specification's rules, with a fake clock and fake randomness
+- implement validation, an error hierarchy, expiry, idempotency and rate limiting
+--- exercise code javascript
+::prompt
+Implement the link shortener from the spec in the lesson: the error classes and `LinkShortener`. Your own tests (written with `test()`) are welcome in the same file; the hidden checks test every rule of the spec.
+::starter
+// The link shortener: see the spec in the lesson.
+
+::solution
+class ShortenerError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = this.constructor.name;
+  }
+}
+class InvalidUrlError extends ShortenerError {}
+class ConflictError extends ShortenerError {}
+class NotFoundError extends ShortenerError {}
+class ExpiredError extends ShortenerError {}
+class PermissionError extends ShortenerError {}
+class RateLimitError extends ShortenerError {}
+
+const ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+const DAY = 86_400_000;
+
+class LinkShortener {
+  #links = new Map();
+  #created = new Map();
+
+  constructor({ now = Date.now, random = Math.random, codeLength = 6 } = {}) {
+    this.now = now;
+    this.random = random;
+    this.codeLength = codeLength;
+  }
+
+  #validUrl(url) {
+    try {
+      const parsed = new URL(url);
+      return parsed.protocol === "http:" || parsed.protocol === "https:";
+    } catch {
+      return false;
+    }
+  }
+
+  #isExpired(link, at) {
+    return link.expiresAt !== null && link.expiresAt <= at;
+  }
+
+  #newCode() {
+    let code;
+    do {
+      code = "";
+      for (let i = 0; i < this.codeLength; i++) code += ALPHABET[Math.floor(this.random() * 62)];
+    } while (this.#links.has(code));
+    return code;
+  }
+
+  #public(link) {
+    const { code, url, owner, createdAt, expiresAt } = link;
+    return { code, url, owner, createdAt, expiresAt };
+  }
+
+  #get(code) {
+    const link = this.#links.get(code);
+    if (!link) throw new NotFoundError(`No link with code ${code}`);
+    return link;
+  }
+
+  shorten(url, { owner, custom, ttlDays } = {}) {
+    if (typeof url !== "string" || !this.#validUrl(url)) throw new InvalidUrlError(`Not a valid http(s) URL: ${url}`);
+    if (typeof owner !== "string" || owner.trim() === "") throw new InvalidUrlError("An owner is required");
+    const at = this.now();
+    if (custom !== undefined) {
+      if (typeof custom !== "string" || !/^[A-Za-z0-9_-]{3,20}$/.test(custom)) throw new InvalidUrlError(`Invalid custom code: ${custom}`);
+      if (this.#links.has(custom)) throw new ConflictError(`The code ${custom} is taken`);
+    } else {
+      for (const link of this.#links.values()) {
+        if (link.owner === owner && link.url === url && !link.custom && !this.#isExpired(link, at)) return this.#public(link);
+      }
+    }
+    const recent = (this.#created.get(owner) ?? []).filter((t) => at - t < 60_000);
+    if (recent.length >= 5) throw new RateLimitError(`${owner} has created too many links; try again in a minute`);
+    if (ttlDays !== undefined && !(typeof ttlDays === "number" && ttlDays > 0)) throw new InvalidUrlError("ttlDays must be a positive number");
+    const code = custom ?? this.#newCode();
+    const link = { code, url, owner, createdAt: at, expiresAt: ttlDays ? at + ttlDays * DAY : null, custom: custom !== undefined, visits: 0, lastVisitAt: null };
+    this.#links.set(code, link);
+    this.#created.set(owner, [...recent, at]);
+    return this.#public(link);
+  }
+
+  resolve(code) {
+    const link = this.#get(code);
+    const at = this.now();
+    if (this.#isExpired(link, at)) throw new ExpiredError(`The link ${code} has expired`);
+    link.visits++;
+    link.lastVisitAt = at;
+    return link.url;
+  }
+
+  stats(code) {
+    const link = this.#get(code);
+    return { visits: link.visits, lastVisitAt: link.lastVisitAt };
+  }
+
+  linksBy(owner) {
+    return [...this.#links.values()].filter((l) => l.owner === owner).sort((a, b) => a.createdAt - b.createdAt).map((l) => l.code);
+  }
+
+  delete(code, owner) {
+    const link = this.#get(code);
+    if (link.owner !== owner) throw new PermissionError(`Only ${link.owner} can delete ${code}`);
+    this.#links.delete(code);
+  }
+}
+::tests
+let __t = 1_000_000;
+let __r = 0;
+let __seed = 42;
+const __rand = () => (__r < 6 ? [0, 0.5, 0.99][__r++ % 3] : (__seed = (__seed * 16807) % 2147483647) / 2147483647);
+const __mk = (opts = {}) => new LinkShortener({ now: () => __t, random: __rand, ...opts });
+const __s = __mk();
+for (const E of [InvalidUrlError, ConflictError, NotFoundError, ExpiredError, PermissionError, RateLimitError]) {
+  assert.ok(new E("x") instanceof ShortenerError && new E("x") instanceof Error, `${E.name} must extend ShortenerError`);
+  assert.strictEqual(new E("x").name, E.name, `${E.name} needs name "${E.name}"`);
+}
+const __a = __s.shorten("https://example.com/a", { owner: "ada" });
+assert.strictEqual(__a.code, "0Vz0Vz", "generated codes use ALPHABET[Math.floor(random() * 62)] for each character");
+assert.deepStrictEqual(__a, { code: "0Vz0Vz", url: "https://example.com/a", owner: "ada", createdAt: 1_000_000, expiresAt: null });
+assert.strictEqual(__s.resolve("0Vz0Vz"), "https://example.com/a");
+assert.deepStrictEqual(__s.stats("0Vz0Vz"), { visits: 1, lastVisitAt: 1_000_000 });
+assert.deepStrictEqual(__s.shorten("https://example.com/a", { owner: "ada" }), __a, "the same owner and URL returns the existing link");
+assert.notStrictEqual(__s.shorten("https://example.com/a", { owner: "bob" }).code, "0Vz0Vz", "a different owner gets a new link");
+for (const bad of ["not a url", "ftp://example.com/x", "javascript:alert(1)", "/relative/path", ""]) assert.throws(() => __s.shorten(bad, { owner: "ada" }), InvalidUrlError, `"${bad}" must be rejected`);
+assert.throws(() => __s.shorten("https://example.com", {}), InvalidUrlError, "an owner is required");
+assert.throws(() => __s.shorten("https://example.com", { owner: "ada", custom: "ab" }), InvalidUrlError);
+assert.throws(() => __s.shorten("https://example.com", { owner: "ada", custom: "has space" }), InvalidUrlError);
+const __c = __s.shorten("https://example.com/docs", { owner: "ada", custom: "Docs_2026" });
+assert.strictEqual(__c.code, "Docs_2026");
+assert.throws(() => __s.shorten("https://example.com/other", { owner: "bob", custom: "Docs_2026" }), ConflictError);
+assert.strictEqual(__s.shorten("https://example.com/other", { owner: "bob", custom: "docs_2026" }).code, "docs_2026", "codes are case-sensitive");
+assert.throws(() => __s.resolve("nope"), NotFoundError);
+assert.throws(() => __s.stats("nope"), NotFoundError);
+const __e = __s.shorten("https://example.com/promo", { owner: "cy", ttlDays: 2 });
+assert.strictEqual(__e.expiresAt, 1_000_000 + 2 * 86_400_000);
+__t = __e.expiresAt - 1;
+assert.strictEqual(__s.resolve(__e.code), "https://example.com/promo");
+__t = __e.expiresAt;
+assert.throws(() => __s.resolve(__e.code), ExpiredError, "a link expires exactly at expiresAt");
+assert.notStrictEqual(__s.shorten("https://example.com/promo", { owner: "cy" }).code, __e.code, "an expired link is not reused");
+assert.throws(() => __s.shorten("https://example.com/x", { owner: "cy", custom: __e.code.length >= 3 ? __e.code : "zzz" }), ConflictError, "expired codes are still taken");
+const __rl = __mk();
+__t = 5_000_000;
+for (let i = 0; i < 5; i++) {
+  __rl.shorten(`https://example.com/${i}`, { owner: "dee" });
+  __t += 10_000;
+}
+assert.throws(() => __rl.shorten("https://example.com/6", { owner: "dee" }), RateLimitError);
+assert.strictEqual(__rl.shorten("https://example.com/0", { owner: "dee" }).url, "https://example.com/0", "returning an existing link doesn't count towards the limit");
+__rl.shorten("https://example.com/eve", { owner: "eve" });
+__t = 5_000_000 + 60_000;
+assert.strictEqual(__rl.shorten("https://example.com/6", { owner: "dee" }).url, "https://example.com/6", "the window slides: after 60 seconds the oldest link no longer counts");
+assert.deepStrictEqual(__rl.linksBy("dee").length, 6);
+const __first = __rl.linksBy("dee")[0];
+assert.throws(() => __rl.delete(__first, "eve"), PermissionError);
+__rl.delete(__first, "dee");
+assert.throws(() => __rl.resolve(__first), NotFoundError);
+assert.throws(() => __rl.delete("missing", "dee"), NotFoundError);
+const __reuse = __mk();
+const __d = __reuse.shorten("https://example.com/r", { owner: "fay", custom: "reuse-me" });
+__reuse.delete("reuse-me", "fay");
+assert.strictEqual(__reuse.shorten("https://example.com/r2", { owner: "gus", custom: "reuse-me" }).owner, "gus", "a deleted code can be used again");
+let __calls = 0;
+const __collide = new LinkShortener({ now: () => 0, random: () => [0, 0, 0, 0.5, 0.5, 0.5][__calls++ % 6], codeLength: 3 });
+assert.strictEqual(__collide.shorten("https://a.com", { owner: "x" }).code, "000");
+assert.strictEqual(__collide.shorten("https://b.com", { owner: "x" }).code, "VVV", "a taken code is regenerated");
+assert.strictEqual(new LinkShortener({ random: () => 0 }).shorten("https://c.com", { owner: "y" }).code, "000000", "the default code length is 6");
+::hints
+- State: a `Map` from code to link object, plus each owner's creation times for the rate limit.
+- Write the rules as tests first, with a fake clock (`now: () => t`) and fake randomness.
+- The rate-limit window: count the owner's creation times `t` with `now - t < 60000`.
+--- cards
+Specification :: A description of what software must do. Turn each rule into a test before building.
+Idempotent operation :: Repeating it gives the same result without extra effect (shortening the same URL twice).
+Sliding window rate limit :: Count actions in the last N seconds (now - t < N), not per fixed minute.
+Fake clock / fake random :: Inject now() and random() so time-based and random behaviour can be tested exactly.
+
+=== lesson js-whats-next | What's next after JavaScript | 50
+## You've learned JavaScript
+
+Look back at Module 1: `console.log("Hello, World!")`. Since then you've learned values and types, decisions and loops, functions and closures, arrays, objects, Maps and Sets, errors and testing, classes, prototypes, inheritance and design patterns, iterators and generators, asynchronous code and web APIs, modules, Node.js, the DOM, forms, canvas, regular expressions, dates, security, TypeScript and the professional toolchain, and you've built a web app, a command-line tool and a programming language. That's the foundation professional JavaScript developers work on every day.
+
+## Where to go from here
+
+- **TypeScript**: the natural next step, and DevQuest's next language course. Almost every professional JavaScript job uses it.
+- **A front-end framework**: React is the most requested in job adverts; Vue and Svelte are friendlier to start with. All of them build on the DOM, events, state and rendering ideas you already know.
+- **The back end**: build an HTTP API with Node.js and Express or Fastify, talking to a database (the DevQuest SQL and PostgreSQL tracks).
+- **Full stack**: Next.js (React) or SvelteKit put front and back end in one project.
+- **Computer science**: the Data Structures & Algorithms track makes you faster at solving problems, and is what technical interviews test.
+- **Career paths**: the Frontend, Backend and Full-Stack paths in DevQuest put these steps in order, with projects.
+
+## Keep your skills alive
+
+- **Build things you'd use yourself.** A personal project teaches more than ten tutorials, because you hit real problems.
+- **Read other people's code.** Pick a small, popular npm package and read its source and tests.
+- **Practise a little every day**: Code Dojo challenges, the Review tab's flashcards and drills.
+- **Read the docs.** MDN for the language and the web platform, nodejs.org for Node. Getting comfortable with reference documentation is what makes you independent.
+- **Share your work**: put projects on GitHub with a README and tests. That's your portfolio.
+
+## Practise more
+
+- Project: [Library Management (JavaScript)](#/projects/library-system) and [Kanban Task Board](#/projects/web-kanban).
+- Next course: the [TypeScript](#/track/typescript) track.
+
+📚 **Go deeper:** *Eloquent JavaScript* (4th ed.), the projects in chapters 7, 16, 19 and 21; MDN Learn (developer.mozilla.org/en-US/docs/Learn); javascript.info, Part 2 "Browser" and Part 3 "Additional articles"; roadmap.sh/javascript and roadmap.sh/frontend.
+--- goals
+- review the ground covered in the JavaScript course
+- choose a next step: TypeScript, a framework, the back end or computer science
+- build habits that keep improving your skills
+--- quiz
+? Which next step does almost every professional JavaScript job expect?
++ TypeScript
+- jQuery
+- CoffeeScript
+- Flash
+> TypeScript is the standard for professional JavaScript today.
+? What's the best way to make your new skills stick?
+- Re-reading the lessons many times
++ Building your own projects and practising a little every day
+- Memorising every array method
+- Watching tutorials only
+> Real problems in your own projects teach more than anything else.
+? Where do professionals check how a JavaScript or web API works?
+- Social media
++ MDN and the official documentation
+- Random blog posts only
+- They memorise everything
+> Reference documentation is the reliable source.
+--- cards
+After JavaScript :: TypeScript, then a framework (React, Vue, Svelte) or the back end (Node + a database), plus DSA for interviews.
+Keep improving :: Build your own projects, read others' code, practise daily, read MDN, share your work on GitHub.
