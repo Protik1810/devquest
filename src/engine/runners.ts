@@ -8,6 +8,7 @@ import { registerMysql, translateMysql } from './mysql';
 import { RedisEngine } from './redis';
 import { PY_TEST_HELPER } from './pyTestHelper';
 import { sameOutput } from './integrity';
+import { JS_RUNTIME } from './jsRuntime';
 
 /** `expected`: for a failed output check, the output that was expected (shown as a line-by-line comparison). */
 export type RunResult = { ok: boolean; output: string; error?: string; passed?: boolean; message?: string; expected?: string; table?: { columns: string[]; values: unknown[][] } };
@@ -113,26 +114,9 @@ function testMessage(msg) {
 }
 `;
 
-const JS_WORKER = `
-onmessage = async (e) => {
-  let out = '';
-  const fmt = (a) => typeof a === 'string' ? a : (() => { try { return JSON.stringify(a); } catch { return String(a); } })();
-  const log = (...args) => { out += args.map(fmt).join(' ') + '\\n'; };
-  self.console = { log, info: log, warn: log, error: log, debug: log };
-  try {
-    const AsyncFunction = (async () => {}).constructor;
-    await new AsyncFunction(e.data.code)();
-    if (e.data.tests) {
-      const before = out.length;
-      try { await new AsyncFunction(e.data.code + '\\n' + e.data.tests)(); }
-      catch (err) { postMessage({ ok: true, output: out.slice(0, before), testError: String(err && err.message || err) }); return; }
-      out = out.slice(0, before);
-    }
-    postMessage({ ok: true, output: out });
-  } catch (err) {
-    postMessage({ ok: false, output: out, error: (err && err.name ? err.name + ': ' : '') + String(err && err.message || err) });
-  }
-};
+// The shared JavaScript runtime (Node-style console, prompt(), assert) answers each message
+const JS_WORKER = `${JS_RUNTIME}
+onmessage = async (e) => postMessage(await __dqRun(e.data));
 `;
 
 class Runner {
@@ -164,7 +148,7 @@ class Runner {
   }
 
   /** `extra` (Python only): `prelude` snippets to run quietly first; `trace` to record a step-through instead. */
-  async run(code: string, tests?: string, timeoutMs = 8000, stdin?: string, extra: { prelude?: string[]; trace?: boolean } = {}): Promise<{ ok: boolean; output: string; error?: string; testError?: string; trace?: string }> {
+  async run(code: string, tests?: string, timeoutMs = 8000, stdin?: string, extra: { prelude?: string[]; trace?: boolean; strict?: boolean } = {}): Promise<{ ok: boolean; output: string; error?: string; testError?: string; trace?: string; syntax?: boolean }> {
     await this.warm();
     const w = this.worker!;
     return new Promise((resolve) => {
@@ -292,6 +276,18 @@ export async function runSandboxed(lang: CodeLang, code: string, tests?: string)
   } catch (e) {
     return { ok: false, output: '', error: String((e as Error).message ?? e) };
   }
+}
+
+/** The engine's SyntaxError messages have no position: find it with sucrase's parser and add the line. */
+async function withSyntaxLocation(error: string, code: string, lang: CodeLang) {
+  try {
+    const { transform } = await import('sucrase');
+    transform(code, { transforms: lang === 'typescript' ? ['typescript'] : [], disableESTransforms: true });
+  } catch (e) {
+    const m = String((e as Error).message).match(/\((\d+):(\d+)\)/);
+    if (m) return `${error} (line ${m[1]})`;
+  }
+  return error;
 }
 
 /** TypeScript runs as JavaScript after sucrase strips the types (no type-checking). */
@@ -507,7 +503,9 @@ export async function runCode(lang: CodeLang, code: string, check?: CodeCheck, s
         return { ok: false, output: '', error: `SyntaxError: ${(e as Error).message}`, passed: check ? false : undefined };
       }
     }
-    const r = await runner.run(code, tests, lang === 'python' ? 15000 : 5000, stdin);
+    // JavaScript lessons run in strict mode, like modern modules
+    const r = await runner.run(code, tests, lang === 'python' ? 15000 : 5000, stdin, lang === 'javascript' || lang === 'typescript' ? { strict: true } : {});
+    if (r.syntax && (lang === 'javascript' || lang === 'typescript')) r.error = await withSyntaxLocation(r.error ?? 'SyntaxError', code, lang);
     if (!r.ok) return { ok: false, output: r.output, error: r.error, passed: check ? false : undefined };
     if (!check) return { ok: true, output: r.output };
     if (check.type === 'stdout') {

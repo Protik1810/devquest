@@ -25,7 +25,8 @@
     "android:release": "npm run android:sync && cd android && gradlew.bat assembleRelease bundleRelease",
     "share": "node scripts/share.mjs",
     "build:web": "npm run build && node scripts/downloads.mjs --copy dist/downloads",
-    "verify:python": "node scripts/verify-python.mjs"
+    "verify:python": "node scripts/verify-python.mjs",
+    "verify:js": "node scripts/verify-js.mjs"
   },
   "build": {
     "appId": "com.protik.devquest",

@@ -24,7 +24,7 @@ export function RunnableCode({ lang, code, earlier }: { lang: CodeLang; code: st
   const [stdin, setStdin] = useState('');
   const bump = useGame((s) => s.bump);
   const python = lang === 'python';
-  const usesInput = python && /\binput\(/.test(src);
+  const usesInput = (python && /\binput\(/.test(src)) || (lang === 'javascript' && /\bprompt\(/.test(src));
   const prelude = (on: boolean) => (on && earlier.length ? earlier : undefined);
 
   const run = async (on = withEarlier) => {
@@ -77,7 +77,7 @@ export function RunnableCode({ lang, code, earlier }: { lang: CodeLang; code: st
       </div>
       {usesInput && (
         <label className="stdin-box small">
-          ⌨️ Typed input for <code>input()</code>, one line per call
+          ⌨️ Typed input for <code>{python ? 'input()' : 'prompt()'}</code>, one line per call
           <textarea rows={2} value={stdin} onChange={(e) => setStdin(e.target.value)} spellCheck={false} />
         </label>
       )}
@@ -106,6 +106,10 @@ function sandboxLimit(error: string): string | null {
   const missing = error.match(/ModuleNotFoundError: No module named '([\w.]+)'/)?.[1];
   if (missing && !/^(shop|helpers|pricing|geometry|textutils|report)\b/.test(missing))
     return `This example uses ${missing}, a package that isn't installed in DevQuest's sandbox. On your own computer, run pip install ${missing.split('.')[0]} in your virtual environment and it works.`;
+  if (/\b(document|window|localStorage) is not defined/.test(error))
+    return 'This example needs a web page (the DOM). Try it in your browser: press F12 to open the developer tools and paste it into the Console tab.';
+  if (/\b(require|process|__dirname|module) is not defined|Cannot use import statement|import declarations may only/.test(error))
+    return 'This example is for Node.js. Save it in a file and run it with node on your own computer.';
   if (/can't start new thread|RuntimeError: can't create new thread/.test(error))
     return "Python inside DevQuest runs in your browser, which can't start threads. Run this example on your own computer.";
   return null;
