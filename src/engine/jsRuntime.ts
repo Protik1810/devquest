@@ -615,11 +615,16 @@ function devquestJsRuntime(g: any) {
     for (const [id, every] of pending) (every ? host.stop : host.clear)(id);
     pending.clear();
   };
+  // A promise rejected with nobody to catch it ends the program, as in Node. In a worker the browser reports it;
+  // under Node's vm (scripts/verify-js.mjs) the host forwards its 'unhandledRejection' events to __dqUnhandled.
+  g.__dqUnhandled = (reason: any) => {
+    if (!late) late = { err: reason };
+    settle();
+  };
   if (typeof g.addEventListener === 'function')
     g.addEventListener('unhandledrejection', (e: any) => {
       e.preventDefault();
-      if (!late) late = { err: e.reason };
-      settle();
+      g.__dqUnhandled(e.reason);
     });
   /** After the code finishes, wait (up to `limitMs`) until its timers have all run, as Node does before exiting. */
   async function idle(limitMs: number): Promise<boolean> {
@@ -640,6 +645,122 @@ function devquestJsRuntime(g: any) {
       });
     }
   }
+
+  // ---------------- a demo web API at https://api.example.com ----------------
+  // example.com is reserved for documentation, so it can never be a real service. Lessons fetch from it to get
+  // predictable, offline answers; every other URL goes to the real fetch.
+  const realFetch = typeof g.fetch === 'function' ? g.fetch.bind(g) : null;
+  const USERS = [
+    { id: 1, name: 'Ada Lovelace', email: 'ada@example.com', city: 'London' },
+    { id: 2, name: 'Grace Hopper', email: 'grace@example.com', city: 'New York' },
+    { id: 3, name: 'Alan Turing', email: 'alan@example.com', city: 'Manchester' },
+    { id: 4, name: 'Margaret Hamilton', email: 'margaret@example.com', city: 'Boston' },
+    { id: 5, name: 'Linus Torvalds', email: 'linus@example.com', city: 'Portland' },
+  ];
+  const POSTS = [
+    [1, 'Notes on the Analytical Engine'], [1, 'Poetical science'], [2, 'The first bug'], [2, 'Teaching computers English'],
+    [3, 'Can machines think?'], [3, 'On computable numbers'], [4, 'Software engineering is engineering'], [4, 'Priority displays'],
+    [5, 'Just for fun'], [5, 'Talk is cheap, show me the code'],
+  ].map(([userId, title], i) => ({ id: i + 1, userId, title }));
+  const TODOS = ['Learn promises', 'Learn async/await', 'Fetch some data', 'Handle errors', 'Cancel a request', 'Retry on failure', 'Paginate results', 'Build an app']
+    .map((title, i) => ({ id: i + 1, title, completed: i < 3 }));
+  const PRODUCTS = ['Keyboard', 'Mouse', 'Monitor', 'Webcam', 'Headset', 'Desk lamp', 'USB hub', 'Laptop stand', 'Microphone', 'Speakers', 'Cable pack', 'Mouse pad']
+    .map((name, i) => ({ id: i + 1, name, price: [49, 25, 189, 59, 79, 35, 19, 45, 99, 89, 12, 9][i] }));
+  const WEATHER: Record<string, number> = { london: 14, paris: 17, tokyo: 21, cairo: 31, oslo: 6 };
+  const demo = { posts: [] as any[], nextId: 11, flaky: 0 };
+  const resetDemo = () => {
+    demo.posts = POSTS.map((p) => ({ ...p }));
+    demo.nextId = 11;
+    demo.flaky = 0;
+  };
+  resetDemo();
+  const STATUS: Record<number, string> = { 200: 'OK', 201: 'Created', 400: 'Bad Request', 404: 'Not Found', 500: 'Internal Server Error', 503: 'Service Unavailable' };
+
+  function demoRoute(method: string, url: any, body: any): { status: number; body: any; delay: number } {
+    const parts = url.pathname.split('/').filter(Boolean);
+    const q = url.searchParams;
+    const ok = (b: any, status = 200) => ({ status, body: b, delay: 100 });
+    const fail = (status: number, error: string) => ({ status, body: { error }, delay: 100 });
+    const [resource, idText, sub] = parts;
+    const id = idText === undefined ? undefined : Number(idText);
+    if (resource === 'slow') return { status: 200, body: { done: true }, delay: Math.max(0, Number(q.get('ms') ?? 1000)) };
+    if (resource === 'flaky') return ++demo.flaky < 3 ? fail(503, 'Service unavailable, try again') : ok({ ok: true, attempt: demo.flaky });
+    if (resource === 'error') return fail(500, 'Internal server error');
+    if (method === 'GET') {
+      if (resource === 'users' && id === undefined) return ok(USERS);
+      if (resource === 'users') {
+        const user = USERS.find((u) => u.id === id);
+        if (!user) return fail(404, 'User not found');
+        if (sub === 'posts') return ok(demo.posts.filter((p) => p.userId === id));
+        if (sub === 'todos') return ok(TODOS.filter((t) => (t.id % 5) + 1 === id));
+        return ok(user);
+      }
+      if (resource === 'posts' && id === undefined) return ok(q.has('userId') ? demo.posts.filter((p) => p.userId === Number(q.get('userId'))) : demo.posts);
+      if (resource === 'posts') return demo.posts.find((p) => p.id === id) ? ok(demo.posts.find((p) => p.id === id)) : fail(404, 'Post not found');
+      if (resource === 'todos') return ok(q.has('completed') ? TODOS.filter((t) => String(t.completed) === q.get('completed')) : TODOS);
+      if (resource === 'products') {
+        const page = Math.max(1, Number(q.get('page') ?? 1));
+        const items = PRODUCTS.slice((page - 1) * 5, page * 5);
+        return ok({ page, items, nextPage: page * 5 < PRODUCTS.length ? page + 1 : null });
+      }
+      if (resource === 'weather') {
+        const city = (q.get('city') ?? '').toLowerCase();
+        return city in WEATHER ? ok({ city: q.get('city'), tempC: WEATHER[city] }) : fail(404, `No weather for "${q.get('city')}"`);
+      }
+    }
+    if (resource === 'posts' && method === 'POST') {
+      if (!body || typeof body.title !== 'string' || !body.title.trim()) return fail(400, 'A post needs a title');
+      const post = { id: demo.nextId++, userId: body.userId ?? 1, title: body.title };
+      demo.posts.push(post);
+      return ok(post, 201);
+    }
+    if (resource === 'posts' && id !== undefined && (method === 'PUT' || method === 'PATCH' || method === 'DELETE')) {
+      const i = demo.posts.findIndex((p) => p.id === id);
+      if (i < 0) return fail(404, 'Post not found');
+      if (method === 'DELETE') return ok(demo.posts.splice(i, 1) && {});
+      demo.posts[i] = method === 'PUT' ? { id, userId: demo.posts[i].userId, ...body } : { ...demo.posts[i], ...body, id };
+      return ok(demo.posts[i]);
+    }
+    return fail(404, 'Not found');
+  }
+
+  function demoResponse(status: number, body: any) {
+    const text = JSON.stringify(body);
+    if (typeof g.Response === 'function') return new g.Response(text, { status, statusText: STATUS[status] ?? '', headers: { 'content-type': 'application/json' } });
+    return { ok: status >= 200 && status < 300, status, statusText: STATUS[status] ?? '', headers: { get: (h: string) => (h.toLowerCase() === 'content-type' ? 'application/json' : null) }, json: async () => JSON.parse(text), text: async () => text };
+  }
+
+  const abortReason = (signal: any) => signal.reason ?? (typeof g.DOMException === 'function' ? new g.DOMException('This operation was aborted', 'AbortError') : Object.assign(new Error('This operation was aborted'), { name: 'AbortError' }));
+
+  g.fetch = (input: any, init: any = {}) => {
+    let url: any;
+    try {
+      url = new g.URL(typeof input === 'string' ? input : input && input.url ? input.url : String(input));
+    } catch {
+      return Promise.reject(new TypeError(`Failed to parse URL from ${input}`));
+    }
+    if (url.hostname !== 'api.example.com') return realFetch ? realFetch(input, init) : Promise.reject(new TypeError('fetch failed'));
+    const signal = init.signal;
+    return new Promise((resolve, reject) => {
+      if (signal && signal.aborted) return reject(abortReason(signal));
+      let body: any;
+      try {
+        body = init.body === undefined ? undefined : JSON.parse(init.body);
+      } catch {
+        body = undefined;
+      }
+      const reply = demoRoute(String(init.method ?? 'GET').toUpperCase(), url, body);
+      const onAbort = () => {
+        g.clearTimeout(timer);
+        reject(abortReason(signal));
+      };
+      const timer = g.setTimeout(() => {
+        if (signal) signal.removeEventListener('abort', onAbort);
+        resolve(demoResponse(reply.status, reply.body));
+      }, reply.delay);
+      if (signal) signal.addEventListener('abort', onAbort, { once: true });
+    });
+  };
 
   // ---------------- running learner code ----------------
   /** The line (in the given source) where an error was raised, from its stack. */
@@ -708,6 +829,7 @@ function devquestJsRuntime(g: any) {
     wake = null;
     rootSuite = newSuite('');
     currentSuite = rootSuite;
+    resetDemo();
     try {
       await fn();
       const end = out.length;

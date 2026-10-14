@@ -50,6 +50,10 @@ exercises = exercises.filter((x) => x.id.includes(filter) && x.ex.solution);
 /** TypeScript runs as JavaScript after sucrase strips the types, as in the app (no type-checking). */
 const strip = (src) => transform(src, { transforms: ['typescript'], disableESTransforms: true }).code;
 
+// A rejected promise nobody handles is reported by the runtime, as it is in the app (instead of crashing this script)
+let current = null;
+process.on('unhandledRejection', (reason) => current?.__dqUnhandled(reason));
+
 async function run(code, tests, stdin, lang = 'javascript') {
   if (lang === 'typescript') {
     try {
@@ -62,8 +66,11 @@ async function run(code, tests, stdin, lang = 'javascript') {
   const ctx = vm.createContext({
     setTimeout, clearTimeout, setInterval, clearInterval, queueMicrotask, structuredClone,
     URL, URLSearchParams, TextEncoder, TextDecoder, AbortController, AbortSignal, performance, crypto,
+    // fetch() itself is the runtime's demo API (api.example.com); no real network during verification
+    Response, Headers, Request, DOMException, EventTarget, Event, Blob, FormData, Intl,
   });
   vm.runInContext(JS_RUNTIME, ctx, { filename: 'devquest-runtime.js' });
+  current = ctx;
   const result = await Promise.race([
     ctx.__dqRun({ code, tests, stdin, strict: true }),
     new Promise((resolve) => setTimeout(() => resolve({ ok: false, output: '', error: 'timed out' }), 10000)),
