@@ -1,0 +1,1653 @@
+=== module Module 5 · Functions
+
+=== lesson js-functions | Defining functions | 80
+## Why functions?
+
+You've already *used* many functions: `console.log`, `Math.max`, `prompt`, `Number`. A **function** is a named, reusable piece of code. Writing your own is the single most important step from "scripts" to "programs":
+
+- **Don't repeat yourself.** Write a calculation once, use it fifty times. Fix a bug once, and it's fixed everywhere.
+- **Give ideas names.** `isLeapYear(year)` says what it means; `(year % 4 === 0 && year % 100 !== 0) || year % 400 === 0` makes every reader work it out.
+- **Break big problems into small ones** that you can understand, test and trust one at a time.
+
+## Declaring and calling a function
+
+```js
+function greet(name) {
+  console.log(`Hello, ${name}!`);
+}
+
+greet("Ada");
+greet("Grace");
+```
+
+- `function` starts a **function declaration**, followed by the function's name (`greet`, in camelCase like variables).
+- `name` in the parentheses is a **parameter**: a variable that receives a value each time the function is called.
+- The body in `{ }` runs **only when the function is called**. Declaring it does nothing visible.
+- `greet("Ada")` **calls** the function; `"Ada"` is the **argument**, the value the parameter gets for this call.
+
+Parameters versus arguments: the *parameter* is the name in the definition; the *argument* is the actual value in a call. Several parameters are separated by commas, and arguments are matched to them **by position**:
+
+```js
+function introduce(name, language) {
+  console.log(`${name} codes in ${language}.`);
+}
+introduce("Ada", "JavaScript");
+introduce("JavaScript", "Ada");
+```
+
+## return: giving a value back
+
+Most useful functions **compute** something and hand it back with `return`. The call then *is* that value, and you can use it anywhere a value fits:
+
+```js
+function area(width, height) {
+  return width * height;
+}
+
+const kitchen = area(3, 4);
+console.log(kitchen);
+console.log(area(2, 5) + area(1, 1));
+console.log(`A 10 by 10 room is ${area(10, 10)} square metres`);
+```
+
+`return` also **ends the function immediately**: any code after it in that call doesn't run. A function with no `return` (or a bare `return;`) gives back `undefined`:
+
+```js
+function shout(text) {
+  console.log(text.toUpperCase());
+}
+const result = shout("hi");
+console.log(result);
+```
+
+### Printing is not returning
+
+This confuses every beginner at least once. `console.log` *shows* a value to a human; `return` *gives* a value to the code that called the function. A function that prints its answer can't be used in a calculation:
+
+```js
+function addAndPrint(a, b) {
+  console.log(a + b);
+}
+function add(a, b) {
+  return a + b;
+}
+console.log(add(2, 3) * 10);
+console.log(addAndPrint(2, 3) * 10);
+```
+
+The last line prints 5 (from inside the function) and then `NaN`, because `addAndPrint` returns `undefined` and `undefined * 10` is `NaN`. **Prefer functions that return values**, and do the printing in one place, outside them.
+
+~~~check
+? What does this print?
+```js
+function double(n) {
+  return n * 2;
+  console.log("doubled!");
+}
+console.log(double(4));
+```
+- `doubled!` then `8`
++ `8`
+- `undefined`
+- `doubled!`
+> `return` ends the function, so the console.log inside it never runs. The outer console.log prints the returned 8.
+~~~
+
+## Early returns
+
+Because `return` ends the function, you can handle special cases first and return straight away, the guard clauses from Module 3, now with a natural home:
+
+```js
+function ticketPrice(age) {
+  if (age < 4) return 0;
+  if (age <= 12) return 6;
+  if (age >= 65) return 8;
+  return 12;
+}
+console.log(ticketPrice(2), ticketPrice(10), ticketPrice(30), ticketPrice(70));
+```
+
+No `else` needed: once a `return` runs, the rest of the function is skipped.
+
+## Functions calling functions
+
+Functions can use other functions, so you build big things out of small, trusted pieces:
+
+```js
+function isLeapYear(year) {
+  return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+}
+function daysInYear(year) {
+  return isLeapYear(year) ? 366 : 365;
+}
+console.log(daysInYear(2024), daysInYear(2025));
+```
+
+`isLeapYear` returns a boolean directly; there's no need for `if (...) return true; else return false;`.
+
+Function **declarations** are *hoisted*: JavaScript makes them available before the line where they're written, so you can call a function that's declared further down the file. Many programmers put the main code at the top and the helper functions below.
+
+## Pure functions and side effects
+
+A **pure** function depends only on its parameters and only produces its return value: same arguments, same result, every time, with nothing else changed. `area` and `isLeapYear` are pure. Anything else a function does (printing, changing a variable outside itself, asking for input, writing a file) is a **side effect**.
+
+Programs need side effects, or they couldn't show anything. But pure functions are far easier to understand, reuse and **test**, so professionals keep most of their logic in pure functions and the side effects at the edges.
+
+## Checking a function with assert
+
+How do you know a function works? Call it with known inputs and compare the results with what you expect. `assert` does exactly that: it stays silent when a check passes and raises an error when it fails.
+
+```js
+function area(width, height) {
+  return width * height;
+}
+assert.strictEqual(area(3, 4), 12);
+assert.strictEqual(area(0, 9), 0);
+assert.strictEqual(area(2.5, 2), 5);
+console.log("All checks passed!");
+```
+
+Change `width * height` to `width + height` and run it again to see a failing check. From now on, many exercises are checked this way: hidden checks **call your function** with different arguments and compare what it **returns**. (DevQuest provides `assert` for you. In Node.js you'd write `import assert from "node:assert/strict";` first; Module 7 covers testing properly.)
+
+## Documenting a function
+
+A comment block starting with `/**` just above a function is a **JSDoc** comment. Editors such as VS Code show it when you hover over a call, and tools can check the types it describes:
+
+```js
+/**
+ * Converts a temperature from Celsius to Fahrenheit.
+ * @param {number} celsius - the temperature in degrees Celsius
+ * @returns {number} the temperature in degrees Fahrenheit
+ */
+function toFahrenheit(celsius) {
+  return celsius * 9 / 5 + 32;
+}
+console.log(toFahrenheit(100));
+```
+
+📚 **Go deeper:** javascript.info, "Functions"; MDN JavaScript Guide, "Functions"; *Eloquent JavaScript* (4th ed.), chapter 3, "Functions".
+--- goals
+- declare functions with parameters and call them with arguments
+- return values with `return`, and explain the difference between returning and printing
+- use early returns for special cases
+- build functions out of other functions
+- tell pure functions from functions with side effects
+- check a function's results with `assert.strictEqual`
+--- quiz
+? What does this print?
+```js
+function f(x) {
+  return x + 1;
+}
+console.log(f(f(1)));
+```
+- 2
++ 3
+- 4
+- `undefined`
+> f(1) is 2, then f(2) is 3.
+? What does a function return if it has no `return` statement?
+- `0`
+- `null`
++ `undefined`
+- The last value it calculated
+> Without `return`, a call gives `undefined`.
+? In `function power(base, exp) { ... }` and the call `power(2, 8)`, what are `base` and `2`?
++ `base` is a parameter, `2` is an argument
+- `base` is an argument, `2` is a parameter
+- Both are parameters
+- Both are arguments
+> Parameters are the names in the definition; arguments are the values in the call.
+? What does this print?
+```js
+function check(n) {
+  if (n > 10) return "big";
+  return "small";
+  return "never";
+}
+console.log(check(50), check(5));
+```
++ `big small`
+- `big never`
+- `small small`
+- `big small never`
+> The first `return` that runs ends the call. "never" is unreachable.
+? Which function is pure?
+- `function log(x) { console.log(x); }`
++ `function square(x) { return x * x; }`
+- `function next() { counter++; return counter; }`
+- `function ask() { return prompt("?"); }`
+> `square` depends only on its argument and changes nothing else. The others print, change an outside variable, or read input.
+? What does `assert.strictEqual(add(2, 2), 4)` do if `add` works correctly?
+- Prints `true`
+- Prints `4`
++ Nothing: it stays silent
+- Returns `"passed"`
+> A passing assertion is silent; a failing one raises an error that explains what was expected.
+--- exercise code javascript
+::prompt
+Write a function `isEven(n)` that **returns** `true` if `n` is even and `false` otherwise. Return the comparison directly; don't use `if`. Hidden checks will call it with several numbers.
+::starter
+function isEven(n) {
+  // return true or false
+}
+::solution
+function isEven(n) {
+  return n % 2 === 0;
+}
+::tests
+assert.strictEqual(isEven(4), true);
+assert.strictEqual(isEven(7), false);
+assert.strictEqual(isEven(0), true);
+assert.strictEqual(isEven(-3), false);
+assert.strictEqual(isEven(-10), true);
+::hints
+- `n % 2 === 0` is already `true` or `false`.
+- Write `return n % 2 === 0;`
+--- exercise parsons javascript
+::prompt
+Put the lines in order to define `toFahrenheit(celsius)` and use it to print a small conversion table. One line is a trap.
+::lines
+function toFahrenheit(celsius) {
+  return celsius * 9 / 5 + 32;
+}
+console.log(0, "C =", toFahrenheit(0), "F");
+console.log(100, "C =", toFahrenheit(100), "F");
+::distractors
+  console.log(celsius * 9 / 5 + 32);
+::expected
+0 C = 32 F
+100 C = 212 F
+::hints
+- The function must return its result so the calls can use it.
+- The definition (with its closing brace) comes before the lines that print.
+--- exercise code javascript
+::prompt
+Write `formatPrice(cents)` that turns a whole number of cents into a price string with a dollar sign and exactly two decimals, e.g. `formatPrice(1999)` returns `"$19.99"` and `formatPrice(5)` returns `"$0.05"`. Negative amounts (refunds) get the minus sign before the dollar sign: `formatPrice(-250)` returns `"-$2.50"`.
+
+Then write `total(priceCents, quantity)` that **uses** `formatPrice` to return the formatted price of `quantity` items.
+::starter
+function formatPrice(cents) {
+}
+
+function total(priceCents, quantity) {
+}
+::solution
+function formatPrice(cents) {
+  const sign = cents < 0 ? "-" : "";
+  return `${sign}$${(Math.abs(cents) / 100).toFixed(2)}`;
+}
+
+function total(priceCents, quantity) {
+  return formatPrice(priceCents * quantity);
+}
+::tests
+assert.strictEqual(formatPrice(1999), "$19.99");
+assert.strictEqual(formatPrice(5), "$0.05");
+assert.strictEqual(formatPrice(0), "$0.00");
+assert.strictEqual(formatPrice(100000), "$1000.00");
+assert.strictEqual(formatPrice(-250), "-$2.50");
+assert.strictEqual(total(250, 4), "$10.00");
+assert.strictEqual(total(333, 3), "$9.99");
+::hints
+- Dollars with two decimals: `(cents / 100).toFixed(2)`.
+- For negatives, format `Math.abs(cents)` and put `"-"` in front of the `$`.
+- In a template literal, `$${...}` prints a `$` followed by the value.
+--- cards
+Function :: A named, reusable block of code: function name(params) { ... }. It runs only when called.
+Parameter vs argument :: Parameter: the name in the definition. Argument: the value passed in a call. Matched by position.
+return :: Gives a value back to the caller and ends the function immediately. No return means the call gives undefined.
+Printing vs returning :: console.log shows a value to a human; return gives it to the code. Prefer returning.
+Pure function :: Depends only on its arguments and only returns a value: same input, same output, no side effects.
+assert.strictEqual(actual, expected) :: Silent if the values are identical (===); raises an error explaining the difference if not.
+Hoisting (functions) :: Function declarations can be called before the line where they're written.
+
+=== lesson js-function-forms | Function expressions, arrows and parameters | 80
+## Functions are values
+
+In JavaScript, a function is a value, just like a number or a string. You can store it in a variable:
+
+```js
+const square = function (n) {
+  return n * n;
+};
+console.log(square(5));
+console.log(typeof square);
+```
+
+This is a **function expression**: a function written where a value is expected, here assigned to `square`. Unlike a declaration, it's **not hoisted**: it exists only from its line onwards, like any `const`.
+
+## Arrow functions
+
+Modern JavaScript has a shorter way to write function expressions, the **arrow function**:
+
+```js
+const square = (n) => {
+  return n * n;
+};
+const cube = (n) => n * n * n;
+const add = (a, b) => a + b;
+const sayHi = () => console.log("Hi!");
+console.log(square(3), cube(3), add(3, 4));
+sayHi();
+```
+
+- Parameters go in parentheses, then `=>` ("fat arrow"), then the body.
+- If the body is a **single expression**, leave out the braces and `return`: the expression's value is returned automatically. This is called a *concise body*.
+- With braces, it's a normal body and you need `return` as usual.
+- With no parameters, write empty parentheses `()`. With exactly one, the parentheses are optional (`n => n * 2`), but formatters such as Prettier add them, so you'll usually see `(n) => n * 2`.
+
+⚠️ To return an object from a concise arrow, wrap it in parentheses. Otherwise the braces are read as a function body:
+
+```js
+const broken = () => { name: "Ada" };
+const works = () => ({ name: "Ada" });
+console.log(broken(), works());
+```
+
+## Which form should I use?
+
+| Form | Typical use |
+|---|---|
+| `function name() { }` (declaration) | named, top-level functions; hoisted, so order doesn't matter |
+| `const name = () => ...` (arrow) | short functions, and functions passed to other functions (next lessons) |
+| `const name = function () { }` (expression) | rarely needed now; you'll see it in older code |
+
+Arrow functions also differ in how they treat `this`, which matters for methods (Module 8). Until then, the choice is mostly style. Many teams use declarations for named functions and arrows for small callbacks.
+
+~~~check
+? What does this print?
+```js
+const half = (n) => { n / 2 };
+console.log(half(10));
+```
+- `5`
++ `undefined`
+- `NaN`
+- An error
+> With braces, an arrow function needs `return`. Without it, the call returns undefined. Either remove the braces or add `return`.
+~~~
+
+## Missing and extra arguments
+
+JavaScript doesn't check how many arguments you pass:
+
+```js
+function describe(name, age) {
+  return `${name} is ${age}`;
+}
+console.log(describe("Ada", 36));
+console.log(describe("Ada"));
+console.log(describe("Ada", 36, "London"));
+```
+
+A missing argument makes its parameter `undefined`; extra arguments are simply ignored. That's flexible, but it hides bugs, which is one reason TypeScript exists (Module 12).
+
+## Default parameters
+
+Give a parameter a **default value** with `=`. It's used when the argument is missing (or is `undefined`):
+
+```js
+function greet(name = "friend", greeting = "Hello") {
+  return `${greeting}, ${name}!`;
+}
+console.log(greet());
+console.log(greet("Ada"));
+console.log(greet("Ada", "Welcome"));
+console.log(greet(undefined, "Hi"));
+```
+
+Defaults are evaluated at each call, and can even use earlier parameters: `function box(width, height = width) { ... }` makes a square when no height is given.
+
+## Rest parameters: any number of arguments
+
+A parameter written with three dots, `...name`, collects **all remaining arguments** into an array (an ordered list; arrays get their own module next, but `for...of` already works on them):
+
+```js
+function sum(...numbers) {
+  let total = 0;
+  for (const n of numbers) {
+    total += n;
+  }
+  return total;
+}
+console.log(sum());
+console.log(sum(4));
+console.log(sum(1, 2, 3, 4, 5));
+```
+
+`Math.max(3, 9, 2)` works the same way: it accepts any number of arguments. The rest parameter must be the **last** parameter: `function log(level, ...messages)`.
+
+You may see the old `arguments` object in legacy code, which also holds all the arguments. It doesn't work in arrow functions and isn't a real array; use rest parameters instead.
+
+## Choosing good parameters
+
+- **Few parameters.** Three is plenty. A call like `createUser("Ada", 36, true, false, "UK")` is impossible to read; Module 6 shows how to pass one *object* with named properties instead.
+- **Required first, optional last**, so callers can leave the optional ones out.
+- **Don't change parameters** to pass results back. Return a value instead.
+
+📚 **Go deeper:** javascript.info, "Function expressions", "Arrow functions, the basics" and "Rest parameters and spread syntax"; MDN, "Arrow function expressions" and "Default parameters"; *Eloquent JavaScript* (4th ed.), chapter 3, "Arrow functions" and "Optional arguments".
+--- goals
+- store functions in variables as function expressions
+- write arrow functions with concise and block bodies, including returning an object
+- choose between declarations, expressions and arrows
+- predict what happens with missing and extra arguments
+- give parameters default values
+- accept any number of arguments with a rest parameter
+--- quiz
+? What does `((a, b) => a * b)(3, 4)` give?
++ `12`
+- `7`
+- `undefined`
+- An error
+> The arrow function is called straight away with 3 and 4, and its concise body returns 3 * 4.
+? What does this print?
+```js
+function f(x, y = 5) {
+  return x + y;
+}
+console.log(f(1), f(1, 1));
+```
+- `6 6`
++ `6 2`
+- `NaN 2`
+- `1 2`
+> y defaults to 5 only when it's missing.
+? What happens?
+```js
+console.log(twice(4));
+const twice = (n) => n * 2;
+```
+- Prints 8
+- Prints undefined
++ `ReferenceError: Cannot access 'twice' before initialization`
+- `TypeError: twice is not a function`
+> Function expressions and arrows assigned to `const` exist only from their line onwards. Only declarations are hoisted.
+? What does `count()` return in `function count(...items) { return items.length; }`?
++ `0`
+- `undefined`
+- `1`
+- An error
+> With no arguments, the rest parameter is an empty array, whose length is 0.
+? Which arrow function returns an object `{ ok: true }`?
+- `() => { ok: true }`
++ `() => ({ ok: true })`
+- `() => return { ok: true }`
+- `=> { ok: true }`
+> Without the parentheses, the braces are read as a function body containing a label.
+? What does this print?
+```js
+function show(a, b) {
+  return `${a}-${b}`;
+}
+console.log(show(1));
+```
+- `1-`
++ `1-undefined`
+- `1-null`
+- An error
+> The missing argument makes `b` undefined, which a template turns into the text "undefined".
+--- exercise fill javascript
+::prompt
+Rewrite these three functions as arrow functions with concise bodies (no braces, no `return`), so the program prints the same results.
+::template
+const square = (n) ____ n * n;
+const isAdult = (age) => age ____ 18;
+const fullName = (first, last) => `${first} ${____}`;
+console.log(square(7), isAdult(17), fullName("Ada", "Lovelace"));
+::answers
+=>
+>=
+last
+::expected
+49 false Ada Lovelace
+::hints
+- An arrow function is `(parameters) => expression`.
+- An adult is 18 or older.
+--- exercise code javascript
+::prompt
+Write `greet(name, greeting)` with defaults: `name` defaults to `"friend"` and `greeting` to `"Hello"`. It returns `"<greeting>, <name>!"`. Then write `shout(...words)` as an arrow function that returns all its arguments joined with spaces, in uppercase, followed by `"!"`; with no words it returns just `"!"`.
+::starter
+function greet(name, greeting) {
+}
+
+const shout = () => {};
+::solution
+function greet(name = "friend", greeting = "Hello") {
+  return `${greeting}, ${name}!`;
+}
+
+const shout = (...words) => words.join(" ").toUpperCase() + "!";
+::tests
+assert.strictEqual(greet(), "Hello, friend!");
+assert.strictEqual(greet("Ada"), "Hello, Ada!");
+assert.strictEqual(greet("Ada", "Welcome"), "Welcome, Ada!");
+assert.strictEqual(greet(undefined, "Hi"), "Hi, friend!");
+assert.strictEqual(shout("hey", "you"), "HEY YOU!");
+assert.strictEqual(shout("wow"), "WOW!");
+assert.strictEqual(shout(), "!");
+::hints
+- Defaults go in the parameter list: `function greet(name = "friend", greeting = "Hello")`.
+- A rest parameter collects the words into an array; `words.join(" ")` glues them with spaces (Module 2).
+--- exercise code javascript
+::prompt
+Write `average(...numbers)` that returns the average of any number of arguments, rounded to **2 decimal places** as a number (use `Math.round(x * 100) / 100`). With no arguments it returns `0` (not `NaN`). Then write `range(...numbers)` as an arrow function that returns the largest minus the smallest (use `Math.max(...numbers)` and `Math.min(...numbers)`: the `...` spreads the array back into separate arguments); with no arguments it returns `0`.
+::starter
+function average(...numbers) {
+}
+
+const range = (...numbers) => {};
+::solution
+function average(...numbers) {
+  if (numbers.length === 0) return 0;
+  let total = 0;
+  for (const n of numbers) {
+    total += n;
+  }
+  return Math.round((total / numbers.length) * 100) / 100;
+}
+
+const range = (...numbers) => (numbers.length === 0 ? 0 : Math.max(...numbers) - Math.min(...numbers));
+::tests
+assert.strictEqual(average(2, 4, 9), 5);
+assert.strictEqual(average(1, 2), 1.5);
+assert.strictEqual(average(1, 2, 2), 1.67);
+assert.strictEqual(average(), 0);
+assert.strictEqual(average(-4, 4), 0);
+assert.strictEqual(range(3, 9, 2), 7);
+assert.strictEqual(range(5), 0);
+assert.strictEqual(range(), 0);
+::hints
+- Guard first: `if (numbers.length === 0) return 0;`
+- Sum with a `for...of` loop, divide by `numbers.length`, then round.
+- Without the guard, `Math.max()` with no arguments is `-Infinity`.
+--- cards
+Function expression :: A function used as a value: const f = function (x) { ... }; Not hoisted.
+Arrow function :: const f = (x) => x * 2; A concise body returns its expression; a { } body needs return.
+Returning an object from an arrow :: Wrap it in parentheses: () => ({ ok: true })
+Missing arguments :: Their parameters are undefined. Extra arguments are ignored.
+Default parameter :: function f(x = 10) { ... } uses 10 when x is missing or undefined.
+Rest parameter :: function f(...args) collects all remaining arguments into an array. Must be last.
+
+=== lesson js-scope-closures | Scope, closures and the call stack | 85
+## Where can a variable be seen?
+
+A variable's **scope** is the part of the program where its name can be used. JavaScript has three levels:
+
+- **Global scope**: declared outside any function or block; visible everywhere in the file.
+- **Function scope**: declared inside a function (including its parameters); visible only inside that function.
+- **Block scope**: declared with `let` or `const` inside `{ }` (an `if`, a loop...); visible only inside that block.
+
+```js
+const appName = "DevQuest";
+function welcome(user) {
+  const message = `Welcome to ${appName}, ${user}!`;
+  return message;
+}
+console.log(welcome("Ada"));
+console.log(message);
+```
+
+The function can see the global `appName`, but `message` belongs to the function and doesn't exist outside it. Every call gets **fresh** local variables, which disappear when the call ends.
+
+**Keep variables in the smallest scope that works.** Global variables can be changed from anywhere, so when one has a wrong value, any line in the program could be to blame.
+
+## Shadowing
+
+An inner scope may declare a name that also exists outside. Inside, the inner one wins; it **shadows** the outer one:
+
+```js
+const level = "global";
+function test() {
+  const level = "function";
+  if (true) {
+    const level = "block";
+    console.log(level);
+  }
+  console.log(level);
+}
+test();
+console.log(level);
+```
+
+It's legal, but it makes code confusing to read; linters (Module 12) can warn you about it.
+
+## Lexical scope: where the code is written
+
+JavaScript looks a name up **from the inside out**: the current block, then the enclosing blocks, then the function, then the scope *where the function was written*, out to the global scope. This is called **lexical scope**: what matters is where the code sits in the source, not where it's called from.
+
+```js
+const x = "outer";
+function show() {
+  return x;
+}
+function caller() {
+  const x = "caller's own";
+  return show();
+}
+console.log(caller());
+```
+
+`show` was written next to the outer `x`, so that's the one it sees, even though it's called from inside `caller`.
+
+## The call stack
+
+When a function calls another function, JavaScript has to remember where to come back to. It keeps a **call stack**: each call pushes a *frame* (that call's local variables and its position) on top; when a call returns, its frame is popped off and execution continues in the frame below.
+
+```js
+function c() {
+  throw new Error("Something went wrong in c");
+}
+function b() {
+  c();
+}
+function a() {
+  b();
+}
+a();
+```
+
+The error shows the stack at the moment it happened, innermost call first: `c` was called by `b`, called by `a`, called from the top level. Node.js prints the same chain as `at c (file.js:2:9)`, `at b (file.js:5:3)` and so on. When an error is raised deep inside your program, this trace tells you the path that led there; the bug is often in a caller that passed a bad value, not in the function that crashed.
+
+## Closures
+
+Here's where JavaScript gets powerful. A function remembers the scope it was **created** in, even after that outer function has finished:
+
+```js
+function makeCounter() {
+  let count = 0;
+  return () => {
+    count++;
+    return count;
+  };
+}
+
+const counter = makeCounter();
+console.log(counter());
+console.log(counter());
+console.log(counter());
+```
+
+`makeCounter` has finished running, so you might expect `count` to be gone. But the arrow function it returned still refers to `count`, so JavaScript keeps it alive. A function together with the variables it remembers is called a **closure**.
+
+Each call to `makeCounter` creates a **new** `count`, so counters are independent:
+
+```js
+function makeCounter() {
+  let count = 0;
+  return () => ++count;
+}
+const visits = makeCounter();
+const clicks = makeCounter();
+visits();
+visits();
+clicks();
+console.log("visits:", visits(), "clicks:", clicks());
+```
+
+Closures give you **private state**: nothing outside can read or change `count` except through the function. That's the foundation of many patterns you'll meet: event handlers that remember things, functions configured once and used many times, and the module pattern.
+
+~~~check
+? What does this print?
+```js
+function makeAdder(n) {
+  return (x) => x + n;
+}
+const add5 = makeAdder(5);
+const add10 = makeAdder(10);
+console.log(add5(1), add10(1));
+```
+- `6 6`
++ `6 11`
+- `11 11`
+- `1 1`
+> Each returned function remembers its own `n`: 5 for add5, 10 for add10.
+~~~
+
+## Function factories
+
+A function that builds and returns configured functions is a **factory**:
+
+```js
+function makeGreeter(greeting) {
+  return (name) => `${greeting}, ${name}!`;
+}
+const hello = makeGreeter("Hello");
+const bonjour = makeGreeter("Bonjour");
+console.log(hello("Ada"), bonjour("Ada"));
+```
+
+Another classic: a function that does something only **once**, remembering that it already did:
+
+```js
+function once(action) {
+  let done = false;
+  return () => {
+    if (done) return;
+    done = true;
+    action();
+  };
+}
+const init = once(() => console.log("Initialising..."));
+init();
+init();
+init();
+```
+
+## Closures in loops: let saves the day
+
+Each iteration of a `for (let ...)` loop gets its **own** copy of the loop variable, so functions created in the loop remember the value of their own iteration. `setTimeout(fn, ms)` runs `fn` later, after the loop has finished:
+
+```js
+for (let i = 1; i <= 3; i++) {
+  setTimeout(() => console.log("let:", i), 0);
+}
+for (var j = 1; j <= 3; j++) {
+  setTimeout(() => console.log("var:", j), 0);
+}
+```
+
+With old-style `var`, there's only **one** `j` for the whole loop, and by the time the functions run it has reached 4. This exact bug filled the internet with questions for years; `let` fixed it. One more reason to never use `var`.
+
+📚 **Go deeper:** javascript.info, "Variable scope, closure"; MDN, "Closures"; *Eloquent JavaScript* (4th ed.), chapter 3, "Bindings and scopes", "Closure" and "The call stack".
+--- goals
+- tell global, function and block scope apart, and keep variables in the smallest scope
+- explain shadowing and lexical scope
+- read a call stack trace to follow the chain of calls that led to an error
+- create closures that keep private state between calls
+- write function factories, such as counters and `once`
+- explain why `let` in a loop gives each iteration its own variable
+--- quiz
+? What does this print?
+```js
+let n = 1;
+function bump() {
+  let n = 10;
+  n++;
+}
+bump();
+console.log(n);
+```
++ `1`
+- `11`
+- `2`
+- An error
+> The `n` inside `bump` is a different, local variable that shadows the global one.
+? What does this print?
+```js
+function counter() {
+  let c = 0;
+  return () => ++c;
+}
+const a = counter();
+const b = counter();
+a();
+a();
+console.log(a(), b());
+```
+- `3 3`
++ `3 1`
+- `1 1`
+- `2 1`
+> Each call to `counter` creates its own `c`. `a` has been called three times, `b` once.
+? An error message shows `at validate (line 12)`, then `at save (line 30)`, then `at line 41`. Which function raised the error?
++ `validate`
+- `save`
+- The code at line 41
+- It can't be known
+> The innermost frame is listed first: `validate` raised it, called by `save`, called from the top level.
+? What does lexical scope mean?
+- Variables are looked up where a function is called
++ Variables are looked up where a function is written in the source
+- Only global variables can be used in functions
+- Variables are looked up alphabetically
+> A function sees the variables around the place it was defined.
+? What is a closure?
+- A function with no parameters
+- A function that has finished running
++ A function together with the variables from the scope it was created in, which it keeps alive
+- A block of code in curly braces
+> Closures let returned functions keep using their outer function's variables.
+? What does this print (after the timers run)?
+```js
+for (var i = 0; i < 3; i++) {
+  setTimeout(() => console.log(i), 0);
+}
+```
+- `0 1 2` on three lines
++ `3 3 3` on three lines
+- `undefined` three times
+- `2 2 2` on three lines
+> With `var` there's one shared `i`, which is 3 when the callbacks finally run. With `let`, each iteration has its own `i`.
+--- exercise code javascript
+::prompt
+Write `makeCounter(start = 0, step = 1)` that returns a function. Each call of the returned function returns the next value: the first call returns `start + step`, the next `start + 2 * step`, and so on. Counters must be independent of each other.
+::starter
+function makeCounter(start = 0, step = 1) {
+}
+::solution
+function makeCounter(start = 0, step = 1) {
+  let value = start;
+  return () => {
+    value += step;
+    return value;
+  };
+}
+::tests
+const __a = makeCounter();
+assert.strictEqual(__a(), 1);
+assert.strictEqual(__a(), 2);
+assert.strictEqual(__a(), 3);
+const __b = makeCounter(10, 5);
+assert.strictEqual(__b(), 15);
+assert.strictEqual(__b(), 20);
+assert.strictEqual(__a(), 4);
+const __c = makeCounter(0, -2);
+assert.strictEqual(__c(), -2);
+::hints
+- Keep the current value in a `let` variable inside `makeCounter`.
+- Return an arrow function that adds `step` to that variable and returns it.
+--- exercise code javascript
+::prompt
+Write `once(fn)`: it returns a new function that calls `fn` the **first** time it's called and returns `fn`'s result; every later call returns that **same first result** without calling `fn` again. (This is how apps make sure, say, a payment is only submitted once.)
+::starter
+function once(fn) {
+}
+::solution
+function once(fn) {
+  let called = false;
+  let result;
+  return () => {
+    if (!called) {
+      called = true;
+      result = fn();
+    }
+    return result;
+  };
+}
+::tests
+let __calls = 0;
+const __init = once(() => { __calls++; return "ready"; });
+assert.strictEqual(__init(), "ready");
+assert.strictEqual(__init(), "ready");
+assert.strictEqual(__init(), "ready");
+assert.strictEqual(__calls, 1);
+const __zero = once(() => 0);
+assert.strictEqual(__zero(), 0);
+assert.strictEqual(__zero(), 0);
+::hints
+- You need two remembered variables: whether `fn` has been called, and its result.
+- Don't use the result itself as the flag: a function could return 0 or undefined.
+--- exercise code javascript
+::prompt
+Write `makeLimiter(max)` that returns a function `tryAction()`. Each call returns `true` while fewer than `max` actions have been allowed, and `false` after that (like a rate limit: "5 login attempts").
+::starter
+function makeLimiter(max) {
+}
+::solution
+function makeLimiter(max) {
+  let used = 0;
+  return () => {
+    if (used >= max) return false;
+    used++;
+    return true;
+  };
+}
+::tests
+const __login = makeLimiter(3);
+assert.strictEqual(__login(), true);
+assert.strictEqual(__login(), true);
+assert.strictEqual(__login(), true);
+assert.strictEqual(__login(), false);
+assert.strictEqual(__login(), false);
+const __none = makeLimiter(0);
+assert.strictEqual(__none(), false);
+const __other = makeLimiter(1);
+assert.strictEqual(__other(), true);
+assert.strictEqual(__other(), false);
+::hints
+- Count the actions allowed so far in a variable inside `makeLimiter`.
+- Return `false` early once the count has reached `max`.
+--- cards
+Scope :: Where a name can be used: global, function (incl. parameters) or block (let/const in { }).
+Shadowing :: An inner variable with the same name as an outer one hides the outer one inside its scope.
+Lexical scope :: Names are looked up from where the function is written in the source, inside out.
+Call stack :: The chain of active calls. An error's trace lists it innermost first: who called whom.
+Closure :: A function plus the variables of the scope it was created in, which it keeps alive and private.
+Function factory :: A function that creates and returns configured functions, e.g. makeAdder(5).
+let in loops :: Each iteration of for (let i ...) gets its own i, so callbacks remember their own value. var shares one.
+
+=== lesson js-recursion | Recursion | 80
+## A function that calls itself
+
+A **recursive** function solves a problem by calling **itself** on a smaller version of the same problem. It sounds circular, but it's how many problems are most naturally described. A countdown from `n` is: "say `n`, then do a countdown from `n - 1`", and a countdown from 0 is "say Liftoff!".
+
+```js
+function countdown(n) {
+  if (n === 0) {
+    console.log("Liftoff!");
+    return;
+  }
+  console.log(n);
+  countdown(n - 1);
+}
+countdown(3);
+```
+
+Every recursive function needs two parts:
+
+1. **A base case**: a version so small it's answered directly, without recursion (`n === 0`).
+2. **A recursive case**: the function calls itself on a **smaller** problem that gets closer to the base case (`n - 1`).
+
+## Recursion that returns values
+
+The factorial of n (written n!) is 1 × 2 × 3 × ... × n. Notice that 5! = 5 × 4!. That's a recursive definition:
+
+```js
+function factorial(n) {
+  if (n <= 1) return 1;
+  return n * factorial(n - 1);
+}
+console.log(factorial(5));
+```
+
+Here's what happens, using the call stack from the last lesson:
+
+```
+factorial(5) = 5 * factorial(4)
+                   factorial(4) = 4 * factorial(3)
+                                      factorial(3) = 3 * factorial(2)
+                                                         factorial(2) = 2 * factorial(1)
+                                                                            factorial(1) = 1
+                                                         factorial(2) = 2 * 1 = 2
+                                      factorial(3) = 3 * 2 = 6
+                   factorial(4) = 4 * 6 = 24
+factorial(5) = 5 * 24 = 120
+```
+
+The calls pile up on the stack until the base case returns; then each waiting call finishes its multiplication on the way back down.
+
+## Forgetting the base case
+
+Without a base case that's actually reached, the function calls itself forever, or rather, until the call stack runs out of space:
+
+```js
+function forever(n) {
+  return forever(n + 1);
+}
+forever(1);
+```
+
+`RangeError: Maximum call stack size exceeded` is JavaScript's name for a **stack overflow**. When you see it, check that your base case exists and that every recursive call really moves towards it. The same error appears if the input is simply too big: JavaScript allows roughly ten thousand nested calls, so recursion isn't suitable for going 100,000 levels deep.
+
+~~~check
+? What does `sum(4)` return?
+```js
+function sum(n) {
+  if (n === 0) return 0;
+  return n + sum(n - 1);
+}
+```
+- 4
++ 10
+- 0
+- It never returns
+> 4 + 3 + 2 + 1 + 0 = 10.
+~~~
+
+## Recursion on strings
+
+Strings shrink nicely: work on the first character, recurse on the rest with `slice(1)`, and stop at the empty string.
+
+```js
+function reverse(text) {
+  if (text === "") return "";
+  return reverse(text.slice(1)) + text[0];
+}
+function countChar(text, ch) {
+  if (text.length === 0) return 0;
+  const here = text[0] === ch ? 1 : 0;
+  return here + countChar(text.slice(1), ch);
+}
+console.log(reverse("recursion"));
+console.log(countChar("banana", "a"));
+```
+
+## Recursion versus loops
+
+Anything a loop can do, recursion can do, and vice versa. For simple counting, a loop is usually clearer and faster in JavaScript. Recursion shines when the data itself is **nested** or branches: folders inside folders, comments with replies to replies, the structure of a web page, game trees, or the "divide and conquer" algorithms of the DSA track. You'll write recursion over nested arrays and objects in Module 6.
+
+## Branching recursion and its cost
+
+Some recursive functions call themselves **more than once**. The Fibonacci numbers (0, 1, 1, 2, 3, 5, 8, 13...) are each the sum of the two before:
+
+```js
+let calls = 0;
+function fib(n) {
+  calls++;
+  if (n < 2) return n;
+  return fib(n - 1) + fib(n - 2);
+}
+console.log(fib(25), "after", calls, "calls");
+```
+
+A quarter of a million calls for `fib(25)`! The same values are recomputed over and over: `fib(23)` is computed twice, `fib(22)` three times, and so on, so the work roughly doubles with every step up. Two fixes:
+
+- Rewrite it as a **loop** that keeps the last two values.
+- **Memoize** it: remember results you've already computed, so each is calculated once. You'll do this with a closure and a `Map` in Module 6.
+
+## A classic: the Towers of Hanoi
+
+Move a tower of discs from peg A to peg C, one disc at a time, never putting a bigger disc on a smaller one. The recursive insight: to move `n` discs, move the top `n - 1` out of the way to the spare peg, move the biggest disc, then move the `n - 1` back on top of it.
+
+```js
+function hanoi(n, from, to, spare) {
+  if (n === 0) return;
+  hanoi(n - 1, from, spare, to);
+  console.log(`Move disc ${n} from ${from} to ${to}`);
+  hanoi(n - 1, spare, to, from);
+}
+hanoi(3, "A", "C", "B");
+```
+
+Seven moves for three discs; `n` discs always need 2ⁿ − 1 moves. Trying to plan this with loops is surprisingly hard; the recursive version is five lines.
+
+## How to think recursively
+
+1. **What's the smallest input?** Answer it directly: that's the base case.
+2. **Assume the function already works for a smaller input.** Don't trace every call in your head; trust it.
+3. **How do you build the answer for this input from the answer for the smaller one?** That's the recursive case.
+
+Step 2 is the "leap of faith" that makes recursion click. You check it once, with the base case and one step, rather than following every call.
+
+📚 **Go deeper:** javascript.info, "Recursion and stack"; *Eloquent JavaScript* (4th ed.), chapter 3, "Recursion"; *Grokking Algorithms* (2nd ed.), chapter 3, "Recursion".
+--- goals
+- write recursive functions with a base case and a recursive case
+- trace recursive calls on the call stack
+- recognise and fix `Maximum call stack size exceeded`
+- recurse over strings with `slice(1)`
+- explain why branching recursion like naive Fibonacci is slow
+- solve a problem by trusting the recursive call on a smaller input
+--- quiz
+? What are the two parts every recursive function needs?
++ A base case and a recursive case that moves towards it
+- A loop and a return
+- Two parameters and a default value
+- A global variable and a counter
+> Without a reachable base case, the recursion never stops.
+? What does this return for `power(2, 5)`?
+```js
+function power(base, exp) {
+  if (exp === 0) return 1;
+  return base * power(base, exp - 1);
+}
+```
+- 10
++ 32
+- 25
+- 64
+> 2 × 2 × 2 × 2 × 2 × 1 = 32.
+? Which error usually means a recursive function's base case is missing or never reached?
+- `ReferenceError`
+- `SyntaxError: Unexpected end of input`
++ `RangeError: Maximum call stack size exceeded`
+- `TypeError: x is not a function`
+> Every call adds a frame to the call stack; endless recursion fills it up.
+? What does this print?
+```js
+function f(s) {
+  if (s.length === 0) return "";
+  return f(s.slice(1)) + s[0];
+}
+console.log(f("abc"));
+```
+- `abc`
++ `cba`
+- `bca`
+- `a`
+> Each call puts its first character after the result for the rest, which reverses the string.
+? Why is the naive recursive `fib(40)` so slow?
+- Recursion is always slow in JavaScript
++ It recomputes the same values again and again, so the number of calls grows exponentially
+- Addition of big numbers is slow
+- The base case is wrong
+> fib(n) calls fib(n-1) and fib(n-2), which repeat each other's work. Memoizing or a loop fixes it.
+--- exercise code javascript
+::prompt
+Write a **recursive** function `sumDigits(n)` that returns the sum of the digits of a non-negative whole number: `sumDigits(4728)` is 4 + 7 + 2 + 8 = 21. Don't use a loop or strings: the last digit is `n % 10`, and the rest of the number is `Math.floor(n / 10)`.
+::starter
+function sumDigits(n) {
+}
+::solution
+function sumDigits(n) {
+  if (n < 10) return n;
+  return (n % 10) + sumDigits(Math.floor(n / 10));
+}
+::tests
+assert.strictEqual(sumDigits(4728), 21);
+assert.strictEqual(sumDigits(0), 0);
+assert.strictEqual(sumDigits(7), 7);
+assert.strictEqual(sumDigits(1000), 1);
+assert.strictEqual(sumDigits(999999), 54);
+::hints
+- Base case: a single-digit number is its own digit sum.
+- Recursive case: the last digit plus the digit sum of the rest.
+--- exercise code javascript
+::prompt
+Write a **recursive** `isPalindrome(text)` that returns `true` if `text` reads the same forwards and backwards (exact characters; no cleaning needed). Compare the first and last characters; if they match, the answer is whether the middle part (`text.slice(1, -1)`) is a palindrome. Strings of length 0 or 1 are palindromes.
+::starter
+function isPalindrome(text) {
+}
+::solution
+function isPalindrome(text) {
+  if (text.length <= 1) return true;
+  if (text[0] !== text.at(-1)) return false;
+  return isPalindrome(text.slice(1, -1));
+}
+::tests
+assert.strictEqual(isPalindrome("racecar"), true);
+assert.strictEqual(isPalindrome("abba"), true);
+assert.strictEqual(isPalindrome("abca"), false);
+assert.strictEqual(isPalindrome(""), true);
+assert.strictEqual(isPalindrome("x"), true);
+assert.strictEqual(isPalindrome("ab"), false);
+assert.strictEqual(isPalindrome("Racecar"), false);
+::hints
+- Two base cases: length 0 or 1 (true), and first character different from the last (false).
+- Otherwise recurse on `text.slice(1, -1)`.
+--- exercise code javascript
+::prompt
+Write a **recursive** `hanoi(n, from, to, spare)` that **returns the number of moves** needed to move `n` discs, and prints each move as `Move disc N from X to Y`, in the correct order. Check your output for 2 discs: three moves.
+::starter
+function hanoi(n, from, to, spare) {
+}
+hanoi(2, "A", "C", "B");
+::solution
+function hanoi(n, from, to, spare) {
+  if (n === 0) return 0;
+  let moves = hanoi(n - 1, from, spare, to);
+  console.log(`Move disc ${n} from ${from} to ${to}`);
+  moves++;
+  moves += hanoi(n - 1, spare, to, from);
+  return moves;
+}
+hanoi(2, "A", "C", "B");
+::tests
+assert.strictEqual(hanoi(0, "A", "C", "B"), 0);
+assert.strictEqual(hanoi(1, "A", "C", "B"), 1);
+assert.strictEqual(hanoi(3, "A", "C", "B"), 7);
+assert.strictEqual(hanoi(5, "X", "Z", "Y"), 31);
+::hints
+- Base case: zero discs need zero moves.
+- Move n - 1 discs from `from` to `spare` (using `to` as the helper), move disc n, then move n - 1 discs from `spare` to `to`.
+- Add up the moves of both recursive calls, plus one.
+--- cards
+Recursion :: A function that calls itself on a smaller version of the problem.
+Base case :: The smallest input, answered directly without recursing. Without it, recursion never ends.
+Stack overflow :: RangeError: Maximum call stack size exceeded. Too many nested calls, usually a missing or unreachable base case.
+Recursing on strings :: Handle text[0], recurse on text.slice(1), stop at "".
+Exponential recursion :: Naive fib calls itself twice per step, recomputing the same values. Fix with a loop or memoization.
+Recursive leap of faith :: Assume the call on the smaller input works; just build this answer from it.
+
+=== lesson js-higher-order | Functions as values: callbacks | 80
+## Passing functions around
+
+Since functions are values, you can pass them **to** other functions and get them **back** from functions. A function that takes or returns another function is a **higher-order function**. This is one of JavaScript's most important ideas: the whole browser, Node.js and every modern framework are built on it.
+
+```js
+function repeat(times, action) {
+  for (let i = 1; i <= times; i++) {
+    action(i);
+  }
+}
+repeat(3, (n) => console.log(`Hello number ${n}`));
+repeat(2, (n) => console.log("*".repeat(n)));
+```
+
+`repeat` knows *how often* to do something; the caller decides *what*. The function you pass in (`action`) is called a **callback**: you hand it over, and the other function calls it back when it's time.
+
+Note the difference between passing a function and calling it: `repeat(3, sayHi)` passes the function; `repeat(3, sayHi())` would call `sayHi` right away and pass its *result* (probably `undefined`).
+
+## Callbacks customise behaviour
+
+Higher-order functions let you write the general part once and plug in the specific part:
+
+```js
+function countWhere(text, test) {
+  let count = 0;
+  for (const ch of text) {
+    if (test(ch)) count++;
+  }
+  return count;
+}
+const sentence = "Hello World, 2026!";
+console.log(countWhere(sentence, (ch) => "aeiouAEIOU".includes(ch)));
+console.log(countWhere(sentence, (ch) => ch === ch.toUpperCase() && ch !== ch.toLowerCase()));
+console.log(countWhere(sentence, (ch) => "0123456789".includes(ch)));
+```
+
+One loop, three different questions. A callback that returns `true` or `false` like `test` is called a **predicate**.
+
+~~~check
+? What does this print?
+```js
+function apply(x, f) {
+  return f(f(x));
+}
+console.log(apply(3, (n) => n * 10));
+```
+- 30
++ 300
+- 13
+- `undefined`
+> f(3) is 30, then f(30) is 300.
+~~~
+
+## Callbacks you'll use every day
+
+You've been close to callbacks already. A few you'll meet constantly:
+
+```js
+setTimeout(() => console.log("...one second later"), 1000);
+console.log("Timer started");
+```
+
+`setTimeout(callback, ms)` calls the callback after a delay; the program doesn't wait for it (that's the start of async JavaScript, Module 10). In a web page, `button.addEventListener("click", callback)` calls the callback on every click (Module 11). And arrays have methods that take callbacks: you'll use these more than any other feature in Module 6:
+
+```js
+const prices = [5, 12, 8, 30];
+console.log(prices.map((p) => p * 2));
+console.log(prices.filter((p) => p > 10));
+```
+
+## Returning functions
+
+The other direction: functions that **build** functions. You did this with closures in the scope lesson:
+
+```js
+const multiplyBy = (factor) => (n) => n * factor;
+const double = multiplyBy(2);
+const triple = multiplyBy(3);
+console.log(double(7), triple(7));
+```
+
+`(factor) => (n) => n * factor` reads as "given a factor, return a function that, given n, returns n times factor". Arrows chained like this are common in modern code.
+
+## Composing functions
+
+Small functions can be glued together. `compose(f, g)` returns a new function that applies `g`, then `f`:
+
+```js
+const compose = (f, g) => (x) => f(g(x));
+const trim = (s) => s.trim();
+const upper = (s) => s.toUpperCase();
+const exclaim = (s) => s + "!";
+const shout = compose(exclaim, compose(upper, trim));
+console.log(shout("   hello  "));
+```
+
+This style, building programs from small, pure, combinable functions, is called **functional programming**. You'll do more of it in Module 12.
+
+## Wrapping a function to add behaviour
+
+A higher-order function can return a new version of a function with something extra, without touching the original's code. This is called a **decorator** or **wrapper**:
+
+```js
+function logged(fn, name) {
+  return (...args) => {
+    const result = fn(...args);
+    console.log(`${name}(${args.join(", ")}) -> ${result}`);
+    return result;
+  };
+}
+const add = (a, b) => a + b;
+const loggedAdd = logged(add, "add");
+loggedAdd(2, 3);
+loggedAdd(10, -4);
+```
+
+`(...args)` collects whatever arguments the wrapper gets, and `fn(...args)` **spreads** them back out into the original function. Professional code uses wrappers like this for logging, timing, caching results and checking permissions.
+
+📚 **Go deeper:** *Eloquent JavaScript* (4th ed.), chapter 5, "Higher-Order Functions"; javascript.info, "Decorators and forwarding"; MDN, "Callback function" (glossary).
+--- goals
+- pass functions as arguments (callbacks), and tell passing a function from calling it
+- write higher-order functions that take a callback or a predicate
+- return functions from functions, including chained arrows
+- compose small functions into bigger ones
+- wrap a function to add behaviour such as logging
+--- quiz
+? What is a callback?
+- A function that calls itself
++ A function passed to another function, which calls it later
+- A function that returns a value
+- A function with default parameters
+> You hand the function over; the receiving function "calls it back".
+? What's the difference between `run(greet)` and `run(greet())`?
++ The first passes the function; the second calls `greet` now and passes its result
+- There's no difference
+- The first is a syntax error
+- The second passes the function twice
+> Parentheses call a function. Without them, you're referring to the function itself.
+? What does this print?
+```js
+const add = (a) => (b) => a + b;
+console.log(add(2)(3));
+```
+- `23`
++ `5`
+- `undefined`
+- An error
+> `add(2)` returns a function `(b) => 2 + b`, which is then called with 3.
+? What does this print?
+```js
+function twice(f) {
+  return (x) => f(f(x));
+}
+const plus3 = (n) => n + 3;
+console.log(twice(plus3)(10));
+```
+- 13
++ 16
+- 6
+- 30
+> plus3(10) is 13, then plus3(13) is 16.
+? A function that takes a value and returns true or false, passed to decide which items count, is called a...
+- decorator
++ predicate
+- factory
+- recursion
+> Predicates answer yes/no questions about a value.
+--- exercise code javascript
+::prompt
+Write `applyN(f, n, x)` that applies the function `f` to `x` **n times** and returns the result: `applyN(double, 3, 1)` is `double(double(double(1)))`, which is 8. With `n` of 0 it returns `x` unchanged.
+::starter
+function applyN(f, n, x) {
+}
+::solution
+function applyN(f, n, x) {
+  let result = x;
+  for (let i = 0; i < n; i++) {
+    result = f(result);
+  }
+  return result;
+}
+::tests
+assert.strictEqual(applyN((v) => v * 2, 3, 1), 8);
+assert.strictEqual(applyN((v) => v + 1, 10, 0), 10);
+assert.strictEqual(applyN((v) => v * 2, 0, 7), 7);
+assert.strictEqual(applyN((s) => s + "!", 2, "hi"), "hi!!");
+::hints
+- Keep the current result in a variable that starts as `x`.
+- Loop `n` times, each time replacing the result with `f(result)`.
+--- exercise code javascript
+::prompt
+Write `countWhere(text, test)` that returns how many characters of `text` make the predicate `test` return `true`. Then, **using** `countWhere`, write `countVowels(text)` (a, e, i, o, u in either case) and `countDigits(text)`, each as a one-line arrow function.
+::starter
+function countWhere(text, test) {
+}
+
+const countVowels = (text) => 0;
+const countDigits = (text) => 0;
+::solution
+function countWhere(text, test) {
+  let count = 0;
+  for (const ch of text) {
+    if (test(ch)) count++;
+  }
+  return count;
+}
+
+const countVowels = (text) => countWhere(text, (ch) => "aeiouAEIOU".includes(ch));
+const countDigits = (text) => countWhere(text, (ch) => "0123456789".includes(ch));
+::tests
+assert.strictEqual(countWhere("banana", (ch) => ch === "a"), 3);
+assert.strictEqual(countWhere("", () => true), 0);
+assert.strictEqual(countVowels("Programming in JavaScript"), 7);
+assert.strictEqual(countVowels("rhythm"), 0);
+assert.strictEqual(countDigits("R2-D2 and C-3PO"), 3);
+assert.strictEqual(countDigits("no digits"), 0);
+::hints
+- `countWhere` loops over the characters and counts those for which `test(ch)` is true.
+- `countVowels` passes a predicate: `(ch) => "aeiouAEIOU".includes(ch)`.
+--- exercise code javascript
+::prompt
+Write `compose(...fns)` that takes **any number** of functions and returns one function that applies them **right to left**: `compose(f, g, h)(x)` is `f(g(h(x)))`. With no functions, the result returns its input unchanged. Use a loop over the functions in reverse order (count down with a `for` loop over `fns.length - 1` to `0`).
+::starter
+function compose(...fns) {
+}
+::solution
+function compose(...fns) {
+  return (x) => {
+    let result = x;
+    for (let i = fns.length - 1; i >= 0; i--) {
+      result = fns[i](result);
+    }
+    return result;
+  };
+}
+::tests
+const __inc = (n) => n + 1;
+const __dbl = (n) => n * 2;
+assert.strictEqual(compose(__inc, __dbl)(5), 11);
+assert.strictEqual(compose(__dbl, __inc)(5), 12);
+assert.strictEqual(compose()(42), 42);
+assert.strictEqual(compose((s) => s + "!", (s) => s.toUpperCase(), (s) => s.trim())("  hey "), "HEY!");
+::hints
+- Return an arrow function `(x) => { ... }` that does the work when it's called.
+- Start with `result = x`, then apply `fns[i]` from the last index down to 0.
+--- cards
+Higher-order function :: A function that takes a function as an argument or returns one.
+Callback :: A function passed to another function to be called later: setTimeout(cb, 1000), button.addEventListener("click", cb).
+Passing vs calling :: run(f) passes the function; run(f()) calls it now and passes the result.
+Predicate :: A function that returns true or false, used to decide which items count.
+compose(f, g) :: (x) => f(g(x)): combine small functions into a pipeline.
+Wrapper / decorator :: A function that returns a new version of another function with extra behaviour (logging, caching...).
+
+=== lesson js-m5-test | Module 5 test | 180 | exam
+This test covers Module 5: declaring and calling functions, returning versus printing, arrow functions and parameters, scope and closures, the call stack, recursion and higher-order functions. The coding problems are checked with hidden tests that call your functions with many inputs, including edge cases.
+
+Before you start, check that you can:
+
+- write functions that **return** results, with early returns for special cases;
+- use default and rest parameters, and write arrow functions with concise bodies;
+- explain scope, shadowing and closures, and build a function factory;
+- write a recursive function with a base case, and spot one without;
+- pass callbacks and write functions that return functions.
+
+## Practise more
+
+- Code Dojo: [Debounce](#/dojo/dojo-js-debounce) uses closures and timers, a classic interview question.
+- Code Dojo: [Event Emitter](#/dojo/dojo-js-event-emitter) and [Deep Equal](#/dojo/dojo-js-deep-equal) once you've finished Module 6.
+--- goals
+- design and write functions that return values
+- use closures and higher-order functions
+- solve problems recursively
+--- quiz
+? What does this print?
+```js
+function f(a, b = a * 2) {
+  return a + b;
+}
+console.log(f(3), f(3, 1));
+```
+- `6 4`
++ `9 4`
+- `NaN 4`
+- `9 7`
+> b defaults to a * 2 = 6, so f(3) is 9; f(3, 1) is 4.
+? What does this print?
+```js
+function report(score) {
+  console.log(`Score: ${score}`);
+}
+const r = report(10);
+console.log(r);
+```
+- `Score: 10` then `10`
++ `Score: 10` then `undefined`
+- `undefined`
+- `Score: 10` only
+> report prints, but returns nothing, so r is undefined.
+? What does this print?
+```js
+let total = 0;
+function add(n) {
+  total += n;
+  return total;
+}
+add(5);
+add(5);
+console.log(add(5));
+```
+- 5
++ 15
+- 10
+- An error
+> `add` changes the outer `total` each time: a side effect. 5, 10, 15.
+? What does this print?
+```js
+const make = () => {
+  let x = 0;
+  return () => (x += 2);
+};
+const g = make();
+g();
+console.log(g(), make()());
+```
++ `4 2`
+- `2 2`
+- `4 4`
+- `6 2`
+> g's own x reaches 4 on the second call; a fresh `make()()` starts again from 0 and returns 2.
+? What does `mystery(3)` return?
+```js
+function mystery(n) {
+  if (n === 0) return "";
+  return mystery(n - 1) + n;
+}
+```
+- `"321"`
++ `"123"`
+- `6`
+- `"3"`
+> The recursion reaches "" first; then each call adds its own n on the way back: "1", "12", "123".
+? Which is a higher-order function?
+- `const sq = (n) => n * n;`
++ `const twice = (f) => (x) => f(f(x));`
+- `function greet(name = "you") { return name; }`
+- `const PI = 3.14;`
+> `twice` takes a function and returns a function.
+? What happens when this runs?
+```js
+function size(n) {
+  return size(n - 1) + 1;
+}
+console.log(size(3));
+```
+- Prints 3
+- Prints 4
++ `RangeError: Maximum call stack size exceeded`
+- Prints `undefined`
+> There's no base case, so the calls never stop.
+? Where should `const tax = 0.2;` live if only `calcPrice` uses it?
+- In the global scope, so every function can use it
++ Inside `calcPrice`, the smallest scope that works
+- In a `var`, so it's hoisted
+- It doesn't matter
+> Smallest scope: nothing else can change it by accident, and readers see where it's used.
+--- exercise code javascript
+::prompt
+Write `caesar(text, shift)` that encrypts text with a **Caesar cipher**: each letter is moved `shift` places along the alphabet, wrapping around from z to a. Keep the case of each letter, and leave everything else (spaces, digits, punctuation) unchanged. Negative shifts move backwards, so `caesar(caesar(t, 3), -3)` gives back `t`.
+
+Two helpers: `"a".charCodeAt(0)` is 97 (the code of a character), and `String.fromCharCode(98)` is `"b"`. Lowercase letters are codes 97 to 122, uppercase 65 to 90. To wrap a position `p` from 0 to 25 safely, even for negative shifts, use `((p % 26) + 26) % 26`.
+::starter
+function caesar(text, shift) {
+}
+::solution
+function shiftLetter(ch, shift, base) {
+  const p = ch.charCodeAt(0) - base + shift;
+  return String.fromCharCode(base + (((p % 26) + 26) % 26));
+}
+
+function caesar(text, shift) {
+  let result = "";
+  for (const ch of text) {
+    if (ch >= "a" && ch <= "z") result += shiftLetter(ch, shift, 97);
+    else if (ch >= "A" && ch <= "Z") result += shiftLetter(ch, shift, 65);
+    else result += ch;
+  }
+  return result;
+}
+::tests
+assert.strictEqual(caesar("abc", 1), "bcd");
+assert.strictEqual(caesar("xyz", 3), "abc");
+assert.strictEqual(caesar("Hello, World!", 3), "Khoor, Zruog!");
+assert.strictEqual(caesar("Khoor, Zruog!", -3), "Hello, World!");
+assert.strictEqual(caesar("abc", 26), "abc");
+assert.strictEqual(caesar("Attack at 10pm", 13), "Nggnpx ng 10cz");
+assert.strictEqual(caesar("", 5), "");
+assert.strictEqual(caesar("a", -1), "z");
+::hints
+- Loop over the characters; letters are shifted, everything else is copied as it is.
+- A helper function `shiftLetter(ch, shift, base)` avoids writing the maths twice (base 97 for lowercase, 65 for uppercase).
+- Position in the alphabet: `ch.charCodeAt(0) - base`. Add the shift, wrap it, and add `base` back.
+--- exercise code javascript
+::prompt
+Write `memoize(fn)` that returns a version of the one-argument function `fn` that **remembers** results: the first call with a given argument calls `fn`; later calls with the **same** argument return the remembered result without calling `fn` again. Store results in an object used as a lookup table: `const cache = {};`, then `cache[arg]` reads or writes the result for `arg`, and `arg in cache` tells you whether it's there. (Objects get a full module next; this is all you need.)
+::starter
+function memoize(fn) {
+}
+::solution
+function memoize(fn) {
+  const cache = {};
+  return (arg) => {
+    if (!(arg in cache)) {
+      cache[arg] = fn(arg);
+    }
+    return cache[arg];
+  };
+}
+::tests
+let __calls = 0;
+const __square = memoize((n) => { __calls++; return n * n; });
+assert.strictEqual(__square(4), 16);
+assert.strictEqual(__square(4), 16);
+assert.strictEqual(__square(5), 25);
+assert.strictEqual(__calls, 2);
+const __zero = memoize(() => { __calls++; return 0; });
+__zero(1);
+__zero(1);
+assert.strictEqual(__calls, 3);
+const __a = memoize((n) => n + 1);
+const __b = memoize((n) => n + 2);
+assert.strictEqual(__a(1), 2);
+assert.strictEqual(__b(1), 3);
+::hints
+- The cache object lives in `memoize`'s scope, so each memoized function has its own.
+- Check `arg in cache` rather than `cache[arg]`: a remembered result might be 0 or `undefined`.
+--- exercise code javascript
+::prompt
+Write a **recursive** `digitalRoot(n)`: repeatedly add up the digits of a non-negative whole number until only one digit is left. `digitalRoot(9875)`: 9 + 8 + 7 + 5 = 29, then 2 + 9 = 11, then 1 + 1 = 2. Write a helper `sumDigits(n)` (from the recursion lesson) and use it.
+::starter
+function digitalRoot(n) {
+}
+::solution
+function sumDigits(n) {
+  if (n < 10) return n;
+  return (n % 10) + sumDigits(Math.floor(n / 10));
+}
+
+function digitalRoot(n) {
+  if (n < 10) return n;
+  return digitalRoot(sumDigits(n));
+}
+::tests
+assert.strictEqual(digitalRoot(9875), 2);
+assert.strictEqual(digitalRoot(0), 0);
+assert.strictEqual(digitalRoot(5), 5);
+assert.strictEqual(digitalRoot(10), 1);
+assert.strictEqual(digitalRoot(999999999), 9);
+assert.strictEqual(digitalRoot(123456789), 9);
+::hints
+- Base case: a number below 10 is already its own digital root.
+- Otherwise, the digital root of n is the digital root of its digit sum.
