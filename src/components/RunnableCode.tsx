@@ -90,12 +90,25 @@ export function RunnableCode({ lang, code, earlier }: { lang: CodeLang; code: st
         </div>
       )}
       {result && <ResultView result={result} lang={lang} code={src} />}
+      {sandboxLimit(result?.error ?? trace?.error ?? '') && (
+        <div className="runnable-hint small muted">💻 {sandboxLimit(result?.error ?? trace?.error ?? '')}</div>
+      )}
       {result?.ok && !result.output && python && (
         <div className="runnable-hint small muted">This example doesn't print anything. Press 👣 Step through to watch its variables change line by line.</div>
       )}
       {trace && <TraceViewer code={src} trace={trace} onClose={() => setTrace(null)} />}
     </div>
   );
+}
+
+/** Explains errors that come from the in-app sandbox rather than from the example itself. */
+function sandboxLimit(error: string): string | null {
+  const missing = error.match(/ModuleNotFoundError: No module named '([\w.]+)'/)?.[1];
+  if (missing && !/^(shop|helpers|pricing|geometry|textutils|report)\b/.test(missing))
+    return `This example uses ${missing}, a package that isn't installed in DevQuest's sandbox. On your own computer, run pip install ${missing.split('.')[0]} in your virtual environment and it works.`;
+  if (/can't start new thread|RuntimeError: can't create new thread/.test(error))
+    return "Python inside DevQuest runs in your browser, which can't start threads. Run this example on your own computer.";
+  return null;
 }
 
 /** A "pause and predict" check inside lesson text: no XP, just instant feedback. */

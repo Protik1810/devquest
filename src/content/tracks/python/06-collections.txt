@@ -1344,6 +1344,318 @@ Counting pattern :: counts[x] = counts.get(x, 0) + 1
 Grouping pattern :: groups.setdefault(key, []).append(item) builds a dict of lists.
 Hashable keys :: Dict keys and set items must be immutable: str, int, tuple yes; list no.
 
+=== lesson py-unpacking-patterns | Unpacking, the walrus and pattern matching | 95
+Modern Python has compact syntax for taking data apart and putting it together. You'll see these features in almost every recent codebase.
+
+## Extended unpacking
+
+You've unpacked fixed-size sequences: `x, y = point`. A **starred** name collects "the rest" into a list:
+
+```python
+first, *rest = [10, 20, 30, 40]        # first = 10, rest = [20, 30, 40]
+first, *middle, last = "abcde"         # 'a', ['b', 'c', 'd'], 'e'
+name, *scores = ["Ada", 91, 88, 97]
+for city, *temps in [("Oslo", 3, 5), ("Rome", 18, 21, 19)]:
+    print(city, max(temps))
+```
+
+By convention, `_` names a value you're ignoring: `_, domain = email.split("@")`.
+
+## Unpacking into new collections
+
+Stars also spread items **into** literals, and two stars spread a dictionary:
+
+```python
+a = [1, 2]
+b = [3, 4]
+both = [*a, *b, 5]                       # [1, 2, 3, 4, 5]
+unique = {*a, *b}                         # a set
+defaults = {"theme": "light", "size": 14}
+custom = {"size": 18}
+settings = {**defaults, **custom}         # {'theme': 'light', 'size': 18}: later keys win
+settings = defaults | custom              # the same, with the dict merge operator (Python 3.9+)
+```
+
+`d1 | d2` makes a **new** dictionary; `d1 |= d2` updates `d1` in place.
+
+## Slice assignment
+
+Assigning to a slice replaces that part of a list in place, even with a different number of items:
+
+```python
+items = ["a", "b", "c", "d"]
+items[1:3] = ["X"]          # ['a', 'X', 'd']
+items[:0] = ["start"]       # insert at the front
+del items[::2]              # delete every second item
+items[:] = []               # empty the SAME list (other names see the change)
+```
+
+## zip(strict=True)
+
+`zip` silently stops at the shortest input, which can hide bugs. With `strict=True` it raises `ValueError` if the lengths differ:
+
+```python
+names = ["Ada", "Alan"]
+ages = [36]
+list(zip(names, ages, strict=True))     # ValueError: zip() argument 2 is shorter than argument 1
+```
+
+## The walrus operator :=
+
+`:=` assigns **and** returns a value inside an expression (it's called the walrus because `:=` looks like one on its side). It removes a common duplication:
+
+```python
+while (line := input("> ")) != "quit":
+    print("You said", line)
+
+if (n := len(items)) > 10:
+    print(f"Too many items: {n}")
+
+valid = [y for x in raw if (y := x.strip())]   # keep non-empty, stripped values
+```
+
+Use it where it makes code clearer, not everywhere.
+
+## Pattern matching in depth
+
+Module 3 used `match` to compare a value with literals. Its real power is **structural**: patterns can take data apart while matching it.
+
+**Sequence patterns** match lists and tuples by shape:
+
+```python
+match command.split():
+    case ["go", direction]:
+        print("Going", direction)
+    case ["take", *things]:
+        print("Taking", ", ".join(things))
+    case ["quit" | "exit"]:
+        print("Bye")
+    case []:
+        print("Say something")
+    case _:
+        print("I don't understand")
+```
+
+**Mapping patterns** match dictionaries by their keys (extra keys are allowed), which is ideal for JSON:
+
+```python
+match event:
+    case {"type": "click", "x": x, "y": y}:
+        print(f"click at {x},{y}")
+    case {"type": "key", "key": k} if len(k) == 1:      # a guard: an extra condition
+        print("typed", k)
+```
+
+**Class patterns** match objects and their attributes: `case Point(x=0, y=0):` matches the origin; `case Point(x=0, y=y):` any point on the y-axis, capturing `y`.
+
+~~~check
+? What does `case ["go", direction]:` match?
+- Only the exact list `["go", "direction"]`
++ Any two-item sequence whose first item is `"go"`, capturing the second as `direction`
+- Any list starting with `"go"`
+- A string that contains "go"
+> A plain name in a pattern is a **capture**: it matches anything and binds it.
+~~~
+
+That capture rule hides a classic trap: `case limit:` doesn't compare with a variable called `limit`; it matches **everything** and rebinds `limit`. To compare with a constant, use a literal, an enum member (`case Color.RED:`) or a guard (`case x if x == limit:`).
+
+📚 **Go deeper:** PEP 636 "Structural Pattern Matching: Tutorial"; PEP 572 (assignment expressions); PEP 3132 (extended iterable unpacking) and PEP 584 (dict union); Python Tutorial, section 4.7.
+--- goals
+- unpack with `*` and `_`, and spread items into new lists, sets and dictionaries
+- merge dictionaries with `{**a, **b}` and `a | b`
+- edit lists in place with slice assignment, and pair data safely with `zip(strict=True)`
+- use the walrus operator where it removes duplication
+- take data apart with sequence, mapping and class patterns in `match`
+--- quiz
+? What is `rest` after `first, *rest = "hey"`?
+- `"ey"`
++ `['e', 'y']`
+- `('e', 'y')`
+- `'y'`
+> A starred target always collects into a list.
+? What is `{"a": 1, "b": 2} | {"b": 3}`?
++ `{'a': 1, 'b': 3}`
+- `{'a': 1, 'b': 2}`
+- `{'a': 1, 'b': 2, 'b': 3}`
+- A `TypeError`
+> The right-hand dictionary wins for shared keys.
+? What is `items` after this?
+```python
+items = [1, 2, 3, 4, 5]
+items[1:4] = [0]
+```
+- `[1, 0, 5]`
+- `[0, 2, 3, 4, 5]`
++ `[1, 0, 5]`, the same list object, changed in place
+- An error: sizes differ
+> The slice (2, 3, 4) is replaced by one item, in place.
+? What does the walrus operator do in `if (n := len(data)) > 3:`?
++ It assigns `len(data)` to `n` and uses that value in the comparison
+- It compares `n` with `len(data)`
+- It's a syntax error outside loops
+- It creates a constant
+> Assignment and use in one expression.
+? `limit = 10` and then `match x:` with `case limit:`. What happens?
+- It matches only when `x == 10`
++ It matches any value and rebinds `limit` to it
+- A `SyntaxError`
+- It never matches
+> A bare name is a capture pattern. Compare with a guard: `case n if n == limit:`.
+--- exercise code python
+::prompt
+Write three small functions with unpacking and dictionary merging:
+
+- `split_name(full)` returns `(first, last)`, ignoring any middle names: `"Ada Augusta King"` gives `("Ada", "King")`;
+- `merge_settings(defaults, overrides)` returns a **new** dictionary where `overrides` win, leaving both inputs unchanged;
+- `rotate_left(items)` returns a new list with the first item moved to the end, using unpacking (`[1, 2, 3]` gives `[2, 3, 1]`; empty stays empty).
+::starter
+def split_name(full):
+    pass
+
+
+def merge_settings(defaults, overrides):
+    pass
+
+
+def rotate_left(items):
+    pass
+::solution
+def split_name(full):
+    first, *_, last = full.split()
+    return first, last
+
+
+def merge_settings(defaults, overrides):
+    return defaults | overrides
+
+
+def rotate_left(items):
+    if not items:
+        return []
+    first, *rest = items
+    return [*rest, first]
+::tests
+assert split_name("Ada Augusta King") == ("Ada", "King")
+assert split_name("Grace Hopper") == ("Grace", "Hopper")
+d = {"theme": "light", "size": 14}
+o = {"size": 18, "font": "mono"}
+assert merge_settings(d, o) == {"theme": "light", "size": 18, "font": "mono"}
+assert d == {"theme": "light", "size": 14} and o == {"size": 18, "font": "mono"}, "don't change the inputs"
+assert rotate_left([1, 2, 3]) == [2, 3, 1]
+assert rotate_left(["x"]) == ["x"]
+assert rotate_left([]) == []
+::hints
+- `first, *_, last = full.split()` ignores everything in the middle.
+- `a | b` (or `{**a, **b}`) builds a new merged dictionary.
+- `first, *rest = items`, then build `[*rest, first]`.
+--- exercise code python
+::prompt
+Write a text-adventure command parser, `respond(command)`, using `match` with **sequence patterns** on `command.lower().split()`:
+
+| Command | Response |
+|---|---|
+| `go <direction>` | `You go north.` |
+| `take <one or more items>` | `You take lamp, key.` |
+| `look` | `You look around.` |
+| `quit` or `exit` | `Bye!` |
+| nothing typed | `Say something.` |
+| anything else | `I don't understand: <the original command>` |
+::starter
+def respond(command):
+    pass
+::solution
+def respond(command):
+    match command.lower().split():
+        case ["go", direction]:
+            return f"You go {direction}."
+        case ["take", *items] if items:
+            return f"You take {', '.join(items)}."
+        case ["look"]:
+            return "You look around."
+        case ["quit" | "exit"]:
+            return "Bye!"
+        case []:
+            return "Say something."
+        case _:
+            return f"I don't understand: {command}"
+::tests
+assert respond("go north") == "You go north."
+assert respond("Take lamp key") == "You take lamp, key."
+assert respond("take") == "I don't understand: take"
+assert respond("look") == "You look around."
+assert respond("EXIT") == "Bye!"
+assert respond("   ") == "Say something."
+assert respond("go") == "I don't understand: go"
+assert respond("dance wildly") == "I don't understand: dance wildly"
+::hints
+- `case ["go", direction]:` matches exactly two words starting with "go".
+- `case ["take", *items] if items:` needs at least one item.
+- `case []:` matches an empty list of words.
+--- exercise code python
+::prompt
+Events arrive as dictionaries (as from a JSON API). Write `describe(event)` with **mapping patterns**:
+
+- `{"type": "click", "x": .., "y": ..}` → `click at 10,20`
+- `{"type": "key", "key": k}` where `k` is a single character → `key a`
+- any other `{"type": "key", "key": k}` → `special key Enter`
+- any other dictionary with a `"type"` → `unknown event scroll`
+- anything else → `not an event`
+::starter
+def describe(event):
+    pass
+::solution
+def describe(event):
+    match event:
+        case {"type": "click", "x": x, "y": y}:
+            return f"click at {x},{y}"
+        case {"type": "key", "key": k} if len(k) == 1:
+            return f"key {k}"
+        case {"type": "key", "key": k}:
+            return f"special key {k}"
+        case {"type": t}:
+            return f"unknown event {t}"
+        case _:
+            return "not an event"
+::tests
+assert describe({"type": "click", "x": 10, "y": 20, "button": "left"}) == "click at 10,20"
+assert describe({"type": "key", "key": "a"}) == "key a"
+assert describe({"type": "key", "key": "Enter"}) == "special key Enter"
+assert describe({"type": "scroll", "dy": 3}) == "unknown event scroll"
+assert describe({"x": 1}) == "not an event"
+assert describe("click") == "not an event"
+::hints
+- Mapping patterns match the keys you list and ignore extra keys.
+- Order matters: put the guarded single-character case before the general key case.
+--- exercise fill python
+::prompt
+Use the walrus operator to read commands until the user types `quit`, without writing `input` twice.
+::template
+count = 0
+while (line ____ input("> ")) != "quit":
+    count += 1
+    print("got", line)
+print(count, "commands")
+::answers
+:=
+::stdin
+north
+look
+quit
+::expected
+> north
+got north
+> look
+got look
+> quit
+2 commands
+::hints
+- The operator that assigns inside an expression looks like a walrus: two characters.
+--- cards
+Starred unpacking :: first, *rest = items puts the remaining items in a list; *middle can sit anywhere.
+Dict merge :: {**a, **b} or a | b make a new dict; later keys win. a |= b updates a in place.
+Walrus := :: Assigns and returns a value inside an expression: while (line := input()) != "quit".
+Capture patterns :: In match, a bare name matches anything and binds it. Compare with constants via literals, dotted names or guards.
+Mapping patterns :: case {"type": "click", "x": x}: matches dicts with those keys (extra keys allowed) and captures values.
 === lesson py-collections-module | The collections module | 90
 Python's standard library includes the `collections` module: specialised containers that make common jobs shorter and faster. Import what you need:
 

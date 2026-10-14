@@ -106,6 +106,19 @@ shop/
 
 You import with dots: `from shop.cart import Cart`, `import shop.payments.card`. `__init__.py` runs when the package is first imported and can expose the package's main names.
 
+## Public names, private names and __all__
+
+A module's names are all importable, but conventions say what's public:
+
+- Names starting with an underscore (`_helper`) are **internal** to the module. `from module import *` skips them, and readers know not to rely on them.
+- A module can list its public names explicitly: `__all__ = ["parse", "Report"]`. Then `from module import *` imports exactly those, and tools and documentation treat them as the module's API.
+
+Inside a package, modules can import each other with **relative imports**: `from .cart import Cart` (same package) or `from ..utils import slugify` (the parent package). Relative imports only work inside packages, not in a script run directly.
+
+Python also caches the compiled form of imported modules in `__pycache__` folders (`.pyc` files), so the next import starts faster. You can safely delete them, and they belong in `.gitignore`.
+
+The `platform` module describes the machine a program runs on: `platform.system()` (for example `'Windows'`, `'Linux'`, `'Darwin'` for macOS), `platform.python_version()`, `platform.machine()`.
+
 ## Where does Python find modules?
 
 `import x` searches the folders listed in `sys.path`: the folder of the script you're running first, then the standard library, then **site-packages**, where installed third-party packages live. One consequence catches many beginners: **don't name your own file after a module you use**. A file called `random.py` in your folder hides the real `random` module, and `random.randint` suddenly "doesn't exist".
@@ -820,6 +833,822 @@ JSON ↔ Python types :: object↔dict, array↔list, string↔str, number↔int
 csv.DictReader / DictWriter :: Read rows as dicts keyed by the header; write dicts with writeheader()/writerows(). Open files with newline="".
 io.StringIO :: An in-memory text file; anything that reads/writes files accepts it.
 
+=== lesson py-binary-formats | Bytes, binary files and other data formats | 100
+Not all data is text. Images, audio, zip files and network packets are **binary**: raw bytes with no characters. This lesson covers working with bytes, and three more data formats you'll meet: pickle, INI configuration files and XML.
+
+## bytes and bytearray
+
+A `bytes` object is an immutable sequence of numbers from 0 to 255:
+
+```python
+data = b"Hi!"                 # a bytes literal: ASCII characters only
+data[0]                       # 72: indexing gives an int, not a character
+list(data)                    # [72, 105, 33]
+data.hex()                    # '486921'
+bytes.fromhex("48 69")        # b'Hi'
+"héllo".encode("utf-8")       # b'h\xc3\xa9llo'  (text → bytes)
+b'h\xc3\xa9llo'.decode()      # 'héllo'          (bytes → text)
+```
+
+`bytearray` is the **mutable** version, useful as a buffer you fill in place: `buf = bytearray(4)` then `buf[0] = 255`.
+
+## Binary files
+
+Open files in binary mode with `"rb"` / `"wb"`; you read and write `bytes`, with no encoding involved. Large files are read in **chunks**:
+
+```python
+import hashlib
+
+def sha256_of(path):
+    digest = hashlib.sha256()
+    with open(path, "rb") as f:
+        while chunk := f.read(65536):       # 64 KB at a time
+            digest.update(chunk)
+    return digest.hexdigest()
+```
+
+That's how download sites let you check a file's integrity.
+
+## Recognising files by their first bytes
+
+Most file formats begin with a fixed **signature** (a "magic number"): PNG images start with `b"\x89PNG"`, PDFs with `b"%PDF"`, ZIP files (and .docx, .xlsx, .jar) with `b"PK\x03\x04"`, JPEGs with `b"\xff\xd8\xff"`. Checking the signature is more reliable than trusting a file's name.
+
+## Packing binary records with struct
+
+`struct` converts between Python numbers and fixed-size binary layouts, as used by file formats and network protocols:
+
+```python
+import struct
+record = struct.pack("<Hh", 7, -125)       # little-endian: unsigned short, signed short
+record                                     # b'\x07\x00\x83\xff'  (4 bytes)
+struct.unpack("<Hh", record)               # (7, -125)
+struct.calcsize("<Hh")                     # 4
+```
+
+Format letters: `b`/`B` 1-byte signed/unsigned, `h`/`H` 2-byte, `i`/`I` 4-byte, `q`/`Q` 8-byte, `f`/`d` floats; `<` means little-endian (most PCs), `>` big-endian (network order).
+
+## base64: bytes as safe text
+
+To put binary data where only text fits (JSON, emails, URLs), encode it as **base64**: `base64.b64encode(b"\x00\xff")` gives `b'AP8='`; `b64decode` reverses it. It's an encoding, **not** encryption: anyone can decode it.
+
+## pickle: Python objects as bytes, with a warning
+
+`pickle` can save almost any Python object, including your own classes:
+
+```python
+import pickle
+blob = pickle.dumps({"scores": [1, 2, 3]})
+pickle.loads(blob)                          # {'scores': [1, 2, 3]}
+```
+
+⚠️ **Never unpickle data you don't trust.** A crafted pickle can run any code when loaded. Use pickle only for your own program's private caches; use JSON to exchange data.
+
+## INI configuration files: configparser
+
+Many tools keep settings in INI files:
+
+```
+[server]
+host = example.com
+port = 8080
+debug = yes
+```
+
+```python
+import configparser
+config = configparser.ConfigParser()
+config.read_string(text)                    # or config.read("settings.ini")
+config["server"]["host"]                    # 'example.com'
+config.getint("server", "port")             # 8080
+config.getboolean("server", "debug")        # True ("yes", "on", "1", "true" all count)
+config.get("server", "timeout", fallback="30")
+```
+
+## XML: ElementTree
+
+XML is a tree of nested **elements** with tags, attributes and text, still common in older APIs, office documents and RSS feeds:
+
+```python
+import xml.etree.ElementTree as ET
+
+xml = '<library><book year="1949"><title>1984</title><author>Orwell</author></book></library>'
+root = ET.fromstring(xml)
+for book in root.findall("book"):
+    print(book.find("title").text, book.get("year"))     # 1984 1949
+```
+
+For XML from untrusted sources, use the `defusedxml` package, which blocks some nasty attacks.
+
+~~~check
+? What is `b"AB"[1]`?
+- `b'B'`
+- `'B'`
++ `66`
+- An error
+> Indexing a bytes object gives an int (the byte's value). Slicing, `b"AB"[1:]`, gives bytes.
+~~~
+
+📚 **Go deeper:** Python Library Reference: "Binary Sequence Types", `struct`, `base64`, `pickle` (read its security warning), `configparser`, `xml.etree.ElementTree`; Wikipedia, "List of file signatures".
+--- goals
+- convert between text and bytes, and read bytes as numbers and hex
+- read and write binary files in chunks
+- pack and unpack binary records with `struct`, and encode bytes as base64
+- read INI files with `configparser` and XML with ElementTree
+- explain why untrusted pickles are dangerous
+--- quiz
+? What does `"é".encode("utf-8")` produce?
++ `b'\xc3\xa9'`, two bytes
+- `b'é'`
+- `233`
+- `'\xe9'`
+> UTF-8 uses two bytes for é. Decoding them gives the text back.
+? Why should you never `pickle.loads` data from an untrusted source?
+- It's slow
++ Loading a crafted pickle can run arbitrary code
+- It only works on Windows
+- It loses data
+> Exchange data as JSON instead.
+? `config.getboolean("app", "debug")` reads `debug = on`. What does it return?
++ `True`
+- `"on"`
+- `False`
+- An error
+> configparser accepts yes/no, on/off, true/false and 1/0.
+? What does base64 provide?
+- Encryption
+- Compression
++ A way to represent bytes as plain ASCII text
+- Error correction
+> Anyone can decode base64; it isn't secret.
+--- exercise code python
+::prompt
+Write `file_kind(data)` that recognises a file from its first bytes: return `"png"` for `b"\x89PNG"`, `"pdf"` for `b"%PDF"`, `"zip"` for `b"PK\x03\x04"`, `"jpeg"` for `b"\xff\xd8\xff"`, and `"unknown"` otherwise. Also write `checksum(data)` returning the SHA-256 hex digest of the bytes.
+::starter
+import hashlib
+
+SIGNATURES = {}
+
+
+def file_kind(data):
+    pass
+
+
+def checksum(data):
+    pass
+::solution
+import hashlib
+
+SIGNATURES = {
+    b"\x89PNG": "png",
+    b"%PDF": "pdf",
+    b"PK\x03\x04": "zip",
+    b"\xff\xd8\xff": "jpeg",
+}
+
+
+def file_kind(data):
+    for magic, kind in SIGNATURES.items():
+        if data.startswith(magic):
+            return kind
+    return "unknown"
+
+
+def checksum(data):
+    return hashlib.sha256(data).hexdigest()
+::tests
+assert file_kind(b"\x89PNG\r\n\x1a\n...") == "png"
+assert file_kind(b"%PDF-1.7 ...") == "pdf"
+assert file_kind(b"PK\x03\x04rest of zip") == "zip"
+assert file_kind(b"\xff\xd8\xff\xe0JFIF") == "jpeg"
+assert file_kind(b"hello") == "unknown" and file_kind(b"") == "unknown"
+assert checksum(b"abc") == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+::hints
+- `bytes` have `startswith`, just like strings.
+- `hashlib.sha256(data).hexdigest()` computes the digest.
+--- exercise code python
+::prompt
+A sensor logs readings as 4-byte records: an **unsigned 2-byte sensor id** and a **signed 2-byte temperature in tenths of a degree**, little-endian (`"<Hh"`). Write:
+
+- `pack_reading(sensor_id, temp)` that rounds `temp` (a float like `21.5`) to tenths and returns the 4 bytes;
+- `unpack_readings(data)` that returns a list of `(sensor_id, temp)` tuples, with `temp` back as a float in degrees.
+::starter
+import struct
+
+FORMAT = "<Hh"
+::solution
+import struct
+
+FORMAT = "<Hh"
+
+
+def pack_reading(sensor_id, temp):
+    return struct.pack(FORMAT, sensor_id, round(temp * 10))
+
+
+def unpack_readings(data):
+    size = struct.calcsize(FORMAT)
+    readings = []
+    for start in range(0, len(data), size):
+        sensor_id, tenths = struct.unpack(FORMAT, data[start:start + size])
+        readings.append((sensor_id, tenths / 10))
+    return readings
+::tests
+r = pack_reading(7, 21.5)
+assert r == b"\x07\x00\xd7\x00" and len(r) == 4
+log = pack_reading(1, -3.2) + pack_reading(2, 0) + pack_reading(65535, 40.04)
+assert unpack_readings(log) == [(1, -3.2), (2, 0.0), (65535, 40.0)]
+assert unpack_readings(b"") == []
+::hints
+- Store tenths as an int: `round(temp * 10)`.
+- `struct.calcsize(FORMAT)` is the record size (4); unpack each slice of that size.
+- Divide by 10 to turn tenths back into degrees.
+--- exercise code python
+::prompt
+Write `load_settings(text)` that reads INI text with `configparser` and returns a dict with the `[server]` section's `host` (default `"localhost"`), `port` as an int (default `8000`) and `debug` as a bool (default `False`). A missing `[server]` section means all defaults.
+::starter
+import configparser
+
+
+def load_settings(text):
+    pass
+::solution
+import configparser
+
+
+def load_settings(text):
+    config = configparser.ConfigParser()
+    config.read_string(text)
+    return {
+        "host": config.get("server", "host", fallback="localhost"),
+        "port": config.getint("server", "port", fallback=8000),
+        "debug": config.getboolean("server", "debug", fallback=False),
+    }
+::tests
+ini = "[server]\nhost = example.com\nport = 8080\ndebug = yes\n"
+assert load_settings(ini) == {"host": "example.com", "port": 8080, "debug": True}
+assert load_settings("[server]\nport = 9000\n") == {"host": "localhost", "port": 9000, "debug": False}
+assert load_settings("") == {"host": "localhost", "port": 8000, "debug": False}
+assert load_settings("[other]\nx = 1\n")["port"] == 8000
+::hints
+- `config.read_string(text)` parses the text.
+- `get`, `getint` and `getboolean` all accept `fallback=` for missing values (and missing sections).
+--- exercise code python
+::prompt
+Write `titles_by(xml_text, author)` returning the titles of that author's books (in document order) from XML like the example, and `books_per_decade(xml_text)` returning a dict decade → number of books (1949 → 1940), using `xml.etree.ElementTree`.
+```xml
+<library>
+  <book year="1949"><title>1984</title><author>George Orwell</author></book>
+  <book year="1945"><title>Animal Farm</title><author>George Orwell</author></book>
+  <book year="1932"><title>Brave New World</title><author>Aldous Huxley</author></book>
+</library>
+```
+::starter
+import xml.etree.ElementTree as ET
+
+
+def titles_by(xml_text, author):
+    pass
+
+
+def books_per_decade(xml_text):
+    pass
+::solution
+import xml.etree.ElementTree as ET
+
+
+def titles_by(xml_text, author):
+    root = ET.fromstring(xml_text)
+    return [b.find("title").text for b in root.findall("book") if b.find("author").text == author]
+
+
+def books_per_decade(xml_text):
+    counts = {}
+    for b in ET.fromstring(xml_text).findall("book"):
+        decade = int(b.get("year")) // 10 * 10
+        counts[decade] = counts.get(decade, 0) + 1
+    return counts
+::tests
+lib = """<library>
+  <book year="1949"><title>1984</title><author>George Orwell</author></book>
+  <book year="1945"><title>Animal Farm</title><author>George Orwell</author></book>
+  <book year="1932"><title>Brave New World</title><author>Aldous Huxley</author></book>
+</library>"""
+assert titles_by(lib, "George Orwell") == ["1984", "Animal Farm"]
+assert titles_by(lib, "Nobody") == []
+assert books_per_decade(lib) == {1940: 2, 1930: 1}
+::hints
+- `ET.fromstring(xml_text)` gives the root element; `root.findall("book")` its book children.
+- `book.find("title").text` is a child's text; `book.get("year")` an attribute.
+--- cards
+bytes vs str :: bytes are numbers 0-255 (b"..."); str is text. encode() turns text into bytes, decode() back.
+Binary mode :: open(path, "rb"/"wb") reads/writes bytes with no encoding; read big files in chunks.
+struct :: pack/unpack numbers to fixed binary layouts: struct.pack("<Hh", 7, -1). < little-endian, > big-endian.
+pickle warning :: Unpickling untrusted data can run arbitrary code. Use JSON for exchanging data.
+configparser :: Reads INI files: config.get/getint/getboolean(section, key, fallback=...).
+
+=== lesson py-sqlite | Databases with sqlite3 | 105
+When data grows beyond a few files, or many parts of a program need to search and update it safely, you want a **database**. Python includes **SQLite**, a complete SQL database stored in a single file (or in memory), used in phones, browsers and countless apps. This lesson connects Python to it. (The **SQL** track teaches the SQL language itself in depth.)
+
+## Connecting and creating tables
+
+```python
+import sqlite3
+
+conn = sqlite3.connect("shop.db")     # a file, created if needed; ":memory:" for a temporary database
+conn.execute("""
+    CREATE TABLE IF NOT EXISTS products (
+        id INTEGER PRIMARY KEY,
+        name TEXT NOT NULL,
+        price_cents INTEGER NOT NULL
+    )
+""")
+```
+
+`conn.execute(sql)` runs one statement. `INTEGER PRIMARY KEY` gives each row a unique id automatically.
+
+## Inserting: always use placeholders
+
+```python
+conn.execute("INSERT INTO products (name, price_cents) VALUES (?, ?)", ("Mug", 899))
+conn.executemany("INSERT INTO products (name, price_cents) VALUES (?, ?)", [("Pen", 150), ("Pad", 300)])
+conn.commit()                          # make the changes permanent
+```
+
+The `?` **placeholders** are filled in safely by sqlite3 from the tuple. Never build SQL with f-strings or `+`:
+
+```python
+name = "x' OR '1'='1"
+conn.execute(f"SELECT * FROM users WHERE name = '{name}'")   # ☠️ SQL injection: matches every user
+conn.execute("SELECT * FROM users WHERE name = ?", (name,))   # ✅ treated as plain text
+```
+
+**SQL injection** (inserting SQL through data) is one of the most common and damaging security bugs in history. Placeholders make it impossible.
+
+## Querying
+
+```python
+cur = conn.execute("SELECT name, price_cents FROM products WHERE price_cents < ? ORDER BY name", (500,))
+cur.fetchall()           # [('Pad', 300), ('Pen', 150)]
+conn.execute("SELECT COUNT(*) FROM products").fetchone()      # (3,)
+for name, price in conn.execute("SELECT name, price_cents FROM products"):
+    print(name, price)
+```
+
+Rows come back as tuples. Set `conn.row_factory = sqlite3.Row` to read columns by name: `row["name"]`.
+
+## Transactions: all or nothing
+
+A **transaction** groups changes so they all happen or none do. Using the connection as a context manager commits if the block succeeds and **rolls back** if it raises:
+
+```python
+with conn:
+    conn.execute("UPDATE accounts SET balance = balance - ? WHERE id = ?", (50, 1))
+    conn.execute("UPDATE accounts SET balance = balance + ? WHERE id = ?", (50, 2))
+# both updates, or (on an error) neither
+```
+
+Note that `with conn:` doesn't close the connection; call `conn.close()` when you're done (or use `contextlib.closing`).
+
+## Beyond sqlite3
+
+Bigger applications often use **PostgreSQL** or **MySQL** servers (the PostgreSQL and MySQL tracks cover them) with the same ideas: connect, parameterised queries, transactions. Many projects use an **ORM** such as SQLAlchemy or Django's ORM, which maps tables to Python classes, plus **migrations** to evolve the schema over time. Learn plain SQL first: ORMs are much easier once you know what they generate.
+
+~~~check
+? Which line is safe from SQL injection?
+- `conn.execute(f"DELETE FROM notes WHERE id = {note_id}")`
+- `conn.execute("DELETE FROM notes WHERE id = " + note_id)`
++ `conn.execute("DELETE FROM notes WHERE id = ?", (note_id,))`
+- `conn.execute("DELETE FROM notes WHERE id = '%s'" % note_id)`
+> Only placeholders keep data separate from the SQL. Note the one-item tuple `(note_id,)`.
+~~~
+
+📚 **Go deeper:** Python Library Reference, `sqlite3` (including "How to use placeholders to bind values in SQL queries"); sqlite.org, "SQL As Understood By SQLite"; OWASP, "SQL Injection Prevention Cheat Sheet".
+--- goals
+- create SQLite databases and tables from Python
+- insert and query data with `?` placeholders, and explain SQL injection
+- read results as tuples or named rows
+- group changes into transactions with `with conn:`
+--- quiz
+? What does `conn.execute("SELECT COUNT(*) FROM t").fetchone()` return for 3 rows?
+- `3`
++ `(3,)`
+- `[3]`
+- `[(3,)]`
+> `fetchone` returns one row as a tuple.
+? What happens to the changes in `with conn:` if a statement inside raises an exception?
+- They're kept
++ They're rolled back
+- Half are kept
+- The database is deleted
+> The connection's context manager commits on success and rolls back on errors.
+? What's the correct parameters argument for one placeholder?
+- `(name)`
++ `(name,)`
+- `name`
+- `[name, ]` is the only option
+> `(name)` is just `name` in parentheses; a one-item tuple needs the comma (a list `[name]` also works).
+? What is SQL injection?
++ Smuggling SQL into a query through data, because the query was built by joining strings
+- A way to speed up queries
+- Adding indexes automatically
+- A database backup method
+> Placeholders prevent it.
+--- exercise code python
+::prompt
+Build a small contacts database:
+
+- `create_db()` returns an in-memory connection with a table `contacts(id INTEGER PRIMARY KEY, name TEXT NOT NULL, email TEXT UNIQUE)`;
+- `add_contact(conn, name, email)` inserts a row (with placeholders), commits, and returns the new row's id (`cursor.lastrowid`);
+- `search(conn, text)` returns `(name, email)` tuples whose name contains `text`, case-insensitively, sorted by name (use `LIKE ?` with `%` around the text).
+::starter
+import sqlite3
+
+
+def create_db():
+    pass
+
+
+def add_contact(conn, name, email):
+    pass
+
+
+def search(conn, text):
+    pass
+::solution
+import sqlite3
+
+
+def create_db():
+    conn = sqlite3.connect(":memory:")
+    conn.execute("CREATE TABLE contacts (id INTEGER PRIMARY KEY, name TEXT NOT NULL, email TEXT UNIQUE)")
+    return conn
+
+
+def add_contact(conn, name, email):
+    cur = conn.execute("INSERT INTO contacts (name, email) VALUES (?, ?)", (name, email))
+    conn.commit()
+    return cur.lastrowid
+
+
+def search(conn, text):
+    return conn.execute("SELECT name, email FROM contacts WHERE name LIKE ? ORDER BY name", (f"%{text}%",)).fetchall()
+::tests
+import sqlite3 as _s
+db = create_db()
+a = add_contact(db, "Grace Hopper", "grace@navy.mil")
+b = add_contact(db, "Ada Lovelace", "ada@x.io")
+add_contact(db, "Alan Turing", "alan@x.io")
+assert (a, b) == (1, 2)
+assert search(db, "a") == [("Ada Lovelace", "ada@x.io"), ("Alan Turing", "alan@x.io"), ("Grace Hopper", "grace@navy.mil")]
+assert search(db, "LOVE") == [("Ada Lovelace", "ada@x.io")]
+assert search(db, "x' OR '1'='1") == [], "use placeholders, not string building"
+try:
+    add_contact(db, "Ada Again", "ada@x.io")
+except _s.IntegrityError:
+    pass
+else:
+    raise AssertionError("emails must be UNIQUE")
+::hints
+- `sqlite3.connect(":memory:")`, then `execute` the `CREATE TABLE`.
+- `conn.execute(...)` returns a cursor; its `lastrowid` is the new id.
+- Build the LIKE pattern in Python: `(f"%{text}%",)`. SQLite's LIKE ignores case for ASCII letters.
+--- exercise code python
+::prompt
+This login check builds SQL with an f-string, so `login(conn, "admin' --", "anything")` gets in without a password. Fix it with **placeholders**. It should return `True` only when a user with that name **and** password exists. (Real systems also hash passwords; see the secure-coding lesson.)
+::starter
+import sqlite3
+
+
+def login(conn, username, password):
+    query = f"SELECT COUNT(*) FROM users WHERE name = '{username}' AND password = '{password}'"
+    return conn.execute(query).fetchone()[0] > 0
+::solution
+import sqlite3
+
+
+def login(conn, username, password):
+    row = conn.execute("SELECT COUNT(*) FROM users WHERE name = ? AND password = ?", (username, password)).fetchone()
+    return row[0] > 0
+::tests
+import sqlite3 as _s
+_db = _s.connect(":memory:")
+_db.execute("CREATE TABLE users (name TEXT, password TEXT)")
+_db.execute("INSERT INTO users VALUES ('admin', 's3cret'), ('ada', 'pa55')")
+assert login(_db, "admin", "s3cret") is True
+assert login(_db, "ada", "wrong") is False
+assert login(_db, "admin' --", "anything") is False, "SQL injection still works"
+assert login(_db, "x", "' OR '1'='1") is False, "SQL injection still works"
+assert login(_db, "O'Brien", "x") is False, "names with quotes must not crash"
+::hints
+- Replace the values inside the SQL with `?` and pass `(username, password)` as the second argument.
+--- exercise code python
+::prompt
+Write `top_customers(conn, n)` that returns the `n` customers who spent the most, as `(name, total_cents)` tuples, biggest first (ties by name). Use one SQL query with `JOIN`, `GROUP BY`, `SUM` and `ORDER BY`, and a placeholder for `LIMIT`. The tables are `customers(id, name)` and `orders(id, customer_id, total_cents)`; customers without orders don't appear.
+::starter
+import sqlite3
+
+
+def top_customers(conn, n):
+    pass
+::solution
+import sqlite3
+
+
+def top_customers(conn, n):
+    query = """
+        SELECT c.name, SUM(o.total_cents) AS spent
+        FROM customers AS c
+        JOIN orders AS o ON o.customer_id = c.id
+        GROUP BY c.id
+        ORDER BY spent DESC, c.name
+        LIMIT ?
+    """
+    return conn.execute(query, (n,)).fetchall()
+::tests
+import sqlite3 as _s
+_db = _s.connect(":memory:")
+_db.executescript("""
+CREATE TABLE customers (id INTEGER PRIMARY KEY, name TEXT);
+CREATE TABLE orders (id INTEGER PRIMARY KEY, customer_id INTEGER, total_cents INTEGER);
+INSERT INTO customers VALUES (1, 'Ada'), (2, 'Alan'), (3, 'Grace'), (4, 'Linus');
+INSERT INTO orders (customer_id, total_cents) VALUES (1, 500), (1, 700), (2, 1200), (3, 300), (3, 2000);
+""")
+assert top_customers(_db, 2) == [("Grace", 2300), ("Ada", 1200)]
+assert top_customers(_db, 10) == [("Grace", 2300), ("Ada", 1200), ("Alan", 1200)]
+assert top_customers(_db, 0) == []
+::hints
+- Join each order to its customer, then `GROUP BY` the customer and `SUM` the totals.
+- Order by the sum descending, then by name; `LIMIT ?` with `(n,)`.
+--- cards
+sqlite3 :: Python's built-in SQL database in a file (or ":memory:"): conn = sqlite3.connect(path); conn.execute(sql, params).
+Placeholders :: conn.execute("... WHERE id = ?", (value,)) keeps data out of the SQL: no SQL injection.
+fetchone / fetchall :: Get one row (a tuple) or all rows (a list of tuples). row_factory = sqlite3.Row gives named columns.
+with conn: :: A transaction: commits if the block succeeds, rolls back if it raises.
+
+=== lesson py-http | HTTP and web APIs | 105
+Most programs today talk to other programs over the web: weather services, payment providers, maps, AI models, your own backend. They do it through **web APIs** that speak **HTTP**. This lesson explains the protocol and how to write robust API clients in Python.
+
+> 🔒 DevQuest's sandbox has no network access (so code you run can't reach the internet), so the exercises use a **fake server**. That's also exactly how professionals test API clients.
+
+## Requests and responses
+
+A **client** sends a **request** to a **server**, which sends back a **response**:
+
+```
+GET /v1/weather?city=Oslo HTTP/1.1          ← method, path and query
+Host: api.example.com                        ← headers
+Accept: application/json
+
+HTTP/1.1 200 OK                              ← status code
+Content-Type: application/json
+
+{"city": "Oslo", "temp": 4.5}                ← body
+```
+
+**Methods** say what to do, and map onto the CRUD operations of a database:
+
+| Method | Meaning | CRUD |
+|---|---|---|
+| `GET` | read a resource | Read |
+| `POST` | create a new resource | Create |
+| `PUT` / `PATCH` | replace / partly update a resource | Update |
+| `DELETE` | remove a resource | Delete |
+
+**Status codes** say how it went: `2xx` success (200 OK, 201 Created, 204 No Content), `3xx` redirect, `4xx` **your** mistake (400 Bad Request, 401 Unauthorized, 403 Forbidden, 404 Not Found, 409 Conflict, 429 Too Many Requests), `5xx` the **server's** problem (500 Internal Server Error, 502/503/504 gateway or availability trouble).
+
+## URLs, built safely
+
+```python
+from urllib.parse import urlencode, urljoin, urlparse
+
+urljoin("https://api.example.com/v1/", "users")             # 'https://api.example.com/v1/users'
+"?" + urlencode({"q": "ada lovelace", "page": 2})          # '?q=ada+lovelace&page=2'
+urlparse("https://example.com:8080/a/b?x=1").port          # 8080
+```
+
+Let `urlencode` escape values; building query strings by hand breaks on spaces, `&` and non-English characters.
+
+## Making requests
+
+The standard library has `urllib.request`, but almost everyone uses the friendlier **requests** package (`pip install requests`):
+
+```python
+import requests
+
+response = requests.get(
+    "https://api.example.com/v1/weather",
+    params={"city": "Oslo"},
+    headers={"Authorization": f"Bearer {api_key}"},
+    timeout=5,                       # ALWAYS set a timeout
+)
+response.raise_for_status()          # raise for 4xx/5xx
+data = response.json()               # parse the JSON body
+requests.post(url, json={"name": "Ada"}, timeout=5)      # send JSON
+```
+
+## Writing a robust client
+
+Networks fail. A good API client:
+
+- sets a **timeout** on every request (otherwise a dead server hangs your program forever);
+- **retries** temporary failures (429, 502, 503, 504, connection errors) a few times, waiting longer each time (**exponential backoff**), but never retries 4xx mistakes like 404;
+- translates failures into **domain exceptions** (`CityNotFound`, `ApiUnavailable`), so callers don't depend on HTTP details;
+- keeps API keys in environment variables, never in code;
+- respects **rate limits** and handles **pagination** (results split over several pages).
+
+And it receives its HTTP layer (the "transport") as a dependency, so tests can pass a fake that returns canned responses. That's dependency injection once more, and it's exactly what the exercises do.
+
+~~~check
+? An API returns 404 for an unknown city. Should your client retry the request?
+- Yes, three times
++ No: 4xx means the request itself was wrong, so it will keep failing
+- Only with a longer timeout
+- Yes, forever
+> Retry temporary server-side problems (5xx, 429), not client errors.
+~~~
+
+📚 **Go deeper:** MDN Web Docs, "An overview of HTTP" and "HTTP response status codes"; requests documentation, "Quickstart"; Python Library Reference, `urllib.parse`.
+--- goals
+- describe HTTP requests and responses: methods, headers, bodies and status codes
+- build URLs and query strings safely with `urllib.parse`
+- call web APIs with `requests`, always with a timeout
+- design API clients that retry temporary failures, raise domain errors and can be tested with a fake transport
+--- quiz
+? Which method creates a new resource?
+- `GET`
++ `POST`
+- `DELETE`
+- `HEAD`
+> POST creates; PUT/PATCH update; GET reads; DELETE removes.
+? What does status code 429 mean?
+- Not found
++ Too many requests: slow down and retry later
+- Server error
+- Created
+> It's the server's rate limit telling you to back off.
+? Why always pass `timeout=` to `requests`?
++ Without it, a request to an unresponsive server can wait forever
+- It makes requests faster
+- It's required by HTTP
+- It encrypts the request
+> requests has no default timeout.
+? What is `urlencode({"q": "a&b"})`?
+- `'q=a&b'`
++ `'q=a%26b'`
+- `'q="a&b"'`
+- An error
+> `&` separates parameters, so inside a value it must be escaped.
+--- exercise code python
+::prompt
+Write `api_url(base, path, **params)` that joins a base URL and a path with `urljoin` and appends the query parameters with `urlencode` (none: no `?`). `api_url("https://api.example.com/v1/", "users", q="ada lovelace", page=2)` gives `https://api.example.com/v1/users?q=ada+lovelace&page=2`.
+::starter
+from urllib.parse import urlencode, urljoin
+
+
+def api_url(base, path, **params):
+    pass
+::solution
+from urllib.parse import urlencode, urljoin
+
+
+def api_url(base, path, **params):
+    url = urljoin(base, path)
+    return f"{url}?{urlencode(params)}" if params else url
+::tests
+assert api_url("https://api.example.com/v1/", "users", q="ada lovelace", page=2) == "https://api.example.com/v1/users?q=ada+lovelace&page=2"
+assert api_url("https://api.example.com/v1/", "status") == "https://api.example.com/v1/status"
+assert api_url("https://x.io/", "search", q="R&D") == "https://x.io/search?q=R%26D"
+::hints
+- `urljoin(base, path)` handles the slash between them.
+- `urlencode(params)` turns the keyword arguments' dict into a query string.
+--- exercise code python
+::prompt
+Write `classify(status)` returning `"success"` (2xx), `"redirect"` (3xx), `"client error"` (4xx) or `"server error"` (5xx), and `should_retry(status)` returning `True` only for the temporary failures 429, 500, 502, 503 and 504.
+::starter
+def classify(status):
+    pass
+
+
+def should_retry(status):
+    pass
+::solution
+RETRYABLE = {429, 500, 502, 503, 504}
+
+
+def classify(status):
+    return {2: "success", 3: "redirect", 4: "client error", 5: "server error"}[status // 100]
+
+
+def should_retry(status):
+    return status in RETRYABLE
+::tests
+assert [classify(s) for s in (200, 201, 204, 301, 404, 429, 500, 503)] == ["success", "success", "success", "redirect", "client error", "client error", "server error", "server error"]
+assert [should_retry(s) for s in (429, 500, 502, 503, 504)] == [True] * 5
+assert [should_retry(s) for s in (200, 400, 401, 404, 501)] == [False] * 5
+::hints
+- `status // 100` gives the first digit.
+- A set of the retryable codes makes `should_retry` a one-liner.
+--- exercise code python
+::prompt
+Write a robust `WeatherClient(transport, retries=3)`. The transport is any object with `get(url, params, timeout)` returning `(status, body_text)`. `current_temp(city)`:
+
+- requests `https://api.example.com/v1/weather` with `params={"city": city}` and `timeout=5`;
+- on 200, returns the `"temp"` from the JSON body as a float;
+- on 404, raises `CityNotFound(city)` immediately;
+- on 429, 500, 502, 503 or 504, retries, up to `retries` attempts in total, then raises `ApiUnavailable`;
+- on any other status, raises `ApiUnavailable` immediately.
+
+Both exception classes are given.
+::starter
+import json
+
+
+class CityNotFound(Exception):
+    pass
+
+
+class ApiUnavailable(Exception):
+    pass
+
+
+class WeatherClient:
+    def __init__(self, transport, retries=3):
+        self.transport = transport
+        self.retries = retries
+::solution
+import json
+
+
+class CityNotFound(Exception):
+    pass
+
+
+class ApiUnavailable(Exception):
+    pass
+
+
+URL = "https://api.example.com/v1/weather"
+RETRYABLE = {429, 500, 502, 503, 504}
+
+
+class WeatherClient:
+    def __init__(self, transport, retries=3):
+        self.transport = transport
+        self.retries = retries
+
+    def current_temp(self, city):
+        for _ in range(self.retries):
+            status, body = self.transport.get(URL, params={"city": city}, timeout=5)
+            if status == 200:
+                return float(json.loads(body)["temp"])
+            if status == 404:
+                raise CityNotFound(city)
+            if status not in RETRYABLE:
+                raise ApiUnavailable(f"unexpected status {status}")
+        raise ApiUnavailable(f"gave up after {self.retries} attempts")
+::tests
+class _Fake:
+    def __init__(self, *responses):
+        self.responses = list(responses)
+        self.calls = []
+    def get(self, url, params, timeout):
+        self.calls.append((url, params, timeout))
+        return self.responses.pop(0)
+t = _Fake((200, '{"city": "Oslo", "temp": 4.5}'))
+assert WeatherClient(t).current_temp("Oslo") == 4.5
+assert t.calls == [("https://api.example.com/v1/weather", {"city": "Oslo"}, 5)], f"request details: {t.calls}"
+t = _Fake((503, ""), (429, ""), (200, '{"temp": -2}'))
+assert WeatherClient(t).current_temp("Tromso") == -2.0 and len(t.calls) == 3
+t = _Fake((404, '{"error": "unknown"}'))
+try:
+    WeatherClient(t).current_temp("Atlantis")
+except CityNotFound:
+    assert len(t.calls) == 1, "don't retry a 404"
+else:
+    raise AssertionError("404 should raise CityNotFound")
+t = _Fake((503, ""), (503, ""), (503, ""), (200, '{"temp": 1}'))
+try:
+    WeatherClient(t).current_temp("Oslo")
+except ApiUnavailable:
+    assert len(t.calls) == 3, "stop after the allowed attempts"
+else:
+    raise AssertionError("keep failing → ApiUnavailable")
+t = _Fake((401, ""))
+try:
+    WeatherClient(t).current_temp("Oslo")
+except ApiUnavailable:
+    assert len(t.calls) == 1
+else:
+    raise AssertionError("401 should raise ApiUnavailable without retrying")
+::hints
+- Loop over the allowed attempts; inside, call `self.transport.get(URL, params={"city": city}, timeout=5)`.
+- `return` on 200, `raise` on 404 or non-retryable statuses; just continue looping on retryable ones.
+- After the loop, all attempts failed: raise `ApiUnavailable`.
+--- cards
+HTTP methods :: GET read, POST create, PUT/PATCH update, DELETE remove.
+Status code classes :: 2xx success, 3xx redirect, 4xx client mistake (don't retry), 5xx server problem (429/5xx: retry with backoff).
+requests :: requests.get(url, params=..., headers=..., timeout=5); response.raise_for_status(); response.json().
+Robust API client :: Timeouts, retries with backoff for temporary failures, domain exceptions, keys from the environment, injectable transport.
 === lesson py-regex | Regular expressions | 105
 A **regular expression** (regex) is a tiny language for describing **patterns** in text: "three digits, a dash, four digits", "a word starting with #", "a date like 2026-10-14". Python's `re` module searches, extracts, validates and replaces text using them.
 

@@ -707,6 +707,36 @@ If the store later moves to a real database, callers still catch `UserNotFound`,
 > Catching the root catches every subclass, including ones added later, without swallowing unrelated errors.
 ~~~
 
+## More about exception objects
+
+A few more details complete the picture of exceptions as objects:
+
+- **`e.args`** holds the arguments given to the exception: `ValueError("bad", 42).args` is `("bad", 42)`.
+- **Implicit chaining:** if an exception happens *while handling* another one, Python keeps the first in `__context__` and the traceback says "During handling of the above exception, another exception occurred". Explicit `raise ... from e` sets `__cause__` instead, which says "was the direct cause of".
+- **Notes** (Python 3.11+): `e.add_note("while importing row 17")` attaches extra context that's shown in the traceback, without changing the exception type or message.
+- **Exception groups** (Python 3.11+): when several independent things can fail at once (validating many records, running many tasks), raise them together as an `ExceptionGroup`, and handle each kind with `except*`:
+
+```python
+def validate(rows):
+    errors = []
+    for i, row in enumerate(rows):
+        if row < 0:
+            errors.append(ValueError(f"row {i}: negative"))
+        elif row > 100:
+            errors.append(OverflowError(f"row {i}: too big"))
+    if errors:
+        raise ExceptionGroup("invalid rows", errors)
+
+try:
+    validate([5, -1, 300, -7])
+except* ValueError as group:
+    print(len(group.exceptions), "negative rows")       # 2 negative rows
+except* OverflowError as group:
+    print(len(group.exceptions), "rows too big")        # 1 rows too big
+```
+
+Unlike `except`, **every** matching `except*` clause runs, each receiving a group with just its kind of exception. `asyncio.TaskGroup` raises exception groups when several tasks fail.
+
 ## Context managers: setup and cleanup, guaranteed
 
 Many resources must be **released** after use: files closed, locks released, database transactions committed or rolled back. Forgetting, or skipping it because an exception happened, causes leaks and corrupted data. The `with` statement guarantees it:
@@ -947,6 +977,44 @@ else:
 ::hints
 - `class UserNotFound(LookupError):` with an `__init__` that calls `super().__init__(message)` and stores `user_id`.
 - In `load_user`: `except KeyError as e: raise UserNotFound(user_id) from e`.
+--- exercise code python
+::prompt
+Write `check_orders(orders)` that validates a list of order dictionaries and reports **every** problem at once. For each order at index `i`, add `ValueError(f"order {i}: quantity must be positive")` if its `"qty"` isn't above 0, and `KeyError(f"order {i}: no sku")` if it has no `"sku"` key (both can apply). If there were any problems, raise `ExceptionGroup("invalid orders", problems)`; otherwise return the number of orders.
+::starter
+def check_orders(orders):
+    return len(orders)
+::solution
+def check_orders(orders):
+    problems = []
+    for i, order in enumerate(orders):
+        if order.get("qty", 0) <= 0:
+            problems.append(ValueError(f"order {i}: quantity must be positive"))
+        if "sku" not in order:
+            problems.append(KeyError(f"order {i}: no sku"))
+    if problems:
+        raise ExceptionGroup("invalid orders", problems)
+    return len(orders)
+::tests
+assert check_orders([{"sku": "A", "qty": 2}, {"sku": "B", "qty": 1}]) == 2
+assert check_orders([]) == 0
+try:
+    check_orders([{"sku": "A", "qty": 2}, {"qty": 0}, {"sku": "C", "qty": -1}])
+except ExceptionGroup as eg:
+    kinds = sorted(type(e).__name__ for e in eg.exceptions)
+    assert kinds == ["KeyError", "ValueError", "ValueError"], kinds
+    assert any("order 1" in str(e) for e in eg.exceptions if isinstance(e, KeyError))
+else:
+    raise AssertionError("invalid orders should raise an ExceptionGroup")
+_seen = []
+try:
+    check_orders([{"qty": 1}])
+except* KeyError as g:
+    _seen.append(len(g.exceptions))
+assert _seen == [1], "a missing sku should be a KeyError inside the group"
+::hints
+- Collect the problems in a list as you loop; don't raise straight away.
+- Check both conditions for every order (two separate `if`s).
+- At the end: `raise ExceptionGroup("invalid orders", problems)`.
 --- cards
 Root exception :: One base exception per module/library (class AppError(Exception)); specific errors subclass it.
 Exceptions with data :: Pass the message to super().__init__() and store details as attributes for handlers.
@@ -954,6 +1022,346 @@ Translating exceptions :: At a module boundary, catch low-level errors and raise
 Context manager :: An object with __enter__ (setup, value for "as") and __exit__ (always runs; gets exception info). Used with with.
 __exit__ return value :: True suppresses the exception; False/None lets it propagate.
 
+=== lesson py-oop-internals | Under the hood: descriptors, slots and metaclasses | 105
+This lesson opens the hood of Python's object system. You won't use these tools every day, but frameworks such as Django, SQLAlchemy and pydantic are built on them, and understanding them explains how features you've already used really work.
+
+## Classes are objects too
+
+Everything in Python is an object, including classes. Their type is `type`:
+
+```python
+class Point:
+    pass
+
+type(Point())        # <class '__main__.Point'>
+type(Point)          # <class 'type'>
+Dynamic = type("Dynamic", (), {"greeting": "hi"})     # create a class at runtime
+Dynamic().greeting   # 'hi'
+```
+
+The `class` statement is essentially a call to `type(name, bases, namespace)`.
+
+## How attribute lookup really works
+
+For `obj.name`, Python checks **data descriptors** on the class, then the instance's `__dict__`, then the class and its MRO. Two hooks let a class take part:
+
+- `__getattr__(self, name)` is called **only when normal lookup fails**: a safe place for fallbacks and delegation (a wrapper that forwards unknown attributes to the object it wraps).
+- `__setattr__(self, name, value)` is called for **every** assignment, so it can validate or forbid changes. Inside it, store values with `super().__setattr__(name, value)` to avoid calling yourself forever.
+
+## Descriptors: the machinery behind @property
+
+A **descriptor** is an object, stored on a class, with `__get__` and/or `__set__` methods. When an attribute lookup finds one, Python calls those methods instead of returning the object itself. Properties, methods, `classmethod` and `staticmethod` are all descriptors.
+
+Writing your own lets you reuse validation across many attributes and classes:
+
+```python
+class Positive:
+    def __set_name__(self, owner, name):      # called when the class is created
+        self.name = "_" + name
+
+    def __get__(self, obj, objtype=None):
+        return getattr(obj, self.name)
+
+    def __set__(self, obj, value):
+        if value <= 0:
+            raise ValueError(f"{self.name[1:]} must be positive")
+        setattr(obj, self.name, value)
+
+
+class Product:
+    price = Positive()
+    weight = Positive()
+
+    def __init__(self, price, weight):
+        self.price = price          # goes through Positive.__set__
+        self.weight = weight
+```
+
+One small class replaces a pair of property methods for every validated attribute. This is how ORM fields (`name = models.CharField(...)`) work.
+
+## __slots__: fixed attributes
+
+Normally each object has a `__dict__`, so you can add any attribute. Declaring `__slots__` gives instances a fixed set of attributes instead:
+
+```python
+class Pixel:
+    __slots__ = ("x", "y")
+    def __init__(self, x, y):
+        self.x, self.y = x, y
+
+p = Pixel(1, 2)
+p.colour = "red"     # AttributeError: 'Pixel' object has no attribute 'colour'
+```
+
+Slotted objects use noticeably less memory (useful for millions of small objects) and catch attribute typos. Dataclasses support it with `@dataclass(slots=True)`.
+
+## Subclassing built-in types
+
+Subclassing `dict` or `list` directly has a surprise: the built-in methods are written in C and don't call your overrides, so a `dict` subclass that overrides `__setitem__` is bypassed by `update()` and the constructor. To customise behaviour, subclass `collections.UserDict` or `UserList`, which route every operation through the methods you override:
+
+```python
+from collections import UserDict
+
+class LowerKeyDict(UserDict):
+    def __setitem__(self, key, value):
+        super().__setitem__(key.lower(), value)
+
+    def __getitem__(self, key):
+        return super().__getitem__(key.lower())
+
+d = LowerKeyDict({"Name": "Ada"})
+d["NAME"]           # 'Ada'
+```
+
+## Hooks for subclasses: __init_subclass__
+
+`__init_subclass__` runs whenever a class is subclassed, a neat way to build **plugin registries** without any extra registration code:
+
+```python
+class Exporter:
+    formats = {}
+
+    def __init_subclass__(cls, fmt, **kwargs):
+        super().__init_subclass__(**kwargs)
+        Exporter.formats[fmt] = cls
+
+class CsvExporter(Exporter, fmt="csv"):
+    ...
+
+Exporter.formats        # {'csv': <class '__main__.CsvExporter'>}
+```
+
+## Metaclasses (in one paragraph)
+
+A **metaclass** is the class of a class (`type` is the default one). A custom metaclass, `class Meta(type)`, can change how classes are created: rename attributes, register them, add methods. Frameworks use them, but they're rarely the right tool in application code: class decorators and `__init_subclass__` solve the same problems more simply. As Tim Peters put it, if you wonder whether you need metaclasses, you don't.
+
+~~~check
+? Why does a `dict` subclass that overrides `__setitem__` miss items added with `update()`?
+- `update` is deprecated
++ The built-in `dict` methods don't call your override; use `collections.UserDict` instead
+- `__setitem__` can't be overridden
+- Because of `__slots__`
+> UserDict implements its methods in Python on top of `__setitem__` and friends.
+~~~
+
+📚 **Go deeper:** Python "Descriptor HowTo Guide" (docs.python.org/3/howto/descriptor.html); Python Language Reference, "Data model" (`__slots__`, `__init_subclass__`, metaclasses); *Fluent Python* (2nd ed.), chapters 23–24.
+--- goals
+- explain that classes are objects created by `type`
+- customise attribute access with `__getattr__` and `__setattr__`
+- write descriptors that reuse validation across attributes
+- use `__slots__`, `UserDict`, `__init_subclass__`, and know when metaclasses are (rarely) needed
+--- quiz
+? What is `type(int)`?
++ `<class 'type'>`
+- `<class 'int'>`
+- `<class 'object'>`
+- An error
+> Classes are objects whose class is `type`.
+? When is `__getattr__` called?
+- On every attribute access
++ Only when normal attribute lookup fails
+- Only for methods
+- Only when assigning
+> `__getattribute__` runs on every access; `__getattr__` is the fallback.
+? What does a descriptor's `__set_name__` receive?
+- The value being assigned
++ The owner class and the attribute name it was assigned to
+- The instance
+- Nothing
+> It lets one descriptor class serve many attributes, each knowing its own name.
+? What happens on `p.z = 1` if `Pixel` has `__slots__ = ("x", "y")`?
+- `z` is created
++ `AttributeError`
+- `z` is silently ignored
+- `TypeError`
+> Slotted instances have no `__dict__`, so only the declared attributes exist.
+--- exercise code python
+::prompt
+Write a **descriptor** `Positive` that only accepts numbers above 0 (else `ValueError` whose message names the attribute, e.g. `price must be positive`), storing each value on the instance under a private name (use `__set_name__`). Then use it for both `price` and `qty` in `Item(price, qty)`, which also has a `total()` method.
+::starter
+class Positive:
+    pass
+
+
+class Item:
+    def __init__(self, price, qty):
+        self.price = price
+        self.qty = qty
+
+    def total(self):
+        return self.price * self.qty
+::solution
+class Positive:
+    def __set_name__(self, owner, name):
+        self.public = name
+        self.private = "_" + name
+
+    def __get__(self, obj, objtype=None):
+        if obj is None:
+            return self
+        return getattr(obj, self.private)
+
+    def __set__(self, obj, value):
+        if value <= 0:
+            raise ValueError(f"{self.public} must be positive")
+        setattr(obj, self.private, value)
+
+
+class Item:
+    price = Positive()
+    qty = Positive()
+
+    def __init__(self, price, qty):
+        self.price = price
+        self.qty = qty
+
+    def total(self):
+        return self.price * self.qty
+::tests
+a = Item(2.5, 4)
+b = Item(10, 1)
+assert a.total() == 10 and b.total() == 10
+assert (a.price, b.price) == (2.5, 10), "each item keeps its own values"
+assert isinstance(vars(Item)["price"], Positive), "use the descriptor as a class attribute"
+for bad in [lambda: Item(0, 1), lambda: Item(5, -2), lambda: setattr(a, "qty", 0)]:
+    try:
+        bad()
+    except ValueError as e:
+        assert "must be positive" in str(e)
+    else:
+        raise AssertionError("non-positive values must raise ValueError")
+try:
+    a.qty = -1
+except ValueError as e:
+    assert str(e) == "qty must be positive", str(e)
+assert a.qty == 4, "a refused value must not be stored"
+::hints
+- In `__set_name__(self, owner, name)`, remember the attribute's name and a private name like `"_" + name`.
+- `__get__` reads with `getattr(obj, private_name)`; `__set__` validates, then uses `setattr`.
+- On the class: `price = Positive()` and `qty = Positive()`.
+--- exercise code python
+::prompt
+Build a self-registering plugin system with `__init_subclass__`:
+
+- `Exporter` keeps a class-level dict `formats`; subclasses declare their format with `class CsvExporter(Exporter, fmt="csv")` and are registered automatically;
+- each exporter has `export(rows)` for a list of lists: `CsvExporter` joins values with `,` and rows with `\n`; `TsvExporter` (`fmt="tsv"`) uses tabs;
+- `export(rows, fmt)` creates the right exporter and returns its output, or raises `ValueError(f"no exporter for {fmt}")`.
+::starter
+class Exporter:
+    formats = {}
+::solution
+class Exporter:
+    formats = {}
+
+    def __init_subclass__(cls, fmt, **kwargs):
+        super().__init_subclass__(**kwargs)
+        Exporter.formats[fmt] = cls
+
+    def export(self, rows):
+        raise NotImplementedError
+
+
+class CsvExporter(Exporter, fmt="csv"):
+    def export(self, rows):
+        return "\n".join(",".join(str(v) for v in row) for row in rows)
+
+
+class TsvExporter(Exporter, fmt="tsv"):
+    def export(self, rows):
+        return "\n".join("\t".join(str(v) for v in row) for row in rows)
+
+
+def export(rows, fmt):
+    if fmt not in Exporter.formats:
+        raise ValueError(f"no exporter for {fmt}")
+    return Exporter.formats[fmt]().export(rows)
+::tests
+rows = [["name", "age"], ["Ada", 36]]
+assert export(rows, "csv") == "name,age\nAda,36"
+assert export(rows, "tsv") == "name\tage\nAda\t36"
+assert set(Exporter.formats) >= {"csv", "tsv"}
+class _Pipe(Exporter, fmt="pipe"):
+    def export(self, rows):
+        return "|".join(str(v) for v in rows[0])
+assert export(rows, "pipe") == "name|age", "new subclasses must register themselves"
+try:
+    export(rows, "xml")
+except ValueError as e:
+    assert str(e) == "no exporter for xml"
+else:
+    raise AssertionError("unknown formats should raise ValueError")
+::hints
+- `def __init_subclass__(cls, fmt, **kwargs):` receives the `fmt=` keyword from the class line; call `super().__init_subclass__(**kwargs)` and store `cls`.
+- Each exporter's `export` builds lines with `join`.
+--- exercise code python
+::prompt
+Two quick tools from this lesson:
+
+- `CaseInsensitiveDict`, built on `collections.UserDict`, treats keys case-insensitively for setting, getting, `in` and `del` (store keys in lowercase);
+- `Pixel` with `__slots__ = ("x", "y")`, so adding any other attribute raises `AttributeError`.
+::starter
+from collections import UserDict
+
+
+class CaseInsensitiveDict(UserDict):
+    pass
+
+
+class Pixel:
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+::solution
+from collections import UserDict
+
+
+class CaseInsensitiveDict(UserDict):
+    def __setitem__(self, key, value):
+        super().__setitem__(key.lower(), value)
+
+    def __getitem__(self, key):
+        return super().__getitem__(key.lower())
+
+    def __delitem__(self, key):
+        super().__delitem__(key.lower())
+
+    def __contains__(self, key):
+        return super().__contains__(key.lower())
+
+
+class Pixel:
+    __slots__ = ("x", "y")
+
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+::tests
+d = CaseInsensitiveDict({"Content-Type": "json"})
+d.update({"ACCEPT": "*/*"})
+assert d["content-type"] == "json" and d["Accept"] == "*/*"
+assert "CONTENT-TYPE" in d
+del d["accept"]
+assert "Accept" not in d and len(d) == 1
+p = Pixel(1, 2)
+assert (p.x, p.y) == (1, 2)
+try:
+    p.colour = "red"
+except AttributeError:
+    pass
+else:
+    raise AssertionError("Pixel must only allow x and y")
+assert not hasattr(p, "__dict__")
+::hints
+- Override `__setitem__`, `__getitem__`, `__delitem__` and `__contains__`, lower-casing the key and calling `super()`.
+- `UserDict.update()` and the constructor go through your `__setitem__`.
+- Add `__slots__ = ("x", "y")` to the class body.
+--- cards
+type :: The class of classes. type(name, bases, namespace) creates a class at runtime.
+__getattr__ vs __setattr__ :: __getattr__ runs only when lookup fails (fallbacks); __setattr__ runs on every assignment.
+Descriptor :: An object on a class with __get__/__set__ (and __set_name__); powers property, methods and ORM fields.
+__slots__ :: Fixed attribute names, no per-instance __dict__: less memory, typos raise AttributeError.
+UserDict / UserList :: Base classes for customising dict/list behaviour; built-in dict methods would bypass your overrides.
+__init_subclass__ :: Runs when a class is subclassed; handy for plugin registries. Prefer it (or class decorators) to metaclasses.
 === lesson py-oop-case-study | Case study: building a gradebook step by step | 150
 This lesson is a **guided project**: you'll build a small but real program the way professionals do, in steps, with tests at every stage. The goal isn't just the code; it's the **process**.
 

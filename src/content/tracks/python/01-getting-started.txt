@@ -1047,6 +1047,156 @@ Float precision :: 0.1 + 0.2 is 0.30000000000000004. Compare floats with math.is
 round() :: Rounds to n decimals; exact halves go to the nearest even number: round(2.5) is 2, round(3.5) is 4.
 Operator precedence :: Parentheses, then **, then * / // %, then + -. -2 ** 2 is -4.
 
+=== lesson py-setup | Python on your own computer | 60
+DevQuest runs real Python inside the app, which is perfect for learning. But real projects live on your own computer: they read and write your files, install packages, use an editor, and are tracked with Git. This lesson gets you set up. Do it now, even if you keep learning here: running your first script on your own machine is a big step.
+
+## 1. Install Python
+
+- **Windows:** download the installer from **python.org** and run it. On the first screen, **tick "Add python.exe to PATH"** before clicking Install. (Alternatively, in a terminal: `winget install Python.Python.3.13`.)
+- **macOS:** use the python.org installer, or Homebrew: `brew install python`. On macOS the command is usually `python3`.
+- **Linux:** Python 3 is usually installed already. Add the extras with your package manager, for example `sudo apt install python3 python3-venv python3-pip`.
+
+Install a recent Python **3** (3.12 or newer). Python 2 reached its end of life in 2020; ignore any tutorial that uses `print "hi"` without parentheses.
+
+## 2. Open a terminal and check
+
+A **terminal** (Command Prompt / PowerShell / Windows Terminal on Windows, Terminal on macOS and Linux) is a text window where you type commands. Type one of these and press Enter:
+
+```
+python --version
+python3 --version
+py --version
+```
+
+One should answer something like `Python 3.13.1`. On Windows, `py` is the Python launcher; on macOS and Linux use `python3`. The **Linux shell** track teaches terminal commands such as `cd` (change folder) and `ls` (list files).
+
+## 3. The interactive shell (REPL)
+
+Type `python` (or `python3`/`py`) on its own and you get the **interactive shell**, with a `>>>` prompt:
+
+```
+>>> 2 ** 10
+1024
+>>> name = "Ada"
+>>> name.upper()
+'ADA'
+>>> help(str.split)
+```
+
+It **reads** what you type, **evaluates** it, **prints** the result and **loops** back for more, hence its nickname, the **REPL**. Notice that it shows the value of an expression without `print`, using its `repr`. It's the quickest place to try something out, but nothing is saved. Leave it with `exit()` (or Ctrl+D on macOS/Linux, Ctrl+Z then Enter on Windows).
+
+## 4. Write and run a script
+
+Programs you want to keep go in `.py` files. Create a folder, put a file `hello.py` in it containing `print("Hello from my computer!")`, then in the terminal:
+
+```
+cd path/to/your/folder
+python hello.py
+```
+
+Python runs the file top to bottom, exactly as in DevQuest. `input()` waits for you to type and press Enter; **Ctrl+C** stops a program that's stuck in a loop.
+
+## 5. Get a proper editor
+
+A code editor highlights syntax, completes names, shows errors as you type and runs a debugger. The most popular free choice is **Visual Studio Code** with Microsoft's **Python** extension:
+
+1. Install VS Code, then the "Python" extension from the Extensions panel.
+2. **File → Open Folder** and open your project folder.
+3. Pick the interpreter (bottom-right corner, or "Python: Select Interpreter").
+4. Press ▶ to run the current file, or open the built-in terminal with Ctrl+`.
+5. Click left of a line number to set a **breakpoint**, then "Run and Debug" to step through the program, just like DevQuest's step-through, but in your own code.
+
+**PyCharm** is a powerful alternative; **Thonny** is a very simple editor designed for beginners.
+
+## 6. Your first project with a virtual environment
+
+Every project should get its own **virtual environment** (Module 12 explains why in detail). Try it now:
+
+```
+mkdir weather-app
+cd weather-app
+python -m venv .venv
+.venv\Scripts\activate          (Windows)
+source .venv/bin/activate       (macOS / Linux)
+pip install requests
+pip list
+```
+
+Your prompt now starts with `(.venv)`, and `requests` is installed for this project only. `deactivate` leaves the environment. Next time, `cd` into the folder and activate it again.
+
+~~~check
+? You typed `python` in a terminal and now see `>>>`. Where are you?
+- In a broken terminal
++ In Python's interactive shell (the REPL): type Python and see results immediately
+- In VS Code
+- In a virtual environment
+> Leave it with `exit()`; run saved programs with `python file.py` instead.
+~~~
+
+## Checklist
+
+- [ ] `python --version` (or `python3`/`py`) shows Python 3.12 or newer.
+- [ ] You've tried a few lines in the REPL and left it.
+- [ ] `hello.py` runs from the terminal.
+- [ ] VS Code (or another editor) opens your folder and runs the file.
+- [ ] You've created and activated a virtual environment and installed a package into it.
+
+📚 **Go deeper:** Python docs, "Using Python on Windows / macOS / Unix"; VS Code docs, "Getting Started with Python in VS Code"; Python Tutorial, chapter 2 "Using the Python Interpreter".
+--- goals
+- install Python 3 and check it from a terminal
+- use the interactive shell (REPL) for quick experiments
+- write a `.py` file and run it from the terminal
+- set up an editor and a first project with a virtual environment
+--- quiz
+? Which command shows the installed Python version?
++ `python --version`
+- `python version()`
+- `print(version)`
+- `pip python`
+> On macOS and Linux the command is often `python3 --version`; on Windows `py --version` also works.
+? What does the REPL print after you type `"hi".upper()` and press Enter?
+- Nothing, because there's no `print`
++ `'HI'`
+- `HI` without quotes
+- An error
+> The interactive shell shows each expression's value (its `repr`) automatically.
+? How do you run a saved program called `game.py`?
+- Double-click inside the REPL
++ `python game.py` in a terminal, from the folder that contains it
+- `run game`
+- `import game.py`
+> `cd` into the folder first, or give the full path to the file.
+? What's the main reason to create a virtual environment for each project?
+- It makes Python faster
++ Each project gets its own installed packages and versions, isolated from others
+- It's required to run any script
+- It backs up your code
+> Projects can need different versions of the same package.
+? A program is stuck in an endless loop in your terminal. What do you press?
+- Ctrl+S
++ Ctrl+C
+- Enter
+- Esc
+> Ctrl+C sends an interrupt and stops the program (raising `KeyboardInterrupt`).
+--- exercise fill python
+::prompt
+On your own computer, a quick way to check which Python a script is running on is `sys.version_info`. Fill in the blanks so this program prints the **major** version number.
+::template
+import ____
+
+print("Python major version:", sys.version_info.____)
+::answers
+sys
+major
+::expected
+Python major version: 3
+::hints
+- The module that knows about the running interpreter is called `sys`.
+- `version_info` has fields called `major`, `minor` and `micro`.
+--- cards
+REPL :: Python's interactive shell (>>> prompt): reads, evaluates and prints each expression. Great for experiments; nothing is saved.
+python file.py :: Runs a saved script from a terminal, in the folder you've cd'd into. Ctrl+C stops a running program.
+PATH :: The list of folders a terminal searches for commands. Tick "Add python.exe to PATH" when installing on Windows.
 === lesson py-m1-test | Module 1 test | 150 | exam
 You've learned to print, read errors, use variables, work with types, read input and do arithmetic. This test mixes them all, just as real programs do.
 

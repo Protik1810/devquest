@@ -798,6 +798,205 @@ argparse :: Parses command-line arguments: positional args, --options with types
 stdout vs stderr :: Normal output to stdout; errors and diagnostics to stderr (print(..., file=sys.stderr)).
 Exit codes :: 0 means success, non-zero means failure: sys.exit(main(sys.argv[1:])).
 
+=== lesson py-capstone-solo | Capstone 3: build it from a spec | 450
+The first two capstones guided you step by step. This one is how real work arrives: a **specification** and a set of **acceptance tests**, and nothing else. Plan the design yourself (classes, data structures, exceptions), build it in small steps, and run the tests often.
+
+## The brief: a ticket office
+
+A small theatre needs software to sell tickets.
+
+- An **event** has a name, a number of seats and a ticket price in cents.
+- Customers **book** tickets for an event (one or more seats). Each booking gets an id: `B1`, `B2`, `B3`… in order.
+- When an event is sold out (or doesn't have enough seats left), the customer can choose to join the event's **waitlist** instead.
+- Customers can **cancel** a booking. The seats become free, and the waitlist is served **in order**: each waiting customer whose request now fits gets a booking automatically (their seats are taken), and is removed from the waitlist. Someone whose request still doesn't fit keeps their place, and later customers are still considered.
+- The office reports **revenue** (seats sold × price, over all events) and each customer's **bookings**.
+- The whole office can be saved as plain data and restored, for a JSON file.
+
+## The interface the tests expect
+
+```python
+office = TicketOffice()
+office.add_event("Hamlet", seats=3, price_cents=2500)
+b1 = office.book("Hamlet", "ada", 2)            # → "B1"
+office.book("Hamlet", "alan", 2)               # raises SoldOut (only 1 seat left)
+office.book("Hamlet", "alan", 2, waitlist=True)  # → None (alan joins the waitlist)
+office.seats_left("Hamlet")                    # 1
+office.cancel(b1)                              # frees 2 seats; alan now gets B2 automatically
+office.bookings_for("alan")                    # [("B2", "Hamlet", 2)]
+office.revenue()                               # 5000
+data = office.to_dict()                        # plain dicts/lists/str/int only
+TicketOffice.from_dict(data)                   # an equivalent office
+```
+
+Errors: `UnknownEvent` for an event that doesn't exist, `SoldOut` when there aren't enough seats (unless `waitlist=True`), `ValueError` for a quantity below 1, adding an event that already exists, or cancelling an unknown booking id. Make `SoldOut` and `UnknownEvent` subclasses of a `TicketError(Exception)` base.
+
+## How to approach it
+
+1. Read the whole brief and the example. Write down the classes (CRC cards) and what each one knows.
+2. Start with the smallest slice: adding events and booking without waitlists. Submit: the failing checks tell you what's next.
+3. Add cancellation, then the waitlist, then saving and loading.
+4. Refactor when it works.
+
+There are no step-by-step hints this time, only a couple of design nudges. You can do this.
+--- goals
+- turn a written specification into a working design on your own
+- implement booking rules, a FIFO waitlist and error handling
+- persist state as plain data, verified by acceptance tests
+--- exercise code python
+::prompt
+Implement the ticket office described in the lesson: `TicketError`, `SoldOut`, `UnknownEvent` and `TicketOffice` with `add_event`, `book`, `seats_left`, `cancel`, `bookings_for`, `revenue`, `to_dict` and `from_dict`. The hidden acceptance tests cover every rule in the brief.
+::starter
+"""Ticket office. Requirements: see the lesson text."""
+
+
+class TicketError(Exception):
+    pass
+
+
+class TicketOffice:
+    pass
+::solution
+"""Ticket office. Requirements: see the lesson text."""
+
+
+class TicketError(Exception):
+    pass
+
+
+class SoldOut(TicketError):
+    pass
+
+
+class UnknownEvent(TicketError):
+    pass
+
+
+class TicketOffice:
+    def __init__(self):
+        self.events = {}      # name -> {"seats": int, "price": int, "waitlist": [(customer, qty)]}
+        self.bookings = {}    # id -> (customer, event, qty)
+        self.next_id = 1
+
+    def add_event(self, name, seats, price_cents):
+        if name in self.events:
+            raise ValueError(f"event {name} already exists")
+        self.events[name] = {"seats": seats, "price": price_cents, "waitlist": []}
+
+    def _event(self, name):
+        if name not in self.events:
+            raise UnknownEvent(name)
+        return self.events[name]
+
+    def seats_left(self, name):
+        event = self._event(name)
+        taken = sum(qty for _, ev, qty in self.bookings.values() if ev == name)
+        return event["seats"] - taken
+
+    def _create(self, customer, name, qty):
+        booking_id = f"B{self.next_id}"
+        self.next_id += 1
+        self.bookings[booking_id] = (customer, name, qty)
+        return booking_id
+
+    def book(self, name, customer, qty, waitlist=False):
+        event = self._event(name)
+        if qty < 1:
+            raise ValueError("quantity must be at least 1")
+        if qty > self.seats_left(name):
+            if waitlist:
+                event["waitlist"].append((customer, qty))
+                return None
+            raise SoldOut(name)
+        return self._create(customer, name, qty)
+
+    def cancel(self, booking_id):
+        if booking_id not in self.bookings:
+            raise ValueError(f"no booking {booking_id}")
+        _, name, _ = self.bookings.pop(booking_id)
+        event = self.events[name]
+        still_waiting = []
+        for customer, qty in event["waitlist"]:
+            if qty <= self.seats_left(name):
+                self._create(customer, name, qty)
+            else:
+                still_waiting.append((customer, qty))
+        event["waitlist"] = still_waiting
+
+    def bookings_for(self, customer):
+        return [(bid, ev, qty) for bid, (c, ev, qty) in self.bookings.items() if c == customer]
+
+    def revenue(self):
+        return sum(qty * self.events[ev]["price"] for _, ev, qty in self.bookings.values())
+
+    def to_dict(self):
+        return {
+            "events": {n: {"seats": e["seats"], "price": e["price"], "waitlist": [list(w) for w in e["waitlist"]]} for n, e in self.events.items()},
+            "bookings": {bid: list(b) for bid, b in self.bookings.items()},
+            "next_id": self.next_id,
+        }
+
+    @classmethod
+    def from_dict(cls, data):
+        office = cls()
+        for name, e in data["events"].items():
+            office.events[name] = {"seats": e["seats"], "price": e["price"], "waitlist": [tuple(w) for w in e["waitlist"]]}
+        office.bookings = {bid: tuple(b) for bid, b in data["bookings"].items()}
+        office.next_id = data["next_id"]
+        return office
+::tests
+import json as _json
+o = TicketOffice()
+o.add_event("Hamlet", seats=3, price_cents=2500)
+o.add_event("Macbeth", seats=10, price_cents=1800)
+assert issubclass(SoldOut, TicketError) and issubclass(UnknownEvent, TicketError)
+b1 = o.book("Hamlet", "ada", 2)
+assert b1 == "B1" and o.seats_left("Hamlet") == 1
+try:
+    o.book("Hamlet", "alan", 2)
+except SoldOut:
+    pass
+else:
+    raise AssertionError("not enough seats → SoldOut")
+assert o.book("Hamlet", "alan", 2, waitlist=True) is None
+assert o.book("Hamlet", "grace", 1, waitlist=True) is not None, "1 seat is free, so grace books normally"
+assert o.seats_left("Hamlet") == 0
+o.book("Hamlet", "linus", 3, waitlist=True)
+o.book("Hamlet", "tim", 1, waitlist=True)
+assert o.revenue() == 3 * 2500
+o.cancel(b1)
+assert o.bookings_for("alan") == [("B3", "Hamlet", 2)], o.bookings_for("alan")
+assert o.bookings_for("linus") == [], "linus's 3 seats still don't fit"
+assert o.bookings_for("tim") == [], "the 2 freed seats went to alan, the first in line"
+assert o.seats_left("Hamlet") == 0
+o.book("Macbeth", "ada", 4)
+assert o.revenue() == 3 * 2500 + 4 * 1800
+for bad in [lambda: o.book("Lear", "x", 1), lambda: o.seats_left("Lear")]:
+    try:
+        bad()
+    except UnknownEvent:
+        pass
+    else:
+        raise AssertionError("unknown events → UnknownEvent")
+for bad in [lambda: o.book("Macbeth", "x", 0), lambda: o.add_event("Hamlet", 5, 100), lambda: o.cancel("B999")]:
+    try:
+        bad()
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("invalid requests → ValueError")
+data = _json.loads(_json.dumps(o.to_dict()))
+copy = TicketOffice.from_dict(data)
+assert copy.revenue() == o.revenue() and copy.seats_left("Macbeth") == 6
+assert copy.book("Macbeth", "zed", 1) == o.book("Macbeth", "zed", 1), "booking ids continue after loading"
+grace_b = [bid for bid, ev, q in copy.bookings_for("grace")][0]
+copy.cancel(grace_b)
+assert [b[1:] for b in copy.bookings_for("tim")] == [("Hamlet", 1)], "the waitlist must survive saving and loading"
+::hints
+- Design nudge: keep events and bookings in dictionaries keyed by name and id; compute seats left from the bookings instead of storing a second number that could get out of sync.
+- Design nudge: when a booking is cancelled, walk the waitlist in order, booking everyone who now fits and keeping the rest in order.
+--- cards
+Acceptance tests :: Tests written from the user's point of view that define when a feature is done.
+Single source of truth :: Derive values (like seats left) from the data instead of storing copies that can drift apart.
 === lesson py-whats-next | What's next after Python | 50
 You've completed a full Python course: from your first `print` to classes, design principles, generators, type hints, async code and two real projects. That's the foundation professional Python developers build on.
 

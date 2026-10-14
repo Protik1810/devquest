@@ -62,6 +62,11 @@ describe('curriculum integrity', () => {
     }
   });
 
+  it('every Python course lesson states its goals', () => {
+    const python = TRACKS.find((t) => t.id === 'python')!;
+    for (const l of python.lessons) expect(l.goals?.length ?? 0, `${l.id} has no --- goals`).toBeGreaterThan(0);
+  });
+
   it('every markdown table row has as many cells as its header', () => {
     // An unescaped | inside `code` in a table cell silently splits the cell (write \| instead)
     const cells = (row: string) => row.trim().replace(/^\||\|$/g, '').split(/(?<!\\)\|/).length;

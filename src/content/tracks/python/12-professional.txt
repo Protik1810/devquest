@@ -1608,6 +1608,696 @@ asyncio.gather :: Runs coroutines concurrently; results come back in the order g
 create_task :: Schedules a coroutine to start running now; await the Task later for its result.
 Don't block the loop :: Use asyncio.sleep and async libraries; time.sleep or heavy CPU work freezes every task.
 
+=== lesson py-concurrency | Threads, processes and the GIL | 100
+`asyncio` handles lots of waiting within one thread. Python has two more ways to do several things at once: **threads** and **processes**. Choosing well depends on one famous detail of CPython: the GIL.
+
+> 🧪 Inside DevQuest, Python runs in the browser, which can't start threads. The examples show standard Python as it runs on your computer, and the exercises practise the parts that matter most: splitting work into independent pieces and protecting shared state.
+
+## Threads share memory; processes don't
+
+A **thread** is an independent flow of execution inside your program. All threads share the same variables, which is convenient and dangerous. A **process** is a separate running program with its own memory; processes share nothing unless you explicitly send data between them.
+
+## The GIL
+
+CPython (the standard Python) has a **Global Interpreter Lock**: only one thread executes Python bytecode at a time. Consequences:
+
+- Threads speed up **I/O-bound** work (downloads, database calls, file reads): while one thread waits, the GIL is released and another runs.
+- Threads do **not** speed up **CPU-bound** pure-Python work (number crunching): they take turns on one core.
+- For CPU-bound work, use **processes**, each with its own interpreter and GIL, running on separate cores. (Libraries like NumPy release the GIL inside their C code, and Python 3.13+ offers an experimental "free-threaded" build without a GIL.)
+
+## concurrent.futures: the easy interface
+
+```python
+from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
+
+def fetch(url): ...                  # I/O-bound
+def crunch(n): ...                   # CPU-bound, must be a top-level function
+
+with ThreadPoolExecutor(max_workers=8) as pool:
+    pages = list(pool.map(fetch, urls))           # results in input order
+
+if __name__ == "__main__":                        # required for processes on Windows and macOS
+    with ProcessPoolExecutor() as pool:
+        results = list(pool.map(crunch, numbers))
+```
+
+Both executors share one interface (`map`, `submit`, `as_completed`), so switching between them is easy. Work sent to processes must be **picklable** (plain data and top-level functions), because it's copied to the other process.
+
+## Race conditions and locks
+
+When threads share data, interleaving can corrupt it. `counter += 1` looks like one step but is really **read, add, write**. If two threads read the same old value, one update is lost: a **race condition**. Races are nasty bugs: they happen randomly, rarely, and often only under load.
+
+A **lock** lets only one thread at a time into a critical section:
+
+```python
+import threading
+
+class Counter:
+    def __init__(self):
+        self.value = 0
+        self._lock = threading.Lock()
+
+    def increment(self):
+        with self._lock:            # acquire; released at the end of the block, even on errors
+            self.value += 1
+```
+
+Locks bring their own risk, **deadlock**: thread A holds lock 1 and waits for lock 2 while thread B holds 2 and waits for 1. Keep critical sections small, and always take multiple locks in the same order.
+
+The safest designs avoid sharing mutable data at all: give each worker its own piece of the input, have it **return** results instead of changing shared state, and combine the results afterwards. Pass messages through a `queue.Queue` (thread-safe) when workers must communicate.
+
+## Choosing a tool
+
+| Work | Best fit |
+|---|---|
+| many network/disk waits, async libraries available | `asyncio` |
+| some waiting, ordinary blocking libraries | `ThreadPoolExecutor` |
+| heavy computation in pure Python | `ProcessPoolExecutor` |
+| huge datasets, numeric work | vectorised libraries (NumPy, pandas), or several machines |
+
+~~~check
+? A program spends 95% of its time computing prime numbers in pure Python. What speeds it up on a 4-core machine?
+- `ThreadPoolExecutor`
++ `ProcessPoolExecutor`
+- `asyncio.gather`
+- Adding a lock
+> CPU-bound pure Python needs separate processes because of the GIL.
+~~~
+
+📚 **Go deeper:** Python Library Reference, `concurrent.futures` and `threading`; Python docs, "Python support for free threading"; Real Python, "What Is the Python Global Interpreter Lock (GIL)?".
+--- goals
+- explain the difference between threads and processes, and what the GIL means for each
+- choose between asyncio, threads and processes for a job
+- use `concurrent.futures` executors through their shared interface
+- recognise race conditions and protect shared state with locks, or avoid sharing it
+--- quiz
+? Why don't threads speed up CPU-heavy pure-Python code in standard CPython?
++ The GIL lets only one thread run Python bytecode at a time
+- Threads can't run on Windows
+- Threads are always slower than processes
+- Python has no threads
+> Threads still help while waiting on I/O, because waiting releases the GIL.
+? What is a race condition?
+- Two programs competing for the fastest time
++ A bug where the result depends on how concurrent operations interleave, such as lost updates
+- An infinite loop
+- A deadlock
+> `counter += 1` from two threads can lose updates.
+? What does `with self._lock:` guarantee?
++ Only one thread at a time runs the block, and the lock is released afterwards even on errors
+- The block runs faster
+- The block runs in a new process
+- The block never raises
+> The lock's context manager acquires and releases it.
+? What must work sent to a `ProcessPoolExecutor` be?
+- Asynchronous
++ Picklable: plain data and top-level functions
+- Under 1 KB
+- A thread
+> It's copied to another process.
+--- exercise code python
+::prompt
+Prepare work for parallel workers, without sharing state:
+
+- `split_work(items, workers)` splits a list into `workers` consecutive chunks whose sizes differ by at most one (earlier chunks get the extra items), dropping empty chunks;
+- `parallel_total(numbers, workers, mapper=map)` sums each chunk **with `mapper(sum, chunks)`** and adds the partial sums. In real code `mapper` would be `pool.map` from an executor; the default `map` runs them one after another, and tests pass a recording fake.
+::starter
+def split_work(items, workers):
+    pass
+
+
+def parallel_total(numbers, workers, mapper=map):
+    pass
+::solution
+def split_work(items, workers):
+    size, extra = divmod(len(items), workers)
+    chunks = []
+    start = 0
+    for i in range(workers):
+        end = start + size + (1 if i < extra else 0)
+        if end > start:
+            chunks.append(items[start:end])
+        start = end
+    return chunks
+
+
+def parallel_total(numbers, workers, mapper=map):
+    return sum(mapper(sum, split_work(numbers, workers)))
+::tests
+assert split_work(list(range(10)), 3) == [[0, 1, 2, 3], [4, 5, 6], [7, 8, 9]]
+assert split_work([1, 2], 4) == [[1], [2]]
+assert split_work([], 3) == []
+_calls = []
+def _recording_map(func, chunks):
+    chunks = list(chunks)
+    _calls.append(len(chunks))
+    return [func(c) for c in chunks]
+assert parallel_total(list(range(1, 101)), 4, _recording_map) == 5050
+assert _calls == [4], "send the chunks through mapper once"
+assert parallel_total([5], 3) == 5
+::hints
+- `divmod(len(items), workers)` gives the base chunk size and how many chunks get one extra item.
+- Walk a `start` index forward, slicing each chunk.
+- `parallel_total` is one line: map `sum` over the chunks, then `sum` the results.
+--- exercise code python
+::prompt
+Make `Counter` safe to share between threads: `increment(by=1)` and `reset()` must change `value` **only while holding** `self._lock` (a `threading.Lock` created in `__init__`), using `with`. The hidden tests replace the lock with a fake that checks it's held at the right moments.
+::starter
+import threading
+
+
+class Counter:
+    def __init__(self):
+        self.value = 0
+
+    def increment(self, by=1):
+        self.value += by
+
+    def reset(self):
+        self.value = 0
+::solution
+import threading
+
+
+class Counter:
+    def __init__(self):
+        self.value = 0
+        self._lock = threading.Lock()
+
+    def increment(self, by=1):
+        with self._lock:
+            self.value += by
+
+    def reset(self):
+        with self._lock:
+            self.value = 0
+::tests
+import threading as _th
+c = Counter()
+assert isinstance(c._lock, type(_th.Lock())), "create a threading.Lock() in __init__"
+class _CheckLock:
+    def __init__(self, owner):
+        self.owner = owner
+        self.held = False
+        self.uses = 0
+    def __enter__(self):
+        self.held = True
+        self.uses += 1
+        self.before = self.owner.value
+    def __exit__(self, *exc):
+        self.held = False
+        return False
+class _Watched(Counter):
+    def __setattr__(self, name, value):
+        if name == "value" and "_lock" in self.__dict__ and isinstance(self._lock, _CheckLock):
+            assert self._lock.held, "value changed without holding the lock"
+        super().__setattr__(name, value)
+w = _Watched()
+w._lock = _CheckLock(w)
+w.increment()
+w.increment(5)
+assert w.value == 6 and w._lock.uses == 2
+w.reset()
+assert w.value == 0 and w._lock.uses == 3
+::hints
+- Create `self._lock = threading.Lock()` in `__init__`.
+- Wrap each change of `self.value` in `with self._lock:`.
+--- cards
+GIL :: CPython's Global Interpreter Lock: one thread runs Python bytecode at a time. Threads help I/O-bound work, not CPU-bound.
+Threads vs processes :: Threads share memory (cheap, race-prone); processes have separate memory (true parallelism, data must be pickled).
+concurrent.futures :: ThreadPoolExecutor / ProcessPoolExecutor with map, submit and as_completed; same interface for both.
+Race condition :: Results depend on interleaving; counter += 1 can lose updates. Protect with a Lock, or don't share mutable state.
+
+=== lesson py-performance | Measuring and improving performance | 100
+"Premature optimisation is the root of all evil," wrote Donald Knuth. Most code is fast enough. But when a program really is slow, a methodical approach finds the fix quickly, and the biggest wins nearly always come from **algorithms and data structures**, not clever tricks.
+
+## First make it work, then right, then fast
+
+1. **Work:** correct results, with tests.
+2. **Right:** clear, well-structured code.
+3. **Fast:** only if it's actually too slow, and only where it's slow.
+
+The tests from step 1 make step 3 safe: you can rewrite a slow part and know immediately if you broke it.
+
+## Measure, don't guess
+
+Programmers are famously bad at guessing where time goes. Measure:
+
+```python
+import time
+start = time.perf_counter()
+result = slow_function()
+print(f"{time.perf_counter() - start:.3f} s")
+
+import timeit
+timeit.timeit("sorted(data)", setup="data = list(range(1000))[::-1]", number=1000)
+```
+
+`timeit` runs a small snippet many times for a reliable number. For a whole program, a **profiler** shows which functions take the time:
+
+```
+python -m cProfile -s cumulative my_program.py
+```
+
+## Complexity: how the work grows
+
+**Big-O notation** describes how running time grows with the input size n (the algorithms track covers it in depth):
+
+| Operation | Grows like | 1,000 items → 1,000,000 items |
+|---|---|---|
+| `x in a_set`, `a_dict[key]` | O(1), constant | the same speed |
+| `x in a_list`, a single loop | O(n), linear | 1,000× slower |
+| `sorted(items)` | O(n log n) | about 2,000× slower |
+| a loop inside a loop over the same data | O(n²), quadratic | **1,000,000×** slower |
+
+That's why the most common performance bug is an innocent-looking `in` check on a list inside a loop: O(n) inside O(n) is O(n²). Turning the list into a set makes it O(n) overall.
+
+## The usual wins
+
+- **Use the right structure:** sets and dicts for lookups, `deque` for queues, `heapq` for "the smallest/largest few", `bisect` for searching sorted lists.
+- **Don't repeat work:** move calculations out of loops, cache results (`functools.lru_cache`).
+- **Build strings with `"".join(parts)`**, not `+=` in a long loop.
+- **Prefer built-ins and comprehensions:** `sum`, `max`, `sorted`, `any` run in fast C code.
+- **Stream big data** with generators instead of building huge lists.
+- **Vectorise numeric work** with NumPy or pandas.
+
+## heapq and bisect
+
+```python
+import heapq, bisect
+
+heapq.nlargest(3, scores)                    # the 3 biggest, without sorting everything
+heapq.nsmallest(2, tasks, key=lambda t: t[1])
+heap = []
+heapq.heappush(heap, (2, "write"))           # a priority queue: smallest first
+heapq.heappop(heap)
+
+breakpoints = [60, 70, 80, 90]               # must be sorted
+bisect.bisect(breakpoints, 85)               # 3: where 85 would go, in O(log n)
+bisect.insort(sorted_list, 42)               # insert, keeping the list sorted
+```
+
+~~~check
+? `for x in a: if x in b: ...` with two lists of 100,000 items is slow. What's the best fix?
+- Use a `while` loop instead
++ Convert `b` to a set first, so each `in` check is O(1)
+- Sort `a`
+- Add `lru_cache`
+> The nested membership test made it O(n²); with a set it's O(n).
+~~~
+
+📚 **Go deeper:** Python Library Reference, `timeit`, `profile` (cProfile), `heapq`, `bisect`; Python Wiki, "TimeComplexity" (the cost of list, dict and set operations); Donald Knuth, "Structured Programming with go to Statements" (1974), source of the famous quote.
+--- goals
+- follow "make it work, make it right, make it fast", measuring before optimising
+- time code with `perf_counter` and `timeit`, and find hot spots with a profiler
+- use Big-O to predict how code scales and spot accidental O(n²) loops
+- speed code up with sets, dicts, `heapq`, `bisect`, caching and `join`
+--- quiz
+? Which is O(1) on average?
++ `key in a_dict`
+- `x in a_list`
+- `sorted(a_list)`
+- `a_list.index(x)`
+> Dicts and sets use hashing.
+? What's the first step when a program feels slow?
+- Rewrite it in another language
++ Measure where the time actually goes
+- Add caching everywhere
+- Remove all comments
+> Profilers often surprise you.
+? What does `heapq.nlargest(5, data)` avoid?
++ Sorting the whole collection when you only need the top few
+- Using memory
+- Comparing items
+- Duplicates
+> It's O(n log k) instead of O(n log n).
+? Why is `s += piece` in a loop over 100,000 pieces slower than `"".join(pieces)`?
++ Each `+=` may copy the whole string so far, while `join` builds the result once
+- `join` uses threads
+- `+=` doesn't work on strings
+- They're the same speed
+> Building with `join` is linear.
+--- exercise code python
+::prompt
+Make these **fast**: the tests use 200,000 items and must finish within a few seconds, so an O(n²) approach will time out.
+
+- `has_duplicates(items)`: `True` if any value appears twice;
+- `common_items(a, b)`: the items of `a` that are also in `b`, in `a`'s order, each only once.
+::starter
+def has_duplicates(items):
+    pass
+
+
+def common_items(a, b):
+    pass
+::solution
+def has_duplicates(items):
+    return len(set(items)) != len(items)
+
+
+def common_items(a, b):
+    lookup = set(b)
+    seen = set()
+    result = []
+    for x in a:
+        if x in lookup and x not in seen:
+            seen.add(x)
+            result.append(x)
+    return result
+::tests
+assert has_duplicates([1, 2, 3, 2]) is True
+assert has_duplicates([]) is False
+assert common_items([3, 1, 2, 3, 5], [5, 3, 9]) == [3, 5]
+big = list(range(200_000))
+assert has_duplicates(big) is False
+assert has_duplicates(big + [199_999]) is True
+assert common_items(big, big[::-1])[:3] == [0, 1, 2] and len(common_items(big, big[::2])) == 100_000
+::hints
+- Set membership is O(1): build sets instead of searching lists.
+- For `common_items`, make a set of `b` once, before the loop, and remember what you've already added.
+--- exercise code python
+::prompt
+Use the standard library's fast tools:
+
+- `top_scores(scores, k)`: the `k` highest `(name, score)` pairs, highest first, with `heapq.nlargest` and a key;
+- `grade(score)`: `"F"` below 60, `"D"` below 70, `"C"` below 80, `"B"` below 90, else `"A"`, using `bisect.bisect` on the breakpoints `[60, 70, 80, 90]` and the string `"FDCBA"`;
+- `merge_logs(*logs)`: merge any number of already-sorted lists of `(timestamp, message)` into one sorted list with `heapq.merge`.
+::starter
+import bisect
+import heapq
+
+
+def top_scores(scores, k):
+    pass
+
+
+def grade(score):
+    pass
+
+
+def merge_logs(*logs):
+    pass
+::solution
+import bisect
+import heapq
+
+
+def top_scores(scores, k):
+    return heapq.nlargest(k, scores, key=lambda pair: pair[1])
+
+
+def grade(score):
+    return "FDCBA"[bisect.bisect([60, 70, 80, 90], score)]
+
+
+def merge_logs(*logs):
+    return list(heapq.merge(*logs))
+::tests
+s = [("Ada", 91), ("Bo", 72), ("Cy", 99), ("Di", 85)]
+assert top_scores(s, 2) == [("Cy", 99), ("Ada", 91)]
+assert top_scores(s, 10)[-1] == ("Bo", 72)
+assert [grade(x) for x in (0, 59, 60, 69, 70, 85, 90, 100)] == ["F", "F", "D", "D", "C", "B", "A", "A"]
+a = [(1, "boot"), (5, "login"), (9, "logout")]
+b = [(2, "cron"), (7, "backup")]
+assert merge_logs(a, b) == [(1, "boot"), (2, "cron"), (5, "login"), (7, "backup"), (9, "logout")]
+assert merge_logs() == []
+::hints
+- `heapq.nlargest(k, iterable, key=...)` with a key that returns the score.
+- `bisect.bisect(breakpoints, score)` gives the index 0–4 into `"FDCBA"`.
+- `heapq.merge(*logs)` returns an iterator; wrap it in `list`.
+--- cards
+Make it work, right, fast :: Correct and tested first, clear second, optimise only measured hot spots.
+timeit / cProfile :: timeit times small snippets reliably; python -m cProfile shows where a program spends its time.
+Big-O :: How work grows with input size: O(1) dict/set lookups, O(n) list search, O(n log n) sorting, O(n²) nested loops.
+heapq / bisect :: heapq: top-k, priority queues, merging sorted data. bisect: search/insert in sorted lists in O(log n).
+
+=== lesson py-secure | Writing secure Python | 105
+Security isn't a separate feature you add at the end; it's a set of habits. Most real-world breaches exploit a handful of well-known mistakes. This lesson covers the ones Python developers most need to avoid. (The **Cybersecurity** track goes much further.)
+
+## Randomness for secrets: use secrets
+
+The `random` module is designed for simulations and games. Its numbers are **predictable** to an attacker who sees enough of them. For anything secret (passwords, tokens, reset links, session ids), use `secrets`:
+
+```python
+import secrets
+token = secrets.token_urlsafe(32)               # e.g. a password-reset link token
+pin = "".join(secrets.choice("0123456789") for _ in range(6))
+secrets.compare_digest(a, b)                     # compare secrets in constant time
+```
+
+## Storing passwords
+
+Never store passwords, not even encrypted ones. Store a **salted, slow hash**:
+
+- a **salt** (random bytes, different for every user) makes identical passwords hash differently and defeats precomputed tables;
+- a deliberately **slow** algorithm (PBKDF2, scrypt, bcrypt, Argon2) makes guessing billions of passwords impractical. Plain SHA-256 is far too fast for passwords.
+
+```python
+import hashlib, hmac, os
+salt = os.urandom(16)
+digest = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, 200_000)
+# to check a login attempt: recompute with the same salt and compare
+hmac.compare_digest(stored_digest, attempt_digest)
+```
+
+Use `compare_digest` rather than `==`: it takes the same time however many characters match, so attackers can't learn anything from timing. In real projects, use a maintained library such as `argon2-cffi` or `passlib`, or your web framework's built-in password hashing.
+
+## Never run untrusted input as code
+
+`eval()` and `exec()` run any Python code, so `eval(user_text)` hands the user your computer: `__import__("os").system("...")`. To parse literal data, use `ast.literal_eval`, which only accepts strings, numbers, lists, dicts, tuples, sets, booleans and None, or better, a real format like JSON. The same danger applies to `pickle.loads` and `yaml.load` on untrusted data.
+
+## Injection in all its forms
+
+Whenever data is placed into a command language, keep them separate:
+
+- **SQL:** placeholders, never string building (see the sqlite3 lesson).
+- **Shell commands:** `subprocess.run(["convert", filename, "out.png"])` with a **list** of arguments; never `shell=True` with user input, where `filename = "a.png; rm -rf ~"` would run the second command.
+- **HTML:** web frameworks escape template variables automatically; don't turn that off for user input (cross-site scripting).
+
+## Path traversal
+
+A download feature that does `open(BASE / user_filename)` can be tricked with `"../../etc/passwd"`. Resolve the final path and check it's still inside the allowed folder:
+
+```python
+from pathlib import Path
+
+def safe_path(base, name):
+    base = Path(base).resolve()
+    target = (base / name).resolve()
+    if not target.is_relative_to(base):
+        raise ValueError("path escapes the base folder")
+    return target
+```
+
+## Secrets and logs
+
+- Keep API keys and passwords in **environment variables** or a secrets manager, never in code or Git. If a secret is ever committed, consider it leaked: rotate it.
+- Don't log passwords, tokens or full card numbers. Logs are copied, shipped and read by many people.
+
+## Dependencies
+
+Your app includes all the code of every package you install. Pin versions, install packages only from trusted sources (watch for **typosquatting**: `reqeusts` is not `requests`), keep them updated, and scan them with `pip-audit`. Keep Python itself updated too.
+
+~~~check
+? Which is the right way to generate a password-reset token?
+- `str(random.randint(0, 999999))`
+- `hashlib.md5(email.encode()).hexdigest()`
++ `secrets.token_urlsafe(32)`
+- `str(time.time())`
+> Only `secrets` produces unpredictable values; the others can be guessed.
+~~~
+
+📚 **Go deeper:** OWASP Top 10 and the OWASP Cheat Sheet Series (Password Storage, Injection Prevention); Python Library Reference, `secrets`, `hmac`, `ast.literal_eval`, `subprocess` ("Security Considerations"); PyPA, `pip-audit`.
+--- goals
+- generate secrets with `secrets`, never `random`
+- store passwords as salted, slow hashes and compare in constant time
+- avoid `eval`, unsafe deserialisation and every kind of injection
+- prevent path traversal, keep secrets out of code and logs, and manage dependencies safely
+--- quiz
+? Why not use `random` for security tokens?
++ Its output can be predicted by an attacker who sees enough of it
+- It's too slow
+- It can't produce letters
+- It requires internet access
+> Use `secrets` for anything that must be unguessable.
+? Why is plain SHA-256 a poor choice for storing passwords?
+- It's not a real hash
++ It's so fast that attackers can try billions of guesses; password hashes must be slow and salted
+- It produces too short a result
+- It's reversible
+> Use PBKDF2, scrypt, bcrypt or Argon2 with a per-user salt.
+? What's the safe way to turn user text like `"[1, 2, 3]"` into a list?
+- `eval(text)`
+- `exec(text)`
++ `ast.literal_eval(text)` (or JSON)
+- `pickle.loads(text)`
+> `literal_eval` accepts only literal data, never code.
+? Why is `subprocess.run(f"convert {name} out.png", shell=True)` dangerous?
++ A name like `"x.png; rm -rf ~"` runs an extra command
+- It's slower
+- `convert` doesn't exist
+- Lists aren't allowed
+> Pass a list of arguments without `shell=True`.
+--- exercise code python
+::prompt
+Write secret generators with the `secrets` module (not `random`):
+
+- `reset_token()` returns a URL-safe token of at least 40 characters (`secrets.token_urlsafe(32)`);
+- `one_time_code(length=6)` returns a string of `length` random digits.
+::starter
+import random
+
+
+def reset_token():
+    return str(random.random())
+
+
+def one_time_code(length=6):
+    return str(random.randint(0, 10 ** length - 1))
+::solution
+import secrets
+
+
+def reset_token():
+    return secrets.token_urlsafe(32)
+
+
+def one_time_code(length=6):
+    return "".join(secrets.choice("0123456789") for _ in range(length))
+::tests
+import re as _re
+t = reset_token()
+assert isinstance(t, str) and len(t) >= 40 and _re.fullmatch(r"[A-Za-z0-9_-]+", t)
+assert len({reset_token() for _ in range(50)}) == 50
+c = one_time_code()
+assert len(c) == 6 and c.isdigit()
+assert len(one_time_code(8)) == 8
+def _names(code):
+    found = set(code.co_names)
+    for const in code.co_consts:
+        if hasattr(const, "co_names"):
+            found |= _names(const)
+    return found
+assert "random" not in _names(reset_token.__code__) | _names(one_time_code.__code__), "use the secrets module, not random"
+::hints
+- `import secrets`; `secrets.token_urlsafe(32)` gives about 43 characters.
+- Build the code from `secrets.choice("0123456789")`, once per digit; keep leading zeros by working with strings.
+--- exercise code python
+::prompt
+Store passwords safely. `hash_password(password)` returns a string `"<salt hex>$<hash hex>"` using a fresh 16-byte salt (`os.urandom(16)`) and `hashlib.pbkdf2_hmac("sha256", password.encode(), salt, ITERATIONS)`. `verify_password(password, stored)` recomputes the hash with the stored salt and compares with `hmac.compare_digest`.
+::starter
+import hashlib
+import hmac
+import os
+
+ITERATIONS = 100_000
+
+
+def hash_password(password):
+    return password
+
+
+def verify_password(password, stored):
+    return password == stored
+::solution
+import hashlib
+import hmac
+import os
+
+ITERATIONS = 100_000
+
+
+def hash_password(password):
+    salt = os.urandom(16)
+    digest = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, ITERATIONS)
+    return salt.hex() + "$" + digest.hex()
+
+
+def verify_password(password, stored):
+    salt_hex, digest_hex = stored.split("$")
+    attempt = hashlib.pbkdf2_hmac("sha256", password.encode(), bytes.fromhex(salt_hex), ITERATIONS)
+    return hmac.compare_digest(attempt.hex(), digest_hex)
+::tests
+s1 = hash_password("correct horse")
+s2 = hash_password("correct horse")
+assert "correct horse" not in s1
+assert s1 != s2, "each hash needs its own random salt"
+salt, digest = s1.split("$")
+assert len(bytes.fromhex(salt)) == 16 and len(bytes.fromhex(digest)) == 32
+assert verify_password("correct horse", s1) and verify_password("correct horse", s2)
+assert not verify_password("Correct horse", s1)
+import hashlib as _h
+assert digest == _h.pbkdf2_hmac("sha256", b"correct horse", bytes.fromhex(salt), ITERATIONS).hex()
+::hints
+- Store the salt with the hash: `salt.hex() + "$" + digest.hex()`.
+- To verify, split on `"$"`, turn the salt back into bytes with `bytes.fromhex`, and hash the attempt the same way.
+- Compare with `hmac.compare_digest(a, b)`.
+--- exercise code python
+::prompt
+Write two defences:
+
+- `safe_path(base, name)` returns the resolved `Path` of `name` inside the folder `base`, or raises `ValueError` if it would escape `base` (like `"../secret.txt"` or an absolute path);
+- `parse_literal(text)` turns text such as `"[1, 2, 3]"` or `"{'a': 1}"` into Python data with `ast.literal_eval`, and raises `ValueError("not a literal")` for anything else, including code.
+::starter
+import ast
+from pathlib import Path
+
+
+def safe_path(base, name):
+    return Path(base) / name
+
+
+def parse_literal(text):
+    return eval(text)
+::solution
+import ast
+from pathlib import Path
+
+
+def safe_path(base, name):
+    root = Path(base).resolve()
+    target = (root / name).resolve()
+    if not target.is_relative_to(root):
+        raise ValueError(f"{name!r} escapes {root}")
+    return target
+
+
+def parse_literal(text):
+    try:
+        return ast.literal_eval(text)
+    except (ValueError, SyntaxError):
+        raise ValueError("not a literal") from None
+::tests
+import tempfile as _tf
+from pathlib import Path as _P
+base = _P(_tf.mkdtemp())
+assert safe_path(base, "report.txt") == (base / "report.txt").resolve()
+assert safe_path(str(base), "sub/dir/a.txt") == (base / "sub" / "dir" / "a.txt").resolve()
+for bad in ["../secret.txt", "sub/../../x", "/etc/passwd"]:
+    try:
+        safe_path(base, bad)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError(f"safe_path should refuse {bad!r}")
+assert parse_literal("[1, 2, 3]") == [1, 2, 3]
+assert parse_literal("{'a': (1, None)}") == {"a": (1, None)}
+for bad in ["__import__('os').system('echo hi')", "open('x')", "1 +"]:
+    try:
+        parse_literal(bad)
+    except ValueError as e:
+        assert str(e) == "not a literal"
+    else:
+        raise AssertionError(f"parse_literal must refuse {bad!r}")
+::hints
+- Resolve both the base and the target, then check `target.is_relative_to(root)`.
+- `ast.literal_eval` raises `ValueError` (or `SyntaxError`) for anything that isn't a literal; turn both into `ValueError("not a literal")`.
+--- cards
+secrets vs random :: random is predictable (simulations, games); secrets is for tokens, passwords and codes.
+Password storage :: Salted, slow hashes (PBKDF2, scrypt, bcrypt, Argon2); compare with hmac.compare_digest. Never store passwords.
+eval / pickle danger :: eval, exec, pickle.loads and yaml.load on untrusted input can run arbitrary code. Use ast.literal_eval or JSON.
+Injection :: Keep data separate from command languages: SQL placeholders, subprocess argument lists, auto-escaped HTML.
+Path traversal :: Resolve the final path and check it's inside the allowed folder (is_relative_to).
 === lesson py-tooling | Tools of a professional Python developer | 100
 Writing code is only part of the job. Professional projects use a standard set of tools to manage dependencies, keep code consistent, catch mistakes automatically, and share their work. You'll use all of these the moment you start a real project on your own computer.
 

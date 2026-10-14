@@ -1215,6 +1215,260 @@ Edge cases :: Empty, zero, one item, negatives, huge values, exact boundaries. B
 TDD :: Red (failing test), green (simplest passing code), refactor.
 Mutation testing :: Deliberately insert bugs; good tests fail for each one.
 
+=== lesson py-mocking | Test doubles and mocks | 100
+Units of code rarely work alone: they send emails, call web APIs, read the clock, roll dice, write to databases. Tests that really do those things are slow, flaky and sometimes dangerous (nobody wants a test run to email real customers). The solution is to replace those collaborators with **test doubles**.
+
+## Kinds of test doubles
+
+| Double | What it is | Example |
+|---|---|---|
+| **fake** | a simple working replacement | an in-memory repository instead of a database |
+| **stub** | returns canned answers | a clock that always says 09:00 |
+| **mock** | records how it was called, so the test can check | a mailer that remembers every `send` |
+
+You've already written fakes and stubs by hand with dependency injection (Module 9). Python's standard library adds a toolkit that makes them in one line: `unittest.mock`.
+
+## Mock objects
+
+```python
+from unittest.mock import Mock
+
+mailer = Mock()
+mailer.send("ada@x.io", "Welcome!")       # any method can be called; it's recorded
+mailer.send.assert_called_once_with("ada@x.io", "Welcome!")   # passes
+mailer.send.call_count                    # 1
+mailer.send.call_args                     # call('ada@x.io', 'Welcome!')
+```
+
+A `Mock` accepts **any** attribute or method call and records it. You configure what calls return:
+
+```python
+api = Mock()
+api.get_price.return_value = 9.99
+api.get_price("apple")                    # 9.99
+
+flaky = Mock(side_effect=[ConnectionError, ConnectionError, "data"])
+# 1st call raises, 2nd raises, 3rd returns "data": perfect for testing retries
+```
+
+`side_effect` can also be an exception class (raise it every time) or a function (compute the answer).
+
+~~~check
+? `m = Mock()`, then `m.anything.you.like(42)`. What happens?
+- `AttributeError`
++ It works: Mocks create attributes and accept calls on demand, recording them
+- It returns 42
+- It raises `TypeError`
+> That flexibility is also a danger: a typo like `m.sned()` won't fail. Use `Mock(spec=RealClass)` to restrict mocks to real attributes.
+~~~
+
+## patch: replacing things temporarily
+
+`patch` swaps something out for the duration of a `with` block (or a decorated test), then restores it:
+
+```python
+from unittest.mock import patch
+
+with patch("builtins.input", return_value="42"):
+    age = int(input("Age? "))             # no typing needed: input() returns "42"
+
+with patch.object(Clock, "now", return_value=datetime(2026, 10, 14, 9, 0)):
+    ...
+```
+
+The golden rule of `patch`: replace the name **where it's looked up**, not where it was defined. If `shop/report.py` does `from datetime import date`, patch `"shop.report.date"`, not `"datetime.date"`.
+
+## Don't over-mock
+
+Mocks make it easy to check *how* code does something (which methods it called, in what order). Tests full of such checks break whenever you refactor, even when the behaviour is still right. Prefer:
+
+1. checking **results** (return values and state) over checking calls;
+2. **fakes** for your own collaborators;
+3. mocks for the edges of the system: email, payments, third-party APIs, the clock.
+
+## Many cases, one test
+
+When a function needs checking with many inputs, write the cases as data, called **table-driven** tests:
+
+```python
+CASES = [("Hello World", "hello-world"), ("  Trim me ", "trim-me"), ("", "")]
+
+def test_slugify():
+    for text, expected in CASES:
+        assert slugify(text) == expected, f"slugify({text!r})"
+```
+
+pytest does the same with `@pytest.mark.parametrize("text, expected", CASES)`, reporting each case as its own test, and **fixtures** provide shared setup (a temporary folder, a test database) to the tests that ask for them by name. unittest has `self.subTest(...)` and `setUp()`.
+
+📚 **Go deeper:** Python Library Reference, `unittest.mock` ("getting started" and "where to patch"); pytest docs, "How to parametrize fixtures and test functions"; Martin Fowler, "Mocks Aren't Stubs".
+--- goals
+- tell fakes, stubs and mocks apart, and choose between them
+- create `Mock` objects, configure `return_value` and `side_effect`, and assert on calls
+- replace things temporarily with `patch`, in the right place
+- write table-driven tests, and avoid over-mocking
+--- quiz
+? Which double would you use instead of a real payment gateway, to check that `charge()` was called once with 50?
+- A fake database
++ A mock, then `assert_called_once_with(50)`
+- A stub clock
+- No double: call the real gateway
+> Mocks record calls so tests can check them.
+? `m = Mock(side_effect=[ValueError, 5])`. What do the first two calls of `m()` do?
++ The first raises `ValueError`, the second returns 5
+- Both return 5
+- Both raise `ValueError`
+- The first returns `ValueError`, the second 5
+> A list `side_effect` supplies one outcome per call.
+? `report.py` does `from time import time`. Which target makes `patch` affect `report.py`?
+- `"time.time"`
++ `"report.time"`
+- `"builtins.time"`
+- Either works
+> Patch where the name is looked up: `report` has its own name `time`.
+? What's the main risk of tests that check every internal call with mocks?
+- They run slowly
++ They break when the code is refactored, even though its behaviour didn't change
+- They can't fail
+- They need a network
+> Prefer checking results; mock the edges of the system.
+--- exercise fill python
+::prompt
+Complete the mock setup: make `api.get_price` return `9.99`, then check it was called exactly once with `"apple"`.
+::template
+from unittest.mock import Mock
+
+api = Mock()
+api.get_price.____ = 9.99
+print(api.get_price("apple"))
+api.get_price.____("apple")
+print("checked")
+::answers
+return_value
+assert_called_once_with
+::expected
+9.99
+checked
+::hints
+- The attribute that sets what a call returns is named after exactly that.
+- The assertion method's name says "called once with".
+--- exercise code python
+::prompt
+Write `ask_int(prompt)` that keeps calling `input(prompt)` until the answer is a whole number, and returns it as an int. The hidden tests replace `input` with a mock (`patch("builtins.input", side_effect=["abc", "4.5", "7"])`) and check both the result and how many times `input` was called.
+::starter
+def ask_int(prompt):
+    return int(input(prompt))
+::solution
+def ask_int(prompt):
+    while True:
+        try:
+            return int(input(prompt))
+        except ValueError:
+            pass
+::tests
+from unittest.mock import patch as _patch
+with _patch("builtins.input", side_effect=["abc", "4.5", "7"]) as fake:
+    assert ask_int("Age? ") == 7
+    assert fake.call_count == 3, f"input should be asked 3 times, was {fake.call_count}"
+    fake.assert_called_with("Age? ")
+with _patch("builtins.input", side_effect=["-12"]) as fake:
+    assert ask_int("n: ") == -12 and fake.call_count == 1
+::hints
+- Loop forever with `while True:` and `return` as soon as the conversion works.
+- Catch `ValueError` and simply try again.
+--- exercise code python
+::prompt
+**You are the tester.** `send_reminders(users, mailer)` (given, correct) sends `mailer.send(email, "We miss you!")` to every user whose `"active"` is `False`, and returns how many it sent. Write at least two `test_...` functions that use a `Mock` mailer and check the calls. They'll be run against the correct version and **three** buggy ones.
+::starter
+from unittest.mock import Mock, call
+
+
+def send_reminders(users, mailer):
+    sent = 0
+    for user in users:
+        if not user["active"]:
+            mailer.send(user["email"], "We miss you!")
+            sent += 1
+    return sent
+
+
+def test_reminds_inactive_user():
+    mailer = Mock()
+    send_reminders([{"email": "a@x.io", "active": False}], mailer)
+    assert mailer.send.called
+::solution
+from unittest.mock import Mock, call
+
+
+def send_reminders(users, mailer):
+    sent = 0
+    for user in users:
+        if not user["active"]:
+            mailer.send(user["email"], "We miss you!")
+            sent += 1
+    return sent
+
+
+USERS = [
+    {"email": "a@x.io", "active": False},
+    {"email": "b@x.io", "active": True},
+    {"email": "c@x.io", "active": False},
+]
+
+
+def test_reminds_only_inactive_users_with_the_right_subject():
+    mailer = Mock()
+    send_reminders(USERS, mailer)
+    assert mailer.send.call_args_list == [call("a@x.io", "We miss you!"), call("c@x.io", "We miss you!")]
+
+
+def test_returns_how_many_were_sent():
+    assert send_reminders(USERS, Mock()) == 2
+    assert send_reminders([], Mock()) == 0
+::tests
+_tests = [f for _name, f in list(globals().items()) if _name.startswith("test_") and callable(f)]
+assert len(_tests) >= 2, f"write at least 2 test_ functions (found {len(_tests)})"
+_real = send_reminders
+for _t in _tests:
+    try:
+        _t()
+    except AssertionError:
+        raise AssertionError(f"{_t.__name__} fails on the CORRECT send_reminders(), so one of its expectations is wrong") from None
+def _everyone(users, mailer):
+    for u in users:
+        mailer.send(u["email"], "We miss you!")
+    return len(users)
+def _wrong_subject(users, mailer):
+    n = 0
+    for u in users:
+        if not u["active"]:
+            mailer.send(u["email"], "Hello")
+            n += 1
+    return n
+def _wrong_count(users, mailer):
+    for u in users:
+        if not u["active"]:
+            mailer.send(u["email"], "We miss you!")
+    return 0
+for _bug, _what in [(_everyone, "emails active users too"), (_wrong_subject, "uses the wrong subject"), (_wrong_count, "always returns 0")]:
+    send_reminders = _bug
+    _caught = False
+    for _t in _tests:
+        try:
+            _t()
+        except Exception:
+            _caught = True
+    send_reminders = _real
+    assert _caught, f"none of your tests caught this bug: send_reminders {_what}"
+::hints
+- Include both active and inactive users in your test data.
+- `mailer.send.call_args_list == [call("a@x.io", "We miss you!"), ...]` checks every call, with its arguments and order.
+- Also test the returned count.
+--- cards
+Fake / stub / mock :: Fake: a working lightweight replacement. Stub: canned answers. Mock: records calls for assertions.
+Mock :: Accepts any attribute or call and records it. return_value sets results; side_effect raises, sequences or computes them.
+assert_called_once_with :: Checks a mock was called exactly once with these arguments. call_args_list holds every call.
+patch :: Temporarily replaces a name; patch where it's looked up ("report.time", not "time.time").
+Table-driven tests :: Cases as data in a loop (or pytest.mark.parametrize), one assertion per case.
 === lesson py-m7-test | Module 7 test | 200 | exam
 This test covers handling and raising exceptions, debugging, logging and writing tests: the skills that turn code that *works on your machine* into code you can trust.
 
