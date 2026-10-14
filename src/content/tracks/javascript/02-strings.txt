@@ -1,0 +1,980 @@
+=== module Module 2 · Strings
+
+=== lesson js-strings | Strings in depth | 70
+## Text is a sequence of characters
+
+A string is a **sequence** of characters, in order. Each character has a position, called its **index**, and counting starts at **0**:
+
+```
+ J   a   v   a   S   c   r   i   p   t
+ 0   1   2   3   4   5   6   7   8   9
+```
+
+```js
+const word = "JavaScript";
+console.log(word.length);
+console.log(word[0]);
+console.log(word[4]);
+console.log(word[word.length - 1]);
+```
+
+- `.length` is the number of characters (10). Note: no parentheses, it's a value, not a function.
+- `word[0]` is the first character. The last one is at `length - 1`, because counting started at 0.
+- Asking for an index that doesn't exist gives `undefined`, not an error: `word[20]` is `undefined`.
+
+The method `.at()` also accepts **negative** positions, which count from the end:
+
+```js
+const word = "JavaScript";
+console.log(word.at(0), word.at(-1), word.at(-2));
+```
+
+## Slicing: taking part of a string
+
+`slice(start, end)` gives you the characters from `start` **up to but not including** `end`:
+
+```js
+const word = "JavaScript";
+console.log(word.slice(0, 4));
+console.log(word.slice(4));
+console.log(word.slice(-6));
+console.log(word.slice(-6, -3));
+```
+
+- Leave out `end` to go to the end of the string.
+- Negative numbers count from the end: `slice(-6)` is "the last 6 characters".
+- The length of `slice(a, b)` is always `b - a`: `slice(0, 4)` gives 4 characters.
+
+"Up to but not including" feels odd at first, but it makes slices fit together: `word.slice(0, 4) + word.slice(4)` is the whole word again.
+
+> You'll also see `substring(start, end)` in older code. It's almost the same, but doesn't understand negative numbers. Prefer `slice`.
+
+~~~check
+? What does `"Hello, World".slice(7, 10)` give?
+- `"World"`
++ `"Wor"`
+- `", W"`
+- `"Worl"`
+> Index 7 is "W". The slice stops before index 10, so it's characters 7, 8 and 9.
+~~~
+
+## Strings can't be changed
+
+Strings are **immutable**: once created, a string never changes. Trying to change one character is an error in strict mode:
+
+```js
+const greeting = "hello";
+greeting[0] = "H";
+```
+
+Instead, you build a **new** string from pieces and, if you like, give the old name to the new string:
+
+```js
+let greeting = "hello";
+greeting = "H" + greeting.slice(1);
+console.log(greeting);
+```
+
+That's why every string method you'll learn next *returns a new string* and leaves the original alone. Forgetting to keep the result is a classic beginner bug: `name.toUpperCase();` on its own line does nothing useful.
+
+## Joining strings
+
+Use `+` to join (concatenate) strings, or a template literal:
+
+```js
+const first = "Ada";
+const last = "Lovelace";
+console.log(first + " " + last);
+console.log(`${first} ${last}`);
+console.log(`${last.toUpperCase()}, ${first[0]}.`);
+```
+
+Template literals are usually clearer: you see the shape of the final text, and any expression can go inside `${ }`: maths, method calls, even a choice (`${score > 50 ? "pass" : "fail"}`, which you'll learn in Module 3). They can also span several lines, keeping the line breaks:
+
+```js
+const poem = `Roses are red,
+Violets are blue,
+JavaScript strings
+Can span lines too.`;
+console.log(poem);
+```
+
+## Special characters: escapes
+
+To put a character in a string that would otherwise end it or can't be typed, use a **backslash escape**:
+
+| Escape | Means |
+|---|---|
+| `\n` | new line |
+| `\t` | tab |
+| `\"` and `\'` | a quote that doesn't end the string |
+| `\\` | one real backslash |
+| `\u00e9` or `\u{1F600}` | a Unicode character by its code (é, 😀) |
+
+```js
+console.log("Name:\tAda\nRole:\tProgrammer");
+console.log('It\'s here', "C:\\Users\\ada");
+console.log("caf\u00e9 \u{1F600}");
+```
+
+## Comparing strings
+
+`===` compares strings exactly, including capital letters and spaces:
+
+```js
+console.log("cat" === "cat", "cat" === "Cat", "cat" === "cat ");
+```
+
+`<` and `>` compare strings **character by character, by their character codes**. That's alphabetical for lowercase words, but every uppercase letter comes before every lowercase one, and digits are compared as characters, not as numbers:
+
+```js
+console.log("apple" < "banana");
+console.log("Zebra" < "apple");
+console.log("10" < "9");
+```
+
+For human-friendly alphabetical order, use `a.localeCompare(b)`, which returns a negative number if `a` comes first, positive if `b` does, and 0 if they're equal. You'll use it when sorting in Module 6.
+
+## Strings are primitives, but have methods
+
+A string is a simple value (a primitive), yet you can write `word.length` and `word.toUpperCase()`. Behind the scenes, JavaScript briefly wraps the string in a `String` object that carries those methods, then throws the wrapper away. You never need to do this yourself, but it explains why `typeof "hi"` is `"string"` and still `"hi".length` works.
+
+## A note on emoji
+
+JavaScript strings are stored as UTF-16 **code units**. Most characters take one unit, but emoji and some rare characters take two, so `"😀".length` is 2. When you must count what a person would call characters, `[..."😀"].length` gives 1 (you'll understand that spread syntax in Module 6). For everyday text in English and most European languages, `.length` is exactly what you expect.
+
+📚 **Go deeper:** javascript.info, "Strings"; MDN, "String" reference and the JavaScript Guide's "Text formatting"; *Eloquent JavaScript* (4th ed.), chapter 1 (Strings) and chapter 4 (Strings and their properties).
+--- goals
+- read single characters with `[i]` and `.at()`, counting from 0 (or from the end)
+- cut parts out of a string with `slice()`, including negative positions
+- explain why strings are immutable and keep the results of string operations
+- build strings with `+` and template literals, including multi-line ones
+- write special characters with escapes such as `\n`, `\t` and `\"`
+- compare strings with `===`, `<` and `localeCompare()`
+--- quiz
+? What does this print?
+```js
+const s = "planet";
+console.log(s[1], s.length);
+```
+- `p 6`
++ `l 6`
+- `l 5`
+- `p 5`
+> Index 0 is "p", index 1 is "l". The word has 6 characters.
+? What is `"keyboard".slice(-5)`?
+- `"keybo"`
++ `"board"`
+- `"oard"`
+- `"yboard"`
+> A negative start counts from the end: the last 5 characters.
+? What does this print?
+```js
+let name = "ada";
+name.toUpperCase();
+console.log(name);
+```
++ `ada`
+- `ADA`
+- `Ada`
+- An error
+> String methods return a new string. Without `name = name.toUpperCase();` the result is thrown away.
+? What does `"abc"[5]` give?
+- An error
+- `""`
++ `undefined`
+- `"c"`
+> An index past the end gives `undefined`. Note: no error is raised.
+? Which comparison is `true`?
+- `"Apple" === "apple"`
++ `"Zoo" < "apple"`
+- `"9" < "10"`
+- `"b" < "a"`
+> All uppercase letters come before lowercase ones in character-code order. "9" < "10" is false because "9" > "1".
+? How do you write a string containing `He said "hi"` using double quotes around it?
+- `"He said "hi""`
++ `"He said \"hi\""`
+- `"He said /"hi/""`
+- `"He said ""hi"""`
+> A backslash before a quote makes it part of the text instead of ending the string.
+--- exercise code javascript
+::prompt
+Given a `word`, print its first character, its last character (use `.at()`), its length, and the word without its first and last characters, exactly like this for `"JavaScript"`:
+```
+First: J
+Last: t
+Length: 10
+Middle: avaScrip
+```
+::starter
+const word = "JavaScript";
+// your code here
+::solution
+const word = "JavaScript";
+console.log("First:", word[0]);
+console.log("Last:", word.at(-1));
+console.log("Length:", word.length);
+console.log("Middle:", word.slice(1, -1));
+::expected
+First: J
+Last: t
+Length: 10
+Middle: avaScrip
+::variants
+"JavaScript" => "programming"
+::hints
+- The first character is `word[0]`; the last is `word.at(-1)`.
+- `slice(1, -1)` starts after the first character and stops before the last.
+--- exercise fill javascript
+::prompt
+Complete the program so it builds a username from a first and last name: the first three letters of the first name, then the whole last name, all in lowercase, then the length of the result.
+::template
+const first = "Grace";
+const last = "Hopper";
+const username = (first.____(0, 3) + last).____();
+console.log(`Username: ${username} (${username.____} characters)`);
+::answers
+slice
+toLowerCase
+length
+::expected
+Username: grahopper (9 characters)
+::hints
+- `slice(0, 3)` gives the first three characters.
+- `toLowerCase()` is a method (with parentheses); `length` is not.
+--- exercise code javascript
+::prompt
+Print a name badge with a template literal that spans **several lines**. Use the variables, and make the role uppercase with a method:
+```
++----------------+
+| Name: Ada      |
+| Role: ENGINEER |
++----------------+
+```
+The spaces inside the box are given; you only need to put the values in the right places.
+::starter
+const name = "Ada";
+const role = "engineer";
+// one console.log with a multi-line template literal
+::solution
+const name = "Ada";
+const role = "engineer";
+console.log(`+----------------+
+| Name: ${name}      |
+| Role: ${role.toUpperCase()} |
++----------------+`);
+::expected
++----------------+
+| Name: Ada      |
+| Role: ENGINEER |
++----------------+
+::variants
+"engineer" => "designer"
+::hints
+- A template literal in backticks keeps its line breaks: start it right after `console.log(` and close it on the last line.
+- Inside it, `${role.toUpperCase()}` puts the role in capitals.
+--- cards
+String index :: The position of a character, counting from 0: "cat"[0] is "c". The last is at length - 1.
+.at(i) :: Like [i], but negative numbers count from the end: "cat".at(-1) is "t".
+slice(start, end) :: The characters from start up to but NOT including end. Negative positions count from the end.
+Immutable strings :: A string can never be changed; methods return new strings. Keep the result: s = s.trim();
+Escape sequences :: \n new line, \t tab, \" or \' a quote, \\ a backslash, \u{1F600} a Unicode character.
+localeCompare :: a.localeCompare(b) is negative if a sorts first, positive if b does, 0 if equal. Human-friendly ordering.
+
+=== lesson js-string-methods | String methods | 75
+## Methods: actions a value can do
+
+A **method** is a function that belongs to a value. You call it with a dot: `text.toUpperCase()`. Strings come with dozens; these are the ones you'll use every week.
+
+## Changing case and trimming spaces
+
+```js
+const raw = "  Hello, World!  ";
+console.log(raw.toUpperCase());
+console.log(raw.toLowerCase());
+console.log(`[${raw.trim()}]`);
+console.log(`[${raw.trimStart()}]`, `[${raw.trimEnd()}]`);
+```
+
+`trim()` removes spaces, tabs and new lines from both ends (never from the middle). Use it on **everything a user types**: people add spaces by accident all the time, and `"ada "` is not equal to `"ada"`.
+
+## Searching
+
+| Method | Answers | Example | Result |
+|---|---|---|---|
+| `includes(x)` | does it contain `x`? | `"banana".includes("nan")` | `true` |
+| `startsWith(x)` | does it begin with `x`? | `"banana".startsWith("ba")` | `true` |
+| `endsWith(x)` | does it end with `x`? | `"photo.png".endsWith(".png")` | `true` |
+| `indexOf(x)` | where is `x` first? | `"banana".indexOf("an")` | `1` |
+| `lastIndexOf(x)` | where is `x` last? | `"banana".lastIndexOf("an")` | `3` |
+
+`indexOf` returns **-1** when it finds nothing. That's not an error, just a signal, so always check for it before using the position. All of these are **case-sensitive**: to search regardless of case, lowercase both sides first.
+
+```js
+const sentence = "The quick brown fox";
+console.log(sentence.includes("quick"), sentence.includes("Quick"));
+console.log(sentence.toLowerCase().includes("QUICK".toLowerCase()));
+console.log(sentence.indexOf("brown"), sentence.indexOf("cat"));
+```
+
+## Replacing
+
+`replace(a, b)` swaps the **first** `a` for `b`; `replaceAll(a, b)` swaps **every** one:
+
+```js
+const date = "2026-10-14";
+console.log(date.replace("-", "/"));
+console.log(date.replaceAll("-", "/"));
+```
+
+(Both can also take a *regular expression* pattern, for "any digit" or "any space" kinds of matches. That's Module 12.)
+
+## Splitting and joining
+
+`split(separator)` cuts a string into an **array** of pieces (an ordered list; arrays are Module 6). `join(separator)` glues an array's pieces back into one string:
+
+```js
+const csvLine = "Ada,Lovelace,1815";
+const parts = csvLine.split(",");
+console.log(parts);
+console.log(parts[0], parts.length);
+console.log(parts.join(" | "));
+console.log("hello".split(""));
+```
+
+`split("")` splits into single characters. Split-then-join is a handy pattern: `"a b c".split(" ").join("-")` gives `"a-b-c"`.
+
+~~~check
+? What does `"red,green,,blue".split(",")` give?
+- `["red", "green", "blue"]`
++ `["red", "green", "", "blue"]`
+- `["red,green,,blue"]`
+- `"red green blue"`
+> Between the two commas is an empty piece, and split keeps it as an empty string.
+~~~
+
+## Padding and repeating
+
+`padStart(length, filler)` and `padEnd(length, filler)` add characters until the string is at least `length` long. They're perfect for zero-padded numbers and lining up columns. `repeat(n)` repeats a string:
+
+```js
+console.log("7".padStart(3, "0"));
+console.log("5".padStart(2, "0") + ":" + "3".padStart(2, "0"));
+console.log("Name".padEnd(10, ".") + "Ada");
+console.log("=".repeat(20));
+```
+
+`padStart` only works on strings, so convert numbers first: `String(7).padStart(3, "0")`.
+
+## Chaining methods
+
+Because each method returns a new string, you can call another method on the result straight away. Read a chain from left to right:
+
+```js
+const input = "   ADA lovelace   ";
+const clean = input.trim().toLowerCase().replaceAll(" ", "-");
+console.log(clean);
+```
+
+Trim, then lowercase, then replace spaces. Long chains can be split over several lines, with each `.method()` on its own line, for readability.
+
+## A worked example: tidying a name
+
+Users type names in every possible way: `"  aDA   "`, `"ADA"`, `"ada"`. Let's make them all `"Ada"`:
+
+```js
+const typed = "  aDA   ";
+const trimmed = typed.trim();
+const tidy = trimmed[0].toUpperCase() + trimmed.slice(1).toLowerCase();
+console.log(`[${tidy}]`);
+```
+
+Trim first (or `trimmed[0]` would be a space), then uppercase the first letter and lowercase the rest. Breaking the work into named steps like `trimmed` makes code easier to read and to debug than one giant expression.
+
+## Where to find the rest
+
+Nobody remembers every method. Professionals look them up: search "MDN String" and you'll find the complete list, each with examples and a browser-support table. Get used to reading those pages; it's a skill you'll use for your whole career.
+
+📚 **Go deeper:** MDN, "String" reference (all methods, with examples); javascript.info, "Strings"; *Eloquent JavaScript* (4th ed.), chapter 4, "Strings and their properties".
+--- goals
+- change case and remove surrounding spaces with `toUpperCase()`, `toLowerCase()` and `trim()`
+- search with `includes`, `startsWith`, `endsWith` and `indexOf` (and handle -1)
+- replace text with `replace()` and `replaceAll()`
+- split strings into arrays and join them back with `split()` and `join()`
+- pad and repeat with `padStart()`, `padEnd()` and `repeat()`
+- chain several methods to clean up user input
+--- quiz
+? What does `"banana".indexOf("x")` give?
+- `0`
+- `undefined`
++ `-1`
+- An error
+> -1 means "not found". Always check for it before using the position.
+? What does this print?
+```js
+console.log("a-b-c".replace("-", "+"));
+```
+- `a+b+c`
++ `a+b-c`
+- `a-b-c`
+- `+`
+> `replace` with a string only swaps the first match. Use `replaceAll` for all of them.
+? What is `"Hello World".toLowerCase().includes("world")`?
++ `true`
+- `false`
+- `"world"`
+- `6`
+> After lowercasing, the text contains "world". This is the standard way to search regardless of case.
+? What does `"42".padStart(5, "0")` give?
+- `"42000"`
++ `"00042"`
+- `"0000042"`
+- `"42"`
+> padStart adds the filler at the start until the string is 5 characters long.
+? What does `"one two three".split(" ").length` give?
+- `1`
+- `2`
++ `3`
+- `13`
+> Splitting on spaces gives three words.
+? A user typed `"  Bob "`. Which expression gives `"bob"`?
+- `"  Bob ".lowercase().trim()`
++ `"  Bob ".trim().toLowerCase()`
+- `"  Bob ".toLowerCase`
+- `trim("  Bob ").toLowerCase()`
+> Methods are called on the value with a dot and parentheses. The method is `toLowerCase`, not `lowercase`.
+--- exercise code javascript
+::prompt
+Write a program that turns a blog post title into a **slug** for its web address: trim the spaces, make it lowercase, and replace every space with `-`. Then print whether it's a long slug (more than 20 characters) as `true` or `false`:
+```
+Title: "  Learn JavaScript Today  "
+Slug: learn-javascript-today
+Long: true
+```
+::starter
+const title = "  Learn JavaScript Today  ";
+// make the slug
+::solution
+const title = "  Learn JavaScript Today  ";
+const slug = title.trim().toLowerCase().replaceAll(" ", "-");
+console.log(`Title: "${title}"`);
+console.log(`Slug: ${slug}`);
+console.log(`Long: ${slug.length > 20}`);
+::expected
+Title: "  Learn JavaScript Today  "
+Slug: learn-javascript-today
+Long: true
+::variants
+"  Learn JavaScript Today  " => " Hello World "
+::hints
+- Chain three methods: `title.trim().toLowerCase().replaceAll(" ", "-")`.
+- `slug.length > 20` is `true` or `false`, and a template literal prints it.
+--- exercise parsons javascript
+::prompt
+Put the lines in order so the program reads a full name like `ada lovelace` and prints the initials `A.L.`. One line is a trap: it would make the program fail.
+::lines
+const full = "ada lovelace";
+const parts = full.split(" ");
+const first = parts[0][0].toUpperCase();
+const last = parts[1][0].toUpperCase();
+console.log(`${first}.${last}.`);
+::distractors
+const parts = full.split("");
+::expected
+A.L.
+::hints
+- Split on a space to get the two words, then take the first character of each.
+- `split("")` splits into single letters, not words.
+--- exercise code javascript
+::prompt
+Read an email address with `prompt`, clean it up (trim spaces, lowercase), and print its **username** (before the `@`) and **domain** (after it) using `indexOf` and `slice`. If there's no `@`, `indexOf` gives -1: in that case print `Not an email address` instead. (You'll learn `if` properly in the next module; here's the shape you need):
+```js
+if (at === -1) {
+  console.log("Not an email address");
+} else {
+  // print the two lines
+}
+```
+For the typed input `  Ada@Example.COM` (with spaces in front):
+```
+Email:   Ada@Example.COM
+User: ada
+Domain: example.com
+```
+::starter
+const email = prompt("Email:");
+// clean it, find the @, then print
+::solution
+const email = prompt("Email:").trim().toLowerCase();
+const at = email.indexOf("@");
+if (at === -1) {
+  console.log("Not an email address");
+} else {
+  console.log("User:", email.slice(0, at));
+  console.log("Domain:", email.slice(at + 1));
+}
+::stdin
+  Ada@Example.COM
+::expected
+Email:   Ada@Example.COM
+User: ada
+Domain: example.com
+::cases
+>>> grace.hopper@navy.mil
+Email: grace.hopper@navy.mil
+User: grace.hopper
+Domain: navy.mil
+>>> not-an-email
+Email: not-an-email
+Not an email address
+::hints
+- `prompt(...).trim().toLowerCase()` cleans the answer in one go.
+- `const at = email.indexOf("@");` finds the position of the @.
+- The user is `email.slice(0, at)`; the domain starts one character after the @: `email.slice(at + 1)`.
+--- cards
+trim() :: Removes spaces, tabs and new lines from both ends of a string. Use it on all user input.
+includes / startsWith / endsWith :: true/false: does the string contain / begin with / end with the given text? Case-sensitive.
+indexOf(x) :: Position of the first x, or -1 if it isn't there.
+replace vs replaceAll :: replace(a, b) swaps only the first a; replaceAll(a, b) swaps every a.
+split / join :: "a,b".split(",") gives ["a", "b"]; ["a", "b"].join("-") gives "a-b".
+padStart(n, fill) :: Adds fill at the start until the string is n long: "7".padStart(3, "0") is "007".
+
+=== lesson js-formatting | Formatting output | 70
+## Why formatting matters
+
+A program's output is its user interface. `Total: 13.5` looks like a bug to a customer; `Total: $13.50` looks professional. This lesson collects the tools for turning raw values into polished text.
+
+## Template literals in depth
+
+Anything that produces a value can go inside `${ }`:
+
+```js
+const item = "coffee";
+const qty = 3;
+const price = 2.4;
+console.log(`${qty} x ${item.toUpperCase()} = ${(qty * price).toFixed(2)}`);
+console.log(`Plural: ${qty} ${qty === 1 ? "cup" : "cups"}`);
+console.log(`Nested: ${`inner ${1 + 1}`}`);
+```
+
+The `? :` in the second line is the **conditional operator**: `condition ? valueIfTrue : valueIfFalse`. It's the standard way to choose between two words inside a template; Module 3 explains it fully.
+
+What do values look like when they're put into a template?
+
+```js
+console.log(`${null} ${undefined} ${true} ${[1, 2, 3]} ${{ a: 1 }}`);
+```
+
+Numbers, booleans, `null` and `undefined` become their names; arrays become comma-separated items. Plain objects become the useless `[object Object]`: when you see that in output, you put an object where you meant one of its parts. (`console.log(obj)` shows objects properly; templates don't.)
+
+## Decimals: toFixed
+
+`toFixed(n)` rounds to exactly `n` decimals and returns a **string**:
+
+```js
+const pi = 3.14159;
+console.log(pi.toFixed(2), pi.toFixed(0), (2).toFixed(2));
+console.log((1.005).toFixed(2));
+```
+
+The last line prints `1.00`, not `1.01`: 1.005 is stored as 1.00499999... (the decimal problem from Module 1). For money, work in whole cents and only format at the end.
+
+## Numbers for humans: toLocaleString and Intl
+
+Different countries write numbers differently: 1,234.5 in the US, 1.234,5 in Germany, 12,34,567 in India. `toLocaleString` formats a number for a **locale** (a language and region code such as `"en-US"`):
+
+```js
+const amount = 1234567.891;
+console.log(amount.toLocaleString("en-US"));
+console.log(amount.toLocaleString("de-DE"));
+console.log(amount.toLocaleString("en-IN"));
+```
+
+Pass options for currencies, percentages and more:
+
+```js
+const price = 1234.5;
+console.log(price.toLocaleString("en-US", { style: "currency", currency: "USD" }));
+console.log(price.toLocaleString("en-GB", { style: "currency", currency: "GBP" }));
+console.log((0.256).toLocaleString("en-US", { style: "percent" }));
+console.log((0.256).toLocaleString("en-US", { style: "percent", minimumFractionDigits: 1 }));
+```
+
+When you format many numbers the same way, create one **formatter** with `Intl.NumberFormat` and reuse it. `Intl` is JavaScript's built-in internationalisation toolkit (you'll meet its date tools in Module 12):
+
+```js
+const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
+console.log(usd.format(3.5), usd.format(1999.99), usd.format(-12));
+const compact = new Intl.NumberFormat("en-US", { notation: "compact" });
+console.log(compact.format(1234), compact.format(2500000));
+```
+
+Real apps format numbers with `Intl` instead of gluing `"$"` and `toFixed` together: it handles every currency symbol, separator and minus sign correctly for every country.
+
+## Lining up columns
+
+`padEnd` and `padStart` turn values into fixed-width columns, which makes tables of output readable:
+
+```js
+console.log("Item".padEnd(12) + "Price".padStart(8));
+console.log("-".repeat(20));
+console.log("Coffee".padEnd(12) + (3.5).toFixed(2).padStart(8));
+console.log("Blueberry muffin".slice(0, 11).padEnd(12) + (2.25).toFixed(2).padStart(8));
+```
+
+Text columns usually line up on the left (`padEnd`); number columns on the right (`padStart`), so the decimal points align. Over-long text must be shortened first with `slice`, or it pushes the next column along.
+
+## console.table
+
+For quick, readable output of a list of records while you're developing, `console.table` draws a table for you:
+
+```js
+console.table([
+  { item: "Coffee", price: 3.5 },
+  { item: "Muffin", price: 2.25 },
+]);
+```
+
+It's a debugging tool (the format isn't under your control), so use padding for output that users will see.
+
+## A receipt, step by step
+
+Let's combine everything: calculate in cents, format at the end, and line up the columns.
+
+```js
+const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
+const coffeeCents = 3 * 240;
+const muffinCents = 2 * 225;
+const subtotal = coffeeCents + muffinCents;
+const tax = Math.round(subtotal * 0.08);
+const line = (label, cents) => label.padEnd(14) + usd.format(cents / 100).padStart(10);
+console.log(line("3 x Coffee", coffeeCents));
+console.log(line("2 x Muffin", muffinCents));
+console.log("-".repeat(24));
+console.log(line("Subtotal", subtotal));
+console.log(line("Tax (8%)", tax));
+console.log(line("Total", subtotal + tax));
+```
+
+`const line = (label, cents) => ...` is a small **function** that builds one row, so the formatting rule is written once. You'll write your own functions in Module 5; for now, notice how much repetition it saves.
+
+📚 **Go deeper:** MDN, "Template literals", "Number.prototype.toLocaleString()" and "Intl.NumberFormat"; javascript.info, "Numbers" (toFixed) and "Intl"; *Eloquent JavaScript* (4th ed.), chapter 1.
+--- goals
+- put any expression, including a `? :` choice, inside a template literal
+- format decimals with `toFixed()` and explain its rounding surprises
+- format numbers, currencies and percentages for a locale with `toLocaleString()` and `Intl.NumberFormat`
+- line up output in columns with `padStart()` and `padEnd()`
+- show records quickly with `console.table()` while debugging
+--- quiz
+? What does this print?
+```js
+const n = 1;
+console.log(`${n} ${n === 1 ? "item" : "items"}`);
+```
++ `1 item`
+- `1 items`
+- `1 true`
+- `${n} item`
+> The condition is true, so the value before the colon is used.
+? What does `` `Total: ${{ amount: 5 }}` `` produce?
+- `Total: 5`
+- `Total: { amount: 5 }`
++ `Total: [object Object]`
+- An error
+> Plain objects turn into "[object Object]" inside templates. Use the part you meant: `obj.amount`.
+? What type is `(9.5).toFixed(2)`?
+- number
++ string
+- boolean
+- It depends on the number
+> toFixed always returns a string, ready for display.
+? What does `(0.5).toLocaleString("en-US", { style: "percent" })` give?
+- `"0.5%"`
++ `"50%"`
+- `"5%"`
+- `"0.50"`
+> The percent style multiplies by 100 and adds the % sign.
+? You're printing a column of prices so the decimal points line up. Which method do you use on each price string?
+- `padEnd`
++ `padStart`
+- `repeat`
+- `trim`
+> Numbers line up on the right, so pad at the start.
+--- exercise code javascript
+::prompt
+Print a progress line for a download. Given `done` megabytes out of `total`, print the percentage (no decimals) with `toLocaleString` and the `percent` style, and a 20-character bar made of `#` for the done part and `.` for the rest:
+```
+Downloading: [#######.............] 35%
+```
+(35% of 20 is 7 `#` characters; use `Math.round` to get the count.)
+::starter
+const done = 70;
+const total = 200;
+// your code here
+::solution
+const done = 70;
+const total = 200;
+const fraction = done / total;
+const filled = Math.round(fraction * 20);
+const bar = "#".repeat(filled) + ".".repeat(20 - filled);
+const percent = fraction.toLocaleString("en-US", { style: "percent" });
+console.log(`Downloading: [${bar}] ${percent}`);
+::expected
+Downloading: [#######.............] 35%
+::variants
+const done = 70 => const done = 150
+::hints
+- The fraction done is `done / total`; the number of `#` is `Math.round(fraction * 20)`.
+- `"#".repeat(n)` makes n hashes; the dots fill the remaining `20 - n`.
+- `fraction.toLocaleString("en-US", { style: "percent" })` gives `"35%"`.
+--- exercise code javascript
+::prompt
+Print this price list. Names are left-aligned in a column 12 characters wide (use `padEnd`), and prices are formatted as US dollars with `Intl.NumberFormat` and right-aligned in a column 10 wide (use `padStart`):
+```
+Notebook         $3.50
+Pen              $1.25
+Backpack        $45.00
+```
+::starter
+const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
+const name1 = "Notebook", price1 = 3.5;
+const name2 = "Pen", price2 = 1.25;
+const name3 = "Backpack", price3 = 45;
+// print the three lines
+::solution
+const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
+const name1 = "Notebook", price1 = 3.5;
+const name2 = "Pen", price2 = 1.25;
+const name3 = "Backpack", price3 = 45;
+console.log(name1.padEnd(12) + usd.format(price1).padStart(10));
+console.log(name2.padEnd(12) + usd.format(price2).padStart(10));
+console.log(name3.padEnd(12) + usd.format(price3).padStart(10));
+::expected
+Notebook         $3.50
+Pen              $1.25
+Backpack        $45.00
+::variants
+price3 = 45 => price3 = 145.5
+::hints
+- `usd.format(3.5)` gives `"$3.50"`.
+- Each line is `name.padEnd(12) + usd.format(price).padStart(10)`.
+--- exercise code javascript
+::prompt
+A time-tracking app stores durations in seconds. Read a number of seconds with `prompt` and print it as a zero-padded clock, `HH:MM:SS`:
+```
+Seconds: 3725
+Duration: 01:02:05
+```
+::starter
+const total = Number(prompt("Seconds:"));
+// hours, minutes, seconds, then pad each to 2 digits
+::solution
+const total = Number(prompt("Seconds:"));
+const hours = Math.floor(total / 3600);
+const minutes = Math.floor((total % 3600) / 60);
+const seconds = total % 60;
+const two = (n) => String(n).padStart(2, "0");
+console.log(`Duration: ${two(hours)}:${two(minutes)}:${two(seconds)}`);
+::stdin
+3725
+::expected
+Seconds: 3725
+Duration: 01:02:05
+::cases
+>>> 59
+Seconds: 59
+Duration: 00:00:59
+>>> 45296
+Seconds: 45296
+Duration: 12:34:56
+::hints
+- Compute hours, minutes and seconds with `Math.floor` and `%`, as in Module 1.
+- `String(5).padStart(2, "0")` gives `"05"`. Numbers need `String(...)` before `padStart`.
+--- cards
+Template literal expressions :: Anything with a value goes in ${ }: maths, method calls, cond ? a : b.
+[object Object] :: What a plain object turns into inside a template or string join. You used an object where you meant one of its parts.
+toLocaleString(locale, options) :: Formats a number for a country: (1234.5).toLocaleString("de-DE") is "1.234,5".
+Intl.NumberFormat :: A reusable number formatter: new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(3.5) is "$3.50".
+Columns :: Left-align text with padEnd(width); right-align numbers with padStart(width).
+console.table :: Draws an array of objects as a table in the console. A debugging aid.
+
+=== lesson js-m2-test | Module 2 test | 150 | exam
+This test covers the whole of Module 2: indexing and slicing, string methods, and formatting output, mixed with what you learned in Module 1.
+
+Before you start, check that you can:
+
+- read characters with `[i]` and `.at()`, and cut out parts with `slice()`, including negative positions;
+- explain why `name.toUpperCase();` on its own changes nothing;
+- clean user input with `trim()` and `toLowerCase()`;
+- search with `includes` and `indexOf` (and handle -1), and use `replaceAll`, `split` and `join`;
+- format numbers with `toFixed`, `toLocaleString` and `Intl.NumberFormat`, and line up columns with padding.
+
+## Practise more
+
+- Code Dojo: [FizzBuzz Array](#/dojo/dojo-js-fizzbuzz) is a good warm-up once you've finished Module 4.
+--- goals
+- manipulate and inspect strings with indexing, slicing and methods
+- clean up and validate text that users type
+- produce neatly formatted, locale-aware output
+--- quiz
+? What does this print?
+```js
+const s = "framework";
+console.log(s.slice(0, 5), s.at(-4));
+```
++ `frame w`
+- `frame work`
+- `frame k`
+- `framew ork`
+> `slice(0, 5)` is "frame"; `.at(-4)` is one character, the fourth from the end: "w".
+? What is `"Hello".length + "Hi".length`?
++ `7`
+- `"52"`
+- `"HelloHi"`
+- `2`
+> `.length` is a number: 5 + 2 = 7.
+? What does this print?
+```js
+let text = "  JS  ";
+text.trim();
+console.log(`[${text}]`);
+```
+- `[JS]`
++ `[  JS  ]`
+- `[JS  ]`
+- An error
+> `trim()` returns a new string; the result was not kept.
+? What does `"2026-10-14".split("-")[1]` give?
+- `"2026"`
++ `"10"`
+- `10`
+- `"-"`
+> Split gives `["2026", "10", "14"]`; index 1 is the string "10".
+? What does `"a.b.c".replaceAll(".", "")` give?
++ `"abc"`
+- `"a.bc"`
+- `"ab.c"`
+- `""`
+> `replaceAll` removes every ".".
+? Which expression checks, ignoring case, whether `msg` contains the word "urgent"?
+- `msg.includes("urgent")`
++ `msg.toLowerCase().includes("urgent")`
+- `msg.includes("urgent").toLowerCase()`
+- `msg.indexOf("urgent") === 0`
+> Lowercase the text first, then search for the lowercase word.
+? What does `(7.456).toFixed(1)` give?
+- `7.4`
+- `"7.4"`
++ `"7.5"`
+- `7.5`
+> It rounds to one decimal (7.456 → 7.5) and returns a string.
+? What does `"3".padStart(3, "0") + 1` give?
+- `4`
+- `"0004"`
++ `"0031"`
+- `"004"`
+> `padStart` gives the string "003", and `+ 1` joins a "1" on the end.
+--- exercise code javascript
+::prompt
+Read a full name with `prompt` and print it in three styles. The typed name may have extra spaces and odd capitals, but always has exactly one space between first and last name once trimmed:
+```
+Name:   grace HOPPER
+Formal: Hopper, Grace
+Initials: G.H.
+Username: ghopper
+```
+::starter
+const name = prompt("Name:");
+// clean it, split it, then build the three lines
+::solution
+const name = prompt("Name:").trim().toLowerCase();
+const parts = name.split(" ");
+const first = parts[0];
+const last = parts[1];
+const cap = (w) => w[0].toUpperCase() + w.slice(1);
+console.log(`Formal: ${cap(last)}, ${cap(first)}`);
+console.log(`Initials: ${first[0].toUpperCase()}.${last[0].toUpperCase()}.`);
+console.log(`Username: ${first[0]}${last}`);
+::stdin
+  grace HOPPER
+::expected
+Name:   grace HOPPER
+Formal: Hopper, Grace
+Initials: G.H.
+Username: ghopper
+::cases
+>>> ADA lovelace
+Name: ADA lovelace
+Formal: Lovelace, Ada
+Initials: A.L.
+Username: alovelace
+::hints
+- Clean first: `prompt("Name:").trim().toLowerCase()`, then `split(" ")` gives the two words.
+- A word with a capital first letter: `word[0].toUpperCase() + word.slice(1)`.
+- The username is the first letter of the first name followed by the whole last name.
+--- exercise code javascript
+::prompt
+Censor a message: every occurrence of the word in `banned` (in any capitalisation) must be replaced by `*` characters of the same length. Lowercase the whole message first to make the search easy, then print the censored message and how many characters were hidden:
+```
+the weather is **** cold and **** wet
+Hidden: 8 characters
+```
+::starter
+const message = "The weather is DARN cold and darn wet";
+const banned = "darn";
+// your code here
+::solution
+const message = "The weather is DARN cold and darn wet";
+const banned = "darn";
+const lower = message.toLowerCase();
+const stars = "*".repeat(banned.length);
+const censored = lower.replaceAll(banned, stars);
+const count = lower.split(banned).length - 1;
+console.log(censored);
+console.log(`Hidden: ${count * banned.length} characters`);
+::expected
+the weather is **** cold and **** wet
+Hidden: 8 characters
+::variants
+const banned = "darn" => const banned = "cold"
+::hints
+- Lowercase the whole message, then `replaceAll(banned, "*".repeat(banned.length))`.
+- Counting matches: splitting on the word gives one more piece than there are matches, so `text.split(word).length - 1`.
+--- exercise code javascript
+::prompt
+A shop prints a **receipt**. The item names and prices (in cents) are given. Print each line with the name padded to 14 characters and the price in dollars (from `Intl.NumberFormat`) padded to 10; then a line of 24 `-` characters; then the total. Work in cents and only convert to dollars when formatting.
+```
+Coffee             $3.40
+Bagel              $2.75
+Orange juice       $4.10
+------------------------
+Total             $10.25
+```
+::starter
+const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
+const a = "Coffee", aCents = 340;
+const b = "Bagel", bCents = 275;
+const c = "Orange juice", cCents = 410;
+// your code here
+::solution
+const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
+const a = "Coffee", aCents = 340;
+const b = "Bagel", bCents = 275;
+const c = "Orange juice", cCents = 410;
+const row = (label, cents) => label.padEnd(14) + usd.format(cents / 100).padStart(10);
+console.log(row(a, aCents));
+console.log(row(b, bCents));
+console.log(row(c, cCents));
+console.log("-".repeat(24));
+console.log(row("Total", aCents + bCents + cCents));
+::expected
+Coffee             $3.40
+Bagel              $2.75
+Orange juice       $4.10
+------------------------
+Total             $10.25
+::variants
+aCents = 340 => aCents = 1340
+::hints
+- Each row is `label.padEnd(14) + usd.format(cents / 100).padStart(10)`.
+- The total is `aCents + bCents + cCents`, formatted the same way.
