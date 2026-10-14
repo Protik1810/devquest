@@ -1,0 +1,945 @@
+=== module Module 3 · Making decisions
+
+=== lesson js-if | if, else if and else | 75
+## Programs that choose
+
+So far every program ran every line, top to bottom. Real programs **choose**: show the "log in" button only to visitors who aren't logged in, charge a child's price for children, warn when the battery is low. The tool for this is the `if` statement, and it works with **booleans**: the values `true` and `false`.
+
+## Comparisons give booleans
+
+| Operator | Means | Example | Result |
+|---|---|---|---|
+| `===` | is equal to (same type and value) | `5 === 5` | `true` |
+| `!==` | is not equal to | `5 !== 3` | `true` |
+| `<` | is less than | `3 < 5` | `true` |
+| `>` | is greater than | `3 > 5` | `false` |
+| `<=` | is less than or equal to | `5 <= 5` | `true` |
+| `>=` | is greater than or equal to | `4 >= 5` | `false` |
+
+A comparison is an expression like `2 + 3`: it produces a value, and that value is a boolean you can print or store:
+
+```js
+const age = 17;
+console.log(age >= 18);
+const isAdult = age >= 18;
+console.log(typeof isAdult, isAdult);
+```
+
+Name boolean variables like yes/no questions: `isAdult`, `hasTicket`, `canEdit`. Then `if (isAdult)` reads like English.
+
+⚠️ Don't confuse `=` (assignment: "make this name refer to that value") with `===` (comparison: "are these equal?"). And remember from Module 1: use `===`, never `==`.
+
+## The if statement
+
+```js
+const temperature = 31;
+if (temperature > 30) {
+  console.log("It's hot! Drink some water.");
+}
+console.log("Have a nice day.");
+```
+
+- The **condition** goes in parentheses after `if`.
+- The code in the curly braces `{ }`, called a **block**, runs only when the condition is truthy.
+- After the block, the program carries on as normal: the last line always runs.
+
+Change `31` to `20` and run it again: the warning disappears, the goodbye stays.
+
+Indent the code inside a block by two spaces. JavaScript doesn't require it, but every reader and every code formatter expects it, so the shape of the code shows its logic at a glance.
+
+## else: the other path
+
+`else` gives the code to run when the condition is falsy. Exactly one of the two blocks runs, never both, never neither:
+
+```js
+const balance = 40;
+const price = 55;
+if (balance >= price) {
+  console.log("Purchase complete.");
+} else {
+  console.log(`You need ${price - balance} more.`);
+}
+```
+
+## else if: more than two paths
+
+Chain conditions with `else if`. JavaScript checks them **from top to bottom** and runs only the **first** block whose condition is true; the rest are skipped:
+
+```js
+const score = 72;
+if (score >= 90) {
+  console.log("Grade A");
+} else if (score >= 80) {
+  console.log("Grade B");
+} else if (score >= 70) {
+  console.log("Grade C");
+} else {
+  console.log("Grade F");
+}
+```
+
+Order matters. With 72, the first two tests fail and `score >= 70` is the first true one. If you put `score >= 70` *first*, a score of 95 would also stop there and get a C. Write the most specific (or highest) test first.
+
+~~~check
+? What does this print?
+```js
+const n = 15;
+if (n > 10) {
+  console.log("big");
+} else if (n > 5) {
+  console.log("medium");
+} else {
+  console.log("small");
+}
+```
++ `big`
+- `big` and `medium`
+- `medium`
+- `small`
+> 15 > 10 is true, so the first block runs and the rest of the chain is skipped, even though 15 > 5 is also true.
+~~~
+
+## Conditions use truthiness
+
+An `if` doesn't need a real boolean; any value works, and JavaScript uses its truthiness (Module 1: `false`, `0`, `""`, `null`, `undefined` and `NaN` are falsy, everything else is truthy). That makes checks for "is there anything there?" short:
+
+```js
+const username = "";
+if (username) {
+  console.log(`Welcome back, ${username}!`);
+} else {
+  console.log("Welcome, guest!");
+}
+```
+
+Be careful when `0` is a valid value: `if (quantity)` treats a quantity of 0 the same as "no quantity at all". When 0 matters, compare explicitly: `if (quantity !== undefined)` or `if (quantity > 0)`.
+
+## Blocks create a scope
+
+A variable declared with `let` or `const` inside a block exists **only inside that block**:
+
+```js
+const hour = 9;
+if (hour < 12) {
+  const greeting = "Good morning";
+  console.log(greeting);
+}
+console.log(greeting);
+```
+
+`greeting is not defined` on the last line. This is a feature: names used for one small job don't leak out and collide with names elsewhere. When you need the value after the `if`, declare the variable *before* it with `let`, and assign it inside:
+
+```js
+const hour = 15;
+let greeting;
+if (hour < 12) {
+  greeting = "Good morning";
+} else {
+  greeting = "Good afternoon";
+}
+console.log(greeting);
+```
+
+## The conditional operator: ? :
+
+For choosing between two **values**, there's a compact expression: `condition ? valueIfTruthy : valueIfFalsy`. (It's often called the *ternary* operator because it has three parts.)
+
+```js
+const hour = 15;
+const greeting = hour < 12 ? "Good morning" : "Good afternoon";
+console.log(greeting);
+const items = 1;
+console.log(`You have ${items} ${items === 1 ? "item" : "items"}.`);
+```
+
+Use it for simple choices of a value, as above; it lets you use `const`. For anything with several steps or more than two cases, use `if`: nested `? :` chains quickly become unreadable.
+
+## switch: comparing one value with many cases
+
+When you compare **one** value against many fixed options, `switch` can be clearer than a long `else if` chain:
+
+```js
+const day = "sat";
+switch (day) {
+  case "sat":
+  case "sun":
+    console.log("Weekend!");
+    break;
+  case "fri":
+    console.log("Almost weekend.");
+    break;
+  default:
+    console.log("A work day.");
+}
+```
+
+- `switch` compares the value with each `case` using `===`.
+- Execution starts at the first matching case and **continues downwards until a `break`**. Forgetting `break` is the classic switch bug: the next case's code runs too ("fall-through").
+- Two cases with nothing between them (`"sat"` and `"sun"`) share code on purpose.
+- `default` runs when nothing matched, like a final `else`.
+
+Here's the fall-through bug in action. `day` is 3, so only "Wed" should print:
+
+```js
+const day = 3;
+switch (day) {
+  case 1:
+    console.log("Mon");
+  case 3:
+    console.log("Wed");
+  case 4:
+    console.log("Thu");
+    break;
+  default:
+    console.log("Other");
+}
+```
+
+## Guard clauses: handle the special cases first
+
+Deep nesting is hard to read. A common professional habit is to deal with problem cases first, and keep the main path flat:
+
+```js
+const input = "";
+const amount = Number(input);
+if (input.trim() === "") {
+  console.log("Please type an amount.");
+} else if (Number.isNaN(amount)) {
+  console.log("That's not a number.");
+} else if (amount <= 0) {
+  console.log("The amount must be positive.");
+} else {
+  console.log(`Paying ${amount.toFixed(2)}...`);
+}
+```
+
+Each special case is handled and done with; the real work sits at the end, not three levels deep. Inside functions (Module 5) you'll write these as early `return`s.
+
+📚 **Go deeper:** javascript.info, "Comparisons", "Conditional branching: if, '?'" and "The switch statement"; MDN JavaScript Guide, "Control flow and error handling"; *Eloquent JavaScript* (4th ed.), chapter 2, "Conditional execution".
+--- goals
+- write comparisons with `===`, `!==`, `<`, `>`, `<=` and `>=`, and store their boolean results
+- run code conditionally with `if`, `else if` and `else`, ordering the tests correctly
+- use truthiness in conditions, and compare explicitly when 0 or "" are valid values
+- explain block scope, and declare a variable before an `if` to use it afterwards
+- choose between two values with `? :`
+- write a `switch` with `break` and `default`, and spot fall-through bugs
+--- quiz
+? What does this print?
+```js
+const x = 7;
+if (x % 2 === 0) {
+  console.log("even");
+} else {
+  console.log("odd");
+}
+```
+- `even`
++ `odd`
+- `even` and `odd`
+- Nothing
+> 7 % 2 is 1, so the condition is false and the else block runs.
+? A shop gives 20% off for orders of 100 or more, and 10% off for orders of 50 or more. Which order of tests is correct?
++ `if (total >= 100) ... else if (total >= 50) ...`
+- `if (total >= 50) ... else if (total >= 100) ...`
+- Either order works
+- `if (total >= 50) ... if (total >= 100) ...`
+> The first true test wins. Testing `>= 50` first would give a 150 order only 10% off.
+? What does this print?
+```js
+const name = "";
+console.log(name ? `Hi ${name}` : "Hi stranger");
+```
+- `Hi `
++ `Hi stranger`
+- `Hi ${name}`
+- An error
+> An empty string is falsy, so the value after the colon is chosen.
+? What happens here?
+```js
+if (true) {
+  let message = "inside";
+}
+console.log(message);
+```
+- It prints `inside`
+- It prints `undefined`
++ `ReferenceError: message is not defined`
+- `SyntaxError`
+> `let` inside a block exists only in that block.
+? What does this print?
+```js
+const level = 2;
+switch (level) {
+  case 1:
+    console.log("easy");
+  case 2:
+    console.log("medium");
+  case 3:
+    console.log("hard");
+    break;
+  default:
+    console.log("unknown");
+}
+```
+- `medium`
++ `medium` and `hard`
+- `medium`, `hard` and `unknown`
+- `easy`, `medium` and `hard`
+> Execution starts at the matching case (2) and falls through until the `break` after "hard".
+? Which line correctly checks that `count` is exactly 10?
+- `if (count = 10)`
++ `if (count === 10)`
+- `if (count => 10)`
+- `if (10 =< count)`
+> `=` assigns, `=>` makes an arrow function, and `=<` isn't an operator. `===` compares.
+--- exercise code javascript
+::prompt
+A cinema prices tickets by age: under 4 free, 4 to 12 a child ticket ($6), 13 to 64 an adult ticket ($12), 65 and over a senior ticket ($8). Read the age with `prompt` and print the ticket type and price:
+```
+Age: 30
+Adult ticket: $12
+```
+For an age under 4, print `Free entry` instead.
+::starter
+const age = Number(prompt("Age:"));
+// if / else if / else
+::solution
+const age = Number(prompt("Age:"));
+if (age < 4) {
+  console.log("Free entry");
+} else if (age <= 12) {
+  console.log("Child ticket: $6");
+} else if (age <= 64) {
+  console.log("Adult ticket: $12");
+} else {
+  console.log("Senior ticket: $8");
+}
+::stdin
+30
+::expected
+Age: 30
+Adult ticket: $12
+::cases
+>>> 2
+Age: 2
+Free entry
+>>> 4
+Age: 4
+Child ticket: $6
+>>> 12
+Age: 12
+Child ticket: $6
+>>> 13
+Age: 13
+Adult ticket: $12
+>>> 65
+Age: 65
+Senior ticket: $8
+::hints
+- Test the ages in order from youngest to oldest, so each test can just check the upper limit.
+- Watch the edges: 12 is still a child, 13 is an adult, 64 is still an adult.
+--- exercise code javascript
+::prompt
+Read a whole number with `prompt` and print one line describing it: whether it's positive, negative or zero, and, for non-zero numbers, whether it's even or odd. Use `? :` for the even/odd word:
+```
+Number: -7
+-7 is negative and odd
+```
+For zero, print `0 is zero`.
+::starter
+const n = Number(prompt("Number:"));
+// your code here
+::solution
+const n = Number(prompt("Number:"));
+if (n === 0) {
+  console.log("0 is zero");
+} else {
+  const sign = n > 0 ? "positive" : "negative";
+  const parity = n % 2 === 0 ? "even" : "odd";
+  console.log(`${n} is ${sign} and ${parity}`);
+}
+::stdin
+-7
+::expected
+Number: -7
+-7 is negative and odd
+::cases
+>>> 0
+Number: 0
+0 is zero
+>>> 12
+Number: 12
+12 is positive and even
+>>> -4
+Number: -4
+-4 is negative and even
+::hints
+- Handle zero first, then deal with the sign and the parity.
+- Careful: `-7 % 2` is `-1`, not `1`. Test `n % 2 === 0` for even, which works for negative numbers too.
+--- exercise code javascript
+::prompt
+Read a day abbreviation (`mon` to `sun`) with `prompt`. Use a `switch` to print `Weekend` for `sat` and `sun`, `Gym day` for `mon`, `wed` and `fri`, `Rest day` for `tue` and `thu`, and `Unknown day` for anything else. Make the input lowercase and trimmed first, so `  SAT` works.
+```
+Day: sat
+Weekend
+```
+::starter
+const day = prompt("Day:");
+// clean it, then switch
+::solution
+const day = prompt("Day:").trim().toLowerCase();
+switch (day) {
+  case "sat":
+  case "sun":
+    console.log("Weekend");
+    break;
+  case "mon":
+  case "wed":
+  case "fri":
+    console.log("Gym day");
+    break;
+  case "tue":
+  case "thu":
+    console.log("Rest day");
+    break;
+  default:
+    console.log("Unknown day");
+}
+::stdin
+sat
+::expected
+Day: sat
+Weekend
+::cases
+>>> WED
+Day: WED
+Gym day
+>>> thu
+Day: thu
+Rest day
+>>> holiday
+Day: holiday
+Unknown day
+::hints
+- Stack cases that share code: `case "sat":` then `case "sun":` directly below it.
+- End each group with `break;`, or the next group's message prints too.
+--- cards
+if / else if / else :: Checks conditions top to bottom and runs only the FIRST block whose condition is truthy; else runs if none were.
+Comparison operators :: === !== < > <= >= produce true or false.
+Block scope :: let and const declared inside { } exist only inside that block.
+Conditional operator :: cond ? a : b gives a if cond is truthy, else b. For choosing between two values.
+switch :: Compares one value with each case using ===. Runs from the matching case until a break; default runs if none match.
+Fall-through :: A switch case without break continues into the next case's code. The classic switch bug.
+Guard clause :: Handle special or invalid cases first, so the main logic isn't deeply nested.
+
+=== lesson js-logic | Logic: &&, ||, ! and ?? | 75
+## Combining conditions
+
+Real decisions depend on several facts at once: "you can drive if you're at least 18 **and** have a licence"; "the shop is closed on Saturday **or** Sunday". JavaScript's **logical operators** combine booleans:
+
+| Operator | Name | True when |
+|---|---|---|
+| `a && b` | AND | both `a` and `b` are true |
+| `a \|\| b` | OR | at least one of them is true |
+| `!a` | NOT | `a` is false |
+
+```js
+const age = 20;
+const hasLicence = false;
+console.log(age >= 18 && hasLicence);
+console.log(age >= 18 || hasLicence);
+console.log(!hasLicence);
+```
+
+The truth tables, worth knowing by heart:
+
+| `a` | `b` | `a && b` | `a \|\| b` |
+|---|---|---|---|
+| true | true | true | true |
+| true | false | false | true |
+| false | true | false | true |
+| false | false | false | false |
+
+## Ranges and precedence
+
+To test whether a number lies in a range, you need **two** comparisons joined with `&&`:
+
+```js
+const age = 15;
+const isTeen = age >= 13 && age <= 19;
+console.log(isTeen);
+```
+
+Writing `13 <= age <= 19` is a classic mistake: JavaScript works it out as `(13 <= age) <= 19`, which compares `true` or `false` with 19 and is **always true**. Run `console.log(13 <= 50 <= 19)` to see it.
+
+`!` binds tightest, then `&&`, then `||`. So `a || b && c` means `a || (b && c)`. Add brackets whenever you mix `&&` and `||`, even when not strictly needed: readers shouldn't have to remember precedence tables.
+
+~~~check
+? `const ok = x > 0 && x < 10 || x === 100;` For which value of x is `ok` true?
+- `0`
+- `10`
++ `100`
+- `-5`
+> `&&` groups first: `(x > 0 && x < 10) || x === 100`. Only 100 makes either side true.
+~~~
+
+## Negating: ! and De Morgan's laws
+
+`!` flips a boolean. To negate a whole combination, either wrap it, `!(a && b)`, or use **De Morgan's laws** to push the `!` inside, flipping `&&` and `||`:
+
+- `!(a && b)` is the same as `!a || !b`
+- `!(a || b)` is the same as `!a && !b`
+
+"It's not (sunny and warm)" means "it's not sunny, or it's not warm". This comes up constantly when you rewrite conditions to make them read better, for example in guard clauses.
+
+## Short-circuit evaluation
+
+`&&` and `||` stop as soon as they know the answer: `false && anything` is false whatever "anything" is, so JavaScript **doesn't even evaluate** the right side. Likewise for `true || anything`.
+
+This matters, because it lets the left side protect the right side:
+
+```js
+const text = "";
+if (text.length > 0 && text[0] === "#") {
+  console.log("A heading");
+} else {
+  console.log("Not a heading");
+}
+```
+
+If the text is empty, `text[0]` is never looked at.
+
+## && and || return a value, not just true/false
+
+Here's a JavaScript speciality: `&&` and `||` don't return `true` or `false`, they return **one of their operands**:
+
+- `a || b` returns `a` if `a` is truthy, otherwise `b`.
+- `a && b` returns `a` if `a` is falsy, otherwise `b`.
+
+```js
+console.log("Ada" || "Guest");
+console.log("" || "Guest");
+console.log(0 || 10);
+console.log("yes" && "both truthy");
+console.log(null && "never reached");
+```
+
+That's why you'll often see `||` used to provide a **default value**: `const name = typed || "Guest";`. But it has a trap: `0` and `""` are falsy, so they're replaced by the default even when they're perfectly valid:
+
+```js
+const volume = 0;
+console.log(volume || 50);
+```
+
+The user chose volume 0 (mute), and got 50!
+
+## ?? : the nullish coalescing operator
+
+`a ?? b` returns `b` **only if `a` is `null` or `undefined`** ("nullish"), and keeps every other value, including `0`, `""` and `false`:
+
+```js
+const volume = 0;
+console.log(volume ?? 50);
+const nickname = undefined;
+console.log(nickname ?? "anonymous");
+```
+
+**Rule of thumb:** for defaults, prefer `??`. Use `||` only when you really mean "replace anything falsy, including empty text and zero".
+
+You can't mix `??` with `&&` or `||` without brackets: `a || b ?? c` is a SyntaxError, precisely because the meaning would be unclear. Write `(a || b) ?? c`.
+
+There are matching assignment shortcuts: `x ??= 5` sets `x` to 5 only if it's nullish; `x ||= 5` only if it's falsy; `x &&= 5` only if it's truthy.
+
+## Booleans instead of if/else
+
+Beginners often write:
+
+```js
+const age = 20;
+let isAdult;
+if (age >= 18) {
+  isAdult = true;
+} else {
+  isAdult = false;
+}
+console.log(isAdult);
+```
+
+But the comparison already *is* the boolean. This says the same in one line:
+
+```js
+const age = 20;
+const isAdult = age >= 18;
+console.log(isAdult);
+```
+
+## A worked example: leap years
+
+A year is a leap year if it's divisible by 4, **except** years divisible by 100, **unless** they're also divisible by 400. So 2024 is a leap year, 1900 is not, 2000 is. As one expression:
+
+```js
+const year = 1900;
+const isLeap = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+console.log(`${year} is ${isLeap ? "" : "not "}a leap year`);
+```
+
+Try 2024, 2000 and 2023. Reading complex conditions is easier if you name the parts: `const divisibleBy4 = year % 4 === 0;` and so on.
+
+📚 **Go deeper:** javascript.info, "Logical operators" and "Nullish coalescing operator '??'"; MDN, "Logical AND (&&)", "Logical OR (||)" and "Nullish coalescing operator (??)"; *Eloquent JavaScript* (4th ed.), chapter 1, "Logical operators" and "Short-circuiting of logical operators".
+--- goals
+- combine conditions with `&&`, `||` and `!`, using the truth tables
+- test ranges correctly with two comparisons, and add brackets when mixing operators
+- rewrite negated conditions with De Morgan's laws
+- use short-circuiting to protect an expression that could fail
+- predict the value that `&&`, `||` and `??` return, and pick `??` for defaults
+- write boolean expressions directly instead of `if`/`else` that sets true or false
+--- quiz
+? What is `true && false || true`?
++ `true`
+- `false`
+- `undefined`
+- An error
+> `&&` first: `true && false` is false; then `false || true` is true.
+? What does `console.log(0 || "none", 0 ?? "none")` print?
+- `none none`
++ `none 0`
+- `0 0`
+- `0 none`
+> `||` replaces any falsy value, including 0; `??` only replaces null and undefined.
+? Which expression is true when `n` is between 1 and 10 (inclusive)?
+- `1 <= n <= 10`
++ `n >= 1 && n <= 10`
+- `n >= 1 || n <= 10`
+- `!(n < 1 && n > 10)`
+> You need two comparisons joined with AND. `1 <= n <= 10` is always true; with `||` every number passes.
+? Which is the same as `!(isWeekend || isHoliday)`?
+- `!isWeekend || !isHoliday`
++ `!isWeekend && !isHoliday`
+- `isWeekend && isHoliday`
+- `!isWeekend || isHoliday`
+> De Morgan: negating an OR gives an AND of the negations.
+? What does `"cat" && "dog"` give?
+- `true`
+- `"cat"`
++ `"dog"`
+- `false`
+> `&&` returns the first falsy operand, or the last one if all are truthy.
+? Why is this safe even when `word` is an empty string?
+```js
+if (word.length > 0 && word[0] === "A") { ... }
+```
+- Because `word[0]` of an empty string is `"A"`
++ Because `&&` stops after a false left side, so `word[0]` is never checked
+- Because empty strings are truthy
+- It isn't safe; it raises an error
+> Short-circuit evaluation: when the left side is false, the right side isn't evaluated. (Here `word[0]` would just be undefined anyway, but with objects it could throw.)
+--- exercise code javascript
+::prompt
+Read a year with `prompt` and print whether it's a leap year. A year is a leap year if it's divisible by 4 but not by 100, or if it's divisible by 400. Use one boolean expression with `&&` and `||`, and `? :` to choose the wording:
+```
+Year: 2024
+2024 is a leap year
+```
+::starter
+const year = Number(prompt("Year:"));
+// your code here
+::solution
+const year = Number(prompt("Year:"));
+const isLeap = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+console.log(`${year} ${isLeap ? "is" : "is not"} a leap year`);
+::stdin
+2024
+::expected
+Year: 2024
+2024 is a leap year
+::cases
+>>> 1900
+Year: 1900
+1900 is not a leap year
+>>> 2000
+Year: 2000
+2000 is a leap year
+>>> 2023
+Year: 2023
+2023 is not a leap year
+::hints
+- "Divisible by 4" is `year % 4 === 0`; "not by 100" is `year % 100 !== 0`.
+- Bracket the first pair: `(divisible by 4 && not by 100) || divisible by 400`.
+--- exercise fill javascript
+::prompt
+A settings screen reads values that may be missing (`undefined`). Fill the gaps so missing values get defaults, but real values, including `0` and an empty string, are kept. Then print whether notifications should be sent: only if they're enabled **and** the volume isn't 0.
+::template
+const savedVolume = 0;
+const savedTheme = undefined;
+const savedNotify = true;
+const volume = savedVolume ____ 50;
+const theme = savedTheme ____ "light";
+const send = savedNotify ____ volume !== 0;
+console.log(`volume=${volume} theme=${theme} send=${send}`);
+::answers
+??
+??
+&&
+::expected
+volume=0 theme=light send=false
+::hints
+- `??` replaces only `null` and `undefined`, so the 0 volume is kept.
+- Notifications need both conditions: use AND.
+--- exercise code javascript
+::prompt
+**FizzBuzz** for one number: read a number with `prompt` and print `FizzBuzz` if it's divisible by both 3 and 5, `Fizz` if it's divisible by 3 only, `Buzz` if by 5 only, and the number itself otherwise. This is a famous interview warm-up; the trick is the order of the tests.
+```
+Number: 15
+FizzBuzz
+```
+::starter
+const n = Number(prompt("Number:"));
+// your code here
+::solution
+const n = Number(prompt("Number:"));
+if (n % 3 === 0 && n % 5 === 0) {
+  console.log("FizzBuzz");
+} else if (n % 3 === 0) {
+  console.log("Fizz");
+} else if (n % 5 === 0) {
+  console.log("Buzz");
+} else {
+  console.log(n);
+}
+::stdin
+15
+::expected
+Number: 15
+FizzBuzz
+::cases
+>>> 9
+Number: 9
+Fizz
+>>> 10
+Number: 10
+Buzz
+>>> 7
+Number: 7
+7
+>>> 45
+Number: 45
+FizzBuzz
+::hints
+- Test "divisible by both" first: otherwise 15 stops at the "divisible by 3" test.
+- Divisible by 3: `n % 3 === 0`.
+--- cards
+&& (AND) :: True only when both sides are true. Returns the first falsy operand, or the last one.
+|| (OR) :: True when at least one side is true. Returns the first truthy operand, or the last one.
+! (NOT) :: Flips true and false. !!x converts x to a boolean.
+Short-circuit evaluation :: && stops at the first falsy value, || at the first truthy one; the rest isn't evaluated.
+?? (nullish coalescing) :: a ?? b gives b only if a is null or undefined. Keeps 0, "" and false. Prefer it for defaults.
+De Morgan's laws :: !(a && b) equals !a || !b; !(a || b) equals !a && !b.
+Range test :: x >= low && x <= high. Never low <= x <= high (always true).
+
+=== lesson js-m3-test | Module 3 test | 150 | exam
+This test covers Module 3: comparisons, `if`/`else if`/`else`, the conditional operator, `switch`, logical operators and default values, mixed with strings and numbers from the earlier modules.
+
+Before you start, check that you can:
+
+- order an `else if` chain so the right block runs;
+- explain block scope, and when to declare a variable before an `if`;
+- write `switch` statements without fall-through bugs;
+- predict the result of `&&`, `||` and `??` with non-boolean values;
+- test ranges and combine conditions with brackets.
+
+## Practise more
+
+- Code Dojo: [FizzBuzz Array](#/dojo/dojo-js-fizzbuzz) once you've learned loops in Module 4.
+--- goals
+- write programs that choose between several paths
+- combine and negate conditions correctly
+- choose sensible defaults with `??`
+--- quiz
+? What does this print?
+```js
+const t = 25;
+if (t > 30) {
+  console.log("hot");
+} else if (t > 20) {
+  console.log("warm");
+} else if (t > 10) {
+  console.log("mild");
+}
+console.log("done");
+```
+- `warm`, `mild` and `done`
++ `warm` and `done`
+- `done`
+- `mild` and `done`
+> The first true test (t > 20) runs; the chain stops; then the line after the chain always runs.
+? What is `!(5 > 3) || 2 === 2`?
++ `true`
+- `false`
+- `2`
+- An error
+> `!(5 > 3)` is false; `false || true` is true.
+? What does `null ?? 0 ?? 5` give?
+- `null`
++ `0`
+- `5`
+- An error
+> `null ?? 0` gives 0, and 0 is not nullish, so it's kept.
+? What does `"" || null || "fallback"` give?
+- `""`
+- `null`
++ `"fallback"`
+- `true`
+> `||` returns the first truthy value.
+? Which `switch` behaviour causes the classic bug?
+- `default` must come last
++ Without `break`, execution continues into the next case
+- `case` values must be numbers
+- `switch` uses `==` comparison
+> Fall-through: forgotten `break`s make several cases' code run. (Switch uses `===`.)
+? What does this print?
+```js
+const qty = 0;
+console.log(qty ? `${qty} in stock` : "out of stock");
+```
+- `0 in stock`
++ `out of stock`
+- `undefined`
+- An error
+> 0 is falsy, so the second value is chosen. Here that's exactly what we want.
+? Which condition is true for every weekday (not "sat", not "sun")?
+- `day !== "sat" || day !== "sun"`
++ `day !== "sat" && day !== "sun"`
+- `!(day === "sat" && day === "sun")`
+- `day === "mon" || "tue" || "wed"`
+> With `||`, every value passes (no day is both). The last option is a classic mistake: `"tue"` alone is always truthy.
+? What happens?
+```js
+const ok = true;
+if (ok) {
+  const msg = "yes";
+}
+console.log(msg);
+```
+- Prints `yes`
+- Prints `undefined`
++ `ReferenceError: msg is not defined`
+- Prints nothing
+> `msg` exists only inside the if block.
+--- exercise code javascript
+::prompt
+A parcel service prices shipping by weight (in kg) and destination. Read both with `prompt` and print the price:
+
+- up to 1 kg: $5; over 1 and up to 5 kg: $12; over 5 and up to 20 kg: $25; over 20 kg: print `Too heavy to ship` and nothing else.
+- International parcels (destination `intl`) cost double. Any other destination is domestic.
+- Express delivery isn't part of this exercise.
+
+Print the price with two decimals:
+```
+Weight (kg): 3.5
+Destination (home/intl): intl
+Shipping: $24.00
+```
+::starter
+const weight = Number(prompt("Weight (kg):"));
+const destination = prompt("Destination (home/intl):");
+// your code here
+::solution
+const weight = Number(prompt("Weight (kg):"));
+const destination = prompt("Destination (home/intl):").trim().toLowerCase();
+if (weight > 20) {
+  console.log("Too heavy to ship");
+} else {
+  let price;
+  if (weight <= 1) {
+    price = 5;
+  } else if (weight <= 5) {
+    price = 12;
+  } else {
+    price = 25;
+  }
+  if (destination === "intl") {
+    price *= 2;
+  }
+  console.log(`Shipping: $${price.toFixed(2)}`);
+}
+::stdin
+3.5
+intl
+::expected
+Weight (kg): 3.5
+Destination (home/intl): intl
+Shipping: $24.00
+::cases
+>>> 1
+>>> home
+Weight (kg): 1
+Destination (home/intl): home
+Shipping: $5.00
+>>> 20
+>>> home
+Weight (kg): 20
+Destination (home/intl): home
+Shipping: $25.00
+>>> 21
+>>> intl
+Weight (kg): 21
+Destination (home/intl): intl
+Too heavy to ship
+>>> 0.5
+>>> INTL
+Weight (kg): 0.5
+Destination (home/intl): INTL
+Shipping: $10.00
+::hints
+- Handle "too heavy" first (a guard clause), then work out the base price with an `else if` chain.
+- Declare `let price;` before the chain so you can use it afterwards.
+- In a template literal, `$${...}` prints a literal `$` followed by the value.
+--- exercise code javascript
+::prompt
+Write a password checker. Read a password with `prompt` and print `Strong`, `Medium` or `Weak`:
+
+- **Strong**: at least 12 characters, and contains a digit **and** a non-letter symbol from `!`, `?`, `#`, `@`.
+- **Medium**: at least 8 characters (but not strong).
+- **Weak**: anything else.
+
+To test for a digit without loops, check each digit with `includes`, or use this ready-made test: `/[0-9]/.test(password)` (it's a *regular expression*, Module 12). Symbols: check `includes` for each of the four.
+```
+Password: correct#horse7
+Strong
+```
+::starter
+const password = prompt("Password:");
+const hasDigit = /[0-9]/.test(password);
+// work out hasSymbol, then decide
+::solution
+const password = prompt("Password:");
+const hasDigit = /[0-9]/.test(password);
+const hasSymbol = password.includes("!") || password.includes("?") || password.includes("#") || password.includes("@");
+if (password.length >= 12 && hasDigit && hasSymbol) {
+  console.log("Strong");
+} else if (password.length >= 8) {
+  console.log("Medium");
+} else {
+  console.log("Weak");
+}
+::stdin
+correct#horse7
+::expected
+Password: correct#horse7
+Strong
+::cases
+>>> correcthorse7
+Password: correcthorse7
+Medium
+>>> abc!1
+Password: abc!1
+Weak
+>>> longpassword!!
+Password: longpassword!!
+Medium
+>>> P@ssw0rd2026!
+Password: P@ssw0rd2026!
+Strong
+::hints
+- `hasSymbol` is four `includes` checks joined with `||`.
+- Test for Strong first, then Medium; Weak is the `else`.
