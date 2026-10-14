@@ -1,0 +1,1817 @@
+=== module Module 8 · Objects and classes
+
+=== lesson js-methods-this | Methods and this | 80
+## Data plus behaviour
+
+So far, objects have mostly held data, and separate functions did things *to* that data. **Object-oriented programming** (OOP) puts the two together: an object holds its data **and** the functions that work on it. Those functions are its **methods**.
+
+```js
+const counter = {
+  count: 0,
+  increment() {
+    this.count++;
+    return this.count;
+  },
+  reset() {
+    this.count = 0;
+  },
+};
+counter.increment();
+counter.increment();
+console.log(counter.count);
+counter.reset();
+console.log(counter.count);
+```
+
+Inside a method, `this` refers to **the object the method was called on**. `counter.increment()` runs `increment` with `this` set to `counter`, so `this.count++` changes `counter.count`. You've been using methods all along: `"hi".toUpperCase()`, `[1, 2].push(3)`, `console.log(...)`.
+
+## this is decided by the call
+
+The key rule: **`this` is whatever is in front of the dot when the function is called**, not where the function was written. The same function can serve many objects:
+
+```js
+function describe() {
+  return `${this.name} costs ${this.price}`;
+}
+const book = { name: "Dune", price: 9.99, describe };
+const pen = { name: "Pen", price: 1.5, describe };
+console.log(book.describe());
+console.log(pen.describe());
+```
+
+## Losing this: the classic bug
+
+If a method is called **without** an object in front of the dot, `this` is `undefined` (in strict mode, which modules, classes and DevQuest always use):
+
+```js
+const counter = {
+  count: 0,
+  increment() {
+    this.count++;
+    return this.count;
+  },
+};
+const inc = counter.increment;
+inc();
+```
+
+`inc` is the same function, but called on its own, so `this` is `undefined` and `this.count` throws. This happens most often when you **pass a method as a callback**: `setTimeout(counter.increment, 1000)` or `button.addEventListener("click", counter.increment)` hand over the function alone, without its object. Two fixes:
+
+```js
+const counter = {
+  count: 0,
+  increment() {
+    this.count++;
+    return this.count;
+  },
+};
+const viaArrow = () => counter.increment();
+const viaBind = counter.increment.bind(counter);
+viaArrow();
+viaBind();
+console.log(counter.count);
+```
+
+- Wrap the call in an arrow function, which calls the method *on its object*.
+- Or `bind`: `fn.bind(obj)` returns a new function whose `this` is permanently `obj`.
+
+## Arrow functions don't have their own this
+
+An arrow function **doesn't get its own `this`**; it uses the `this` of the code around it. That makes arrows perfect for callbacks *inside* methods:
+
+```js
+const team = {
+  name: "Blue",
+  members: ["Ada", "Grace"],
+  introduce() {
+    return this.members.map((m) => `${m} plays for ${this.name}`);
+  },
+};
+console.log(team.introduce());
+```
+
+The arrow inside `map` sees the `this` of `introduce`, which is `team`. With a regular `function () { ... }` callback there, `this` would be `undefined` and the code would crash.
+
+But it also means arrows are **wrong as methods** in object literals:
+
+```js
+const broken = {
+  name: "Broken",
+  hello: () => `Hi from ${this?.name}`,
+};
+console.log(broken.hello());
+```
+
+The arrow takes `this` from the surrounding code (here, the top level, where it's `undefined`), not from `broken`. Rule of thumb: **method shorthand for methods, arrows for callbacks inside them.**
+
+~~~check
+? What does this print?
+```js
+const dog = {
+  name: "Rex",
+  speak() {
+    return `${this.name} barks`;
+  },
+};
+const cat = { name: "Tom", speak: dog.speak };
+console.log(cat.speak());
+```
+- `Rex barks`
++ `Tom barks`
+- `undefined barks`
+- An error
+> `this` is the object in front of the dot at call time: cat.
+~~~
+
+## call and apply
+
+Every function has `call` and `apply` methods that run it with a chosen `this`: `describe.call(book)` or `describe.call(book, arg1, arg2)`; `apply` takes the arguments as an array. You'll rarely need them in your own code, but you'll see them in libraries and older code.
+
+## Getters and setters
+
+A **getter** is a method that looks like a property when you read it; a **setter** runs when you assign to it. They let an object compute values on demand or check values before storing them:
+
+```js
+const person = {
+  first: "Ada",
+  last: "Lovelace",
+  get fullName() {
+    return `${this.first} ${this.last}`;
+  },
+  set fullName(value) {
+    const [first, last] = value.split(" ");
+    this.first = first;
+    this.last = last;
+  },
+};
+console.log(person.fullName);
+person.fullName = "Grace Hopper";
+console.log(person.first, person.last);
+```
+
+No parentheses: `person.fullName`, not `person.fullName()`. Getters are great for values derived from other data, which then can never get out of sync.
+
+## Method chaining
+
+A method that returns `this` lets callers chain calls, a style you'll see in many libraries:
+
+```js
+const query = {
+  parts: [],
+  where(condition) {
+    this.parts.push(`WHERE ${condition}`);
+    return this;
+  },
+  orderBy(field) {
+    this.parts.push(`ORDER BY ${field}`);
+    return this;
+  },
+  build() {
+    return this.parts.join(" ");
+  },
+};
+console.log(query.where("age > 18").orderBy("name").build());
+```
+
+## Factory functions
+
+To make many similar objects, a function can build and return them. Each call creates a fresh object with its own data:
+
+```js
+function createCounter(start = 0) {
+  return {
+    count: start,
+    increment() {
+      this.count++;
+      return this.count;
+    },
+  };
+}
+const a = createCounter();
+const b = createCounter(10);
+a.increment();
+console.log(a.count, b.increment());
+```
+
+This works, but every object gets its own copy of every method, and nothing says "these objects are all counters". **Classes**, the next lesson, are JavaScript's dedicated tool for making many objects of the same kind.
+
+📚 **Go deeper:** javascript.info, "Object methods, 'this'", "Function binding" and "Property getters and setters"; MDN, "this"; *Eloquent JavaScript* (4th ed.), chapter 6, "Methods".
+--- goals
+- write methods that use `this` to read and change their object
+- predict `this` from the call: the object in front of the dot
+- fix lost `this` in callbacks with an arrow wrapper or `bind`
+- use arrow functions for callbacks inside methods, but not as methods
+- define getters and setters, and chain methods by returning `this`
+- build objects with factory functions
+--- quiz
+? Inside `obj.method()`, what is `this`?
++ `obj`
+- The method itself
+- The global object
+- `undefined`
+> In a method call, this is the object before the dot.
+? What happens here?
+```js
+const user = {
+  name: "Ada",
+  hi() {
+    return "Hi " + this.name;
+  },
+};
+const f = user.hi;
+console.log(f());
+```
+- Prints `Hi Ada`
+- Prints `Hi undefined`
++ `TypeError: Cannot read properties of undefined (reading 'name')`
+- `ReferenceError`
+> Called without an object, this is undefined in strict mode.
+? Which line safely passes `player.jump` to a function that will call it later?
+- `onKey(player.jump)`
++ `onKey(() => player.jump())`
+- `onKey(player.jump())`
+- `onKey(jump)`
+> The arrow calls jump on player. Passing player.jump loses this; player.jump() calls it right away.
+? Why is an arrow function a poor choice for a method in an object literal?
+- Arrow functions can't return values
++ It doesn't get its own `this`, so `this` isn't the object
+- Arrow functions are slower
+- Object literals can't contain functions
+> Arrows take this from the surrounding code. Use method shorthand for methods.
+? With `get area() { return this.w * this.h; }`, how do you read the area of `rect`?
+- `rect.area()`
++ `rect.area`
+- `rect.get.area`
+- `area(rect)`
+> Getters are read like properties, without parentheses.
+? What must a method return to allow chaining like `obj.a().b().c()`?
+- `true`
+- `undefined`
++ `this`
+- A new object every time
+> Returning this hands the same object to the next call in the chain.
+--- exercise code javascript
+::prompt
+Create an object `playlist` with a `songs` array (initially empty), a `current` index (initially 0) and these methods, using `this`:
+
+- `add(title)`: adds a song to the end and returns `this` (so calls can be chained);
+- `now()`: returns the title of the current song, or `null` if the playlist is empty;
+- `next()`: moves to the next song, wrapping round to the first after the last one, and returns the new current title;
+- a getter `length` that gives the number of songs.
+::starter
+const playlist = {
+  songs: [],
+  current: 0,
+};
+::solution
+const playlist = {
+  songs: [],
+  current: 0,
+  add(title) {
+    this.songs.push(title);
+    return this;
+  },
+  now() {
+    return this.songs.length ? this.songs[this.current] : null;
+  },
+  next() {
+    this.current = (this.current + 1) % this.songs.length;
+    return this.now();
+  },
+  get length() {
+    return this.songs.length;
+  },
+};
+::tests
+assert.strictEqual(playlist.now(), null);
+playlist.add("Intro").add("Loops").add("Outro");
+assert.strictEqual(playlist.length, 3);
+assert.strictEqual(playlist.now(), "Intro");
+assert.strictEqual(playlist.next(), "Loops");
+assert.strictEqual(playlist.next(), "Outro");
+assert.strictEqual(playlist.next(), "Intro", "after the last song, wrap to the first");
+assert.deepStrictEqual(playlist.songs, ["Intro", "Loops", "Outro"]);
+::hints
+- Methods use `this.songs` and `this.current`.
+- Wrapping round: `(this.current + 1) % this.songs.length`.
+- A getter: `get length() { return this.songs.length; }`.
+--- exercise code javascript
+::prompt
+This `stopwatch` object has two `this` bugs. `tickAll(n)` should call `tick` n times through `repeat`, and `laps()` should return the lap times formatted as `"Lap 1: 3s"` and so on. Fix both bugs **without** changing `repeat`.
+::starter
+function repeat(times, action) {
+  for (let i = 0; i < times; i++) action();
+}
+
+const stopwatch = {
+  seconds: 0,
+  lapTimes: [3, 5],
+  tick() {
+    this.seconds++;
+  },
+  tickAll(n) {
+    repeat(n, this.tick);
+    return this.seconds;
+  },
+  laps() {
+    return this.lapTimes.map(function (t, i) {
+      return `Lap ${i + 1}: ${t}s` + (this.seconds > 0 ? "" : "");
+    });
+  },
+};
+::solution
+function repeat(times, action) {
+  for (let i = 0; i < times; i++) action();
+}
+
+const stopwatch = {
+  seconds: 0,
+  lapTimes: [3, 5],
+  tick() {
+    this.seconds++;
+  },
+  tickAll(n) {
+    repeat(n, () => this.tick());
+    return this.seconds;
+  },
+  laps() {
+    return this.lapTimes.map((t, i) => `Lap ${i + 1}: ${t}s` + (this.seconds > 0 ? "" : ""));
+  },
+};
+::tests
+assert.strictEqual(stopwatch.tickAll(3), 3);
+assert.strictEqual(stopwatch.tickAll(2), 5);
+assert.deepStrictEqual(stopwatch.laps(), ["Lap 1: 3s", "Lap 2: 5s"]);
+::hints
+- `repeat(n, this.tick)` passes the method without its object. Wrap it: `() => this.tick()`, or use `this.tick.bind(this)`.
+- The `function` callback in `map` has its own `this` (undefined). Use an arrow function instead.
+--- exercise code javascript
+::prompt
+Write a factory function `createTemperature(celsius)` that returns an object with a `celsius` property and a **getter and setter** `fahrenheit`: reading it converts (`C × 9 / 5 + 32`), and assigning to it updates `celsius` (`(F − 32) × 5 / 9`). Add a method `describe()` that returns `"cold"` below 10 °C, `"mild"` up to 25 °C, and `"hot"` above that.
+::starter
+function createTemperature(celsius) {
+}
+::solution
+function createTemperature(celsius) {
+  return {
+    celsius,
+    get fahrenheit() {
+      return (this.celsius * 9) / 5 + 32;
+    },
+    set fahrenheit(value) {
+      this.celsius = ((value - 32) * 5) / 9;
+    },
+    describe() {
+      if (this.celsius < 10) return "cold";
+      if (this.celsius <= 25) return "mild";
+      return "hot";
+    },
+  };
+}
+::tests
+const __t = createTemperature(100);
+assert.strictEqual(__t.fahrenheit, 212);
+__t.fahrenheit = 50;
+assert.strictEqual(__t.celsius, 10);
+assert.strictEqual(__t.describe(), "mild");
+assert.strictEqual(createTemperature(-5).describe(), "cold");
+assert.strictEqual(createTemperature(25).describe(), "mild");
+assert.strictEqual(createTemperature(30).describe(), "hot");
+const __u = createTemperature(0);
+assert.strictEqual(__u.fahrenheit, 32);
+assert.strictEqual(__t.celsius, 10, "each object has its own state");
+::hints
+- Return an object literal with `celsius` (shorthand property), `get fahrenheit()`, `set fahrenheit(value)` and `describe()`.
+- Inside them, use `this.celsius`.
+--- cards
+Method :: A function stored on an object and called with a dot: obj.method(). It can use this.
+this :: The object in front of the dot when a method is called. Decided by the call, not by where the function was written.
+Lost this :: Passing obj.method as a callback loses its object: this becomes undefined. Fix with () => obj.method() or obj.method.bind(obj).
+Arrow functions and this :: Arrows have no own this; they use the surrounding code's. Great for callbacks inside methods, wrong as methods.
+bind / call / apply :: fn.bind(obj) returns a function with this fixed to obj; call/apply run fn once with a chosen this.
+Getter / setter :: get x() { ... } runs when x is read; set x(v) { ... } runs when x is assigned. No parentheses for callers.
+Factory function :: A function that builds and returns new objects.
+
+=== lesson js-classes | Classes and objects | 90
+## Blueprints for objects
+
+A shop has thousands of products, a bank millions of accounts. Each account has the same *kind* of data (owner, balance) and the same *behaviour* (deposit, withdraw). A **class** is the blueprint; each account made from it is an **object**, also called an **instance** of the class.
+
+```js
+class BankAccount {
+  constructor(owner, balance = 0) {
+    this.owner = owner;
+    this.balance = balance;
+  }
+
+  deposit(amount) {
+    this.balance += amount;
+    return this.balance;
+  }
+
+  withdraw(amount) {
+    if (amount > this.balance) {
+      throw new Error(`Insufficient funds: ${this.owner} has ${this.balance}`);
+    }
+    this.balance -= amount;
+    return this.balance;
+  }
+}
+
+const ada = new BankAccount("Ada", 100);
+const grace = new BankAccount("Grace");
+ada.deposit(50);
+grace.deposit(20);
+console.log(ada.balance, grace.balance);
+console.log(ada);
+console.log(ada instanceof BankAccount);
+```
+
+- `class BankAccount { ... }` defines the class. Class names use **PascalCase** (each word capitalised).
+- The **constructor** runs when you create an object with `new`. Its job is to set up the new object's starting state, stored on `this`.
+- `new BankAccount("Ada", 100)` creates a fresh object, runs the constructor with `this` pointing at it, and gives you the object.
+- Methods are written without the `function` keyword, and every instance can use them.
+- Each instance has **its own state**: depositing into `ada` doesn't touch `grace`.
+
+The vocabulary, worth knowing for interviews and documentation: the object's data is its **state**, stored in **properties** (also called fields or attributes); its methods are its **behaviour**; and the set of public methods and properties that other code uses is its **interface**.
+
+## Class fields
+
+Properties that every instance starts with can be declared at the top of the class, as **fields**:
+
+```js
+class TodoList {
+  items = [];
+  completed = 0;
+
+  constructor(title) {
+    this.title = title;
+  }
+
+  add(text) {
+    this.items.push({ text, done: false });
+    return this;
+  }
+}
+const home = new TodoList("Home");
+const work = new TodoList("Work");
+home.add("Water plants").add("Call mum");
+console.log(home.items.length, work.items.length);
+```
+
+Fields are created fresh for **each** instance, so every list gets its own `items` array. Declaring fields at the top also documents, in one place, what data the class holds.
+
+## Validate in the constructor
+
+The constructor is the gatekeeper: reject impossible values there, and no invalid object can ever exist:
+
+```js
+class Rectangle {
+  constructor(width, height) {
+    if (!(width > 0) || !(height > 0)) {
+      throw new RangeError(`Width and height must be positive, got ${width} x ${height}`);
+    }
+    this.width = width;
+    this.height = height;
+  }
+
+  get area() {
+    return this.width * this.height;
+  }
+
+  scale(factor) {
+    return new Rectangle(this.width * factor, this.height * factor);
+  }
+
+  toString() {
+    return `Rectangle ${this.width}x${this.height}`;
+  }
+}
+const r = new Rectangle(3, 4);
+console.log(r.area, String(r.scale(2)), `${r}`);
+try {
+  new Rectangle(-1, 5);
+} catch (error) {
+  console.log(error.message);
+}
+```
+
+Notice `toString()`: JavaScript calls it whenever the object is turned into text, as in template literals or `String(r)`. Without it, you'd get `[object Object]`.
+
+## Objects have identity
+
+Two objects created from the same class with the same data are still **two different objects**:
+
+```js
+class Point {
+  constructor(x, y) {
+    this.x = x;
+    this.y = y;
+  }
+  equals(other) {
+    return this.x === other.x && this.y === other.y;
+  }
+}
+const p = new Point(1, 2);
+const q = new Point(1, 2);
+console.log(p === q, p.equals(q));
+const alias = p;
+alias.x = 99;
+console.log(p.x);
+```
+
+`===` asks "same object?". When "equal" should mean "same data", write an `equals` method. And everything from the references lesson applies: two variables can name one object, and changing it through one is visible through the other.
+
+~~~check
+? What does this print?
+```js
+class Box {
+  items = [];
+  add(x) {
+    this.items.push(x);
+  }
+}
+const a = new Box();
+const b = new Box();
+a.add(1);
+a.add(2);
+b.add(3);
+console.log(a.items.length, b.items.length);
+```
+- `3 3`
++ `2 1`
+- `2 0`
+- `1 1`
+> Each instance gets its own items array from the field.
+~~~
+
+## Static members: belonging to the class itself
+
+Some things belong to the class as a whole rather than to one object. Mark them `static`; you use them through the class name:
+
+```js
+class Temperature {
+  static ABSOLUTE_ZERO = -273.15;
+  static created = 0;
+
+  constructor(celsius) {
+    if (celsius < Temperature.ABSOLUTE_ZERO) throw new RangeError("Below absolute zero");
+    this.celsius = celsius;
+    Temperature.created++;
+  }
+
+  static fromFahrenheit(f) {
+    return new Temperature(((f - 32) * 5) / 9);
+  }
+
+  get fahrenheit() {
+    return (this.celsius * 9) / 5 + 32;
+  }
+}
+const boiling = Temperature.fromFahrenheit(212);
+console.log(boiling.celsius, new Temperature(20).fahrenheit, Temperature.created);
+```
+
+Common uses:
+
+- **Alternative constructors** (*factory methods*) with clear names: `Temperature.fromFahrenheit(212)`, `User.fromJSON(data)`, `Color.fromHex("#ff0000")`.
+- **Constants** shared by all instances: `Temperature.ABSOLUTE_ZERO`.
+- **Helpers** that relate to the class but don't need an instance: `Array.isArray(x)`, `Number.isInteger(x)` and `Object.keys(obj)` are all static methods of built-in classes.
+
+## Classes in practice
+
+- A class is declared before it's used: unlike function declarations, `new BankAccount()` above the `class` line throws a ReferenceError.
+- Class bodies always run in strict mode.
+- Under the hood, `typeof BankAccount` is `"function"`: a class is a special kind of function, and its methods live on a shared *prototype* (Module 8, lesson 4).
+
+What makes a good class? It represents **one** clear concept (a noun: `Invoice`, `Player`, `ShoppingCart`), keeps the data it needs together with the operations on that data, has short methods with verb names, and makes invalid states impossible. If you can't describe a class in one sentence without "and", it's probably two classes.
+
+📚 **Go deeper:** javascript.info, "Class basic syntax" and "Static properties and methods"; MDN, "Using classes"; *Eloquent JavaScript* (4th ed.), chapter 6, "Classes".
+--- goals
+- define classes with a constructor, fields and methods, and create instances with `new`
+- explain state, behaviour, instance and interface
+- give every instance its own fields, and validate state in the constructor
+- add `toString()` and getters for display and derived values
+- compare objects by identity versus by data with an `equals` method
+- use static fields and static factory methods
+--- quiz
+? What does `new` do?
+- Copies an existing object
++ Creates a fresh object, runs the constructor with `this` set to it, and returns it
+- Declares a class
+- Calls a static method
+> new makes an instance and lets the constructor set it up.
+? What does this print?
+```js
+class Counter {
+  count = 0;
+  inc() {
+    this.count++;
+  }
+}
+const c1 = new Counter();
+const c2 = c1;
+c2.inc();
+console.log(c1.count);
+```
+- 0
++ 1
+- 2
+- `undefined`
+> c1 and c2 are the same object.
+? Where should a `Product` class reject a negative price?
++ In the constructor, so an invalid product can never exist
+- In every method that uses the price
+- In `toString()`
+- Nowhere; prices can't be negative in JavaScript
+> Validate once, at creation; then every method can trust the object's state.
+? How do you call the static method `fromJSON` of class `User`?
+- `new User().fromJSON(data)`
++ `User.fromJSON(data)`
+- `fromJSON(User, data)`
+- `User.prototype.fromJSON(data)`
+> Static members belong to the class and are used through its name.
+? What does `${point}` give for an object whose class defines no `toString`?
+- The object's properties
++ `[object Object]`
+- An error
+- The class name
+> Define toString() to control how an object looks as text.
+? Which is the best class design?
+- A `Utils` class with forty unrelated methods
++ An `Invoice` class with its line items, `addLine`, `total` and `toString`
+- A `Data` class whose properties are all public and changed from everywhere
+- One class per function
+> A class should represent one clear concept and keep its data with the operations on it.
+--- exercise code javascript
+::prompt
+Write a class `Rectangle`:
+
+- the constructor takes `width` and `height`, and throws a `RangeError` unless both are positive numbers;
+- getters `area` and `perimeter`;
+- a method `isSquare()`;
+- a method `scale(factor)` that returns a **new** `Rectangle` (the original doesn't change);
+- `toString()` returning e.g. `"Rectangle 3x4"`;
+- a static factory `Rectangle.square(size)`.
+::starter
+class Rectangle {
+}
+::solution
+class Rectangle {
+  constructor(width, height) {
+    for (const side of [width, height]) {
+      if (typeof side !== "number" || !(side > 0)) throw new RangeError("Width and height must be positive numbers");
+    }
+    this.width = width;
+    this.height = height;
+  }
+
+  get area() {
+    return this.width * this.height;
+  }
+
+  get perimeter() {
+    return 2 * (this.width + this.height);
+  }
+
+  isSquare() {
+    return this.width === this.height;
+  }
+
+  scale(factor) {
+    return new Rectangle(this.width * factor, this.height * factor);
+  }
+
+  toString() {
+    return `Rectangle ${this.width}x${this.height}`;
+  }
+
+  static square(size) {
+    return new Rectangle(size, size);
+  }
+}
+::tests
+const __r = new Rectangle(3, 4);
+assert.strictEqual(__r.area, 12);
+assert.strictEqual(__r.perimeter, 14);
+assert.strictEqual(__r.isSquare(), false);
+const __big = __r.scale(2);
+assert.ok(__big instanceof Rectangle);
+assert.strictEqual(__big.area, 48);
+assert.strictEqual(__r.width, 3, "scale must not change the original");
+assert.strictEqual(String(__r), "Rectangle 3x4");
+assert.strictEqual(`${Rectangle.square(5)}`, "Rectangle 5x5");
+assert.strictEqual(Rectangle.square(2).isSquare(), true);
+assert.throws(() => new Rectangle(0, 4), RangeError);
+assert.throws(() => new Rectangle(3, -1), RangeError);
+assert.throws(() => new Rectangle("3", 4), RangeError);
+::hints
+- Getters: `get area() { return this.width * this.height; }`, read as `r.area`.
+- `scale` returns `new Rectangle(...)` with the multiplied sizes.
+- Check `typeof width === "number"` as well as `width > 0`: `"3" > 0` is true, because JavaScript converts the string.
+--- exercise code javascript
+::prompt
+Write a class `ShoppingCart` that holds lines of `{ name, price, qty }`:
+
+- `addItem(name, price, qty = 1)`: if the item is already in the cart, increase its quantity; otherwise add a new line. Throw a `RangeError` for a price below 0 or a quantity that isn't a positive whole number. Return `this` for chaining.
+- `removeItem(name)`: remove the line; return `true` if something was removed, `false` otherwise.
+- getter `itemCount`: the total quantity of all items.
+- getter `total`: the total price, rounded to 2 decimals.
+- `clear()`: empty the cart.
+::starter
+class ShoppingCart {
+  lines = [];
+}
+::solution
+class ShoppingCart {
+  lines = [];
+
+  addItem(name, price, qty = 1) {
+    if (!(price >= 0)) throw new RangeError("Price must be 0 or more");
+    if (!Number.isInteger(qty) || qty < 1) throw new RangeError("Quantity must be a positive whole number");
+    const line = this.lines.find((l) => l.name === name);
+    if (line) line.qty += qty;
+    else this.lines.push({ name, price, qty });
+    return this;
+  }
+
+  removeItem(name) {
+    const before = this.lines.length;
+    this.lines = this.lines.filter((l) => l.name !== name);
+    return this.lines.length < before;
+  }
+
+  get itemCount() {
+    return this.lines.reduce((sum, l) => sum + l.qty, 0);
+  }
+
+  get total() {
+    return Math.round(this.lines.reduce((sum, l) => sum + l.price * l.qty, 0) * 100) / 100;
+  }
+
+  clear() {
+    this.lines = [];
+  }
+}
+::tests
+const __c = new ShoppingCart();
+__c.addItem("Pen", 1.2, 3).addItem("Book", 12.5).addItem("Pen", 1.2, 2);
+assert.strictEqual(__c.lines.length, 2);
+assert.strictEqual(__c.itemCount, 6);
+assert.strictEqual(__c.total, 18.5);
+assert.strictEqual(__c.removeItem("Book"), true);
+assert.strictEqual(__c.removeItem("Book"), false);
+assert.strictEqual(__c.total, 6);
+assert.throws(() => __c.addItem("Bad", -1), RangeError);
+assert.throws(() => __c.addItem("Bad", 1, 0), RangeError);
+assert.throws(() => __c.addItem("Bad", 1, 1.5), RangeError);
+const __other = new ShoppingCart();
+assert.strictEqual(__other.itemCount, 0, "each cart has its own lines");
+__c.clear();
+assert.strictEqual(__c.total, 0);
+::hints
+- `this.lines.find((l) => l.name === name)` gives the existing line (or undefined).
+- `removeItem` can compare the length before and after a `filter`.
+- Use `reduce` in the getters, starting from 0.
+--- exercise code javascript
+::prompt
+Write a class `Duration` that stores a length of time in whole seconds:
+
+- the constructor takes `seconds` (a whole number, 0 or more; otherwise throw a `RangeError`);
+- static factories `Duration.fromMinutes(m)` and `Duration.parse(text)` for text like `"1:05:30"` (hours:minutes:seconds) or `"5:30"` (minutes:seconds);
+- `plus(other)` returns a new `Duration` with the sum;
+- `equals(other)` compares by seconds;
+- `toString()` returns `"H:MM:SS"`, e.g. `"1:05:30"` (hours not padded, minutes and seconds padded to 2 digits).
+::starter
+class Duration {
+}
+::solution
+class Duration {
+  constructor(seconds) {
+    if (!Number.isInteger(seconds) || seconds < 0) throw new RangeError(`Bad duration: ${seconds}`);
+    this.seconds = seconds;
+  }
+
+  static fromMinutes(m) {
+    return new Duration(m * 60);
+  }
+
+  static parse(text) {
+    const parts = text.split(":").map(Number);
+    let seconds = 0;
+    for (const p of parts) seconds = seconds * 60 + p;
+    return new Duration(seconds);
+  }
+
+  plus(other) {
+    return new Duration(this.seconds + other.seconds);
+  }
+
+  equals(other) {
+    return other instanceof Duration && this.seconds === other.seconds;
+  }
+
+  toString() {
+    const h = Math.floor(this.seconds / 3600);
+    const m = Math.floor((this.seconds % 3600) / 60);
+    const s = this.seconds % 60;
+    return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+  }
+}
+::tests
+assert.strictEqual(String(new Duration(3725)), "1:02:05");
+assert.strictEqual(`${Duration.fromMinutes(90)}`, "1:30:00");
+assert.strictEqual(Duration.parse("1:05:30").seconds, 3930);
+assert.strictEqual(Duration.parse("5:30").seconds, 330);
+assert.strictEqual(String(Duration.parse("0:00:07")), "0:00:07");
+const __a = new Duration(100);
+const __sum = __a.plus(new Duration(50));
+assert.strictEqual(__sum.seconds, 150);
+assert.strictEqual(__a.seconds, 100, "plus returns a new Duration");
+assert.ok(__sum.equals(new Duration(150)));
+assert.ok(!__sum.equals(new Duration(151)));
+assert.throws(() => new Duration(-1), RangeError);
+assert.throws(() => new Duration(1.5), RangeError);
+::hints
+- Parsing: each part multiplies what you have so far by 60 and adds itself; that handles both "M:SS" and "H:MM:SS".
+- In `toString`, compute h, m and s with `Math.floor` and `%`, and pad m and s with `padStart(2, "0")`.
+--- cards
+Class :: A blueprint for objects of one kind: class Name { constructor() {...} method() {...} }. PascalCase names.
+Instance :: An object made from a class with new. instanceof checks: obj instanceof Name.
+constructor :: Runs on new; sets up the new object's state on this. Validate arguments here.
+Class field :: items = []; declared at the top of the class: created fresh for each instance.
+toString() :: Called when an object is turned into text (templates, String(x)). Without it: [object Object].
+Identity vs equality :: === compares identity (same object?). Write an equals(other) method to compare data.
+static :: Belongs to the class, not instances: Temperature.fromFahrenheit(212), Number.isInteger(x).
+
+=== lesson js-encapsulation | Encapsulation: private fields, getters and setters | 85
+## Protecting an object's state
+
+Here's a bank account class with a problem:
+
+```js
+class Account {
+  constructor(owner) {
+    this.owner = owner;
+    this.balance = 0;
+  }
+  deposit(amount) {
+    if (amount <= 0) throw new RangeError("Deposits must be positive");
+    this.balance += amount;
+  }
+}
+const acc = new Account("Ada");
+acc.deposit(100);
+acc.balance = -1000000;
+console.log(acc.balance);
+```
+
+`deposit` carefully validates its input, but any code anywhere can simply write `acc.balance = -1000000` and skip all the rules. A rule that must always hold for an object ("the balance is never negative") is called an **invariant**, and **encapsulation** means hiding an object's internal state so that only its own methods can change it, which lets the object guarantee its invariants.
+
+## Private fields: #
+
+Prefix a field's name with `#` to make it **private**: it can only be used inside the class body.
+
+```js
+class Account {
+  #balance = 0;
+
+  constructor(owner) {
+    this.owner = owner;
+  }
+
+  deposit(amount) {
+    if (!(amount > 0)) throw new RangeError("Deposits must be positive");
+    this.#balance += amount;
+  }
+
+  withdraw(amount) {
+    if (!(amount > 0)) throw new RangeError("Withdrawals must be positive");
+    if (amount > this.#balance) throw new Error("Insufficient funds");
+    this.#balance -= amount;
+  }
+
+  get balance() {
+    return this.#balance;
+  }
+}
+const acc = new Account("Ada");
+acc.deposit(100);
+acc.withdraw(30);
+console.log(acc.balance);
+acc.balance = 5;
+```
+
+- `#balance` is declared at the top of the class (private fields must be declared).
+- Inside the class, it's read and written as `this.#balance`.
+- Outside, it simply doesn't exist: writing `acc.#balance` anywhere outside the class is a **SyntaxError** before the program even runs.
+- The **getter** `balance` lets other code *read* the balance, but since there's no setter, assigning to it fails (`Cannot set property balance of #<Account> which has only a getter`).
+
+Now the only way to change the balance is through `deposit` and `withdraw`, which enforce the rules. Private fields don't appear in `console.log` output or `JSON.stringify` either.
+
+Methods can be private too: `#validate(amount) { ... }`, called as `this.#validate(amount)`. Use them for helper steps that aren't part of the object's public interface.
+
+## Public interface, private implementation
+
+Encapsulation splits a class into two parts:
+
+- the **interface**: the public methods and properties that other code may use, which you promise to keep working;
+- the **implementation**: the private details of how it works, which you can change at any time.
+
+Because nobody outside can depend on private fields, you can later store the balance in cents, keep a transaction log, or cache values, without breaking a single caller. That freedom to change is the real payoff of encapsulation in large programs.
+
+~~~check
+? What happens here?
+```js
+class Secret {
+  #code = 1234;
+}
+const s = new Secret();
+console.log(s.code);
+```
+- It prints `1234`
++ It prints `undefined`
+- SyntaxError
+- TypeError
+> `s.code` looks for a normal property called "code", which doesn't exist. `#code` is a different, private name. (Writing `s.#code` outside the class would be a SyntaxError.)
+~~~
+
+## Setters that validate
+
+A setter runs code on assignment, so it can check the new value, keeping assignment syntax for the caller:
+
+```js
+class Thermostat {
+  #target = 20;
+
+  get target() {
+    return this.#target;
+  }
+
+  set target(value) {
+    if (typeof value !== "number" || value < 5 || value > 30) {
+      throw new RangeError(`Target must be 5 to 30 degrees, got ${value}`);
+    }
+    this.#target = value;
+  }
+}
+const t = new Thermostat();
+t.target = 22;
+console.log(t.target);
+try {
+  t.target = 90;
+} catch (error) {
+  console.log(error.message);
+}
+console.log(t.target);
+```
+
+Use getters and setters when reading or assigning should look like a property. Use ordinary methods (`setTarget(value)`, `raiseBy(2)`) when the action has a meaningful name of its own, or might be slow; callers don't expect assignments to do heavy work.
+
+## Don't leak your internals
+
+A getter that returns a private **array or object** hands out a reference to it, and then callers can change it behind the object's back. Return a **copy**:
+
+```js
+class Course {
+  #students = [];
+
+  enrol(name) {
+    if (this.#students.includes(name)) throw new Error(`${name} is already enrolled`);
+    this.#students.push(name);
+  }
+
+  get students() {
+    return [...this.#students];
+  }
+}
+const js = new Course();
+js.enrol("Ada");
+js.students.push("Mallory");
+console.log(js.students);
+```
+
+The copy can be modified freely, but the course's real list is safe. This is called a **defensive copy**.
+
+## Tell, don't ask
+
+Encapsulated objects work best when you **tell** them what to do rather than **asking** for their data and doing the work yourself:
+
+- Asking: `if (account.balance >= price) { account.balance -= price; }` spreads the account's rules across the program.
+- Telling: `account.withdraw(price);` keeps the rule in one place, inside the class.
+
+If you find code outside a class repeatedly reading its properties to make decisions, that logic probably belongs in a method of the class.
+
+## Other ways to hide things
+
+- Before `#private` existed (2021), developers marked fields with an underscore, `this._balance`, as a *convention* meaning "please don't touch". It isn't enforced, but you'll see it in lots of existing code.
+- **Closures** (Module 5) also give true privacy: a factory function's local variables can only be reached by the functions it returns.
+- `Object.freeze(this)` at the end of a constructor makes all public properties read-only, which suits **immutable value objects** (a `Point`, a `Money`, a `Date` range) whose "changes" return new objects.
+
+📚 **Go deeper:** javascript.info, "Private and protected properties and methods" and "Property getters and setters"; MDN, "Private properties"; *Eloquent JavaScript* (4th ed.), chapter 6, "Encapsulation" and "Private properties".
+--- goals
+- explain invariants, and why encapsulation protects them
+- hide state and helper methods with `#private` fields and methods
+- expose read-only values with getters, and validate assignments with setters
+- separate a class's public interface from its private implementation
+- return defensive copies instead of internal arrays and objects
+- design methods that are told what to do ("tell, don't ask")
+--- quiz
+? What is an invariant?
++ A rule about an object's state that must always hold, such as "the balance is never negative"
+- A variable that never changes
+- A private method
+- A class with no fields
+> Encapsulation lets an object guarantee its invariants by controlling every change.
+? Where can `this.#count` be used?
+- Anywhere in the program
+- Only in the constructor
++ Only inside the class body that declares `#count`
+- Only in subclasses
+> Private fields are visible only inside their own class's code.
+? A class has `get size()` but no setter. What happens on `obj.size = 5` in strict mode?
+- `size` becomes 5
+- Nothing, silently
++ A TypeError: the property has only a getter
+- A SyntaxError
+> Without a setter the property is read-only.
+? Why should `get items()` return `[...this.#items]` instead of `this.#items`?
+- It's faster
++ Returning the real array would let outside code change the object's private data
+- Private fields can't be returned
+- Arrays can't be returned from getters
+> A defensive copy keeps the internal array under the object's control.
+? Which follows "tell, don't ask"?
+- `if (cart.items.length < 10) cart.items.push(item);`
++ `cart.add(item);` with the limit checked inside `add`
+- `cart.items = [...cart.items, item];`
+- `cart.items[cart.items.length] = item;`
+> The rule lives in one place: the class's own method.
+? What does `this._secret` mean in older code?
+- A truly private field
++ A naming convention asking other code not to touch it; nothing enforces it
+- A static field
+- A syntax error
+> Only #fields are really private.
+--- exercise code javascript
+::prompt
+Write a class `BankAccount` with a **private** `#balance` (starting at 0) and a private `#history` array:
+
+- `deposit(amount)` and `withdraw(amount)` throw a `RangeError` unless the amount is a positive number; `withdraw` throws an `Error` with the message `"Insufficient funds"` if the balance is too low. Each successful operation adds an entry like `{ type: "deposit", amount: 50 }` to the history and returns the new balance.
+- a getter `balance` (read-only).
+- a getter `history` that returns a **copy** of the history.
+- a private method `#check(amount)` used by both operations for the validation.
+::starter
+class BankAccount {
+}
+::solution
+class BankAccount {
+  #balance = 0;
+  #history = [];
+
+  #check(amount) {
+    if (typeof amount !== "number" || !(amount > 0)) throw new RangeError(`Amount must be positive, got ${amount}`);
+  }
+
+  deposit(amount) {
+    this.#check(amount);
+    this.#balance += amount;
+    this.#history.push({ type: "deposit", amount });
+    return this.#balance;
+  }
+
+  withdraw(amount) {
+    this.#check(amount);
+    if (amount > this.#balance) throw new Error("Insufficient funds");
+    this.#balance -= amount;
+    this.#history.push({ type: "withdraw", amount });
+    return this.#balance;
+  }
+
+  get balance() {
+    return this.#balance;
+  }
+
+  get history() {
+    return this.#history.map((entry) => ({ ...entry }));
+  }
+}
+::tests
+const __acc = new BankAccount();
+assert.strictEqual(__acc.deposit(100), 100);
+assert.strictEqual(__acc.withdraw(30), 70);
+assert.strictEqual(__acc.balance, 70);
+assert.throws(() => __acc.withdraw(500), { message: "Insufficient funds" });
+assert.throws(() => __acc.deposit(-5), RangeError);
+assert.throws(() => __acc.deposit("10"), RangeError);
+assert.throws(() => { __acc.balance = 1e6; }, TypeError, "balance must be read-only");
+assert.strictEqual(__acc.balance, 70);
+assert.deepStrictEqual(__acc.history, [{ type: "deposit", amount: 100 }, { type: "withdraw", amount: 30 }]);
+__acc.history.push({ type: "deposit", amount: 999 });
+assert.strictEqual(__acc.history.length, 2, "history must return a copy");
+assert.deepStrictEqual(Object.keys(__acc), [], "no public fields: balance and history are private");
+::hints
+- Declare `#balance = 0;` and `#history = [];` at the top of the class.
+- A private method: `#check(amount) { ... }`, called as `this.#check(amount)`.
+- The `history` getter returns a copy, e.g. `[...this.#history]` (or copies of each entry).
+--- exercise code javascript
+::prompt
+Write a class `Temperature` that stores the temperature in Celsius in a private field, with:
+
+- the constructor taking `celsius`;
+- a getter and setter `celsius`, and a getter and setter `fahrenheit`;
+- every way of setting the temperature (constructor included) must throw a `RangeError` if it would go below absolute zero (−273.15 °C) or isn't a number. Put that rule in one private method.
+::starter
+class Temperature {
+}
+::solution
+class Temperature {
+  #celsius;
+
+  constructor(celsius) {
+    this.celsius = celsius;
+  }
+
+  #set(celsius) {
+    if (typeof celsius !== "number" || Number.isNaN(celsius) || celsius < -273.15) {
+      throw new RangeError(`Impossible temperature: ${celsius}`);
+    }
+    this.#celsius = celsius;
+  }
+
+  get celsius() {
+    return this.#celsius;
+  }
+
+  set celsius(value) {
+    this.#set(value);
+  }
+
+  get fahrenheit() {
+    return (this.#celsius * 9) / 5 + 32;
+  }
+
+  set fahrenheit(value) {
+    this.#set(((value - 32) * 5) / 9);
+  }
+}
+::tests
+const __t = new Temperature(100);
+assert.strictEqual(__t.fahrenheit, 212);
+__t.fahrenheit = 32;
+assert.strictEqual(__t.celsius, 0);
+__t.celsius = 25;
+assert.strictEqual(__t.fahrenheit, 77);
+assert.throws(() => new Temperature(-300), RangeError);
+assert.throws(() => { __t.celsius = -274; }, RangeError);
+assert.throws(() => { __t.fahrenheit = -500; }, RangeError);
+assert.throws(() => { __t.celsius = "hot"; }, RangeError);
+assert.strictEqual(__t.celsius, 25, "a failed assignment must not change the temperature");
+assert.deepStrictEqual(Object.keys(__t), []);
+::hints
+- Store the value in `#celsius`; a private method `#set(value)` validates and stores it.
+- The constructor can simply do `this.celsius = celsius;`, which goes through the setter.
+- The `fahrenheit` setter converts and then calls the same private method.
+--- exercise code javascript
+::prompt
+Write a class `Stack` (last in, first out) that hides its items in a private array:
+
+- `push(item)` returns `this`; `pop()` removes and returns the top item, or throws an `Error` with the message `"Stack is empty"`;
+- `peek()` returns the top item without removing it (or `undefined` if empty);
+- getters `size` and `isEmpty`;
+- `toArray()` returns a copy of the items, bottom first.
+
+Then use it in a function `isBalanced(text)` that returns `true` if every bracket `(`, `[`, `{` in the text is closed by the matching bracket in the right order: `isBalanced("{[()()]}")` is true, `isBalanced("([)]")` is false.
+::starter
+class Stack {
+}
+
+function isBalanced(text) {
+}
+::solution
+class Stack {
+  #items = [];
+
+  push(item) {
+    this.#items.push(item);
+    return this;
+  }
+
+  pop() {
+    if (this.#items.length === 0) throw new Error("Stack is empty");
+    return this.#items.pop();
+  }
+
+  peek() {
+    return this.#items.at(-1);
+  }
+
+  get size() {
+    return this.#items.length;
+  }
+
+  get isEmpty() {
+    return this.#items.length === 0;
+  }
+
+  toArray() {
+    return [...this.#items];
+  }
+}
+
+function isBalanced(text) {
+  const pairs = { ")": "(", "]": "[", "}": "{" };
+  const open = new Stack();
+  for (const ch of text) {
+    if ("([{".includes(ch)) open.push(ch);
+    else if (ch in pairs) {
+      if (open.isEmpty || open.pop() !== pairs[ch]) return false;
+    }
+  }
+  return open.isEmpty;
+}
+::tests
+const __s = new Stack();
+assert.strictEqual(__s.isEmpty, true);
+__s.push(1).push(2).push(3);
+assert.strictEqual(__s.size, 3);
+assert.strictEqual(__s.peek(), 3);
+assert.strictEqual(__s.pop(), 3);
+assert.deepStrictEqual(__s.toArray(), [1, 2]);
+__s.toArray().push(99);
+assert.strictEqual(__s.size, 2, "toArray must return a copy");
+__s.pop();
+__s.pop();
+assert.throws(() => __s.pop(), { message: "Stack is empty" });
+assert.strictEqual(__s.peek(), undefined);
+assert.strictEqual(isBalanced("{[()()]}"), true);
+assert.strictEqual(isBalanced("([)]"), false);
+assert.strictEqual(isBalanced("(("), false);
+assert.strictEqual(isBalanced("())"), false);
+assert.strictEqual(isBalanced("f(a[0]) { return x; }"), true);
+assert.strictEqual(isBalanced(""), true);
+::hints
+- The class wraps a private array: `#items = [];` and each method uses `this.#items`.
+- isBalanced: push opening brackets; for a closing one, the top of the stack must be its partner.
+- At the end the stack must be empty: every opened bracket was closed.
+--- cards
+Encapsulation :: Hiding an object's internal state so only its own methods can change it, protecting its invariants.
+Invariant :: A rule that must always be true for an object, e.g. "balance >= 0".
+#private field :: Declared as #name in the class; used as this.#name; outside the class it's a SyntaxError to touch it.
+Private method :: #helper() { ... }, called as this.#helper(). Not part of the public interface.
+Read-only property :: A getter without a setter: assigning to it throws in strict mode.
+Validating setter :: set x(v) { if (bad) throw ...; this.#x = v; } keeps assignment syntax but enforces the rules.
+Defensive copy :: Return [...this.#items] rather than the private array itself.
+Tell, don't ask :: Call obj.withdraw(x) rather than reading obj's data and changing it from outside.
+
+=== lesson js-prototypes | Prototypes and special methods | 85
+## Where do methods live?
+
+You've seen that methods work on every instance of a class. But each instance only stores its own **fields**; the methods aren't copied into it:
+
+```js
+class Dog {
+  constructor(name) {
+    this.name = name;
+  }
+  bark() {
+    return `${this.name} says woof`;
+  }
+}
+const rex = new Dog("Rex");
+console.log(Object.keys(rex));
+console.log(Object.hasOwn(rex, "bark"), "bark" in rex);
+console.log(Object.getPrototypeOf(rex) === Dog.prototype);
+console.log(Object.getOwnPropertyNames(Dog.prototype));
+```
+
+Every object has a hidden link to another object, its **prototype**. When you read a property that the object doesn't have itself, JavaScript looks in its prototype, then in the prototype's prototype, and so on: the **prototype chain**. A class puts its methods on one shared object, `Dog.prototype`, and every `Dog` instance links to it. A million dogs share one `bark` function.
+
+## The prototype chain
+
+```js
+class Dog {
+  constructor(name) {
+    this.name = name;
+  }
+  bark() {
+    return "woof";
+  }
+}
+const rex = new Dog("Rex");
+const level1 = Object.getPrototypeOf(rex);
+const level2 = Object.getPrototypeOf(level1);
+const level3 = Object.getPrototypeOf(level2);
+console.log(level1 === Dog.prototype, level2 === Object.prototype, level3);
+console.log(rex.toString(), rex.hasOwnProperty("name"));
+```
+
+`rex` → `Dog.prototype` → `Object.prototype` → `null`. That's why every object has `toString` and `hasOwnProperty`: they live on `Object.prototype`, at the end of almost every chain.
+
+Built-in values work the same way: `[1, 2].map(...)` finds `map` on `Array.prototype`, and `"hi".toUpperCase()` finds it on `String.prototype`. When MDN documents `Array.prototype.map()`, that's what the name means.
+
+`instanceof` checks the chain too: `rex instanceof Dog` asks "is `Dog.prototype` somewhere in `rex`'s prototype chain?".
+
+~~~check
+? Where is the method `withdraw` of `class Account { withdraw() {} }` stored?
+- In every instance, as an own property
++ Once, on `Account.prototype`, shared by all instances
+- In a global variable
+- In `Object.prototype`
+> Class methods live on the prototype; instances find them through the chain.
+~~~
+
+## Before classes: constructor functions
+
+Classes arrived in 2015. Before that, the same thing was written with a **constructor function** and its `prototype` property, and you'll still meet this style in older code and libraries:
+
+```js
+function Cat(name) {
+  this.name = name;
+}
+Cat.prototype.meow = function () {
+  return `${this.name} says meow`;
+};
+const tom = new Cat("Tom");
+console.log(tom.meow(), tom instanceof Cat);
+```
+
+`class` does exactly this behind the scenes, with nicer syntax and a few safety features (classes must be called with `new`, their bodies are always strict). That's why people describe classes as "syntactic sugar over prototypes".
+
+## Object.create: linking objects directly
+
+`Object.create(proto)` makes a new object whose prototype is `proto`. It shows the core idea without any class at all: objects **delegating** to other objects.
+
+```js
+const robotMethods = {
+  introduce() {
+    return `I am ${this.name}, model ${this.model}`;
+  },
+};
+const r2 = Object.create(robotMethods);
+r2.name = "R2";
+r2.model = "astromech";
+console.log(r2.introduce(), Object.getPrototypeOf(r2) === robotMethods);
+```
+
+## Don't modify built-in prototypes
+
+Because `Array.prototype` is shared by every array in the program, you *could* add your own methods to it: `Array.prototype.last = function () { ... }`. Don't. This is called **monkey patching**, and it causes clashes when a library does the same thing, or when JavaScript later adds a built-in method with the same name. (This really happened: a library's `Array.prototype.flatten` is why the built-in had to be named `flat`.) Write a normal function instead.
+
+## Special methods: how objects plug into the language
+
+Python has its "dunder" methods; JavaScript has a smaller set of special methods that the language calls for you:
+
+| Method | Called when |
+|---|---|
+| `toString()` | the object is turned into a string (templates, `String(obj)`, `+ ""`) |
+| `valueOf()` | the object is used as a number (`+obj`, `obj > 5`) |
+| `[Symbol.toPrimitive](hint)` | either; `hint` is `"number"`, `"string"` or `"default"` |
+| `toJSON()` | `JSON.stringify` serialises the object |
+| `[Symbol.iterator]()` | the object is used in `for...of` or spread (Module 9) |
+
+```js
+class Money {
+  constructor(cents) {
+    this.cents = cents;
+  }
+  toString() {
+    return `$${(this.cents / 100).toFixed(2)}`;
+  }
+  valueOf() {
+    return this.cents;
+  }
+  toJSON() {
+    return { amount: this.cents / 100, currency: "USD" };
+  }
+}
+const price = new Money(1250);
+const shipping = new Money(499);
+console.log(`Total: ${new Money(price + shipping)}`);
+console.log(price > shipping, JSON.stringify({ price }));
+```
+
+`price + shipping` calls `valueOf` on both, giving 1749, and the template calls `toString`. Note that JavaScript has **no operator overloading**: you can't make `==` or `===` compare your objects by content, so write `equals(other)` methods instead. And use `valueOf` sparingly: `price + shipping` returning a plain number rather than `Money` can confuse readers; an explicit `price.plus(shipping)` method is often clearer.
+
+📚 **Go deeper:** javascript.info, "Prototypal inheritance", "F.prototype", "Native prototypes" and "Object to primitive conversion"; MDN, "Inheritance and the prototype chain"; *Eloquent JavaScript* (4th ed.), chapter 6, "Prototypes".
+--- goals
+- explain the prototype chain and how property lookup walks it
+- tell own properties from inherited ones with `Object.hasOwn`
+- explain that class methods live on the class's prototype, shared by instances
+- read constructor-function code written before classes
+- create objects that delegate with `Object.create`
+- explain why built-in prototypes shouldn't be modified
+- customise conversion with `toString`, `valueOf`, `toJSON` and `Symbol.toPrimitive`
+--- quiz
+? What is `Object.getPrototypeOf([])`?
++ `Array.prototype`
+- `Object.prototype`
+- `null`
+- `Array`
+> Arrays link to Array.prototype, where map, filter and the rest live.
+? For `const d = new Dog("Rex")` (class with a `bark` method), what is `Object.hasOwn(d, "bark")`?
+- `true`
++ `false`
+- `undefined`
+- An error
+> bark is inherited from Dog.prototype, not an own property of d.
+? What does JavaScript call when it evaluates `` `${obj}` ``?
+- `obj.valueOf()` only
++ `obj.toString()` (or `Symbol.toPrimitive` with the "string" hint)
+- `obj.toJSON()`
+- Nothing; it always prints [object Object]
+> Templates convert to a string, which uses toString.
+? Why is adding methods to `Array.prototype` a bad idea?
+- It's a syntax error
+- Arrays can't have methods
++ Every array in the program is affected, which can clash with libraries and future built-ins
+- It makes arrays immutable
+> Monkey patching shared prototypes causes conflicts that are very hard to debug.
+? Which method controls what `JSON.stringify` produces for an object?
+- `toString`
+- `valueOf`
++ `toJSON`
+- `[Symbol.iterator]`
+> JSON.stringify calls toJSON if it exists and serialises its result.
+? `class A {}` is "syntactic sugar". What does that mean?
++ It's a nicer way to write something the language could already do (constructor functions and prototypes)
+- It runs faster than other code
+- It can only contain getters
+- It isn't real JavaScript
+> Classes build the same prototype structure that constructor functions did.
+--- exercise code javascript
+::prompt
+Write an immutable class `Money` that stores whole **cents**:
+
+- the constructor takes `cents` (a whole number; otherwise throw a `TypeError`) and freezes the object with `Object.freeze(this)`;
+- `static fromDollars(dollars)` rounds to the nearest cent;
+- `plus(other)` and `times(factor)` return **new** `Money` objects (round `times` to whole cents);
+- `equals(other)`;
+- `toString()` gives `"$12.50"` (negative amounts: `"-$3.00"`);
+- `toJSON()` returns `{ dollars: 12.5 }`;
+- `valueOf()` returns the cents, so amounts can be compared with `<` and `>`.
+::starter
+class Money {
+}
+::solution
+class Money {
+  constructor(cents) {
+    if (!Number.isInteger(cents)) throw new TypeError(`Cents must be a whole number, got ${cents}`);
+    this.cents = cents;
+    Object.freeze(this);
+  }
+
+  static fromDollars(dollars) {
+    return new Money(Math.round(dollars * 100));
+  }
+
+  plus(other) {
+    return new Money(this.cents + other.cents);
+  }
+
+  times(factor) {
+    return new Money(Math.round(this.cents * factor));
+  }
+
+  equals(other) {
+    return other instanceof Money && other.cents === this.cents;
+  }
+
+  toString() {
+    const sign = this.cents < 0 ? "-" : "";
+    return `${sign}$${(Math.abs(this.cents) / 100).toFixed(2)}`;
+  }
+
+  toJSON() {
+    return { dollars: this.cents / 100 };
+  }
+
+  valueOf() {
+    return this.cents;
+  }
+}
+::tests
+const __a = Money.fromDollars(12.5);
+assert.strictEqual(String(__a), "$12.50");
+assert.strictEqual(`${new Money(-300)}`, "-$3.00");
+assert.strictEqual(String(__a.plus(new Money(5))), "$12.55");
+assert.strictEqual(__a.times(3).cents, 3750);
+assert.strictEqual(new Money(999).times(0.5).cents, 500);
+assert.ok(__a.equals(new Money(1250)));
+assert.ok(!__a.equals(new Money(1251)));
+assert.ok(new Money(100) < new Money(200));
+assert.strictEqual(JSON.stringify({ price: __a }), '{"price":{"dollars":12.5}}');
+assert.throws(() => new Money(1.5), TypeError);
+assert.throws(() => { __a.cents = 0; }, TypeError, "Money must be frozen");
+assert.strictEqual(Money.fromDollars(0.1 + 0.2).cents, 30);
+assert.ok(!Object.hasOwn(__a, "plus"), "methods belong on the prototype");
+::hints
+- `Object.freeze(this)` at the end of the constructor makes the object read-only.
+- Every operation returns `new Money(...)`; never change `this.cents`.
+- `toString` formats `Math.abs(cents) / 100` with `toFixed(2)` and puts the sign before the `$`.
+--- exercise code javascript
+::prompt
+This code was written before JavaScript had classes. Rewrite `Timer` as a `class` with the same behaviour, so the same calls work: a constructor taking `label`, `start(now)`, `stop(now)` (throws an `Error` with message `"Timer not started"` if not running) returning the elapsed milliseconds, and a static `Timer.format(ms)` that gives `"1.50s"`.
+::starter
+function Timer(label) {
+  this.label = label;
+  this.startedAt = null;
+}
+Timer.prototype.start = function (now) {
+  this.startedAt = now;
+  return this;
+};
+Timer.prototype.stop = function (now) {
+  if (this.startedAt === null) throw new Error("Timer not started");
+  const elapsed = now - this.startedAt;
+  this.startedAt = null;
+  return elapsed;
+};
+Timer.format = function (ms) {
+  return (ms / 1000).toFixed(2) + "s";
+};
+::solution
+class Timer {
+  constructor(label) {
+    this.label = label;
+    this.startedAt = null;
+  }
+
+  start(now) {
+    this.startedAt = now;
+    return this;
+  }
+
+  stop(now) {
+    if (this.startedAt === null) throw new Error("Timer not started");
+    const elapsed = now - this.startedAt;
+    this.startedAt = null;
+    return elapsed;
+  }
+
+  static format(ms) {
+    return (ms / 1000).toFixed(2) + "s";
+  }
+}
+::tests
+const __src = String(Timer);
+assert.ok(__src.startsWith("class"), "rewrite Timer as a class");
+const __t = new Timer("build");
+assert.strictEqual(__t.start(1000), __t);
+assert.strictEqual(__t.stop(2500), 1500);
+assert.strictEqual(Timer.format(1500), "1.50s");
+assert.throws(() => __t.stop(3000), { message: "Timer not started" });
+assert.ok(Object.hasOwn(Timer.prototype, "start") && Object.hasOwn(Timer.prototype, "stop"));
+assert.deepStrictEqual(Object.keys(__t), ["label", "startedAt"]);
+::hints
+- The constructor function's body becomes the class's `constructor`.
+- Each `Timer.prototype.x = function (...) { ... }` becomes a method `x(...) { ... }`.
+- `Timer.format = ...` becomes a `static format(ms) { ... }` method.
+--- cards
+Prototype :: Every object links to another object, its prototype; missing properties are looked up there.
+Prototype chain :: obj → Class.prototype → Object.prototype → null. Lookup walks it until the property is found.
+Class methods :: Live once on Class.prototype, shared by all instances. Fields live on each instance.
+Constructor function :: Pre-2015 style: function Cat(n) { this.n = n; } Cat.prototype.meow = function () { ... }.
+Object.create(proto) :: Makes a new object whose prototype is proto.
+Monkey patching :: Changing built-in prototypes like Array.prototype. Avoid: it affects everything and clashes.
+Special methods :: toString (text), valueOf / Symbol.toPrimitive (numbers), toJSON (JSON.stringify), Symbol.iterator (for...of).
+
+=== lesson js-m8-test | Module 8 test | 180 | exam
+This test covers Module 8: methods and `this`, classes, encapsulation with private fields and accessors, and prototypes with special methods.
+
+Before you start, check that you can:
+
+- predict `this` from a call, and fix lost `this` in callbacks;
+- write a class with a validating constructor, fields, methods, getters, `toString` and static factories;
+- hide state with `#private` fields and expose it safely;
+- explain the prototype chain and where methods live;
+- control how objects become strings, numbers and JSON.
+
+## Practise more
+
+- Project: [Library Management (JavaScript)](#/projects/library-system) is a full class-based design with Maps and errors.
+- Code Dojo: [Event Emitter](#/dojo/dojo-js-event-emitter) is a small class used all over Node.js and the browser.
+--- goals
+- model concepts as classes with protected state
+- use `this`, getters, setters and static members correctly
+- explain how JavaScript objects share behaviour through prototypes
+--- quiz
+? What does this print?
+```js
+class Light {
+  on = false;
+  toggle() {
+    this.on = !this.on;
+    return this;
+  }
+}
+const l = new Light();
+console.log(l.toggle().toggle().toggle().on);
+```
++ `true`
+- `false`
+- `undefined`
+- An error
+> Three toggles from false: true, false, true. Returning this allows the chain.
+? What happens?
+```js
+class Player {
+  name = "Ada";
+  greet() {
+    return `Hi, ${this.name}`;
+  }
+}
+const p = new Player();
+const greet = p.greet;
+console.log(greet());
+```
+- `Hi, Ada`
+- `Hi, undefined`
++ A TypeError, because `this` is undefined
+- A SyntaxError
+> Extracting the method loses its object.
+? Which statement about `#total` declared in `class Order` is true?
+- Any code can read `order.total`
+- Subclasses can read `this.#total` freely
++ Only code inside the `Order` class body can use it
+- It's shared by all instances
+> Private fields belong to each instance and are only accessible inside the declaring class.
+? What does `Object.keys(new Temperature(20))` show if the class stores its value in `#celsius` and exposes a `celsius` getter?
++ `[]`
+- `['celsius']`
+- `['#celsius']`
+- `[20]`
+> Private fields and prototype getters aren't own enumerable properties.
+? Why are a class's methods not copied into every instance?
+- They are copied
++ They live on the shared prototype, which every instance links to
+- Methods are stored in the constructor
+- JavaScript deletes them after the constructor runs
+> One shared function per method, found through the prototype chain.
+? What is printed by `` console.log(`${new Point(1, 2)}`) `` if `Point` has `toString() { return `(${this.x}, ${this.y})`; }`?
+- `[object Object]`
++ `(1, 2)`
+- `Point { x: 1, y: 2 }`
+- `1,2`
+> Template literals call toString.
+? A class needs an alternative way to be created from a JSON object. What's the idiomatic tool?
+- A second constructor
++ A static factory method such as `User.fromJSON(data)`
+- A setter
+- A global function that edits the prototype
+> JavaScript allows one constructor; static factories give named alternatives.
+--- exercise code javascript
+::prompt
+Model a **library loan system** with two classes:
+
+`Book`: constructor `(isbn, title, copies = 1)` (throw a `RangeError` if `copies` isn't a positive whole number); private field `#available` starting at `copies`; getters `available` and `isAvailable`; methods `checkOut()` (throws an `Error` `"No copies left"` when none are available) and `checkIn()` (throws an `Error` `"All copies are already in"` if nothing is out).
+
+`Library`: private `#books` (a Map from isbn to Book); `addBook(book)` (throws an `Error` `"Duplicate ISBN"` if the isbn exists; returns `this`); `find(isbn)` (the book or `undefined`); `lend(isbn)` (throws an `Error` `"Unknown book"` for an unknown isbn, otherwise checks the book out); a getter `availableTitles` returning the titles of the books with copies available, sorted alphabetically.
+::starter
+class Book {
+}
+
+class Library {
+}
+::solution
+class Book {
+  #available;
+
+  constructor(isbn, title, copies = 1) {
+    if (!Number.isInteger(copies) || copies < 1) throw new RangeError("Copies must be a positive whole number");
+    this.isbn = isbn;
+    this.title = title;
+    this.copies = copies;
+    this.#available = copies;
+  }
+
+  get available() {
+    return this.#available;
+  }
+
+  get isAvailable() {
+    return this.#available > 0;
+  }
+
+  checkOut() {
+    if (this.#available === 0) throw new Error("No copies left");
+    this.#available--;
+  }
+
+  checkIn() {
+    if (this.#available === this.copies) throw new Error("All copies are already in");
+    this.#available++;
+  }
+}
+
+class Library {
+  #books = new Map();
+
+  addBook(book) {
+    if (this.#books.has(book.isbn)) throw new Error("Duplicate ISBN");
+    this.#books.set(book.isbn, book);
+    return this;
+  }
+
+  find(isbn) {
+    return this.#books.get(isbn);
+  }
+
+  lend(isbn) {
+    const book = this.find(isbn);
+    if (!book) throw new Error("Unknown book");
+    book.checkOut();
+  }
+
+  get availableTitles() {
+    return [...this.#books.values()]
+      .filter((b) => b.isAvailable)
+      .map((b) => b.title)
+      .sort((a, b) => a.localeCompare(b));
+  }
+}
+::tests
+const __lib = new Library();
+__lib.addBook(new Book("111", "Dune", 2)).addBook(new Book("222", "Emma")).addBook(new Book("333", "Beloved"));
+assert.deepStrictEqual(__lib.availableTitles, ["Beloved", "Dune", "Emma"]);
+__lib.lend("222");
+assert.deepStrictEqual(__lib.availableTitles, ["Beloved", "Dune"]);
+assert.throws(() => __lib.lend("222"), { message: "No copies left" });
+__lib.lend("111");
+assert.strictEqual(__lib.find("111").available, 1);
+assert.throws(() => __lib.lend("999"), { message: "Unknown book" });
+assert.throws(() => __lib.addBook(new Book("111", "Dune again")), { message: "Duplicate ISBN" });
+__lib.find("222").checkIn();
+assert.throws(() => __lib.find("222").checkIn(), { message: "All copies are already in" });
+assert.throws(() => new Book("x", "Bad", 0), RangeError);
+assert.throws(() => { __lib.find("111").available = 50; }, TypeError, "available must be read-only");
+assert.deepStrictEqual(Object.keys(__lib), [], "the books Map must be private");
+::hints
+- Book: store `#available` and change it only in `checkOut`/`checkIn`, each guarding its own rule.
+- Library: `#books = new Map();` keyed by isbn; `lend` uses `find` and then `book.checkOut()` (tell, don't ask).
+- availableTitles: `[...this.#books.values()]`, then filter, map and sort.
+--- exercise code javascript
+::prompt
+Write a class `Vector` for 2D vectors, immutable (freeze it in the constructor), with:
+
+- `plus(other)`, `minus(other)` and `scale(k)` returning new vectors;
+- a getter `length` (√(x² + y²));
+- `equals(other)`;
+- `toString()` giving `"Vector(3, 4)"`;
+- static `Vector.ZERO`, a vector (0, 0), and static `Vector.from([x, y])`.
+::starter
+class Vector {
+}
+::solution
+class Vector {
+  constructor(x, y) {
+    this.x = x;
+    this.y = y;
+    Object.freeze(this);
+  }
+
+  static from([x, y]) {
+    return new Vector(x, y);
+  }
+
+  plus(other) {
+    return new Vector(this.x + other.x, this.y + other.y);
+  }
+
+  minus(other) {
+    return new Vector(this.x - other.x, this.y - other.y);
+  }
+
+  scale(k) {
+    return new Vector(this.x * k, this.y * k);
+  }
+
+  get length() {
+    return Math.hypot(this.x, this.y);
+  }
+
+  equals(other) {
+    return other instanceof Vector && this.x === other.x && this.y === other.y;
+  }
+
+  toString() {
+    return `Vector(${this.x}, ${this.y})`;
+  }
+
+  static ZERO = new Vector(0, 0);
+}
+::tests
+const __v = new Vector(3, 4);
+assert.strictEqual(__v.length, 5);
+assert.strictEqual(String(__v.plus(new Vector(1, 1))), "Vector(4, 5)");
+assert.strictEqual(String(__v.minus(new Vector(3, 4))), "Vector(0, 0)");
+assert.ok(__v.minus(__v).equals(Vector.ZERO));
+assert.strictEqual(`${__v.scale(2)}`, "Vector(6, 8)");
+assert.ok(Vector.from([3, 4]).equals(__v));
+assert.ok(Vector.ZERO instanceof Vector);
+assert.throws(() => { __v.x = 10; }, TypeError, "vectors must be frozen");
+assert.strictEqual(__v.x, 3);
+::hints
+- `Object.freeze(this)` at the end of the constructor.
+- `Math.hypot(x, y)` computes √(x² + y²).
+- A static field can hold an instance: `static ZERO = new Vector(0, 0);` (put it after the methods, or anywhere in the class body).
