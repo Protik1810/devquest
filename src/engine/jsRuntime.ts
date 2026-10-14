@@ -475,6 +475,93 @@ function devquestJsRuntime(g: any) {
   assert.strict = assert;
   g.assert = assert;
 
+  // ---------------- test() and describe(), like node:test (run after the program's own code) ----------------
+  type TestNode = { kind: 'test' | 'suite' | 'skip'; name: string; fn: () => any; children: TestNode[]; before: (() => any)[]; after: (() => any)[] };
+  const newSuite = (name: string): TestNode => ({ kind: 'suite', name, fn: () => undefined, children: [], before: [], after: [] });
+  let rootSuite = newSuite('');
+  let currentSuite = rootSuite;
+  const register = (kind: TestNode['kind']) => (name: any, fn: () => any) => {
+    currentSuite.children.push({ kind, name: String(name), fn, children: [], before: [], after: [] });
+  };
+  const testFn: any = register('test');
+  testFn.skip = register('skip');
+  testFn.todo = register('skip');
+  g.test = g.it = testFn;
+  const describeFn: any = (name: any, fn: () => any) => {
+    const suite = newSuite(String(name));
+    currentSuite.children.push(suite);
+    const outer = currentSuite;
+    currentSuite = suite;
+    try {
+      fn();
+    } finally {
+      currentSuite = outer;
+    }
+  };
+  describeFn.skip = register('skip');
+  g.describe = describeFn;
+  g.beforeEach = (fn: () => any) => currentSuite.before.push(fn);
+  g.afterEach = (fn: () => any) => currentSuite.after.push(fn);
+
+  /** What a failed test shows: for a generated assertion message, the expected and actual values. */
+  function explainFailure(err: any) {
+    if (err instanceof AssertionError && (err as any).generatedMessage && /Equal$/.test((err as any).operator))
+      return `${err.message}\nexpected: ${inspect((err as any).expected)}\ngot:      ${inspect((err as any).actual)}`;
+    return describe(err);
+  }
+
+  async function runSuite(suite: TestNode, depth: number, hooks: TestNode[], counts: Record<string, number>): Promise<boolean> {
+    let ok = true;
+    const pad = '  '.repeat(depth);
+    for (const node of suite.children) {
+      if (node.kind === 'skip') {
+        counts.skipped++;
+        write(`${pad}﹣ ${node.name} # SKIP`);
+      } else if (node.kind === 'suite') {
+        counts.suites++;
+        write(`${pad}▶ ${node.name}`);
+        const passed = await runSuite(node, depth + 1, [...hooks, node], counts);
+        write(`${pad}${passed ? '✔' : '✖'} ${node.name}`);
+        ok = ok && passed;
+      } else {
+        counts.tests++;
+        try {
+          for (const s of hooks) for (const h of s.before) await h();
+          await node.fn();
+          for (const s of [...hooks].reverse()) for (const h of s.after) await h();
+          counts.pass++;
+          write(`${pad}✔ ${node.name}`);
+        } catch (err) {
+          counts.fail++;
+          ok = false;
+          write(`${pad}✖ ${node.name}\n${explainFailure(err).split('\n').map((l) => `${pad}  ${l}`).join('\n')}`);
+        }
+      }
+    }
+    return ok;
+  }
+
+  /** Runs the tests the program registered, then prints a summary like node:test's. */
+  async function runRegisteredTests() {
+    if (!rootSuite.children.length) return;
+    const counts: Record<string, number> = { tests: 0, suites: 0, pass: 0, fail: 0, skipped: 0 };
+    await runSuite(rootSuite, 0, [rootSuite], counts);
+    write(`ℹ tests ${counts.tests}\nℹ suites ${counts.suites}\nℹ pass ${counts.pass}\nℹ fail ${counts.fail}${counts.skipped ? `\nℹ skipped ${counts.skipped}` : ''}`);
+  }
+
+  /** For hidden checks: every registered test as { name, fn }, with suite names joined by " > ". */
+  g.__dqTests = () => {
+    const found: { name: string; fn: () => any }[] = [];
+    const walk = (suite: TestNode, prefix: string) => {
+      for (const node of suite.children) {
+        if (node.kind === 'test') found.push({ name: prefix + node.name, fn: node.fn });
+        if (node.kind === 'suite') walk(node, `${prefix}${node.name} > `);
+      }
+    };
+    walk(rootSuite, '');
+    return found;
+  };
+
   // ---------------- timers: like Node, a program ends when no timers are left ----------------
   const host = { set: g.setTimeout.bind(g), clear: g.clearTimeout.bind(g), every: g.setInterval.bind(g), stop: g.clearInterval.bind(g) };
   const pending = new Map<any, boolean>(); // timer id → is it an interval?
@@ -611,9 +698,13 @@ function devquestJsRuntime(g: any) {
     clearAll();
     late = null;
     wake = null;
+    rootSuite = newSuite('');
+    currentSuite = rootSuite;
     try {
       await fn();
       const end = out.length;
+      // Like node:test, tests registered with test() run after the program's own code
+      await runRegisteredTests();
       const finished = await idle(3000);
       const failure = late as { err: any } | null; // set by timer callbacks while idle() waited
       if (failure) throw failure.err;
