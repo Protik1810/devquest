@@ -6,6 +6,7 @@ import { useGame } from '../engine/store';
 import type { CodeLang, QuizQuestion } from '../content/types';
 import { parseQuestions } from '../content/lessonFile';
 import { InlineCheck, RUNNABLE, RunnableCode } from './RunnableCode';
+import { DATASETS } from '../content/sqlDatasets';
 
 marked.setOptions({ gfm: true });
 
@@ -15,12 +16,12 @@ type Segment =
   | { kind: 'md'; text: string }
   | { kind: 'ill'; name: string }
   | { kind: 'viz'; name: string }
-  | { kind: 'code'; lang: CodeLang; code: string; earlier: string[] }
+  | { kind: 'code'; lang: CodeLang; code: string; earlier: string[]; dataset?: string }
   | { kind: 'check'; questions: QuizQuestion[] };
 
 const EMBED = /^\s*\{\{((?:ill|viz):[\w-]+)\}\}\s*$/m;
 /** A fenced block: ```lang or ~~~lang, closed by the same fence on its own line. */
-const FENCE = /^(```|~~~)([\w-]*)[ \t]*\n([\s\S]*?)^\1[ \t]*$/gm;
+const FENCE = /^(```|~~~)([\w-]*(?:[ \t]+[\w-]+)?)[ \t]*\n([\s\S]*?)^\1[ \t]*$/gm;
 
 function embeds(text: string): Segment[] {
   return text.split(EMBED).map((part, i): Segment => {
@@ -39,7 +40,10 @@ function segments(source: string, interactive: boolean): Segment[] {
   let at = 0;
   for (const m of source.matchAll(FENCE)) {
     const [whole, fence, info, body] = m;
-    const lang = fence === '```' || fence === '~~~' ? RUNNABLE[info.toLowerCase()] : undefined;
+    // ```sql shop: a SQL example that runs on a fresh copy of the "shop" sample database (PostgreSQL)
+    const [word, dataset] = info.toLowerCase().split(/[ \t]+/);
+    const sqlExample = word === 'sql' && dataset !== undefined && dataset in DATASETS;
+    const lang = fence === '```' || fence === '~~~' ? (sqlExample ? 'postgres' : dataset === undefined ? RUNNABLE[word] : undefined) : undefined;
     const check = fence === '~~~' && info === 'check';
     if (!lang && !check) continue; // stays ordinary markdown
     pending += source.slice(at, m.index);
@@ -49,7 +53,7 @@ function segments(source: string, interactive: boolean): Segment[] {
     if (check) out.push({ kind: 'check', questions: parseQuestions('lesson text', body) });
     else if (lang) {
       const earlier = seen[lang] ?? [];
-      out.push({ kind: 'code', lang, code: body, earlier: [...earlier] });
+      out.push({ kind: 'code', lang, code: body, earlier: [...earlier], ...(sqlExample ? { dataset } : {}) });
       seen[lang] = [...earlier, body];
     }
   }
@@ -71,7 +75,7 @@ export function Markdown({ source, untrusted = false, interactive = false }: { s
           const Ill = ILLUSTRATIONS[part.name];
           return Ill ? <Ill key={i} /> : <p key={i}>[missing illustration: {part.name}]</p>;
         }
-        if (part.kind === 'code') return <RunnableCode key={`${i}:${part.code.length}`} lang={part.lang} code={part.code} earlier={part.earlier} />;
+        if (part.kind === 'code') return <RunnableCode key={`${i}:${part.code.length}`} lang={part.lang} code={part.code} earlier={part.earlier} dataset={part.dataset} />;
         if (part.kind === 'check') return <InlineCheck key={i} questions={part.questions} />;
         // Lesson content is authored in-app (trusted); AI text goes through the escaping renderer
         return <div key={i} dangerouslySetInnerHTML={{ __html: (untrusted ? safeMarked : marked).parse(part.text) as string }} />;

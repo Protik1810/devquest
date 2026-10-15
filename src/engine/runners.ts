@@ -568,7 +568,9 @@ export async function tracePython(code: string, stdin?: string, prelude?: string
 }
 
 /** Runs an example from a lesson page; for Python, `prelude` (the page's earlier examples) runs quietly first. */
-export async function runExample(lang: CodeLang, code: string, prelude?: string[], stdin?: string): Promise<RunResult> {
+export async function runExample(lang: CodeLang, code: string, prelude?: string[], stdin?: string, setup?: string): Promise<RunResult> {
+  // SQL course examples run on a fresh copy of their sample database
+  if (lang === 'postgres') return runPostgres(code, undefined, setup);
   if (lang !== 'python') return runCode(lang, code, undefined, stdin);
   const r = await python.run(code, undefined, 15000, stdin, { prelude });
   return r.ok ? { ok: true, output: r.output } : { ok: false, output: r.output, error: r.error };

@@ -5,6 +5,7 @@ import { useGame } from '../engine/store';
 import { Editor, WebPreview } from './Editor';
 import { ResultView } from './ResultView';
 import { TraceViewer } from './TraceViewer';
+import { DATASETS } from '../content/sqlDatasets';
 import { Inline, shuffleOptions } from './Quiz';
 
 /** Fence languages whose examples can run inside a lesson. */
@@ -15,7 +16,7 @@ export const RUNNABLE: Record<string, CodeLang> = { python: 'python', py: 'pytho
  * An HTML example (`web`) runs as a live page preview, with anything it logs shown underneath.
  * `earlier` holds the page's previous examples in the same language, for examples that build on them.
  */
-export function RunnableCode({ lang, code, earlier }: { lang: CodeLang; code: string; earlier: string[] }) {
+export function RunnableCode({ lang, code, earlier, dataset }: { lang: CodeLang; code: string; earlier: string[]; dataset?: string }) {
   const [src, setSrc] = useState(code.replace(/\n$/, ''));
   const [editing, setEditing] = useState(false);
   const [result, setResult] = useState<RunResult | null>(null);
@@ -36,7 +37,7 @@ export function RunnableCode({ lang, code, earlier }: { lang: CodeLang; code: st
     bump('runs');
     if (web) setPage(src);
     try {
-      setResult(await runExample(lang, src, prelude(on), usesInput ? stdin : undefined));
+      setResult(await runExample(lang, src, prelude(on), usesInput ? stdin : undefined, dataset === undefined ? undefined : DATASETS[dataset]));
     } catch (e) {
       setResult({ ok: false, output: '', error: String((e as Error).message ?? e) });
     } finally {

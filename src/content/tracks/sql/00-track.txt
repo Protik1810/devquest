@@ -1,0 +1,9 @@
++++ track
+id: sql
+title: SQL
+icon: 🗄️
+tier: 6
+color: #06b6d4
+kind: language
+blurb: The language of data, from your first SELECT to production databases, taught on real PostgreSQL running inside DevQuest: querying and filtering, NULL logic, aggregation, joins and subqueries, table design and constraints, normalization, CTEs and window functions, JSON, transactions, indexes and query plans, security and SQL injection, functions and triggers, and using SQL from application code. Notes compare MySQL, SQLite, SQL Server and Oracle wherever they differ.
++++

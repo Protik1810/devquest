@@ -1,0 +1,1086 @@
+=== module Module 2 · Querying one table
+
+=== lesson sql-where | Filtering rows: WHERE | 60
+## Choosing rows
+
+`SELECT` chooses columns; **`WHERE`** chooses rows. It keeps only the rows for which a condition is true:
+
+```sql shop
+SELECT name, price
+FROM products
+WHERE price < 50;
+```
+
+Comparison operators:
+
+| Operator | Means |
+|---|---|
+| `=` | equal (one `=`, not two) |
+| `<>` or `!=` | not equal (`<>` is the standard form) |
+| `<`, `<=`, `>`, `>=` | less, less or equal, greater, greater or equal |
+
+They work on numbers, text (alphabetical order) and dates:
+
+```sql shop
+SELECT name, joined_on
+FROM customers
+WHERE joined_on >= '2025-09-01';
+```
+
+The date is written as a string in ISO format (`'YYYY-MM-DD'`); PostgreSQL converts it to a date because it's compared with a date column.
+
+## Combining conditions: AND, OR, NOT
+
+```sql shop
+SELECT name, price, stock
+FROM products
+WHERE price < 100 AND stock > 0;
+```
+
+`AND` needs both conditions to be true; `OR` needs at least one; `NOT` reverses a condition. When you mix `AND` and `OR`, **`AND` is evaluated first**, exactly like `*` before `+` in arithmetic. That causes real bugs:
+
+```sql shop
+-- Intended: cheap products in category 2 or 3. Actually: (category 2) OR (category 3 AND cheap)
+SELECT name, category_id, price
+FROM products
+WHERE category_id = 2 OR category_id = 3 AND price < 100;
+```
+
+The Laptop costs 1299, yet it's in the result. Add parentheses to say what you mean:
+
+```sql shop
+SELECT name, category_id, price
+FROM products
+WHERE (category_id = 2 OR category_id = 3) AND price < 100;
+```
+
+Whenever a condition mixes `AND` and `OR`, use parentheses, even when they aren't needed: the next reader will thank you.
+
+## Shortcuts: IN and BETWEEN
+
+```sql shop
+SELECT name, country
+FROM customers
+WHERE country IN ('NL', 'AT');
+```
+
+`IN (list)` means "equal to any of these", and replaces a chain of `OR`s. `NOT IN` is the opposite (but beware of `NULL` in the list, next lesson).
+
+```sql shop
+SELECT name, price
+FROM products
+WHERE price BETWEEN 40 AND 60;
+```
+
+`BETWEEN a AND b` includes **both ends**: it means `price >= 40 AND price <= 60`. For dates and times, a half-open range is usually safer: `ordered_at >= '2026-01-01' AND ordered_at < '2026-02-01'` catches every moment of January, while `BETWEEN '2026-01-01' AND '2026-01-31'` misses everything after midnight on the 31st when the column is a timestamp.
+
+## Pattern matching: LIKE and ILIKE
+
+`LIKE` compares text with a pattern, where `%` matches any sequence of characters (including none) and `_` matches exactly one character:
+
+```sql shop
+SELECT name FROM products WHERE name LIKE '%Mouse%';
+```
+
+| Pattern | Matches |
+|---|---|
+| `'A%'` | starts with A |
+| `'%er'` | ends with er |
+| `'%o%'` | contains o |
+| `'_a%'` | a as the second letter |
+
+`LIKE` is case-sensitive in PostgreSQL; **`ILIKE`** is the case-insensitive version (PostgreSQL only; elsewhere write `LOWER(name) LIKE '%mouse%'`). For complex patterns, PostgreSQL also supports **regular expressions** with `~` (and `~*` ignoring case), the same regex language you met in the Python and JavaScript courses:
+
+```sql shop
+SELECT name, email FROM customers WHERE email ~ '^[a-g]';
+```
+
+~~~check
+? Which condition finds products whose name contains "desk" in any capitalisation?
+- `name = '%desk%'`
+- `name LIKE 'desk'`
++ `name ILIKE '%desk%'`
+- `name IN ('desk')`
+> % wildcards only work with LIKE/ILIKE; ILIKE ignores case.
+~~~
+
+## How a query is processed
+
+It helps to know the order in which the database logically handles the clauses you've seen, which is **not** the order you write them:
+
+1. `FROM`: take the table;
+2. `WHERE`: keep the matching rows;
+3. `SELECT`: compute the output columns;
+4. `ORDER BY` and `LIMIT` (next lessons).
+
+That's why you **can't** use a `SELECT` alias in `WHERE`: when `WHERE` runs, the alias doesn't exist yet.
+
+```sql shop
+-- error: the alias doesn't exist when WHERE runs (fix: WHERE price * stock > 5000)
+SELECT name, price * stock AS stock_value
+FROM products
+WHERE stock_value > 5000;
+```
+
+📚 **Go deeper:** *SQL: The Complete Reference*, chapter 6 (row selection, search conditions); PostgreSQL documentation, "Comparison Functions and Operators" and "Pattern Matching".
+--- goals
+- filter rows with comparison operators on numbers, text and dates
+- combine conditions with AND, OR and NOT, using parentheses to control precedence
+- use IN, BETWEEN, LIKE, ILIKE and regular expressions
+- explain the logical processing order of FROM, WHERE and SELECT
+--- quiz
+? What is the "not equal" operator in standard SQL?
++ `<>`
+- `=!`
+- `=/=`
+- `NOT=`
+> `!=` also works in most databases; `<>` is the standard.
+? In `WHERE a OR b AND c`, what's evaluated first?
+- a OR b
++ b AND c
+- Left to right
+- It's an error
+> AND binds tighter than OR; use parentheses.
+? Does `price BETWEEN 10 AND 20` include 20?
++ Yes, both ends are included
+- No, the upper end is excluded
+- Only for integers
+- Only if written BETWEEN INCLUSIVE
+> BETWEEN is inclusive at both ends.
+? Why can't `WHERE` use an alias defined in `SELECT`?
++ WHERE is processed before SELECT, so the alias doesn't exist yet
+- Aliases are only for ORDER BY
+- WHERE can't contain expressions
+- It can, in PostgreSQL
+> Logical order: FROM, WHERE, SELECT, ORDER BY.
+? What does `'_o%'` match?
+- Text ending in o
++ Text whose second character is o
+- Text containing o
+- Exactly two characters
+> _ is one character, % is any number.
+--- exercise code postgres
+::prompt
+List the `name` and `price` of products that cost **more than 100** and are **in stock** (stock above 0).
+::dataset shop
+::starter
+SELECT name, price
+FROM products
+WHERE ...;
+::solution
+SELECT name, price
+FROM products
+WHERE price > 100 AND stock > 0;
+::reference
+SELECT name, price FROM products WHERE price > 100 AND stock > 0;
+::hints
+- Two conditions joined with `AND`.
+--- exercise code postgres
+::prompt
+List the `id` and `status` of every order whose status is **pending, paid or shipped** (orders still in progress). Use `IN`.
+::dataset shop
+::starter
+SELECT id, status
+FROM orders;
+::solution
+SELECT id, status
+FROM orders
+WHERE status IN ('pending', 'paid', 'shipped');
+::reference
+SELECT id, status FROM orders WHERE status IN ('pending', 'paid', 'shipped');
+::hints
+- `WHERE status IN ('pending', 'paid', 'shipped')`.
+--- exercise code postgres
+::prompt
+Find the customers who are **in the US or the Netherlands** (`NL`) and joined **in 2025**. Return `name`, `country` and `joined_on`. Watch the precedence of `AND` and `OR`.
+::dataset shop
+::starter
+SELECT name, country, joined_on
+FROM customers
+WHERE country = 'US' OR country = 'NL' AND joined_on >= '2025-01-01' AND joined_on < '2026-01-01';
+::solution
+SELECT name, country, joined_on
+FROM customers
+WHERE (country = 'US' OR country = 'NL')
+  AND joined_on >= '2025-01-01' AND joined_on < '2026-01-01';
+::reference
+SELECT name, country, joined_on FROM customers WHERE country IN ('US', 'NL') AND joined_on >= '2025-01-01' AND joined_on < '2026-01-01';
+::hints
+- Without parentheses, the date conditions only apply to Dutch customers.
+- Wrap the two country conditions in parentheses (or use `country IN ('US', 'NL')`).
+--- exercise code postgres
+::prompt
+Find the products whose name **contains a hyphen or the word "Pro"** (case-sensitive). Return `name`.
+::dataset shop
+::starter
+SELECT name
+FROM products;
+::solution
+SELECT name
+FROM products
+WHERE name LIKE '%-%' OR name LIKE '%Pro%';
+::reference
+SELECT name FROM products WHERE name LIKE '%-%' OR name LIKE '%Pro%';
+::hints
+- `%` matches any text before and after: `LIKE '%-%'`.
+- Combine two `LIKE` conditions with `OR`.
+--- cards
+WHERE :: Keeps only rows whose condition is true. Processed after FROM, before SELECT.
+AND before OR :: AND binds tighter than OR; always add parentheses when mixing them.
+IN / BETWEEN :: x IN (a, b, c) = any of; x BETWEEN a AND b includes both ends.
+LIKE patterns :: % = any sequence, _ = one character. ILIKE ignores case (PostgreSQL). ~ is a regex match.
+Half-open date ranges :: ts >= '2026-01-01' AND ts < '2026-02-01' — safer than BETWEEN for timestamps.
+
+=== lesson sql-null | NULL and three-valued logic | 65
+## NULL means "unknown"
+
+Some values are missing: Linus Torvalds has no email address in the shop database, and one customer has no city. SQL represents a missing or unknown value with **`NULL`**:
+
+```sql shop
+SELECT name, email, city FROM customers WHERE id IN (5, 10, 11);
+```
+
+`NULL` isn't zero, an empty string or `false`. It's the absence of a value, and that has surprising consequences.
+
+## Comparisons with NULL are unknown
+
+What is `NULL = 'London'`? We don't know the city, so we can't say: the answer is neither true nor false but **unknown** (which SQL also writes as `NULL`). Even `NULL = NULL` is unknown: two unknown values aren't known to be equal.
+
+```sql empty
+SELECT NULL = 1 AS a, NULL = NULL AS b, NULL <> 1 AS c, 1 + NULL AS d, 'x' || NULL AS e;
+```
+
+All five results are `NULL`. **Almost any expression involving `NULL` gives `NULL`.**
+
+And `WHERE` only keeps rows where the condition is **true**: unknown rows are dropped. So this finds nobody, even though two customers have no email:
+
+```sql shop
+SELECT name FROM customers WHERE email = NULL;
+```
+
+To test for missing values, SQL has special operators:
+
+```sql shop
+SELECT name FROM customers WHERE email IS NULL;
+```
+
+`IS NULL` and `IS NOT NULL` always give true or false, never unknown.
+
+## Three-valued logic
+
+Because conditions can be true, false or unknown, SQL uses **three-valued logic**:
+
+| `a` | `b` | `a AND b` | `a OR b` | `NOT a` |
+|---|---|---|---|---|
+| true | unknown | unknown | **true** | false |
+| false | unknown | **false** | unknown | true |
+| unknown | unknown | unknown | unknown | unknown |
+
+The rule of thumb: if the answer could go either way depending on the unknown value, it's unknown; if it's decided regardless (`false AND anything`, `true OR anything`), it's decided.
+
+The classic trap: rows with `NULL` disappear from **both** a condition and its opposite.
+
+```sql shop
+SELECT
+  (SELECT count(*) FROM customers WHERE city = 'London') AS in_london,
+  (SELECT count(*) FROM customers WHERE city <> 'London') AS not_in_london,
+  (SELECT count(*) FROM customers) AS everyone;
+```
+
+2 + 9 is 11, but there are 12 customers: the customer with no city is in neither group. If "not in London" should include unknown cities, say so: `WHERE city <> 'London' OR city IS NULL`, or use PostgreSQL's (and the standard's) `city IS DISTINCT FROM 'London'`, which treats `NULL` as an ordinary comparable value.
+
+~~~check
+? `WHERE NOT (city = 'Paris')`. Which rows are kept?
+- All rows except Paris
++ Rows with a known city other than Paris (NULL cities are dropped too)
+- Only rows with NULL cities
+- No rows
+> NOT unknown is still unknown, so NULL rows are filtered out.
+~~~
+
+## The NOT IN trap
+
+`NOT IN` with a list containing `NULL` returns **no rows at all**: `x NOT IN (1, NULL)` means `x <> 1 AND x <> NULL`, and `x <> NULL` is always unknown.
+
+```sql shop
+SELECT name FROM products WHERE category_id NOT IN (2, 3, NULL);
+```
+
+This bites hardest with subqueries (`NOT IN (SELECT ...)`) when the subquery can return a `NULL`. Module 4 shows the safe alternative, `NOT EXISTS`.
+
+## Replacing NULL: COALESCE and NULLIF
+
+**`COALESCE(a, b, ...)`** returns the first argument that isn't `NULL`. It's how you show a default:
+
+```sql shop
+SELECT name,
+       COALESCE(email, '(no email)') AS email,
+       COALESCE(city, 'unknown city') AS city
+FROM customers;
+```
+
+**`NULLIF(a, b)`** does the opposite: it returns `NULL` when `a = b`. Its classic use is avoiding division by zero, because dividing by `NULL` gives `NULL` instead of an error:
+
+```sql shop
+SELECT name, price, stock, round(price / NULLIF(stock, 0), 2) AS price_per_unit_in_stock
+FROM products;
+```
+
+## Where NULLs come from, and when to allow them
+
+`NULL` appears when a column has no value (an optional email), when outer joins find no match (Module 4), and from aggregates over no rows (Module 3). Good table design (Module 5) decides deliberately which columns may be `NULL`: allow it only when "unknown" or "not applicable" is a real possibility, and mark everything else `NOT NULL`.
+
+📚 **Go deeper:** *SQL: The Complete Reference*, chapter 5 ("Missing Data (NULL Values)") and chapter 6 (NULL value handling in search conditions); PostgreSQL documentation, "Comparison Functions and Operators" (IS DISTINCT FROM) and "Conditional Expressions".
+--- goals
+- explain what NULL means, and why comparisons with it are unknown
+- test for missing values with IS NULL and IS NOT NULL
+- apply three-valued logic, and avoid losing NULL rows in negated conditions
+- avoid the NOT IN trap
+- replace and produce NULLs with COALESCE and NULLIF
+--- quiz
+? What does `WHERE email = NULL` return?
+- Rows with no email
++ No rows: the comparison is always unknown
+- All rows
+- An error
+> Use IS NULL.
+? What is `true OR NULL`?
++ true
+- NULL
+- false
+- An error
+> It's true whatever the unknown value is.
+? What is `false AND NULL`?
+- NULL
++ false
+- true
+- An error
+> false AND anything is false.
+? What does `COALESCE(NULL, NULL, 'x', 'y')` return?
++ 'x'
+- NULL
+- 'y'
+- 'xy'
+> The first non-NULL argument.
+? Why can `WHERE id NOT IN (SELECT ...)` unexpectedly return nothing?
++ If the subquery returns a NULL, every NOT IN comparison is unknown
+- NOT IN is not supported with subqueries
+- Subqueries must be sorted
+- NOT IN only works with text
+> One NULL in the list makes NOT IN unknown for every row.
+--- exercise code postgres
+::prompt
+List the `name` of every customer who has **no email address**.
+::dataset shop
+::starter
+SELECT name
+FROM customers
+WHERE email = NULL;
+::solution
+SELECT name
+FROM customers
+WHERE email IS NULL;
+::reference
+SELECT name FROM customers WHERE email IS NULL;
+::hints
+- `= NULL` is never true. Use `IS NULL`.
+--- exercise code postgres
+::prompt
+List the `name` and `city` of every customer **not** living in London, **including** customers whose city is unknown.
+::dataset shop
+::starter
+SELECT name, city
+FROM customers
+WHERE city <> 'London';
+::solution
+SELECT name, city
+FROM customers
+WHERE city <> 'London' OR city IS NULL;
+::reference
+SELECT name, city FROM customers WHERE city IS DISTINCT FROM 'London';
+::hints
+- `city <> 'London'` is unknown when the city is NULL, so that row is dropped.
+- Add `OR city IS NULL`, or use `city IS DISTINCT FROM 'London'`.
+--- exercise code postgres
+::prompt
+For each review, return `id`, `rating` and a column `comment` that shows the comment, or the text `no comment` when there isn't one.
+::dataset shop
+::starter
+SELECT id, rating, comment
+FROM reviews;
+::solution
+SELECT id, rating, COALESCE(comment, 'no comment') AS comment
+FROM reviews;
+::reference
+SELECT id, rating, COALESCE(comment, 'no comment') AS comment FROM reviews;
+::hints
+- `COALESCE(comment, 'no comment')`.
+- Keep the column name with `AS comment`.
+--- cards
+NULL :: A missing or unknown value — not 0, not '', not false.
+Comparisons with NULL :: Give unknown (NULL), even NULL = NULL. WHERE keeps only true rows.
+IS NULL / IS NOT NULL :: The way to test for missing values; never = NULL.
+Three-valued logic :: true OR unknown = true; false AND unknown = false; otherwise unknown stays unknown.
+IS DISTINCT FROM :: Comparison that treats NULL as a normal value: NULL IS DISTINCT FROM 'x' is true.
+COALESCE / NULLIF :: COALESCE(a, b, ...) = first non-NULL. NULLIF(a, b) = NULL if a = b (avoids division by zero).
+NOT IN trap :: x NOT IN (..., NULL) is never true. Prefer NOT EXISTS with subqueries.
+
+=== lesson sql-sorting | Sorting and paging | 55
+## ORDER BY
+
+Rows in a table have **no order**. Without `ORDER BY`, a database returns rows in whatever order is convenient, and that order can change from one run to the next (as data changes, or when the planner picks another plan). If the order matters, say so:
+
+```sql shop
+SELECT name, price
+FROM products
+ORDER BY price;
+```
+
+`ASC` (ascending, the default) and `DESC` (descending) set the direction for each column. With several columns, later ones break ties:
+
+```sql shop
+SELECT name, country, joined_on
+FROM customers
+ORDER BY country, joined_on DESC;
+```
+
+Customers are grouped by country (A to Z), and within each country the most recent first.
+
+You can sort by an expression or by a `SELECT` alias (unlike `WHERE`, `ORDER BY` runs **after** `SELECT`):
+
+```sql shop
+SELECT name, price * stock AS stock_value
+FROM products
+ORDER BY stock_value DESC;
+```
+
+## Where do NULLs go?
+
+In PostgreSQL, `NULL`s sort as if they were larger than every value: last in ascending order, first in descending order. You can choose explicitly:
+
+```sql shop
+SELECT name, city
+FROM customers
+ORDER BY city NULLS FIRST;
+```
+
+Databases disagree here (MySQL and SQL Server put `NULL`s first in ascending order), so write `NULLS FIRST` or `NULLS LAST` whenever it matters.
+
+## LIMIT and OFFSET
+
+**`LIMIT n`** returns at most `n` rows, which together with `ORDER BY` answers "top N" questions:
+
+```sql shop
+SELECT name, price
+FROM products
+ORDER BY price DESC
+LIMIT 3;
+```
+
+`LIMIT` without `ORDER BY` returns some arbitrary rows: almost always a bug.
+
+**`OFFSET n`** skips rows first, which gives simple **pagination**: page 3 with 5 rows per page is `LIMIT 5 OFFSET 10`.
+
+```sql shop
+SELECT id, name
+FROM products
+ORDER BY id
+LIMIT 5 OFFSET 10;
+```
+
+The standard SQL spelling is `OFFSET 10 ROWS FETCH FIRST 5 ROWS ONLY`, which PostgreSQL, Oracle and SQL Server understand. SQL Server also has `SELECT TOP 5 ...`, and older Oracle code uses `ROWNUM`.
+
+~~~check
+? Why is `SELECT * FROM products LIMIT 5` without ORDER BY a problem?
+- It returns an error
++ Which 5 rows come back isn't defined and can change between runs
+- It always returns the last 5 rows
+- LIMIT needs OFFSET
+> Tables are unordered; only ORDER BY defines an order.
+~~~
+
+## Ties and stable pages
+
+If two rows have the same sort value, their relative order isn't defined either, so a page boundary can fall between them differently each time: a row can appear on two pages, or on none. Make the order **unique** by adding a tie-breaker, usually the primary key:
+
+```sql shop
+SELECT name, price
+FROM products
+ORDER BY price DESC, id;
+```
+
+## Keyset pagination
+
+`OFFSET` gets slow for deep pages (the database still reads and discards all the skipped rows), and rows inserted while a user is paging shift everything. Large applications use **keyset pagination** (also called "seek" or cursor pagination): remember the last row of the previous page, and ask for rows after it:
+
+```sql shop
+-- page 1: the 5 most expensive; the last one was the Office Chair (229.00, id 11)
+SELECT id, name, price
+FROM products
+WHERE (price, id) < (229.00, 11)
+ORDER BY price DESC, id DESC
+LIMIT 5;
+```
+
+`(price, id) < (229.00, 11)` is a **row comparison**: rows with a lower price, or the same price and a lower id. With an index on `(price, id)`, every page is fast, however deep. APIs expose this as a "next page cursor".
+
+📚 **Go deeper:** *SQL: The Complete Reference*, chapter 6 ("Sorting Query Results"); PostgreSQL documentation, "Sorting Rows (ORDER BY)" and "LIMIT and OFFSET"; Markus Winand, *Use The Index, Luke*, "Paging Through Results".
+--- goals
+- sort results by one or more columns and expressions, in either direction
+- control where NULLs sort
+- return top-N results and pages with LIMIT and OFFSET
+- make sort orders deterministic with tie-breakers
+- explain keyset pagination and when to prefer it
+--- quiz
+? Without ORDER BY, in what order are rows returned?
+- Insertion order
+- Primary key order
++ No guaranteed order
+- Alphabetical
+> Only ORDER BY guarantees an order.
+? `ORDER BY country, name DESC` sorts...
++ by country ascending, then by name descending within each country
+- both columns descending
+- by name only
+- by country descending
+> Each column has its own direction; ASC is the default.
+? Which returns the 3rd page of 10 rows?
+- `LIMIT 10 OFFSET 30`
++ `LIMIT 10 OFFSET 20`
+- `LIMIT 30 OFFSET 10`
+- `OFFSET 3 LIMIT 10`
+> Skip pages 1 and 2 (20 rows).
+? Why add the primary key at the end of an ORDER BY used for paging?
++ To make the order unique, so rows don't move between pages
+- To make the query faster
+- Because ORDER BY requires it
+- To include the id in the result
+> Ties have no defined order; a unique tie-breaker fixes that.
+--- exercise code postgres
+::prompt
+Return the `name` and `price` of the **five cheapest** products, cheapest first. If prices tie, order by `name`.
+::dataset shop
+::starter
+SELECT name, price
+FROM products;
+::solution
+SELECT name, price
+FROM products
+ORDER BY price, name
+LIMIT 5;
+::reference
+SELECT name, price FROM products ORDER BY price, name LIMIT 5;
+::ordered true
+::hints
+- `ORDER BY price, name`, then `LIMIT 5`.
+--- exercise code postgres
+::prompt
+List the customers (`name`, `city`) ordered by `city` alphabetically, with customers whose city is unknown **first**, and by `name` within the same city.
+::dataset shop
+::starter
+SELECT name, city
+FROM customers
+ORDER BY city;
+::solution
+SELECT name, city
+FROM customers
+ORDER BY city NULLS FIRST, name;
+::reference
+SELECT name, city FROM customers ORDER BY city ASC NULLS FIRST, name;
+::ordered true
+::hints
+- `NULLS FIRST` goes after the column (and its direction).
+--- exercise code postgres
+::prompt
+The orders page of the admin panel shows orders **newest first**, 6 per page. Return the **second page** (columns `id`, `ordered_at`, `status`).
+::dataset shop
+::starter
+SELECT id, ordered_at, status
+FROM orders;
+::solution
+SELECT id, ordered_at, status
+FROM orders
+ORDER BY ordered_at DESC, id DESC
+LIMIT 6 OFFSET 6;
+::reference
+SELECT id, ordered_at, status FROM orders ORDER BY ordered_at DESC, id DESC LIMIT 6 OFFSET 6;
+::ordered true
+::hints
+- Newest first: `ORDER BY ordered_at DESC` (add `id DESC` as a tie-breaker).
+- Skip the first page: `LIMIT 6 OFFSET 6`.
+--- cards
+ORDER BY :: The only way to guarantee an order. ASC default, DESC descending; later columns break ties.
+NULLS FIRST / LAST :: Choose where NULLs sort (PostgreSQL default: last ascending, first descending).
+LIMIT / OFFSET :: Top-N and pages: LIMIT 10 OFFSET 20 = page 3. Standard: OFFSET 20 ROWS FETCH FIRST 10 ROWS ONLY.
+Tie-breaker :: Add a unique column (the id) at the end of ORDER BY so the order is deterministic.
+Keyset pagination :: WHERE (sort_col, id) < (last_value, last_id) ORDER BY ... LIMIT n — fast and stable for deep pages.
+
+=== lesson sql-expressions | Expressions, functions and CASE | 70
+## Built-in functions
+
+SQL comes with hundreds of functions. You call them like in any language: `name(arguments)`. The most useful ones, grouped:
+
+**Text:**
+
+```sql shop
+SELECT name,
+       upper(name) AS shouting,
+       length(name) AS characters,
+       left(name, 3) AS first_three,
+       replace(name, ' ', '_') AS slug,
+       split_part(email, '@', 2) AS email_domain
+FROM customers
+WHERE id <= 4;
+```
+
+| Function | Does |
+|---|---|
+| `lower(s)`, `upper(s)`, `initcap(s)` | change case |
+| `length(s)` | number of characters |
+| `trim(s)`, `ltrim`, `rtrim` | remove surrounding spaces (or other characters) |
+| `substring(s from 2 for 3)`, `left(s, n)`, `right(s, n)` | parts of a string |
+| `position('x' in s)`, `strpos(s, 'x')` | where a substring starts (0 if absent) |
+| `replace(s, from, to)` | replace every occurrence |
+| `split_part(s, sep, n)` | the n-th field |
+| `concat(a, b, ...)`, `concat_ws(sep, a, b, ...)` | join strings, **ignoring NULLs** (unlike `\|\|`) |
+| `format('%s has %s items', a, b)` | printf-style formatting |
+| `lpad(s, n, '0')`, `rpad` | pad to a length |
+
+**Numbers:**
+
+```sql shop
+SELECT name, price,
+       round(price * 0.85, 2) AS discounted,
+       ceil(price) AS rounded_up,
+       floor(price / 100) * 100 AS price_band,
+       price % 10 AS last_digits
+FROM products
+WHERE id <= 5;
+```
+
+`round(x, 2)` rounds to 2 decimals; `abs`, `power`, `sqrt`, `mod` (or `%`), `greatest(a, b, ...)` and `least(...)` do what their names say. `random()` returns a number between 0 and 1.
+
+## Types and casting
+
+Every value has a **type**, and an expression's type decides what you can do with it. Converting between types is called **casting**. Standard SQL writes `CAST(x AS type)`; PostgreSQL also has the shorter `x::type`:
+
+```sql empty
+SELECT CAST('42' AS integer) + 1 AS a,
+       '3.14'::numeric * 2 AS b,
+       42::text || ' apples' AS c,
+       '2026-03-15'::date + 10 AS d,
+       round(7::numeric / 2, 1) AS e;
+```
+
+A cast that can't work fails with an error (`'abc'::integer` gives `invalid input syntax for type integer`), which is what you want: bad data should be noticed, not silently turned into 0 (as MySQL does in some modes).
+
+## CASE: if-then-else in SQL
+
+**`CASE`** chooses a value based on conditions, checked in order; the first true one wins:
+
+```sql shop
+SELECT name, price,
+       CASE
+         WHEN price >= 300 THEN 'premium'
+         WHEN price >= 50 THEN 'standard'
+         ELSE 'budget'
+       END AS price_band
+FROM products;
+```
+
+Without `ELSE`, unmatched rows give `NULL`. The short form compares one expression with several values:
+
+```sql shop
+SELECT id,
+       CASE status
+         WHEN 'pending' THEN 'Waiting for payment'
+         WHEN 'paid' THEN 'Being prepared'
+         WHEN 'shipped' THEN 'On its way'
+         WHEN 'delivered' THEN 'Delivered'
+         ELSE 'Cancelled'
+       END AS customer_message
+FROM orders
+ORDER BY id
+LIMIT 6;
+```
+
+`CASE` works anywhere an expression does: in `SELECT`, `WHERE`, `ORDER BY` (for custom sort orders) and inside aggregate functions (Module 3).
+
+~~~check
+? What does a CASE without ELSE return when no WHEN matches?
+- An error
+- 0
++ NULL
+- The first WHEN's value
+> Add ELSE when you need a default.
+~~~
+
+## Custom sort orders
+
+`CASE` in `ORDER BY` sorts by business rules rather than alphabetically:
+
+```sql shop
+SELECT id, status
+FROM orders
+ORDER BY CASE status WHEN 'pending' THEN 1 WHEN 'paid' THEN 2 WHEN 'shipped' THEN 3 ELSE 4 END, id;
+```
+
+📚 **Go deeper:** *SQL: The Complete Reference*, chapter 5 (expressions, built-in functions, data types); PostgreSQL documentation, "Functions and Operators" (string, mathematical, conditional) and "Type Conversion".
+--- goals
+- use the common text and numeric functions
+- convert between types with CAST and ::
+- compute values conditionally with CASE, and sort by business rules
+--- quiz
+? What is `concat('a', NULL, 'b')` in PostgreSQL?
++ `'ab'`
+- NULL
+- `'aNULLb'`
+- An error
+> concat ignores NULLs; 'a' || NULL || 'b' would be NULL.
+? What does `'abc'::integer` do?
+- Returns 0
+- Returns NULL
++ Raises an error
+- Returns 97
+> Invalid input is an error, so bad data is noticed.
+? In a CASE with several WHEN clauses that are true, which wins?
++ The first one that's true
+- The last one
+- The most specific one
+- It's an error
+> Conditions are checked in order.
+? Which rounds 2.567 to 2.57?
++ `round(2.567, 2)`
+- `ceil(2.567, 2)`
+- `trunc(2.567)`
+- `floor(2.567, 2)`
+> round(x, digits).
+--- exercise code postgres
+::prompt
+For each customer with an email, return the `name` and the email's **domain** in a column called `domain` (everything after the `@`), and the name in **upper case** as `upper_name`.
+::dataset shop
+::starter
+SELECT name
+FROM customers
+WHERE email IS NOT NULL;
+::solution
+SELECT name, split_part(email, '@', 2) AS domain, upper(name) AS upper_name
+FROM customers
+WHERE email IS NOT NULL;
+::reference
+SELECT name, substring(email from position('@' in email) + 1) AS domain, upper(name) AS upper_name FROM customers WHERE email IS NOT NULL;
+::hints
+- `split_part(email, '@', 2)` takes the second part when splitting at `@`.
+- `upper(name) AS upper_name`.
+--- exercise code postgres
+::prompt
+Classify products by stock level. Return `name`, `stock` and `stock_status`: `out of stock` when the stock is 0, `low` when it's below 10, `ok` when it's below 100, and `plenty` otherwise.
+::dataset shop
+::starter
+SELECT name, stock
+FROM products;
+::solution
+SELECT name, stock,
+       CASE
+         WHEN stock = 0 THEN 'out of stock'
+         WHEN stock < 10 THEN 'low'
+         WHEN stock < 100 THEN 'ok'
+         ELSE 'plenty'
+       END AS stock_status
+FROM products;
+::reference
+SELECT name, stock, CASE WHEN stock = 0 THEN 'out of stock' WHEN stock < 10 THEN 'low' WHEN stock < 100 THEN 'ok' ELSE 'plenty' END AS stock_status FROM products;
+::hints
+- A `CASE WHEN ... THEN ... END` with four branches; order matters (check 0 before "below 10").
+--- exercise code postgres
+::prompt
+Show orders sorted by how urgent they are for the warehouse: `paid` first (they must be packed), then `pending`, then `shipped`, then the rest; within each group, oldest first. Return `id`, `status` and `ordered_at`.
+::dataset shop
+::starter
+SELECT id, status, ordered_at
+FROM orders
+ORDER BY status;
+::solution
+SELECT id, status, ordered_at
+FROM orders
+ORDER BY CASE status WHEN 'paid' THEN 1 WHEN 'pending' THEN 2 WHEN 'shipped' THEN 3 ELSE 4 END,
+         ordered_at;
+::reference
+SELECT id, status, ordered_at FROM orders ORDER BY CASE status WHEN 'paid' THEN 1 WHEN 'pending' THEN 2 WHEN 'shipped' THEN 3 ELSE 4 END, ordered_at;
+::ordered true
+::hints
+- Map each status to a number with `CASE`, and sort by that number.
+- Then by `ordered_at` (ascending: oldest first).
+--- cards
+Text functions :: lower/upper, length, trim, substring/left/right, position, replace, split_part, concat (ignores NULL), format, lpad.
+Number functions :: round(x, n), ceil, floor, abs, power, sqrt, % (mod), greatest/least, random().
+CAST :: CAST(x AS type) or PostgreSQL's x::type. Invalid input raises an error.
+CASE :: CASE WHEN cond THEN v ... ELSE d END — first true branch wins; no ELSE means NULL.
+Custom sort :: ORDER BY CASE col WHEN 'a' THEN 1 WHEN 'b' THEN 2 ELSE 3 END.
+
+=== lesson sql-dates | Dates and times | 65
+## Date and time types
+
+| Type | Holds | Example |
+|---|---|---|
+| `date` | a calendar day | `2026-03-15` |
+| `time` | a time of day | `14:30:00` |
+| `timestamp` | date and time, **without** a time zone | `2026-03-15 14:30:00` |
+| `timestamptz` | an exact moment in time, shown in the session's time zone | `2026-03-15 14:30:00+00` |
+| `interval` | a duration | `3 days 04:00:00` |
+
+**Store moments as `timestamptz`.** Despite its name, it doesn't store a time zone: it stores an absolute moment (in UTC) and converts to and from the session's time zone. A plain `timestamp` is just a date and a time with no zone, so "10:15" is ambiguous when your users are in different countries. (The shop's `orders.ordered_at` uses `timestamp` to keep the examples simple; Module 5 discusses this choice.)
+
+Write literals in ISO 8601 format: `'2026-03-15'`, `'2026-03-15 14:30'`, `'2026-03-15T14:30:00Z'`. Other formats (`'03/15/2026'`) depend on settings and are ambiguous (is `03/04` March or April?).
+
+## The current date and time
+
+```sql empty
+SELECT current_date, now(), now() AT TIME ZONE 'Asia/Tokyo' AS tokyo_time;
+```
+
+`now()` (or `current_timestamp`) returns the time the current **transaction** started: it stays the same for every row of a query, which keeps results consistent.
+
+## Date arithmetic
+
+```sql shop
+SELECT id, ordered_at,
+       ordered_at + interval '14 days' AS return_deadline,
+       ordered_at::date AS order_day,
+       date '2026-04-01' - ordered_at::date AS days_before_april
+FROM orders
+WHERE id >= 17;
+```
+
+- `date + integer` adds days; `date - date` gives a number of days;
+- `timestamp + interval` adds a duration (`interval '1 month'`, `'2 hours'`, `'1 year 6 months'`);
+- `timestamp - timestamp` gives an interval; `age(a, b)` gives it in years, months and days.
+
+## Taking dates apart
+
+```sql shop
+SELECT id, ordered_at,
+       extract(year FROM ordered_at) AS year,
+       extract(month FROM ordered_at) AS month,
+       extract(dow FROM ordered_at) AS weekday,
+       date_trunc('month', ordered_at) AS month_start,
+       to_char(ordered_at, 'DD Mon YYYY HH24:MI') AS pretty
+FROM orders
+WHERE id <= 5;
+```
+
+- `extract(field FROM value)` gives one part: `year`, `quarter`, `month`, `day`, `dow` (day of week, 0 = Sunday), `hour`, `epoch` (seconds since 1970)...
+- `date_trunc('month', ts)` cuts a timestamp down to the start of its month (or `'day'`, `'week'`, `'year'`, `'hour'`): essential for "per month" reports (Module 3).
+- `to_char(value, format)` formats for display (PostgreSQL and Oracle; MySQL uses `DATE_FORMAT`, SQL Server `FORMAT`). Formatting is usually better done in the application, which knows the user's language.
+
+## Filtering by date
+
+To get everything in one month, compare with a **half-open range** rather than taking the column apart:
+
+```sql shop
+SELECT id, ordered_at
+FROM orders
+WHERE ordered_at >= '2026-01-01' AND ordered_at < '2026-02-01';
+```
+
+This is correct for timestamps (it includes 31 January at 23:59) and, unlike `WHERE extract(month FROM ordered_at) = 1`, it can use an index on `ordered_at` (Module 7).
+
+~~~check
+? Which condition reliably selects all orders placed in March 2026, on a timestamp column?
+- `ordered_at BETWEEN '2026-03-01' AND '2026-03-31'`
++ `ordered_at >= '2026-03-01' AND ordered_at < '2026-04-01'`
+- `ordered_at = '2026-03'`
+- `ordered_at LIKE '2026-03%'`
+> BETWEEN with a date stops at midnight on the 31st.
+~~~
+
+## Generating series of dates
+
+`generate_series` produces a row for every step, which is how you build calendars and fill gaps in reports (a month with no orders still needs a row):
+
+```sql empty
+SELECT day::date
+FROM generate_series(date '2026-03-01', date '2026-03-07', interval '1 day') AS day;
+```
+
+📚 **Go deeper:** PostgreSQL documentation, "Date/Time Types" and "Date/Time Functions and Operators"; *SQL: The Complete Reference*, chapter 5 (date and time data); "Falsehoods programmers believe about time" (Noah Sussman, blog post).
+--- goals
+- choose between date, timestamp, timestamptz and interval
+- get the current date and time, and do date arithmetic with intervals
+- take dates apart with extract, date_trunc and to_char
+- filter by date ranges correctly, and generate series of dates
+--- quiz
+? Which type should store "when an order was placed" in a global app?
++ `timestamptz`
+- `timestamp`
+- `date`
+- `text`
+> timestamptz is an absolute moment; plain timestamp has no zone.
+? What is `date '2026-03-10' - date '2026-03-01'`?
++ `9` (days)
+- `'9 days'`
+- An error
+- `-9`
+> date minus date gives an integer number of days.
+? What does `date_trunc('month', timestamp '2026-03-17 09:30')` return?
++ `2026-03-01 00:00:00`
+- `3`
+- `2026-03-17 00:00:00`
+- `'March'`
+> It truncates to the start of the month.
+? Why is `WHERE extract(year FROM ordered_at) = 2026` slower than a range condition on large tables?
++ It can't use an ordinary index on ordered_at
+- extract is deprecated
+- It returns the wrong rows
+- It isn't slower
+> Functions on the column hide it from the index; ranges don't.
+--- exercise code postgres
+::prompt
+For each order placed **in 2025**, return its `id`, the `month` as a number (column name `month`), and the `day_of_week` as a number from 0 (Sunday) to 6. Use a half-open range for the year.
+::dataset shop
+::starter
+SELECT id
+FROM orders;
+::solution
+SELECT id,
+       extract(month FROM ordered_at) AS month,
+       extract(dow FROM ordered_at) AS day_of_week
+FROM orders
+WHERE ordered_at >= '2025-01-01' AND ordered_at < '2026-01-01';
+::reference
+SELECT id, extract(month FROM ordered_at) AS month, extract(dow FROM ordered_at) AS day_of_week FROM orders WHERE ordered_at >= '2025-01-01' AND ordered_at < '2026-01-01';
+::hints
+- `extract(month FROM ordered_at)` and `extract(dow FROM ordered_at)`.
+- `WHERE ordered_at >= '2025-01-01' AND ordered_at < '2026-01-01'`.
+--- exercise code postgres
+::prompt
+Returns are allowed for **30 days** after an order. For each order that has been **delivered**, return `id`, `ordered_at` and `return_until` (the moment 30 days after the order), sorted by `id`.
+::dataset shop
+::starter
+SELECT id, ordered_at
+FROM orders
+WHERE status = 'delivered';
+::solution
+SELECT id, ordered_at, ordered_at + interval '30 days' AS return_until
+FROM orders
+WHERE status = 'delivered'
+ORDER BY id;
+::reference
+SELECT id, ordered_at, ordered_at + interval '30 days' AS return_until FROM orders WHERE status = 'delivered' ORDER BY id;
+::ordered true
+::hints
+- Add an interval: `ordered_at + interval '30 days'`.
+--- exercise code postgres
+::prompt
+How long had each customer been a member on **1 March 2026**? Return `name`, `joined_on` and `days_member` (a whole number of days), longest-standing members first (then by name).
+::dataset shop
+::starter
+SELECT name, joined_on
+FROM customers;
+::solution
+SELECT name, joined_on, date '2026-03-01' - joined_on AS days_member
+FROM customers
+ORDER BY days_member DESC, name;
+::reference
+SELECT name, joined_on, '2026-03-01'::date - joined_on AS days_member FROM customers ORDER BY 3 DESC, name;
+::ordered true
+::hints
+- Subtracting two dates gives days: `date '2026-03-01' - joined_on`.
+- `ORDER BY days_member DESC, name`.
+--- cards
+date / timestamp / timestamptz :: A day; a date+time without zone; an absolute moment (stored as UTC). Prefer timestamptz for events.
+interval :: A duration: ts + interval '30 days'; timestamp - timestamp gives an interval.
+now() :: The current transaction's start time (same for every row). current_date for today.
+extract / date_trunc :: extract(month FROM ts) gives a number; date_trunc('month', ts) gives the month's start.
+Date filters :: Use half-open ranges (>= start AND < next start), not functions on the column.
+generate_series :: generate_series(start, stop, interval '1 day') makes one row per step, for calendars and gap filling.
+
+=== lesson sql-m2-test | Module 2 test | 150 | exam
+This test covers Module 2: filtering with `WHERE`, `NULL` and three-valued logic, sorting and paging, expressions, functions and `CASE`, and dates and times.
+
+Before you start, check that you can:
+
+- combine conditions with correct precedence, and use `IN`, `BETWEEN` and `LIKE`;
+- handle `NULL` with `IS NULL`, `COALESCE` and `IS DISTINCT FROM`;
+- sort deterministically and page through results;
+- transform values with functions, casts and `CASE`;
+- filter and compute with dates and intervals.
+--- goals
+- answer questions about a single table precisely
+- avoid NULL and precedence traps
+- format results for people to read
+--- quiz
+? What is `NULL + 5`?
++ NULL
+- 5
+- 0
+- An error
+> Arithmetic with NULL gives NULL.
+? Which condition is true for a row whose `discount` is NULL?
+- `discount = NULL`
+- `discount <> 0`
++ `discount IS NULL`
+- `NOT discount > 0`
+> Only IS NULL tests for missing values.
+? `ORDER BY price DESC LIMIT 1` returns...
++ one of the most expensive products
+- the cheapest product
+- the last product added
+- an error without OFFSET
+> With ties, add a tie-breaker to make it deterministic.
+? Which is a valid PostgreSQL cast?
++ `'12'::integer`
+- `integer('12')`
+- `CAST('12', integer)`
+- `'12' AS integer`
+> CAST('12' AS integer) is the standard form.
+? `WHERE name LIKE 'S%'` matches...
++ names starting with a capital S
+- names containing S
+- names ending in S
+- names starting with s in any case
+> Use ILIKE for case-insensitive matching.
+--- exercise code postgres
+::prompt
+The marketing team wants a contact list. Return customers who **have an email** and joined **before 1 January 2026**, with these columns: `name`, `email`, `city` (show `unknown` when there's no city) and `member_since` (the join date formatted like `March 2025`: use `to_char(joined_on, 'FMMonth YYYY')`). Sort by join date, oldest first.
+::dataset shop
+::starter
+SELECT name, email
+FROM customers;
+::solution
+SELECT name,
+       email,
+       COALESCE(city, 'unknown') AS city,
+       to_char(joined_on, 'FMMonth YYYY') AS member_since
+FROM customers
+WHERE email IS NOT NULL AND joined_on < '2026-01-01'
+ORDER BY joined_on;
+::reference
+SELECT name, email, COALESCE(city, 'unknown') AS city, to_char(joined_on, 'FMMonth YYYY') AS member_since FROM customers WHERE email IS NOT NULL AND joined_on < '2026-01-01' ORDER BY joined_on;
+::ordered true
+::hints
+- Two conditions: `email IS NOT NULL` and `joined_on < '2026-01-01'`.
+- `COALESCE(city, 'unknown') AS city`.
+- `FM` in the format removes the padding spaces after the month name.
+--- exercise code postgres
+::prompt
+Build a price list for the **Computers** (category 2) and **Audio** (category 3) products that are in stock: `name`, `price`, `price_band` (`premium` from 250, `mid` from 50, else `budget`) and `vat_price`, the price plus 20% VAT rounded to 2 decimals. Order by `price_band` with premium first, then mid, then budget, and by name within a band.
+::dataset shop
+::starter
+SELECT name, price
+FROM products
+WHERE category_id = 2 OR category_id = 3 AND stock > 0;
+::solution
+SELECT name,
+       price,
+       CASE WHEN price >= 250 THEN 'premium' WHEN price >= 50 THEN 'mid' ELSE 'budget' END AS price_band,
+       round(price * 1.2, 2) AS vat_price
+FROM products
+WHERE category_id IN (2, 3) AND stock > 0
+ORDER BY CASE WHEN price >= 250 THEN 1 WHEN price >= 50 THEN 2 ELSE 3 END, name;
+::reference
+SELECT name, price, CASE WHEN price >= 250 THEN 'premium' WHEN price >= 50 THEN 'mid' ELSE 'budget' END AS price_band, round(price * 1.2, 2) AS vat_price FROM products WHERE (category_id = 2 OR category_id = 3) AND stock > 0 ORDER BY CASE WHEN price >= 250 THEN 1 WHEN price >= 50 THEN 2 ELSE 3 END, name;
+::ordered true
+::hints
+- The starter's `WHERE` has a precedence bug: the stock condition only applies to category 3.
+- Sorting by the band's text would put `budget` first; sort by a `CASE` that maps bands to numbers.

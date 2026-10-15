@@ -4,7 +4,6 @@ import { foundations } from './foundations';
 import { git } from './git';
 import { shell } from './shell';
 import { dsa } from './dsa';
-import { sql } from './sql';
 import { systems, networking, web, devops, architecture } from './overviews';
 import { polyglot, ai, career } from './polyglot';
 import { LABS } from './labs';
@@ -28,6 +27,9 @@ export const python = parseTrackFile(...Object.keys(pythonFiles).sort().map((f) 
 /** The JavaScript course, likewise one file per module (tracks/javascript/NN-*.txt). */
 const javascriptFiles = import.meta.glob<string>('./tracks/javascript/*.txt', { query: '?raw', import: 'default', eager: true });
 export const javascript = parseTrackFile(...Object.keys(javascriptFiles).sort().map((f) => javascriptFiles[f]));
+/** The SQL course (tracks/sql/NN-*.txt), on PostgreSQL with the sample databases in tracks/sql/datasets. */
+const sqlFiles = import.meta.glob<string>('./tracks/sql/*.txt', { query: '?raw', import: 'default', eager: true });
+export const sql = parseTrackFile(...Object.keys(sqlFiles).sort().map((f) => sqlFiles[f]));
 /** The TypeScript course (tracks/typescript/NN-*.txt). */
 const typescriptFiles = import.meta.glob<string>('./tracks/typescript/*.txt', { query: '?raw', import: 'default', eager: true });
 export const typescript = parseTrackFile(...Object.keys(typescriptFiles).sort().map((f) => typescriptFiles[f]));

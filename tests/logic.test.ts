@@ -154,6 +154,16 @@ Text.
     expect(() => parseTrackFile(`${header}\n=== lesson d1 | First | 40\nText.\n=== lessson d2 | Second | 40\n`)).toThrow(/misspelt/);
   });
 
+  it('reads short field values on the same line, and loads SQL sample databases', () => {
+    const t = parseTrackFile(
+      `${header}\n=== lesson d1 | First | 40\nText.\n--- exercise code postgres\n::prompt\nP\n::dataset shop\n::starter\nSELECT 1;\n::solution\nSELECT 2;\n::reference\nSELECT 2;\n::ordered true\n`,
+    );
+    const check = t.lessons[0].exercise!.check;
+    expect(check.type === 'sql' && check.ordered).toBe(true);
+    expect(check.type === 'sql' && check.setup).toContain('CREATE TABLE customers');
+    expect(() => parseTrackFile(`${header}\n=== lesson d1 | First | 40\nText.\n--- exercise code postgres\n::prompt\nP\n::dataset nope\n::starter\nx\n::solution\ny\n::reference\ny\n`)).toThrow(/unknown ::dataset nope/);
+  });
+
   it('rejects unknown exercise fields', () => {
     const exercise = (field: string) =>
       `${header}\n=== lesson d1 | First | 40\nText.\n--- exercise code python\n::prompt\nP\n::starter\nx\n::solution\ny\n::${field}\nprint(1)\n`;

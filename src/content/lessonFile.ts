@@ -1,4 +1,5 @@
 import type { CodeCheck, CodeExercise, CodeLang, Exercise, Lesson, QuizQuestion, StdinCase, Track } from './types';
+import { DATASETS } from './sqlDatasets';
 
 /**
  * Parses a track written as a plain-text lesson file (src/content/tracks/*.txt), so lessons full of code
@@ -106,15 +107,18 @@ function parseLesson(trackId: string, block: string): Lesson {
   return lesson;
 }
 
-const KNOWN_FIELDS = new Set(['prompt', 'starter', 'solution', 'hints', 'expected', 'setup', 'reference', 'verify', 'ordered', 'tests', 'variants', 'stdin', 'cases', 'lines', 'distractors', 'template', 'answers']);
+const KNOWN_FIELDS = new Set(['prompt', 'starter', 'solution', 'hints', 'expected', 'setup', 'reference', 'verify', 'ordered', 'tests', 'variants', 'stdin', 'cases', 'lines', 'distractors', 'template', 'answers', 'dataset']);
 
 function fields(content: string, where: string) {
   const out: Record<string, string> = {};
-  const parts = content.split(/^::(\w+)[ \t]*$/m);
-  for (let i = 1; i < parts.length; i += 2) {
+  // A field's value follows on the next lines, or (for short values) on the same line: ::dataset shop
+  const parts = content.split(/^::(\w+)(?:[ \t]+(\S[^\n]*?))?[ \t]*$/m);
+  for (let i = 1; i < parts.length; i += 3) {
+    const [name, inline, block] = [parts[i], parts[i + 1], parts[i + 2].replace(/^\n/, '').replace(/\s+$/, '')];
     // A misspelt or invented field would otherwise be ignored without a word
-    if (!KNOWN_FIELDS.has(parts[i])) throw new Error(`${where}: unknown field ::${parts[i]}`);
-    out[parts[i]] = parts[i + 1].replace(/^\n/, '').replace(/\s+$/, '');
+    if (!KNOWN_FIELDS.has(name)) throw new Error(`${where}: unknown field ::${name}`);
+    if (inline !== undefined && block !== '') throw new Error(`${where}: ::${name} has a value on its own line and more lines after it`);
+    out[name] = inline ?? block;
   }
   return out;
 }
@@ -167,7 +171,10 @@ function parseFill(where: string, lang: CodeLang, content: string): Exercise {
 
 function buildCheck(where: string, f: Record<string, string>): CodeCheck {
   const stdin = f.stdin !== undefined ? { stdin: f.stdin } : {};
-  if (f.reference !== undefined) return { type: 'sql', setup: f.setup ?? '', expected: f.reference, ordered: f.ordered === 'true', ...(f.verify ? { verify: f.verify } : {}) };
+  if (f.dataset !== undefined && !(f.dataset in DATASETS)) throw new Error(`${where}: unknown ::dataset ${f.dataset}`);
+  // A sample database (SQL course), then any extra ::setup
+  const setup = [f.dataset !== undefined ? DATASETS[f.dataset] : '', f.setup ?? ''].filter(Boolean).join('\n');
+  if (f.reference !== undefined) return { type: 'sql', setup, expected: f.reference, ordered: f.ordered === 'true', ...(f.verify ? { verify: f.verify } : {}) };
   if (f.tests !== undefined && f.expected !== undefined) throw new Error(`${where}: an exercise is checked by ::tests or by ::expected, not both`);
   if (f.tests !== undefined) return { type: 'tests', code: f.tests + '\n', ...stdin };
   if (f.expected !== undefined) {

@@ -26,7 +26,8 @@
     "share": "node scripts/share.mjs",
     "build:web": "npm run build && node scripts/downloads.mjs --copy dist/downloads",
     "verify:python": "node scripts/verify-python.mjs",
-    "verify:js": "node scripts/verify-js.mjs"
+    "verify:js": "node scripts/verify-js.mjs",
+    "verify:sql": "node scripts/verify-sql.mjs"
   },
   "build": {
     "appId": "com.protik.devquest",

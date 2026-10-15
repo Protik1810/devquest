@@ -55,8 +55,8 @@ const describe = (t: Table | null | undefined) => (t ? `${t.values.length} row(s
  * PostgreSQL exercises. With a `sql` check, the learner's last result is compared with the reference query's
  * (`expected`). With `verify`, a checking query runs after both scripts instead (for CREATE/ALTER/INSERT tasks).
  */
-export async function runPostgres(code: string, check?: CodeCheck): Promise<RunResult> {
-  const setup = check?.type === 'sql' ? check.setup : undefined;
+export async function runPostgres(code: string, check?: CodeCheck, exampleSetup?: string): Promise<RunResult> {
+  const setup = check?.type === 'sql' ? check.setup : exampleSetup;
   const verify = check?.type === 'sql' ? check.verify : undefined;
   const mine = await pgRun(code, setup, verify);
   if (!mine.ok) return { ok: false, output: '', error: mine.error, passed: check ? false : undefined };

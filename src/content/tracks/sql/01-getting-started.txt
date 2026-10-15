@@ -1,0 +1,653 @@
+=== module Module 1 · Getting started
+
+=== lesson sql-why | Databases and SQL | 50
+## Why databases exist
+
+Almost every application stores data: users, orders, messages, sensor readings. You could keep it in files (the Python and JavaScript courses did, with JSON), but as soon as an application is real, files break down:
+
+- **Several users at once**: two people buying the last ticket at the same moment must not both succeed.
+- **Crashes**: a power cut halfway through saving must not leave half an order behind.
+- **Size**: finding one customer among ten million shouldn't mean reading ten million lines.
+- **Questions nobody planned for**: "which customers in Boston spent more than $500 last year?" should need one short query, not a new program.
+- **Rules**: every order must belong to an existing customer, prices can't be negative, emails must be unique.
+
+A **database management system** (DBMS) is software that solves all of these: it stores data safely, lets many programs read and change it at the same time, keeps it consistent, and answers questions about it quickly.
+
+## The relational model
+
+In 1970, Edgar F. Codd, a researcher at IBM, proposed storing data as **relations**: what we now call **tables**. Each table holds one kind of thing; each **row** is one thing (one customer); each **column** is one fact about it (its name, its city). Every row is identified by a **primary key** (usually an `id` column), and tables point to each other with **foreign keys**: an order row stores the `id` of its customer.
+
+Here is part of the shop database used throughout this course:
+
+```sql shop
+SELECT * FROM customers;
+```
+
+Press **▶ Run**: that query asks the database for every column (`*`) of every row in the `customers` table, and the database answers with a table. This course runs **real PostgreSQL** inside DevQuest; every example works on a fresh copy of a sample database, so experiment freely: press **✎ Edit**, change things and run again. Nothing you do can break it.
+
+The relational model's great idea is that you describe **what** data you want, not **how** to find it. The database works out the "how" (which files to read, which indexes to use, in which order) by itself.
+
+## SQL: the language of relational databases
+
+**SQL** (Structured Query Language, pronounced "S-Q-L" or "sequel") was created at IBM in the 1970s to work with relational data, and it became an ANSI/ISO standard in 1986. Fifty years later it's still the most widely used way to work with data, and one of the most valuable skills for any developer, analyst or data scientist.
+
+SQL is **declarative**: a query states the result you want.
+
+```sql shop
+SELECT name, city
+FROM customers
+WHERE country = 'UK';
+```
+
+Compare that with the loop, the condition and the list you would write in Python or JavaScript to do the same thing. The database's **query planner** turns the SQL into an efficient plan, and it can change that plan as the data grows, without any change to your query.
+
+SQL has several parts, which this course covers in turn:
+
+| Part | Statements | Used for |
+|---|---|---|
+| Queries | `SELECT` | reading data (most of what you'll write) |
+| Data manipulation (DML) | `INSERT`, `UPDATE`, `DELETE` | changing data |
+| Data definition (DDL) | `CREATE`, `ALTER`, `DROP` | creating tables and other objects |
+| Data control (DCL) | `GRANT`, `REVOKE` | permissions |
+| Transaction control | `BEGIN`, `COMMIT`, `ROLLBACK` | grouping changes |
+
+~~~check
+? What does it mean that SQL is declarative?
+- SQL statements must be declared before use
++ You describe the result you want, and the database decides how to compute it
+- SQL can only declare tables, not query them
+- Every column must have a declared type
+> The query planner chooses the "how"; you write the "what".
+~~~
+
+## Which database? Dialects
+
+Every major database speaks SQL, with its own extensions and small differences, called **dialects**:
+
+| Database | Typical use |
+|---|---|
+| **PostgreSQL** | general purpose; the most standards-compliant open-source database, and the most popular among developers |
+| **MySQL** / MariaDB | web applications (WordPress, many startups) |
+| **SQLite** | a database in a single file, built into phones, browsers and apps |
+| **SQL Server** | Microsoft and enterprise environments |
+| **Oracle** | large enterprises and banks |
+| Snowflake, BigQuery, Redshift | analytics on huge datasets ("data warehouses") |
+
+The core you'll learn (`SELECT`, joins, grouping, `INSERT`, `CREATE TABLE`, transactions) works almost everywhere. This course uses PostgreSQL, and notes the differences you'll meet in the others, such as `LIMIT` versus SQL Server's `TOP`.
+
+## Not only relational
+
+You'll also hear of **NoSQL** databases: document stores (MongoDB), key-value stores (Redis), wide-column stores (Cassandra) and graph databases (Neo4j). They trade some of the relational model's guarantees for flexibility or scale in specific situations, and DevQuest has tracks on MongoDB and Redis. Relational databases remain the default choice for most applications, and PostgreSQL itself can store documents too (Module 6).
+
+📚 **Go deeper:** *SQL: The Complete Reference* (Groff, Weinberg and Oppel), chapters 1 to 4; the PostgreSQL tutorial (postgresql.org/docs/current/tutorial.html); E. F. Codd, "A Relational Model of Data for Large Shared Data Banks" (1970), surprisingly readable.
+--- goals
+- explain what problems a database management system solves that files don't
+- describe tables, rows, columns, primary keys and foreign keys
+- explain what "declarative" means for SQL
+- name the main parts of SQL and the main database products
+--- quiz
+? Which problem is a database much better at than a folder of JSON files?
++ Many users changing the same data safely at the same time
+- Storing text
+- Being readable in an editor
+- Working without a computer
+> Concurrency, crash safety, integrity rules and fast queries are what a DBMS adds.
+? In a relational database, what is a row?
+- A type of value
++ One record, such as one customer
+- A list of tables
+- A query
+> Tables hold one kind of thing; each row is one of them.
+? What is a foreign key?
++ A column that stores the primary key of a row in another (or the same) table
+- A key used to encrypt data
+- A column from another database product
+- The first column of a table
+> Foreign keys connect tables: orders.customer_id refers to customers.id.
+? `INSERT`, `UPDATE` and `DELETE` belong to which part of SQL?
+- Data definition (DDL)
++ Data manipulation (DML)
+- Data control (DCL)
+- Queries
+> DDL creates structure; DML changes rows.
+--- exercise code postgres
+::prompt
+Run a query that returns **every column of every row** in the `products` table of the shop database.
+::dataset shop
+::starter
+-- your query here
+::solution
+SELECT * FROM products;
+::reference
+SELECT * FROM products;
+::hints
+- `SELECT *` means "all columns".
+- `FROM products` names the table.
+--- cards
+DBMS :: Database management system: stores data safely, handles many users at once, enforces rules and answers queries.
+Relational model :: Data as tables (relations) of rows and columns, connected by keys (Codd, 1970).
+Primary key :: A column (or columns) whose value identifies each row uniquely.
+Foreign key :: A column holding another row's primary key, connecting tables.
+Declarative :: SQL describes the result wanted; the query planner decides how to compute it.
+SQL parts :: Queries (SELECT), DML (INSERT/UPDATE/DELETE), DDL (CREATE/ALTER/DROP), DCL (GRANT/REVOKE), transactions.
+
+=== lesson sql-intro | Your first queries: SELECT | 60
+## The sample database
+
+Most lessons use the **shop** database, an online store with these tables:
+
+| Table | Columns |
+|---|---|
+| `customers` | `id`, `name`, `email`, `city`, `country`, `joined_on` |
+| `products` | `id`, `name`, `category_id`, `price`, `stock`, `added_on` |
+| `categories` | `id`, `name`, `parent_id` |
+| `orders` | `id`, `customer_id`, `ordered_at`, `status`, `shipping` |
+| `order_items` | `order_id`, `product_id`, `quantity`, `unit_price` |
+| `reviews` | `id`, `product_id`, `customer_id`, `rating`, `comment`, `created_on` |
+
+## SELECT and FROM
+
+A query starts with **`SELECT`**, the columns you want, then **`FROM`**, the table:
+
+```sql shop
+SELECT name, price
+FROM products;
+```
+
+- Columns come back in the order you list them.
+- `SELECT *` returns all columns. It's handy for exploring, but in application code list the columns you need: the query stays clear, sends less data, and doesn't break when someone adds a column.
+- SQL **keywords** aren't case-sensitive (`select` works), but writing them in capitals is a strong convention that makes queries easy to read. Table and column names are written in lower case.
+- Spaces and line breaks don't matter: put each clause on its own line once queries grow.
+- A statement ends with a **semicolon** `;`, which you need when you run several statements together.
+
+## Expressions and aliases
+
+A `SELECT` list can contain **expressions**, not just columns. **`AS`** gives a result column a name (an **alias**):
+
+```sql shop
+SELECT name,
+       price,
+       price * 1.2 AS price_with_tax,
+       stock * price AS stock_value
+FROM products;
+```
+
+Without `AS`, PostgreSQL names a computed column `?column?`, which is useless to whoever reads the result. Aliases that contain spaces or capitals need double quotes: `AS "Stock value"`.
+
+Strings are written in **single quotes**, and `||` joins them:
+
+```sql shop
+SELECT name || ' (' || country || ')' AS customer
+FROM customers;
+```
+
+A single quote inside a string is written twice: `'Chef''s Knife'`. **Double quotes** are only for names (`"Stock value"`), never for strings: this is one of the most common beginner mistakes, and MySQL's habit of accepting `"text"` as a string doesn't help.
+
+## Removing duplicates: DISTINCT
+
+```sql shop
+SELECT DISTINCT country
+FROM customers;
+```
+
+`DISTINCT` removes duplicate rows from the result: four countries instead of twelve customers. With several columns, it removes rows where **all** the listed columns are the same.
+
+~~~check
+? What does `SELECT DISTINCT city, country FROM customers` return?
+- Each city once, whatever its country
++ Each different (city, country) combination once
+- Only cities that appear once
+- An error: DISTINCT takes one column
+> DISTINCT applies to the whole row of selected columns.
+~~~
+
+## SELECT without a table
+
+PostgreSQL can evaluate expressions without any table, which makes it a handy calculator for trying things out:
+
+```sql empty
+SELECT 2 + 3 * 4 AS answer, 'Hello' || ', SQL' AS greeting, 7 / 2 AS integer_division, 7 / 2.0 AS decimal_division;
+```
+
+Note `7 / 2` is `3`: dividing two integers gives an integer in PostgreSQL (and SQL Server), while MySQL gives `3.5000`. Make one side a decimal (`2.0`) when you want a fractional result.
+
+📚 **Go deeper:** *SQL: The Complete Reference*, chapters 5 and 6; PostgreSQL documentation, "The SQL Language: Queries: Select Lists".
+--- goals
+- write `SELECT ... FROM` queries for chosen columns
+- compute expressions and name result columns with `AS`
+- write string literals correctly, and join strings with `||`
+- remove duplicate rows with `DISTINCT`
+--- quiz
+? How do you write the text Chef's Knife as an SQL string?
++ `'Chef''s Knife'`
+- `"Chef's Knife"`
+- `'Chef\'s Knife'`
+- `Chef's Knife`
+> Double the single quote. Double quotes are for names.
+? Why avoid `SELECT *` in application code?
+- It's slower to type
++ It returns columns you don't need and changes meaning when the table changes
+- It doesn't work in PostgreSQL
+- It returns rows in random order
+> Explicit column lists keep queries clear and stable.
+? What is `7 / 2` in PostgreSQL?
++ `3`
+- `3.5`
+- `4`
+- An error
+> Integer divided by integer gives an integer; write 7 / 2.0 for 3.5.
+? What does `AS` do in `SELECT price * 2 AS doubled`?
+- Converts the type
++ Names the result column
+- Creates a new table column
+- Filters the rows
+> It's a column alias for the result.
+--- exercise code postgres
+::prompt
+List every product's `name` and `stock`.
+::dataset shop
+::starter
+SELECT
+::solution
+SELECT name, stock FROM products;
+::reference
+SELECT name, stock FROM products;
+::hints
+- List the two columns after `SELECT`, separated by a comma.
+--- exercise code postgres
+::prompt
+For every product, return its `name`, its `price`, and a column named `sale_price` that is the price with 25% off (multiply by `0.75`).
+::dataset shop
+::starter
+SELECT name, price
+FROM products;
+::solution
+SELECT name, price, price * 0.75 AS sale_price
+FROM products;
+::reference
+SELECT name, price, price * 0.75 AS sale_price FROM products;
+::hints
+- Add an expression to the select list: `price * 0.75`.
+- Name it with `AS sale_price`.
+--- exercise code postgres
+::prompt
+Return each customer as one text column named `label`, in the form `Ada Lovelace <ada@example.com>`. (Customers without an email will give `NULL`: the next module explains why.)
+::dataset shop
+::starter
+SELECT
+FROM customers;
+::solution
+SELECT name || ' <' || email || '>' AS label
+FROM customers;
+::reference
+SELECT name || ' <' || email || '>' AS label FROM customers;
+::hints
+- Join strings with `||`: `name || ' <' || email || '>'`.
+- Give the result the alias `label`.
+--- exercise code postgres
+::prompt
+Which cities do customers come from? Return the column `city`, each city **once**.
+::dataset shop
+::starter
+SELECT city FROM customers;
+::solution
+SELECT DISTINCT city FROM customers;
+::reference
+SELECT DISTINCT city FROM customers;
+::hints
+- `DISTINCT` goes straight after `SELECT`.
+--- cards
+SELECT ... FROM :: SELECT columns FROM table; — the basic query. * means all columns.
+Column alias :: expression AS name — names a result column (double-quote names with spaces).
+String literal :: 'single quotes'; a quote inside is doubled: 'Chef''s'. "Double quotes" are for identifiers.
+Concatenation :: 'a' || 'b' joins strings in standard SQL and PostgreSQL (MySQL uses CONCAT()).
+DISTINCT :: Removes duplicate result rows (comparing all selected columns).
+Integer division :: 7 / 2 = 3 in PostgreSQL; use 7 / 2.0 or a cast for 3.5.
+
+=== lesson sql-tools | Working with a real database | 50
+## Client and server
+
+A database like PostgreSQL runs as a **server**: a program that owns the data files and listens for connections, usually on port 5432 (MySQL: 3306, SQL Server: 1433). Everything else is a **client** that connects, sends SQL and receives results:
+
+- **`psql`**, PostgreSQL's command-line client;
+- graphical tools: **pgAdmin**, **DBeaver**, **DataGrip**, TablePlus, the database panels in VS Code;
+- your applications, through a **driver** (Module 7);
+- DevQuest, which here runs PostgreSQL inside the app itself, compiled to WebAssembly.
+
+A connection needs a **host**, **port**, **database name**, **user** and **password**, often written as one **connection URL**:
+
+```
+postgres://shop_app:secret@localhost:5432/shop
+```
+
+Never put real passwords in code or commit them to Git: use environment variables (`DATABASE_URL`) or a secret manager.
+
+## Installing PostgreSQL
+
+- **Windows / macOS**: the installers from postgresql.org (they include pgAdmin), or Postgres.app on macOS.
+- **Linux**: `sudo apt install postgresql` (Debian, Ubuntu) or your distribution's package.
+- **Docker**, the most common choice for development, because every project can have its own version:
+
+```
+docker run --name shop-db -e POSTGRES_PASSWORD=dev -p 5432:5432 -d postgres:18
+```
+
+- **Hosted**: Neon, Supabase, AWS RDS, Google Cloud SQL and Azure give you a managed server with backups.
+
+## psql essentials
+
+```
+psql postgres://postgres:dev@localhost:5432/postgres
+```
+
+Inside `psql`, SQL statements end with `;`, and backslash commands (not SQL; only `psql` understands them) explore the database:
+
+| Command | Does |
+|---|---|
+| `\l` | list databases |
+| `\c shop` | connect to the database `shop` |
+| `\dt` | list tables |
+| `\d customers` | describe a table: columns, types, keys, indexes |
+| `\x` | toggle expanded display (one column per line, for wide rows) |
+| `\i file.sql` | run the SQL in a file |
+| `\timing` | show how long each statement takes |
+| `\?` / `\h SELECT` | help on psql commands / on an SQL statement |
+| `\q` | quit |
+
+The same information is available with plain SQL from the **system catalog**, which works in any client. You'll explore it in Module 7; here's a taste:
+
+```sql shop
+SELECT table_name
+FROM information_schema.tables
+WHERE table_schema = 'public';
+```
+
+## Databases, schemas and tables
+
+A PostgreSQL **server** (also called a cluster) holds several **databases**; each database contains **schemas** (namespaces, `public` by default); each schema contains **tables** and other objects. So the full name of a table is `database.schema.table`, and you can write `public.customers` in a query. MySQL has no separate schema level (its "schema" means a database), and SQL Server uses `dbo` as the default schema.
+
+## Scripts and comments
+
+SQL is usually kept in `.sql` files: schema definitions, seed data, migrations (Module 5) and reports. Comments make them readable:
+
+```sql shop
+-- A line comment
+SELECT name, price   /* a block comment
+                        can span lines */
+FROM products
+WHERE price > 300;
+```
+
+When a script holds several statements, clients run them in order. In DevQuest the result shown is that of the **last** statement that returns rows.
+
+~~~check
+? Which of these is understood only by psql, not by the database server?
+- `SELECT * FROM customers;`
++ `\dt`
+- `CREATE TABLE t (id integer);`
+- `SELECT table_name FROM information_schema.tables;`
+> Backslash commands are client features; psql turns some of them into catalog queries for you.
+~~~
+
+📚 **Go deeper:** PostgreSQL documentation, "psql" (reference) and "Server Setup and Operation"; the official `postgres` image on Docker Hub; *SQL: The Complete Reference*, chapter 3 (SQL in perspective).
+--- goals
+- explain the client-server model and connection URLs
+- install PostgreSQL locally or with Docker, and connect with psql
+- use the essential psql commands and the information schema to explore a database
+- describe the server, database, schema and table hierarchy
+--- quiz
+? What is PostgreSQL's default port?
++ 5432
+- 3306
+- 80
+- 1433
+> MySQL uses 3306, SQL Server 1433.
+? Where should a production database password live?
+- In the source code
+- In the Git repository's README
++ In an environment variable or a secret manager
+- In a comment in the SQL file
+> Never commit credentials.
+? What does `\d orders` do in psql?
++ Describes the orders table: columns, types, keys and indexes
+- Deletes the orders table
+- Downloads the table
+- Shows the first rows
+> \d is "describe".
+? In PostgreSQL, which level comes between a database and its tables?
++ Schemas
+- Clusters
+- Rows
+- Indexes
+> server → databases → schemas → tables.
+--- exercise code postgres
+::prompt
+Using the **information schema** (not a psql command), list the `column_name` and `data_type` of every column in the `orders` table, in the order the columns were defined. (Hint: the view is `information_schema.columns`, which has the columns `table_name`, `column_name`, `data_type` and `ordinal_position`.)
+::dataset shop
+::starter
+SELECT column_name, data_type
+FROM information_schema.columns
+WHERE ...
+::solution
+SELECT column_name, data_type
+FROM information_schema.columns
+WHERE table_name = 'orders'
+ORDER BY ordinal_position;
+::reference
+SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'orders' ORDER BY ordinal_position;
+::ordered
+true
+::hints
+- Filter with `WHERE table_name = 'orders'` (a string, so single quotes).
+- `ORDER BY ordinal_position` keeps the definition order.
+--- cards
+Client-server :: The database server owns the data; clients (psql, GUIs, apps) connect, send SQL and get results.
+Connection URL :: postgres://user:password@host:5432/database — keep passwords in environment variables.
+psql :: PostgreSQL's terminal client: \l databases, \dt tables, \d table, \x expanded, \q quit.
+Schema :: A namespace inside a database (public by default): database.schema.table.
+information_schema :: Standard catalog views describing tables, columns and constraints, readable with SQL.
+
+=== lesson sql-errors | Reading SQL errors | 50
+## Errors tell you exactly what's wrong
+
+When PostgreSQL can't run a statement, it stops and explains why. Reading those messages calmly is half of working with databases. A message has up to four parts, as `psql` and DevQuest show them:
+
+```
+ERROR: column "nme" does not exist (line 1)
+HINT: Perhaps you meant to reference the column "products.name".
+```
+
+- **ERROR**: what went wrong;
+- the **position** (DevQuest shows the line);
+- **DETAIL**: the specific values involved, when relevant;
+- **HINT**: a suggestion, when PostgreSQL has one.
+
+Run each of these to see the messages, then fix them (the fixes are in the comments):
+
+```sql shop
+-- error: a misspelt column (fix: name)
+SELECT nme, price FROM products;
+```
+
+```sql shop
+-- error: a misspelt table (fix: customers)
+SELECT name FROM customer;
+```
+
+```sql shop
+-- error: a string in double quotes is a column name (fix: 'UK')
+SELECT name FROM customers WHERE country = "UK";
+```
+
+```sql shop
+-- error: ORDER without BY (fix: ORDER BY price)
+SELECT name, price FROM products ORDER price;
+```
+
+That last one shows a classic: a **syntax error** is reported where the parser got confused, which is often just **after** the real mistake. The message points at `price`, but the problem is the missing `BY` before it. When the message says `syntax error at or near "X"`, look at what comes right before `X`.
+
+## The most common errors
+
+| Message | Usual cause |
+|---|---|
+| `column "x" does not exist` | a typo, a column of another table, or a string written in double quotes |
+| `relation "x" does not exist` | a misspelt table, a table in another schema, or a table not created yet ("relation" means table) |
+| `syntax error at or near "x"` | a missing comma, parenthesis or keyword just before `x`, or a reserved word used as a name |
+| `operator does not exist: integer = text` | comparing values of different types (quote numbers only as text, not as numbers) |
+| `column "x" must appear in the GROUP BY clause or be used in an aggregate function` | Module 3 explains this one |
+| `duplicate key value violates unique constraint` | inserting a value that must be unique, twice (Module 5) |
+| `null value in column "x" violates not-null constraint` | a required value is missing |
+| `division by zero` | exactly that |
+
+```sql shop
+-- error: comparing a number with text (fix: WHERE id = 3)
+SELECT name FROM customers WHERE id = 'three';
+```
+
+## A statement either works completely or not at all
+
+When a statement fails, **nothing** it would have done happens. In a script, PostgreSQL stops at the first failing statement; statements before it have already run (unless they're inside a transaction, Module 7). So when you fix an error in a script, check whether the earlier statements already ran.
+
+~~~check
+? `syntax error at or near "FROM"` in `SELECT name price, FROM products`. Where's the mistake?
++ The stray comma before FROM (and the missing comma between name and price)
+- FROM is misspelt
+- The table doesn't exist
+- price is not a column
+> The parser reports where it got stuck: look just before that word.
+~~~
+
+## Reserved words and quoting names
+
+Some names clash with SQL keywords: a column named `order`, `user` or `group` causes syntax errors. You can quote it (`"order"`), but it's better to choose another name (`orders`, `customer`, `team`). Quoted names are also **case-sensitive**: `"Customers"` and `customers` are different tables in PostgreSQL, which is why lower-case, unquoted, `snake_case` names are the convention.
+
+📚 **Go deeper:** PostgreSQL documentation, "Appendix A. PostgreSQL Error Codes" and "Lexical Structure" (identifiers and key words); *SQL: The Complete Reference*, chapter 5 (names and constants).
+--- goals
+- read an error's message, position, detail and hint
+- find the real cause of a syntax error just before the reported position
+- recognise and fix the most common SQL errors
+- avoid reserved words and quoted mixed-case names
+--- quiz
+? What does "relation" mean in `relation "customer" does not exist`?
++ A table (or view)
+- A foreign key
+- A join
+- A row
+> Relational theory calls tables relations; the message says the table name is wrong.
+? `WHERE country = "UK"` gives `column "UK" does not exist`. Why?
+- UK isn't a valid country
++ Double quotes mark a name, so "UK" is read as a column
+- country isn't a column
+- Strings can't be compared
+> Use single quotes for strings: 'UK'.
+? A syntax error is reported at "FROM". Where's the mistake most likely?
+- After FROM
++ Just before FROM
+- At the end of the statement
+- In another statement
+> The parser stops where it can no longer make sense of the text.
+? Why avoid naming a column `order`?
++ ORDER is a reserved word, so it causes syntax errors unless quoted every time
+- It's too short
+- PostgreSQL forbids nouns
+- It slows queries down
+> Choose names that aren't keywords.
+--- exercise code postgres
+::prompt
+This query has **three** errors. Fix them so it returns the `name` and `city` of the customers in the **US**.
+::dataset shop
+::starter
+SELECT name city
+FROM customer
+WHERE country = "US";
+::solution
+SELECT name, city
+FROM customers
+WHERE country = 'US';
+::reference
+SELECT name, city FROM customers WHERE country = 'US';
+::hints
+- A comma is missing between the two columns (otherwise `city` becomes an alias for `name`).
+- The table is called `customers`.
+- Text values use single quotes.
+--- cards
+Error anatomy :: ERROR (what), position/line (where), DETAIL (values involved), HINT (a suggestion).
+syntax error at or near "x" :: The real mistake is usually just before x: a missing comma, parenthesis or keyword.
+relation does not exist :: Misspelt table, wrong schema, or not created yet.
+Single vs double quotes :: 'text' is a string; "name" is an identifier (column/table), case-sensitive.
+Failed statement :: Does nothing at all; earlier statements in a script have already run unless in a transaction.
+
+=== lesson sql-m1-test | Module 1 test | 120 | exam
+This test covers Module 1: what databases and SQL are, your first `SELECT` queries with expressions, aliases and `DISTINCT`, working with a PostgreSQL server, and reading errors.
+
+Before you start, check that you can:
+
+- explain tables, rows, columns, primary and foreign keys;
+- write `SELECT` queries with expressions and aliases;
+- use single quotes for strings and `||` to join them;
+- read an error message and find its cause.
+--- goals
+- write basic queries confidently
+- explain how a database is organised and accessed
+- fix common query errors
+--- quiz
+? Which query returns each country once?
++ `SELECT DISTINCT country FROM customers;`
+- `SELECT country FROM customers ONCE;`
+- `SELECT UNIQUE(country) FROM customers;`
+- `SELECT country FROM DISTINCT customers;`
+> DISTINCT goes right after SELECT.
+? What does `SELECT 10 / 4;` return in PostgreSQL?
+- 2.5
++ 2
+- 3
+- An error
+> Integer division truncates.
+? What is `'Mr ' || 'Smith'`?
++ `'Mr Smith'`
+- `'Mr || Smith'`
+- An error
+- `2`
+> || joins strings.
+? In `postgres://app:pw@db.example.com:5432/shop`, what is `shop`?
+- The user
+- The password
+- The host
++ The database name
+> user:password@host:port/database.
+? Which statement is a DDL statement?
+- `SELECT`
+- `UPDATE`
++ `CREATE TABLE`
+- `GRANT`
+> DDL defines structure: CREATE, ALTER, DROP.
+--- exercise code postgres
+::prompt
+For each product, return the `name`, the `price`, and `stock_value` (the price multiplied by the stock), with a fourth column named `label` showing the name and price like `Wireless Mouse: 24.99`.
+::dataset shop
+::starter
+SELECT name, price
+FROM products;
+::solution
+SELECT name,
+       price,
+       price * stock AS stock_value,
+       name || ': ' || price AS label
+FROM products;
+::reference
+SELECT name, price, price * stock AS stock_value, name || ': ' || price AS label FROM products;
+::hints
+- Two computed columns, each with `AS`.
+- `||` converts the number to text automatically when one side is text.
+--- exercise code postgres
+::prompt
+Return the distinct combinations of `country` and `city` among customers (columns `country`, `city`).
+::dataset shop
+::starter
+SELECT country, city FROM customers;
+::solution
+SELECT DISTINCT country, city FROM customers;
+::reference
+SELECT DISTINCT country, city FROM customers;
+::hints
+- One `DISTINCT` applies to the whole row.
