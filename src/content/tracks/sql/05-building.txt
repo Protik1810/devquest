@@ -1,0 +1,1073 @@
+=== module Module 5 · Building databases
+
+=== lesson sql-create | Creating tables and choosing types | 70
+## CREATE TABLE
+
+A table is defined with **`CREATE TABLE`**: its name, then each column's name, **type** and optional **constraints**:
+
+```sql empty
+CREATE TABLE books (
+  id         integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  title      text NOT NULL,
+  isbn       char(13) UNIQUE,
+  pages      integer,
+  price      numeric(8, 2) NOT NULL DEFAULT 0,
+  published  date,
+  in_print   boolean NOT NULL DEFAULT true,
+  added_at   timestamptz NOT NULL DEFAULT now()
+);
+
+INSERT INTO books (title, isbn, pages, price, published)
+VALUES ('The Pragmatic Programmer', '9780135957059', 352, 44.95, '2019-09-13');
+
+SELECT * FROM books;
+```
+
+- **`GENERATED ALWAYS AS IDENTITY`** makes the database number the rows (1, 2, 3...). It's the standard form; older PostgreSQL code uses `serial`, MySQL `AUTO_INCREMENT`, SQL Server `IDENTITY(1,1)`.
+- **`DEFAULT`** gives a value when an `INSERT` doesn't provide one.
+- Constraints (`NOT NULL`, `UNIQUE`, `PRIMARY KEY`) are the next lesson's subject.
+
+`DROP TABLE books;` deletes a table and all its data, immediately and without a recycle bin: in production, think twice. `CREATE TABLE IF NOT EXISTS` and `DROP TABLE IF EXISTS` avoid errors in setup scripts.
+
+## Choosing types
+
+The type of a column is a promise about every value it will ever hold. Choosing well prevents bad data and wasted space:
+
+| Data | Type | Notes |
+|---|---|---|
+| whole numbers | `integer` (±2.1 billion), `bigint` (±9.2 × 10¹⁸), `smallint` | ids of busy tables need `bigint` |
+| money, exact decimals | `numeric(p, s)` | `numeric(10, 2)`: 10 digits, 2 after the point. Exact. |
+| measurements, science | `double precision` (`float8`), `real` | **approximate**: never for money |
+| text | `text`, `varchar(n)`, `char(n)` | in PostgreSQL `text` is as fast as `varchar`; use `varchar(n)` only when a limit is a real rule. `char(n)` pads with spaces |
+| yes/no | `boolean` | `true`, `false` (and `NULL`) |
+| dates and times | `date`, `timestamptz`, `interval` | Module 2 |
+| identifiers from elsewhere | `uuid` | `gen_random_uuid()` makes one |
+| documents | `jsonb` | Module 6 |
+| binary data | `bytea` | files usually belong in object storage, with only their path in the database |
+
+Why not floats for money? Binary floating point can't represent most decimals exactly:
+
+```sql empty
+SELECT 0.1::double precision + 0.2::double precision AS float_sum,
+       0.1::numeric + 0.2::numeric AS numeric_sum,
+       (0.1::double precision + 0.2::double precision) = 0.3 AS float_equal;
+```
+
+The float sum is `0.30000000000000004`, so equality fails. `numeric` is exact (but slower, which never matters for money).
+
+PostgreSQL also has types few databases offer: arrays (`text[]`), ranges (`daterange`), network addresses (`inet`), geometric types, and user-defined enums and composite types (Module 6).
+
+## Naming conventions
+
+- `snake_case`, lower case, no quotes: `order_items`, `created_at`;
+- tables in the plural (`customers`) or singular (`customer`): pick one per project (this course uses plural);
+- `id` for the primary key, `<thing>_id` for foreign keys (`customer_id`);
+- timestamps as `<event>_at` (`shipped_at`), dates as `<event>_on`, booleans as `is_x`/`has_x` or an adjective (`in_print`);
+- avoid reserved words (`user`, `order`, `group`).
+
+## Creating tables from queries
+
+`CREATE TABLE ... AS SELECT` creates a table from a query's result (handy for snapshots and reports, though it copies no constraints):
+
+```sql shop
+CREATE TABLE uk_customers AS
+SELECT id, name, city FROM customers WHERE country = 'UK';
+
+SELECT * FROM uk_customers;
+```
+
+**Temporary tables** (`CREATE TEMP TABLE`) disappear at the end of the session, which suits intermediate results in long scripts.
+
+~~~check
+? Which type should store a product's price?
+- `double precision`
+- `real`
++ `numeric(10, 2)`
+- `text`
+> numeric is exact; floats are approximate.
+~~~
+
+📚 **Go deeper:** *SQL: The Complete Reference*, chapter 13 "Creating a Database" (table definitions); PostgreSQL documentation, "Data Types" and "CREATE TABLE"; "Don't Do This" on the PostgreSQL wiki (which types and habits to avoid).
+--- goals
+- create and drop tables with columns, defaults and identity keys
+- choose appropriate types for numbers, money, text, dates and identifiers
+- explain why floating-point types are wrong for money
+- follow common naming conventions, and create tables from queries
+--- quiz
+? What does `GENERATED ALWAYS AS IDENTITY` do?
++ The database numbers new rows automatically
+- Makes the column unique
+- Copies the id from another table
+- Generates a UUID
+> It's the standard auto-numbering column.
+? What is `0.1::float8 + 0.2::float8 = 0.3`?
+- true
++ false
+- NULL
+- An error
+> Floats are approximate; use numeric for exact decimals.
+? In PostgreSQL, is `varchar(255)` faster than `text`?
+- Yes, much faster
++ No, they perform the same; use varchar(n) only when the length limit is a real rule
+- text can't be indexed
+- varchar can't hold Unicode
+> PostgreSQL stores them the same way.
+? What does `CREATE TABLE t AS SELECT ...` copy?
++ The query's columns and rows (not constraints or indexes)
+- Everything, including constraints
+- Only the column definitions
+- Nothing until you INSERT
+> It's a snapshot of a result.
+--- exercise code postgres
+::prompt
+Create a table **`events`** for a meetup site with these columns:
+
+- `id`: an integer primary key numbered by the database (identity);
+- `title`: text, required;
+- `starts_at`: a timestamp **with time zone**, required;
+- `capacity`: integer, required, **default 50**;
+- `fee`: an exact decimal with 6 digits, 2 of them after the point, **default 0**;
+- `online`: boolean, required, **default false**.
+
+Then insert one event, `SQL Night`, starting `2026-11-05 18:30+00`, using all the defaults. The checker inspects the column types, defaults and the row.
+::dataset empty
+::starter
+CREATE TABLE events (
+);
+::solution
+CREATE TABLE events (
+  id        integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  title     text NOT NULL,
+  starts_at timestamptz NOT NULL,
+  capacity  integer NOT NULL DEFAULT 50,
+  fee       numeric(6, 2) NOT NULL DEFAULT 0,
+  online    boolean NOT NULL DEFAULT false
+);
+
+INSERT INTO events (title, starts_at) VALUES ('SQL Night', '2026-11-05 18:30+00');
+::reference
+CREATE TABLE events (id integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY, title text NOT NULL, starts_at timestamptz NOT NULL, capacity integer NOT NULL DEFAULT 50, fee numeric(6, 2) NOT NULL DEFAULT 0, online boolean NOT NULL DEFAULT false);
+INSERT INTO events (title, starts_at) VALUES ('SQL Night', '2026-11-05 18:30+00');
+::verify
+SELECT column_name, data_type, numeric_precision, numeric_scale, is_nullable, is_identity,
+       (SELECT row_to_json(e)::text FROM events e) AS row
+FROM information_schema.columns
+WHERE table_name = 'events'
+ORDER BY ordinal_position;
+::ordered true
+::hints
+- `timestamptz` is the short name for `timestamp with time zone`.
+- `fee numeric(6, 2) NOT NULL DEFAULT 0`.
+- Insert only `title` and `starts_at`; the other columns get their defaults.
+--- cards
+CREATE TABLE :: CREATE TABLE name (col type constraints, ...); DROP TABLE removes it and its data.
+Identity column :: id integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY (older: serial; MySQL AUTO_INCREMENT).
+DEFAULT :: Value used when an INSERT omits the column, e.g. DEFAULT now(), DEFAULT 0.
+numeric vs float :: numeric(p, s) is exact (money); double precision is approximate (measurements).
+text vs varchar :: Same performance in PostgreSQL; varchar(n) only for real length rules.
+CREATE TABLE AS :: Snapshot of a query's result as a new table (no constraints copied).
+
+=== lesson sql-constraints | Constraints and data integrity | 80
+## Rules the database enforces
+
+Application code has bugs, data gets imported from spreadsheets, and several programs often share one database. **Constraints** are rules the database itself enforces on every change, whoever makes it, so bad data simply can't get in. They're the last line of defence, and the most reliable one.
+
+| Constraint | Rule | Error code when broken |
+|---|---|---|
+| `NOT NULL` | a value is required | 23502 |
+| `UNIQUE` | no two rows have the same value(s) | 23505 |
+| `PRIMARY KEY` | `UNIQUE` + `NOT NULL`: the row's identity | 23505 / 23502 |
+| `FOREIGN KEY` | the value must exist in another table | 23503 |
+| `CHECK (condition)` | the condition must not be false | 23514 |
+
+The shop database is full of them. Try breaking each rule:
+
+```sql shop
+-- error: violates the foreign key (there is no customer 99)
+INSERT INTO orders (id, customer_id, ordered_at, status) VALUES (100, 99, now(), 'pending');
+```
+
+```sql shop
+-- error: violates the CHECK constraint on status
+INSERT INTO orders (id, customer_id, ordered_at, status) VALUES (100, 1, now(), 'lost');
+```
+
+```sql shop
+-- error: violates the UNIQUE constraint on email
+UPDATE customers SET email = 'ada@example.com' WHERE id = 2;
+```
+
+Read the `DETAIL` line of each error: PostgreSQL names the constraint and the offending value.
+
+## Declaring constraints
+
+Constraints can be written on a column, or separately at the end of the table (needed when they involve several columns). Giving them **names** makes errors and later changes clearer:
+
+```sql empty
+CREATE TABLE members (
+  id       integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  email    text NOT NULL UNIQUE,
+  nickname text NOT NULL,
+  born_on  date CHECK (born_on > '1900-01-01'),
+  club     text NOT NULL,
+  CONSTRAINT members_nickname_per_club UNIQUE (club, nickname)
+);
+
+INSERT INTO members (email, nickname, club) VALUES ('a@x.dev', 'ace', 'chess'), ('b@x.dev', 'ace', 'go');
+SELECT * FROM members;
+```
+
+`UNIQUE (club, nickname)` allows the same nickname in different clubs, but not twice in one club.
+
+A subtlety: `UNIQUE` allows several `NULL`s, because `NULL`s aren't equal to each other. (PostgreSQL 15 added `UNIQUE NULLS NOT DISTINCT` when you want at most one.) And a `CHECK` passes when its condition is **unknown**: `CHECK (born_on > '1900-01-01')` accepts a `NULL` birth date. Combine it with `NOT NULL` when the value is required.
+
+## Foreign keys and what happens on delete
+
+A foreign key decides what happens when the referenced row is deleted or its key changes:
+
+| Option | When the customer is deleted, their orders... |
+|---|---|
+| `ON DELETE NO ACTION` / `RESTRICT` (default) | ...block the delete (error 23503) |
+| `ON DELETE CASCADE` | ...are deleted too |
+| `ON DELETE SET NULL` | ...keep existing, with `customer_id` set to NULL |
+| `ON DELETE SET DEFAULT` | ...get the column's default |
+
+```sql empty
+CREATE TABLE authors (id integer PRIMARY KEY, name text NOT NULL);
+CREATE TABLE posts (
+  id        integer PRIMARY KEY,
+  author_id integer NOT NULL REFERENCES authors (id) ON DELETE CASCADE,
+  title     text NOT NULL
+);
+INSERT INTO authors VALUES (1, 'Ada'), (2, 'Grace');
+INSERT INTO posts VALUES (1, 1, 'Notes'), (2, 1, 'Poetry'), (3, 2, 'Bugs');
+
+DELETE FROM authors WHERE id = 1;
+SELECT * FROM posts;
+```
+
+Choose deliberately: `CASCADE` suits data that only makes sense with its parent (an order's items), `RESTRICT` protects important history (orders of a customer), and `SET NULL` keeps rows whose link is optional. Index foreign key columns too (Module 7): PostgreSQL doesn't do it automatically, and deletes on the parent need it.
+
+~~~check
+? A `CHECK (price > 0)` column receives NULL. What happens?
++ It's accepted: an unknown condition doesn't violate a CHECK
+- It's rejected
+- It's converted to 0
+- The CHECK is disabled
+> Add NOT NULL if the value is required.
+~~~
+
+## Constraints and business rules
+
+Constraints express rules that can be checked **on one row** (CHECK), between rows of one table (UNIQUE) or between tables (FOREIGN KEY). Rules that need more ("an order can't contain more items than are in stock", "a room can't be double-booked") need other tools: PostgreSQL's **exclusion constraints** (`EXCLUDE USING gist (room WITH =, during WITH &&)` prevents overlapping bookings), triggers (Module 7), or application logic inside transactions. A practical rule: put every rule the database **can** enforce into the schema, and only the rest into code.
+
+📚 **Go deeper:** *SQL: The Complete Reference*, chapter 11 "Data Integrity"; PostgreSQL documentation, "Constraints" (and "Exclusion Constraints"); Appendix A, "PostgreSQL Error Codes".
+--- goals
+- explain why the database should enforce integrity rules
+- declare NOT NULL, UNIQUE, PRIMARY KEY, FOREIGN KEY and CHECK constraints, on columns and tables
+- predict how UNIQUE and CHECK treat NULL
+- choose foreign key actions: RESTRICT, CASCADE and SET NULL
+- recognise rules that need exclusion constraints, triggers or application code
+--- quiz
+? Which constraint makes sure an order's customer exists?
+- CHECK
+- UNIQUE
++ FOREIGN KEY
+- NOT NULL
+> REFERENCES customers (id).
+? `UNIQUE (email)` and two rows with NULL email. What happens?
++ Both are allowed (NULLs aren't equal), unless NULLS NOT DISTINCT is used
+- The second is rejected
+- Both are rejected
+- NULL is converted to ''
+> Unique ignores NULLs by default.
+? Which foreign key option deletes an order's items when the order is deleted?
++ `ON DELETE CASCADE`
+- `ON DELETE RESTRICT`
+- `ON DELETE SET NULL`
+- `ON UPDATE CASCADE`
+> CASCADE follows the delete to dependent rows.
+? What does a PRIMARY KEY imply?
++ UNIQUE and NOT NULL
+- Only UNIQUE
+- Only NOT NULL
+- An automatic foreign key
+> It's the row's identity.
+--- exercise code postgres
+::prompt
+Create two tables for a library:
+
+- **`members`**: `id` (integer primary key), `name` (text, required), `email` (text, required, unique);
+- **`loans`**: `id` (integer primary key), `member_id` (integer, required, a foreign key to `members` that **blocks** deleting a member who has loans), `book` (text, required), `borrowed_on` (date, required), `due_on` (date, required), and a CHECK that `due_on` is **after** `borrowed_on`.
+
+The checker tries a series of good and bad statements against your tables and expects each bad one to be rejected with the right error.
+::dataset empty
+::starter
+CREATE TABLE members (
+);
+
+CREATE TABLE loans (
+);
+::solution
+CREATE TABLE members (
+  id    integer PRIMARY KEY,
+  name  text NOT NULL,
+  email text NOT NULL UNIQUE
+);
+
+CREATE TABLE loans (
+  id          integer PRIMARY KEY,
+  member_id   integer NOT NULL REFERENCES members (id) ON DELETE RESTRICT,
+  book        text NOT NULL,
+  borrowed_on date NOT NULL,
+  due_on      date NOT NULL,
+  CHECK (due_on > borrowed_on)
+);
+::reference
+CREATE TABLE members (id integer PRIMARY KEY, name text NOT NULL, email text NOT NULL UNIQUE);
+CREATE TABLE loans (id integer PRIMARY KEY, member_id integer NOT NULL REFERENCES members (id), book text NOT NULL, borrowed_on date NOT NULL, due_on date NOT NULL CHECK (due_on > borrowed_on));
+::verify
+CREATE OR REPLACE FUNCTION pg_temp.attempt(stmt text) RETURNS text LANGUAGE plpgsql AS $f$
+BEGIN
+  BEGIN
+    EXECUTE stmt;
+    RAISE EXCEPTION '__accepted__';
+  EXCEPTION WHEN others THEN
+    IF SQLERRM = '__accepted__' THEN RETURN 'accepted'; END IF;
+    RETURN SQLSTATE;
+  END;
+END $f$;
+INSERT INTO members (id, name, email) VALUES (1, 'Ada', 'ada@x.dev');
+INSERT INTO loans (id, member_id, book, borrowed_on, due_on) VALUES (1, 1, 'Dune', '2026-03-01', '2026-03-15');
+SELECT * FROM (VALUES
+  ('good member', pg_temp.attempt($$INSERT INTO members (id, name, email) VALUES (2, 'Bob', 'bob@x.dev')$$)),
+  ('duplicate email', pg_temp.attempt($$INSERT INTO members (id, name, email) VALUES (3, 'Eve', 'ada@x.dev')$$)),
+  ('missing name', pg_temp.attempt($$INSERT INTO members (id, name, email) VALUES (4, NULL, 'x@x.dev')$$)),
+  ('missing email', pg_temp.attempt($$INSERT INTO members (id, name) VALUES (5, 'Zed')$$)),
+  ('good loan', pg_temp.attempt($$INSERT INTO loans (id, member_id, book, borrowed_on, due_on) VALUES (2, 1, 'Emma', '2026-03-01', '2026-03-02')$$)),
+  ('unknown member', pg_temp.attempt($$INSERT INTO loans (id, member_id, book, borrowed_on, due_on) VALUES (3, 9, 'Emma', '2026-03-01', '2026-03-02')$$)),
+  ('due before borrowed', pg_temp.attempt($$INSERT INTO loans (id, member_id, book, borrowed_on, due_on) VALUES (4, 1, 'Emma', '2026-03-05', '2026-03-01')$$)),
+  ('due same day', pg_temp.attempt($$INSERT INTO loans (id, member_id, book, borrowed_on, due_on) VALUES (5, 1, 'Emma', '2026-03-05', '2026-03-05')$$)),
+  ('missing book', pg_temp.attempt($$INSERT INTO loans (id, member_id, borrowed_on, due_on) VALUES (6, 1, '2026-03-05', '2026-03-06')$$)),
+  ('delete member with loans', pg_temp.attempt($$DELETE FROM members WHERE id = 1$$))
+) AS checks (attempt, result);
+::ordered true
+::hints
+- `email text NOT NULL UNIQUE`.
+- `member_id integer NOT NULL REFERENCES members (id)`: the default action already blocks the delete (`ON DELETE RESTRICT` says so explicitly).
+- A table-level `CHECK (due_on > borrowed_on)` compares two columns.
+--- exercise code postgres
+::prompt
+In the shop, the business decides that deleting a customer must **delete their reviews too**, while their orders still **block** the delete. Replace the foreign key from `reviews` to `customers` (named `reviews_customer_id_fkey`) with one that has `ON DELETE CASCADE`. Then remove customer **5** (Linus Torvalds) completely: delete their order items, then their orders, then the customer, and let the database delete their review automatically.
+::dataset shop
+::starter
+ALTER TABLE reviews DROP CONSTRAINT reviews_customer_id_fkey;
+-- add the new constraint, then delete customer 5's order items, orders and the customer
+::solution
+ALTER TABLE reviews DROP CONSTRAINT reviews_customer_id_fkey;
+ALTER TABLE reviews
+  ADD CONSTRAINT reviews_customer_id_fkey FOREIGN KEY (customer_id) REFERENCES customers (id) ON DELETE CASCADE;
+
+DELETE FROM order_items WHERE order_id IN (SELECT id FROM orders WHERE customer_id = 5);
+DELETE FROM orders WHERE customer_id = 5;
+DELETE FROM customers WHERE id = 5;
+::reference
+ALTER TABLE reviews DROP CONSTRAINT reviews_customer_id_fkey;
+ALTER TABLE reviews ADD FOREIGN KEY (customer_id) REFERENCES customers (id) ON DELETE CASCADE;
+DELETE FROM order_items oi USING orders o WHERE o.id = oi.order_id AND o.customer_id = 5;
+DELETE FROM orders WHERE customer_id = 5;
+DELETE FROM customers WHERE id = 5;
+::verify
+SELECT (SELECT count(*) FROM customers) AS customers,
+       (SELECT count(*) FROM reviews) AS reviews,
+       (SELECT count(*) FROM reviews WHERE customer_id = 5) AS linus_reviews,
+       (SELECT confdeltype FROM pg_constraint WHERE conrelid = 'reviews'::regclass AND contype = 'f' AND conkey = ARRAY[(SELECT attnum FROM pg_attribute WHERE attrelid = 'reviews'::regclass AND attname = 'customer_id')]) AS on_delete;
+::hints
+- `ALTER TABLE reviews ADD CONSTRAINT reviews_customer_id_fkey FOREIGN KEY (customer_id) REFERENCES customers (id) ON DELETE CASCADE;`
+- Customer 5's orders still block the delete: remove their order items first, then their orders, then the customer.
+--- cards
+Constraints :: Rules the database enforces on every change: NOT NULL, UNIQUE, PRIMARY KEY, FOREIGN KEY, CHECK.
+Error codes :: 23502 not null, 23505 unique, 23503 foreign key, 23514 check.
+Table constraint :: Declared after the columns, for several columns: UNIQUE (club, nickname), CHECK (due_on > borrowed_on).
+NULL in UNIQUE/CHECK :: UNIQUE allows many NULLs; CHECK passes when the condition is unknown.
+ON DELETE :: RESTRICT/NO ACTION blocks, CASCADE deletes dependents, SET NULL clears the reference.
+Exclusion constraint :: EXCLUDE USING gist (room WITH =, during WITH &&) — no overlapping bookings (PostgreSQL).
+
+=== lesson sql-write | Changing data: INSERT, UPDATE, DELETE | 80
+## INSERT
+
+```sql shop
+INSERT INTO customers (id, name, email, city, country, joined_on)
+VALUES (13, 'Frances Allen', 'fran@example.com', 'Schenectady', 'US', '2026-03-10');
+
+SELECT * FROM customers WHERE id = 13;
+```
+
+Always **list the columns**: the statement then keeps working when columns are added, and columns you leave out get their default (or `NULL`). Several rows can go in one statement, which is much faster than one statement per row:
+
+```sql shop
+INSERT INTO categories (id, name, parent_id)
+VALUES (8, 'Garden', NULL), (9, 'Tools', 8);
+
+SELECT * FROM categories ORDER BY id;
+```
+
+`INSERT ... SELECT` copies the result of a query into a table:
+
+```sql shop
+CREATE TABLE vip_customers (customer_id integer PRIMARY KEY, since date NOT NULL);
+
+INSERT INTO vip_customers (customer_id, since)
+SELECT customer_id, min(ordered_at)::date
+FROM orders
+GROUP BY customer_id
+HAVING count(*) >= 3;
+
+SELECT * FROM vip_customers;
+```
+
+## RETURNING
+
+PostgreSQL's **`RETURNING`** clause returns rows from `INSERT`, `UPDATE` and `DELETE`, typically to get generated ids without a second query:
+
+```sql empty
+CREATE TABLE notes (id integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY, body text NOT NULL, created_at timestamptz NOT NULL DEFAULT now());
+
+INSERT INTO notes (body) VALUES ('first'), ('second') RETURNING id, body;
+```
+
+(SQL Server has `OUTPUT`; MySQL has `LAST_INSERT_ID()`; SQLite and MariaDB support `RETURNING` too.)
+
+## UPDATE
+
+```sql shop
+UPDATE products
+SET price = round(price * 0.9, 2), stock = stock + 5
+WHERE category_id = 5
+RETURNING name, price, stock;
+```
+
+`SET` lists the new values, which can use the old ones (`stock + 5`). **`WHERE` decides which rows change.** Without it, **every row** changes:
+
+```sql shop
+-- Oops: no WHERE. Every customer is now in London.
+UPDATE customers SET city = 'London';
+SELECT DISTINCT city FROM customers;
+```
+
+That mistake is famous for a reason. Habits that prevent it: write the `WHERE` first; run the same `WHERE` in a `SELECT` before updating; work inside a transaction you can roll back (Module 7); and never run ad-hoc updates on production without a reviewed script.
+
+To update using values from another table, PostgreSQL has `UPDATE ... FROM` (SQL Server is similar; MySQL uses `UPDATE ... JOIN`):
+
+```sql shop
+-- Mark products as discontinued (stock 0) if they belong to the Books category
+UPDATE products p
+SET stock = 0
+FROM categories c
+WHERE c.id = p.category_id AND c.name = 'Books'
+RETURNING p.name, p.stock;
+```
+
+## DELETE
+
+```sql shop
+DELETE FROM reviews
+WHERE rating <= 2
+RETURNING id, product_id, rating;
+```
+
+The same warning applies: `DELETE FROM reviews;` with no `WHERE` empties the table. **`TRUNCATE reviews;`** empties a table much faster (it doesn't go row by row), which suits staging tables, not everyday work. Related rows elsewhere are protected by foreign keys: deleting a customer who has orders fails unless the foreign key cascades.
+
+Many applications never really delete important rows: they **soft delete** by setting a `deleted_at` timestamp and filtering it out, which keeps history and allows undo.
+
+~~~check
+? What does `UPDATE products SET price = price * 1.1;` do?
+- Raises an error because WHERE is missing
++ Raises the price of every product by 10%
+- Updates the first product only
+- Nothing until COMMIT in every case
+> No WHERE means every row.
+~~~
+
+## Upsert: INSERT ... ON CONFLICT
+
+"Insert this row, or update it if it already exists" is called an **upsert**. PostgreSQL (and SQLite) write it as `INSERT ... ON CONFLICT`:
+
+```sql shop
+INSERT INTO products (id, name, category_id, price, stock, added_on)
+VALUES (2, 'Wireless Mouse', 2, 22.99, 10, '2025-03-15'),
+       (16, 'USB-C Hub', 2, 34.50, 25, '2026-03-12')
+ON CONFLICT (id) DO UPDATE
+SET price = excluded.price,
+    stock = products.stock + excluded.stock
+RETURNING id, name, price, stock;
+```
+
+`ON CONFLICT (id)` names the unique column that may clash; `excluded` is the row that couldn't be inserted. Product 2 is updated (new price, stock added); product 16 is inserted. `ON CONFLICT DO NOTHING` simply skips duplicates. (MySQL: `INSERT ... ON DUPLICATE KEY UPDATE`.)
+
+The standard SQL statement for the same job is **`MERGE`** (PostgreSQL 15+, SQL Server, Oracle), which compares a source with a target and says what to do for matched and unmatched rows:
+
+```sql shop
+MERGE INTO products AS p
+USING (VALUES (9, 25.00), (99, 10.00)) AS changes (id, new_price)
+ON p.id = changes.id
+WHEN MATCHED THEN UPDATE SET price = changes.new_price
+WHEN NOT MATCHED THEN DO NOTHING
+RETURNING merge_action(), p.name, p.price;
+```
+
+Unlike a read-then-write in application code ("SELECT; if missing INSERT else UPDATE"), an upsert is **atomic**: two requests arriving at the same moment can't both insert.
+
+📚 **Go deeper:** *SQL: The Complete Reference*, chapter 10 "Database Updates"; PostgreSQL documentation, "Data Manipulation", "INSERT" (ON CONFLICT) and "MERGE".
+--- goals
+- insert single rows, many rows and query results, always listing columns
+- get generated values back with RETURNING
+- update and delete rows safely, including from other tables' values
+- write atomic upserts with ON CONFLICT and MERGE
+--- quiz
+? Why list the columns in an INSERT?
++ The statement keeps working when columns are added, and omitted columns get defaults
+- It's required by PostgreSQL
+- It makes inserts faster
+- So the primary key is generated
+> INSERT INTO t VALUES (...) breaks as soon as the table changes.
+? What does `excluded` refer to in `ON CONFLICT DO UPDATE`?
++ The row you tried to insert
+- The existing row
+- The deleted rows
+- An error
+> excluded.price is the new value; tablename.price is the old one.
+? What's the risk of `DELETE FROM orders;`?
++ It deletes every row in the table
+- It drops the table
+- It's not valid SQL
+- It deletes the first row only
+> Always check your WHERE.
+? Why is `INSERT ... ON CONFLICT` better than "SELECT, then INSERT or UPDATE" in application code?
++ It's atomic: concurrent requests can't both insert
+- It's shorter only
+- It works without a unique constraint
+- It skips constraints
+> Separate read-then-write steps race with each other.
+--- exercise code postgres
+::prompt
+A new product arrives. Insert **`Desk Lamp`** with id `16`, category `6` (Furniture), price `35.00`, stock `20` and added on `2026-03-12`. Then increase the stock of every **Kitchen** product (category 5) by **10**. Finally, delete the reviews that have **no comment and a rating below 4**.
+::dataset shop
+::starter
+INSERT INTO products
+::solution
+INSERT INTO products (id, name, category_id, price, stock, added_on)
+VALUES (16, 'Desk Lamp', 6, 35.00, 20, '2026-03-12');
+
+UPDATE products SET stock = stock + 10 WHERE category_id = 5;
+
+DELETE FROM reviews WHERE comment IS NULL AND rating < 4;
+::reference
+INSERT INTO products (id, name, category_id, price, stock, added_on) VALUES (16, 'Desk Lamp', 6, 35, 20, '2026-03-12');
+UPDATE products SET stock = stock + 10 WHERE category_id = 5;
+DELETE FROM reviews WHERE comment IS NULL AND rating < 4;
+::verify
+SELECT (SELECT string_agg(id || ':' || name || ':' || stock, ', ' ORDER BY id) FROM products WHERE category_id IN (5, 6)) AS kitchen_and_furniture,
+       (SELECT string_agg(id::text, ',' ORDER BY id) FROM reviews) AS reviews_left;
+::hints
+- List the columns in the INSERT.
+- `UPDATE products SET stock = stock + 10 WHERE category_id = 5;`
+- `comment IS NULL AND rating < 4`.
+--- exercise code postgres
+::prompt
+A supplier sends a price list. Apply it with **one upsert**: for products 3, 7 and 17, set the prices to 84.00, 49.00 and 15.00. Product 17 doesn't exist yet: create it as `Cable Organiser` in category 6, with stock 0, added on `2026-03-15`. Existing products keep their names, categories and stock; only their price changes.
+::dataset shop
+::starter
+INSERT INTO products (id, name, category_id, price, stock, added_on)
+VALUES
+  (3, 'Mechanical Keyboard', 2, 84.00, 0, '2025-05-20'),
+  (7, 'Chef''s Knife', 5, 49.00, 0, '2025-01-10'),
+  (17, 'Cable Organiser', 6, 15.00, 0, '2026-03-15');
+::solution
+INSERT INTO products (id, name, category_id, price, stock, added_on)
+VALUES
+  (3, 'Mechanical Keyboard', 2, 84.00, 0, '2025-05-20'),
+  (7, 'Chef''s Knife', 5, 49.00, 0, '2025-01-10'),
+  (17, 'Cable Organiser', 6, 15.00, 0, '2026-03-15')
+ON CONFLICT (id) DO UPDATE SET price = excluded.price;
+::reference
+UPDATE products SET price = 84 WHERE id = 3;
+UPDATE products SET price = 49 WHERE id = 7;
+INSERT INTO products (id, name, category_id, price, stock, added_on) VALUES (17, 'Cable Organiser', 6, 15, 0, '2026-03-15');
+::verify
+SELECT id, name, category_id, price, stock FROM products WHERE id IN (3, 7, 17) ORDER BY id;
+::ordered true
+::hints
+- Add `ON CONFLICT (id) DO UPDATE SET price = excluded.price` to the INSERT.
+- Only `price` is updated, so the existing stock (not the 0 in the VALUES list) is kept.
+--- exercise code postgres
+::prompt
+Record a **5% price rise** on every product that has received at least one **5-star review**, and return the changed products' `name` and new `price` (rounded to 2 decimals) using `RETURNING`. (The checker looks at the prices afterwards.)
+::dataset shop
+::starter
+UPDATE products
+SET price = price * 1.05;
+::solution
+UPDATE products
+SET price = round(price * 1.05, 2)
+WHERE id IN (SELECT product_id FROM reviews WHERE rating = 5)
+RETURNING name, price;
+::reference
+UPDATE products p SET price = round(p.price * 1.05, 2) WHERE EXISTS (SELECT 1 FROM reviews r WHERE r.product_id = p.id AND r.rating = 5);
+::verify
+SELECT id, price FROM products ORDER BY id;
+::ordered true
+::hints
+- The starter changes every product: add a `WHERE` with a subquery on `reviews`.
+- `round(price * 1.05, 2)`, then `RETURNING name, price`.
+--- cards
+INSERT :: INSERT INTO t (cols) VALUES (...), (...); or INSERT INTO t (cols) SELECT ... — always list columns.
+RETURNING :: Returns rows affected by INSERT/UPDATE/DELETE, e.g. generated ids (PostgreSQL, SQLite, MariaDB).
+UPDATE :: UPDATE t SET col = expr WHERE ...; no WHERE = every row. UPDATE ... FROM for values from other tables.
+DELETE / TRUNCATE :: DELETE FROM t WHERE ... removes rows; TRUNCATE empties a table quickly.
+Upsert :: INSERT ... ON CONFLICT (key) DO UPDATE SET col = excluded.col (or DO NOTHING). Atomic.
+MERGE :: Standard upsert/sync: MERGE INTO target USING source ON ... WHEN MATCHED ... WHEN NOT MATCHED ...
+Soft delete :: Set deleted_at instead of deleting; keeps history and allows undo.
+
+=== lesson sql-design | Designing a database: normalization | 80
+## From a spreadsheet to tables
+
+Most databases start as someone's spreadsheet. Here's one for a training company, as a table:
+
+```sql empty
+CREATE TABLE bookings_sheet (
+  booking_id int, student text, student_email text, course text, course_fee numeric, trainer text, trainer_phone text, booked_on date
+);
+INSERT INTO bookings_sheet VALUES
+  (1, 'Ada', 'ada@x.dev', 'SQL Basics', 300, 'Edgar', '555-0101', '2026-02-01'),
+  (2, 'Ada', 'ada@x.dev', 'Advanced SQL', 450, 'Edgar', '555-0101', '2026-03-01'),
+  (3, 'Bob', 'bob@x.dev', 'SQL Basics', 300, 'Edgar', '555-0101', '2026-02-03'),
+  (4, 'Cy', 'cy@x.dev', 'Data Modelling', 400, 'Margaret', '555-0199', '2026-02-10');
+SELECT * FROM bookings_sheet;
+```
+
+It works, until it doesn't:
+
+- **Update anomaly**: Edgar's phone number is stored three times; change one and the data contradicts itself.
+- **Insertion anomaly**: you can't record a new course until someone books it (there's no row to put it in).
+- **Deletion anomaly**: delete Cy's booking and you lose the fact that Margaret teaches Data Modelling.
+
+**Normalization** is the process of splitting tables so that every fact is stored **once**, which removes these anomalies.
+
+## The normal forms
+
+The rules are called **normal forms**. In practice, aim for the third:
+
+- **First normal form (1NF)**: every column holds **one** value (no lists like `'SQL, Python'` in a cell, no `phone1`, `phone2`, `phone3` columns), and every row is unique (it has a key).
+- **Second normal form (2NF)**: in a table with a composite key, every column depends on the **whole** key, not part of it. In an `enrolments(student_id, course_id, course_fee)` table, the fee depends on the course alone: it belongs in `courses`.
+- **Third normal form (3NF)**: no column depends on another **non-key** column. In `courses(id, name, trainer, trainer_phone)`, the phone depends on the trainer, not on the course: it belongs in `trainers`.
+
+A memorable summary (from Bill Kent): every non-key column must provide a fact about **the key, the whole key, and nothing but the key**. (Boyce-Codd normal form, BCNF, tightens 3NF for some rare cases with several overlapping candidate keys.)
+
+## The normalized design
+
+Each **thing** (entity) gets a table, and relationships become foreign keys:
+
+```sql empty
+CREATE TABLE trainers (id integer PRIMARY KEY, name text NOT NULL, phone text);
+CREATE TABLE courses  (id integer PRIMARY KEY, name text NOT NULL UNIQUE, fee numeric(8, 2) NOT NULL,
+                       trainer_id integer NOT NULL REFERENCES trainers (id));
+CREATE TABLE students (id integer PRIMARY KEY, name text NOT NULL, email text NOT NULL UNIQUE);
+CREATE TABLE bookings (id integer PRIMARY KEY,
+                       student_id integer NOT NULL REFERENCES students (id),
+                       course_id integer NOT NULL REFERENCES courses (id),
+                       booked_on date NOT NULL,
+                       UNIQUE (student_id, course_id));
+
+SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name;
+```
+
+Edgar's phone is now stored once; a course can exist without bookings; deleting a booking deletes only the booking. A join (or a **view**, Module 6) rebuilds the spreadsheet whenever someone wants it.
+
+## A design process
+
+1. **List the things** the system is about (nouns in the requirements: student, course, trainer, booking).
+2. **List their facts** (attributes), and choose a key for each.
+3. **Find the relationships** and their cardinality (one-to-many, many-to-many), adding junction tables for many-to-many.
+4. **Check the normal forms**: does any column describe something other than its table's key?
+5. **Add the rules** as constraints (Module 5): required values, uniqueness, valid ranges.
+6. **Test it with real questions**: can every report and screen be built with joins?
+
+## When to denormalize
+
+Normalization optimises for **correct writes**. Sometimes reads matter more, and you deliberately store a fact twice: a cached `order_total` on `orders`, a counter of reviews on `products`, a reporting table rebuilt nightly. That's **denormalization**, and it's legitimate when you know what you're trading: you must keep the copies in sync (with triggers, application code or materialized views, Modules 6 and 7). Note that `order_items.unit_price` in the shop **isn't** a denormalization: the price at the time of the order is a different fact from the product's current price.
+
+~~~check
+? `employees(id, name, department_id, department_name)`. Which normal form does department_name break?
+- 1NF
+- 2NF
++ 3NF: it depends on department_id, not on the employee key
+- None
+> Move it to a departments table.
+~~~
+
+📚 **Go deeper:** *SQL: The Complete Reference*, chapter 4 (the relational model); William Kent, "A Simple Guide to Five Normal Forms in Relational Database Theory" (1983); C. J. Date, *Database Design and Relational Theory*.
+--- goals
+- recognise update, insertion and deletion anomalies in flat tables
+- apply the first, second and third normal forms
+- turn requirements into entities, keys and relationships
+- know when and how to denormalize deliberately
+--- quiz
+? A column `skills` contains `'SQL, Python, Go'`. Which normal form is broken?
++ 1NF: a cell holds several values
+- 2NF
+- 3NF
+- None
+> Store one skill per row in a related table.
+? "The key, the whole key, and nothing but the key" summarises...
++ 1NF to 3NF: every non-key column describes the whole key and nothing else
+- primary key syntax
+- foreign key actions
+- index design
+> Bill Kent's summary of normalization.
+? What's a deletion anomaly?
++ Deleting one fact accidentally deletes another, unrelated fact
+- A delete that fails
+- Deleting duplicates
+- A cascading delete
+> Deleting Cy's booking lost Margaret's course.
+? Is `order_items.unit_price` (copied from products.price) a normalization mistake?
++ No: the price at the time of the order is a different fact from today's price
+- Yes, always remove it
+- Only if prices never change
+- Yes, it breaks 1NF
+> History must be stored as it was.
+--- exercise code postgres
+::prompt
+The flat `bookings_sheet` table from the lesson is loaded. Normalize it into four tables, **`trainers`**, **`courses`**, **`students`** and **`bookings`**, with the columns and keys shown in the lesson (`trainers(id, name, phone)`, `courses(id, name, fee, trainer_id)`, `students(id, name, email)`, `bookings(id, student_id, course_id, booked_on)`), and fill them **from the sheet with `INSERT ... SELECT`** (ids can be generated in any order; the checker joins your tables back together).
+::dataset empty
+::setup
+CREATE TABLE bookings_sheet (booking_id int, student text, student_email text, course text, course_fee numeric, trainer text, trainer_phone text, booked_on date);
+INSERT INTO bookings_sheet VALUES
+  (1, 'Ada', 'ada@x.dev', 'SQL Basics', 300, 'Edgar', '555-0101', '2026-02-01'),
+  (2, 'Ada', 'ada@x.dev', 'Advanced SQL', 450, 'Edgar', '555-0101', '2026-03-01'),
+  (3, 'Bob', 'bob@x.dev', 'SQL Basics', 300, 'Edgar', '555-0101', '2026-02-03'),
+  (4, 'Cy', 'cy@x.dev', 'Data Modelling', 400, 'Margaret', '555-0199', '2026-02-10'),
+  (5, 'Bob', 'bob@x.dev', 'Data Modelling', 400, 'Margaret', '555-0199', '2026-02-11');
+::starter
+CREATE TABLE trainers (id integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY, name text NOT NULL UNIQUE, phone text);
+-- create courses, students and bookings, then fill all four from bookings_sheet
+::solution
+CREATE TABLE trainers (id integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY, name text NOT NULL UNIQUE, phone text);
+CREATE TABLE courses (id integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY, name text NOT NULL UNIQUE,
+                      fee numeric(8, 2) NOT NULL, trainer_id integer NOT NULL REFERENCES trainers (id));
+CREATE TABLE students (id integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY, name text NOT NULL, email text NOT NULL UNIQUE);
+CREATE TABLE bookings (id integer PRIMARY KEY,
+                       student_id integer NOT NULL REFERENCES students (id),
+                       course_id integer NOT NULL REFERENCES courses (id),
+                       booked_on date NOT NULL);
+
+INSERT INTO trainers (name, phone) SELECT DISTINCT trainer, trainer_phone FROM bookings_sheet;
+INSERT INTO courses (name, fee, trainer_id)
+SELECT DISTINCT s.course, s.course_fee, t.id FROM bookings_sheet s JOIN trainers t ON t.name = s.trainer;
+INSERT INTO students (name, email) SELECT DISTINCT student, student_email FROM bookings_sheet;
+INSERT INTO bookings (id, student_id, course_id, booked_on)
+SELECT s.booking_id, st.id, c.id, s.booked_on
+FROM bookings_sheet s
+JOIN students st ON st.email = s.student_email
+JOIN courses c ON c.name = s.course;
+::reference
+CREATE TABLE trainers (id serial PRIMARY KEY, name text, phone text);
+CREATE TABLE courses (id serial PRIMARY KEY, name text, fee numeric, trainer_id int REFERENCES trainers (id));
+CREATE TABLE students (id serial PRIMARY KEY, name text, email text);
+CREATE TABLE bookings (id int PRIMARY KEY, student_id int REFERENCES students (id), course_id int REFERENCES courses (id), booked_on date);
+INSERT INTO trainers (name, phone) SELECT DISTINCT trainer, trainer_phone FROM bookings_sheet;
+INSERT INTO courses (name, fee, trainer_id) SELECT DISTINCT course, course_fee, (SELECT id FROM trainers WHERE name = trainer) FROM bookings_sheet;
+INSERT INTO students (name, email) SELECT DISTINCT student, student_email FROM bookings_sheet;
+INSERT INTO bookings SELECT booking_id, (SELECT id FROM students WHERE email = student_email), (SELECT id FROM courses WHERE name = course), booked_on FROM bookings_sheet;
+::verify
+SELECT b.id, st.name AS student, st.email, c.name AS course, c.fee::numeric(8,2) AS fee, t.name AS trainer, t.phone, b.booked_on,
+       (SELECT count(*) FROM trainers) AS trainers, (SELECT count(*) FROM courses) AS courses, (SELECT count(*) FROM students) AS students
+FROM bookings b
+JOIN students st ON st.id = b.student_id
+JOIN courses c ON c.id = b.course_id
+JOIN trainers t ON t.id = c.trainer_id
+ORDER BY b.id;
+::ordered true
+::hints
+- Fill the tables in dependency order: trainers, then courses (which need trainer ids), students, then bookings.
+- `INSERT INTO trainers (name, phone) SELECT DISTINCT trainer, trainer_phone FROM bookings_sheet;`
+- To find the new ids, join the sheet to the new tables on a unique value (name, email).
+--- cards
+Anomalies :: Update (copies disagree), insertion (can't store a fact alone), deletion (lose an unrelated fact).
+1NF :: One value per cell, no repeating column groups, rows identifiable by a key.
+2NF :: Non-key columns depend on the whole composite key, not part of it.
+3NF :: Non-key columns depend only on the key, not on other non-key columns.
+Kent's rule :: The key, the whole key, and nothing but the key.
+Denormalization :: Deliberately storing a fact twice for read speed; you must keep the copies in sync.
+
+=== lesson sql-alter | Changing a schema: ALTER TABLE and migrations | 65
+## Schemas evolve
+
+Applications change, and their tables must change with them, usually while the database is full of data and in use. **`ALTER TABLE`** changes an existing table:
+
+```sql shop
+ALTER TABLE customers ADD COLUMN phone text;
+ALTER TABLE customers ADD COLUMN marketing_opt_in boolean NOT NULL DEFAULT false;
+ALTER TABLE products RENAME COLUMN added_on TO listed_on;
+ALTER TABLE products ALTER COLUMN stock SET DEFAULT 10;
+ALTER TABLE products ADD CONSTRAINT products_name_unique UNIQUE (name);
+
+SELECT column_name, data_type, column_default
+FROM information_schema.columns
+WHERE table_name IN ('customers', 'products')
+ORDER BY table_name, ordinal_position;
+```
+
+| Change | Statement |
+|---|---|
+| add a column | `ADD COLUMN name type [constraints]` |
+| remove a column | `DROP COLUMN name` (its data is gone) |
+| rename | `RENAME COLUMN a TO b`, `RENAME TO new_table` |
+| change a type | `ALTER COLUMN c TYPE new_type [USING expression]` |
+| defaults | `ALTER COLUMN c SET DEFAULT x` / `DROP DEFAULT` |
+| required | `ALTER COLUMN c SET NOT NULL` / `DROP NOT NULL` |
+| constraints | `ADD CONSTRAINT name ...` / `DROP CONSTRAINT name` |
+
+Adding a `NOT NULL` column to a table with rows needs a default (or the existing rows would break the rule). Changing a type converts every value, with `USING` for conversions PostgreSQL can't guess:
+
+```sql shop
+ALTER TABLE orders ALTER COLUMN status TYPE varchar(12);
+ALTER TABLE customers ALTER COLUMN joined_on TYPE timestamptz USING joined_on::timestamptz;
+SELECT name, joined_on FROM customers LIMIT 3;
+```
+
+## Backfilling data
+
+A new required column is often added in three steps: add it as nullable, fill it in (**backfill**), then make it required:
+
+```sql shop
+ALTER TABLE orders ADD COLUMN items_count integer;
+
+UPDATE orders o
+SET items_count = (SELECT coalesce(sum(quantity), 0) FROM order_items oi WHERE oi.order_id = o.id);
+
+ALTER TABLE orders ALTER COLUMN items_count SET NOT NULL;
+SELECT id, items_count FROM orders ORDER BY id LIMIT 5;
+```
+
+## Migrations
+
+In a team, schema changes are never typed by hand into production. They're written as **migrations**: numbered SQL files (or code) kept in Git, applied in order by a tool that records which ones already ran:
+
+```
+migrations/
+  0001_create_customers.sql
+  0002_create_orders.sql
+  0003_add_phone_to_customers.sql
+```
+
+Tools include Flyway and Liquibase (any language), Alembic (Python), Prisma Migrate and Knex (Node.js), Rails and Django migrations. Every developer's database, the test database and production all get the same changes in the same order. Good migrations:
+
+- are **small** and do one thing;
+- are **never edited** after they've run anywhere (fix mistakes with a new migration);
+- are tested on a copy of production data when they touch big tables;
+- come with a way back when possible ("down" migrations), although on real data the honest fix is often a new forward migration.
+
+## Changing a live database safely
+
+Some changes lock a table or break the running application. Renaming a column, for example, breaks every query of the old code still running during a deployment. The safe pattern is **expand and contract**:
+
+1. **Expand**: add the new column (or table) next to the old one; the code writes to both.
+2. **Migrate**: backfill old rows; switch reads to the new column.
+3. **Contract**: once no code uses the old column, drop it in a later release.
+
+Also be careful with operations that rewrite or lock a big table (changing a type, adding a constraint that must check every row): PostgreSQL offers gentler forms, such as adding a constraint `NOT VALID` and validating it later, and `CREATE INDEX CONCURRENTLY` (Module 7).
+
+~~~check
+? Why add a new NOT NULL column in steps (nullable, backfill, then SET NOT NULL)?
++ Existing rows have no value yet, so the constraint can only be added after they're filled
+- PostgreSQL forbids NOT NULL on ALTER
+- To make the column faster
+- Because defaults aren't allowed
+> Or give it a default if one constant value is right for old rows.
+~~~
+
+📚 **Go deeper:** PostgreSQL documentation, "Modifying Tables" and "ALTER TABLE"; *SQL: The Complete Reference*, chapter 13 (changing a table definition); the Flyway documentation, "Concepts: Migrations"; "Zero-downtime Postgres migrations" articles by the teams at GitLab and Braintree.
+--- goals
+- add, drop, rename and change columns and constraints with ALTER TABLE
+- convert column types with USING, and backfill new columns
+- explain migrations and how teams manage them
+- apply expand-and-contract for changes on a live system
+--- quiz
+? What happens to a column's data when you `DROP COLUMN` it?
++ It's deleted
+- It's archived
+- It moves to a hidden column
+- Nothing until VACUUM
+> Back it up first if you might need it.
+? Why should a migration never be edited after it has run somewhere?
++ Databases that already ran it won't run the new version, so environments drift apart
+- Migration files are read-only
+- Git forbids it
+- It's slower
+> Write a new migration instead.
+? What is "expand and contract"?
++ Add the new structure alongside the old, migrate, then remove the old one later
+- Compress tables to save space
+- Add indexes, then remove them
+- Grow a column's size
+> It keeps old and new code working during deployment.
+--- exercise code postgres
+::prompt
+Evolve the shop schema:
+
+1. Add a column **`vip`** to `customers`: boolean, required, default `false`.
+2. Set `vip` to true for customers with **3 or more orders**.
+3. Rename the `products.stock` column to **`quantity_in_stock`**.
+4. Add a CHECK constraint named **`orders_shipping_non_negative`** that requires `shipping >= 0`.
+::dataset shop
+::starter
+ALTER TABLE customers ADD COLUMN vip boolean;
+::solution
+ALTER TABLE customers ADD COLUMN vip boolean NOT NULL DEFAULT false;
+
+UPDATE customers c
+SET vip = true
+WHERE (SELECT count(*) FROM orders o WHERE o.customer_id = c.id) >= 3;
+
+ALTER TABLE products RENAME COLUMN stock TO quantity_in_stock;
+
+ALTER TABLE orders ADD CONSTRAINT orders_shipping_non_negative CHECK (shipping >= 0);
+::reference
+ALTER TABLE customers ADD COLUMN vip boolean NOT NULL DEFAULT false;
+UPDATE customers SET vip = true WHERE id IN (SELECT customer_id FROM orders GROUP BY customer_id HAVING count(*) >= 3);
+ALTER TABLE products RENAME COLUMN stock TO quantity_in_stock;
+ALTER TABLE orders ADD CONSTRAINT orders_shipping_non_negative CHECK (shipping >= 0);
+::verify
+SELECT (SELECT string_agg(name, ', ' ORDER BY name) FROM customers WHERE vip) AS vips,
+       (SELECT is_nullable || ' ' || column_default FROM information_schema.columns WHERE table_name = 'customers' AND column_name = 'vip') AS vip_column,
+       (SELECT count(*) FROM information_schema.columns WHERE table_name = 'products' AND column_name = 'quantity_in_stock') AS renamed,
+       (SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'orders_shipping_non_negative') AS shipping_check;
+::hints
+- `ADD COLUMN vip boolean NOT NULL DEFAULT false` fills existing rows with false.
+- Update with a subquery counting each customer's orders.
+- `ALTER TABLE orders ADD CONSTRAINT orders_shipping_non_negative CHECK (shipping >= 0);`
+--- cards
+ALTER TABLE :: ADD/DROP COLUMN, RENAME COLUMN, ALTER COLUMN TYPE ... USING, SET/DROP DEFAULT, SET/DROP NOT NULL, ADD/DROP CONSTRAINT.
+Backfill :: Add a column as nullable, fill old rows, then SET NOT NULL.
+Migration :: A numbered, versioned schema change kept in Git and applied in order by a tool. Never edit one that has run.
+Expand and contract :: Add new structure, migrate code and data, remove the old structure later: zero-downtime changes.
+NOT VALID :: Add a constraint without checking existing rows now; VALIDATE CONSTRAINT later (less locking).
+
+=== lesson sql-m5-test | Module 5 test | 150 | exam
+This test covers Module 5: creating tables and choosing types, constraints and integrity, `INSERT`, `UPDATE`, `DELETE` and upserts, normalization, and schema changes with `ALTER TABLE` and migrations.
+
+Before you start, check that you can:
+
+- create tables with suitable types, defaults and keys;
+- declare every rule the database can enforce;
+- change data safely, including upserts and `RETURNING`;
+- normalize a flat design to 3NF;
+- evolve a schema with `ALTER TABLE` and migrations.
+--- goals
+- design and build a database that protects its own data
+- modify data and structure safely
+--- quiz
+? Which statement adds a row or updates it if its key exists, atomically?
++ `INSERT ... ON CONFLICT (id) DO UPDATE ...`
+- `UPDATE ... OR INSERT`
+- `INSERT OR REPLACE` in PostgreSQL
+- `SELECT` then `INSERT`
+> ON CONFLICT (MySQL: ON DUPLICATE KEY UPDATE; standard: MERGE).
+? Which type stores an exact amount of money?
++ numeric
+- real
+- double precision
+- integer with a float cast
+> Floats can't represent most decimals exactly.
+? A table `orders(id, customer_id, customer_email)`. What's wrong?
++ customer_email depends on the customer, not the order (3NF): store it in customers
+- Nothing
+- 1NF: two ids
+- orders needs a composite key
+> Facts about the customer belong in customers.
+? What error code means a CHECK constraint was violated?
+- 23505
+- 23503
++ 23514
+- 23502
+> 23505 unique, 23503 foreign key, 23502 not null.
+? You must rename a column used by running application servers. What's safest?
++ Add the new column, write to both, backfill, switch reads, then drop the old column later
+- Rename it during the deployment
+- Drop and recreate the table
+- Edit an old migration
+> Expand and contract.
+--- exercise code postgres
+::prompt
+Build a small **ticketing** schema:
+
+- `venues`: `id` (identity primary key), `name` (text, required, unique), `capacity` (integer, required, must be positive);
+- `shows`: `id` (identity primary key), `venue_id` (required foreign key to venues; deleting a venue deletes its shows), `title` (text, required), `starts_at` (timestamptz, required), and a rule that the same venue can't have two shows starting at the same time;
+- `tickets`: `id` (identity primary key), `show_id` (required foreign key to shows, **blocking** deletes of shows with tickets), `seat` (text, required), `price` (numeric(8,2), required, at least 0), and a rule that a seat can be sold only once per show.
+
+The checker runs good and bad statements against your schema.
+::dataset empty
+::starter
+CREATE TABLE venues (
+);
+::solution
+CREATE TABLE venues (
+  id       integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  name     text NOT NULL UNIQUE,
+  capacity integer NOT NULL CHECK (capacity > 0)
+);
+
+CREATE TABLE shows (
+  id        integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  venue_id  integer NOT NULL REFERENCES venues (id) ON DELETE CASCADE,
+  title     text NOT NULL,
+  starts_at timestamptz NOT NULL,
+  UNIQUE (venue_id, starts_at)
+);
+
+CREATE TABLE tickets (
+  id      integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  show_id integer NOT NULL REFERENCES shows (id) ON DELETE RESTRICT,
+  seat    text NOT NULL,
+  price   numeric(8, 2) NOT NULL CHECK (price >= 0),
+  UNIQUE (show_id, seat)
+);
+::reference
+CREATE TABLE venues (id integer GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY, name text NOT NULL UNIQUE, capacity integer NOT NULL CHECK (capacity > 0));
+CREATE TABLE shows (id integer GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY, venue_id integer NOT NULL REFERENCES venues ON DELETE CASCADE, title text NOT NULL, starts_at timestamptz NOT NULL, UNIQUE (venue_id, starts_at));
+CREATE TABLE tickets (id integer GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY, show_id integer NOT NULL REFERENCES shows, seat text NOT NULL, price numeric(8, 2) NOT NULL CHECK (price >= 0), UNIQUE (show_id, seat));
+::verify
+CREATE OR REPLACE FUNCTION pg_temp.attempt(stmt text) RETURNS text LANGUAGE plpgsql AS $f$
+BEGIN
+  BEGIN
+    EXECUTE stmt;
+    RAISE EXCEPTION '__accepted__';
+  EXCEPTION WHEN others THEN
+    IF SQLERRM = '__accepted__' THEN RETURN 'accepted'; END IF;
+    RETURN SQLSTATE;
+  END;
+END $f$;
+INSERT INTO venues (name, capacity) VALUES ('Hall', 100), ('Club', 40);
+INSERT INTO shows (venue_id, title, starts_at) SELECT id, 'Opening', '2026-05-01 19:00+00' FROM venues WHERE name = 'Hall';
+INSERT INTO shows (venue_id, title, starts_at) SELECT id, 'Jazz', '2026-05-02 20:00+00' FROM venues WHERE name = 'Club';
+INSERT INTO tickets (show_id, seat, price) SELECT id, 'A1', 25 FROM shows WHERE title = 'Opening';
+SELECT * FROM (VALUES
+  ('venue without name', pg_temp.attempt($$INSERT INTO venues (capacity) VALUES (10)$$)),
+  ('duplicate venue name', pg_temp.attempt($$INSERT INTO venues (name, capacity) VALUES ('Hall', 10)$$)),
+  ('zero capacity', pg_temp.attempt($$INSERT INTO venues (name, capacity) VALUES ('Tiny', 0)$$)),
+  ('show at unknown venue', pg_temp.attempt($$INSERT INTO shows (venue_id, title, starts_at) VALUES (999, 'X', now())$$)),
+  ('double-booked venue', pg_temp.attempt($$INSERT INTO shows (venue_id, title, starts_at) SELECT id, 'Clash', '2026-05-01 19:00+00' FROM venues WHERE name = 'Hall'$$)),
+  ('same time, other venue', pg_temp.attempt($$INSERT INTO shows (venue_id, title, starts_at) SELECT id, 'Other', '2026-05-01 19:00+00' FROM venues WHERE name = 'Club'$$)),
+  ('negative price', pg_temp.attempt($$INSERT INTO tickets (show_id, seat, price) SELECT id, 'A2', -1 FROM shows WHERE title = 'Opening'$$)),
+  ('seat sold twice', pg_temp.attempt($$INSERT INTO tickets (show_id, seat, price) SELECT id, 'A1', 25 FROM shows WHERE title = 'Opening'$$)),
+  ('same seat, other show', pg_temp.attempt($$INSERT INTO tickets (show_id, seat, price) SELECT id, 'A1', 25 FROM shows WHERE title = 'Jazz'$$)),
+  ('delete show with tickets', pg_temp.attempt($$DELETE FROM shows WHERE title = 'Opening'$$)),
+  ('delete venue without tickets', pg_temp.attempt($$DELETE FROM venues WHERE name = 'Club'$$))
+) AS checks (attempt, result);
+::ordered true
+::hints
+- "Can't have two shows at the same time in one venue" is `UNIQUE (venue_id, starts_at)`.
+- Deleting a venue deletes its shows: `ON DELETE CASCADE` on `shows.venue_id`. Tickets block deletes: the default (or `ON DELETE RESTRICT`).
+- `UNIQUE (show_id, seat)` sells each seat once per show.
