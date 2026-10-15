@@ -1,0 +1,1007 @@
+=== module Module 6 · Advanced queries
+
+=== lesson sql-cte | CTEs and recursive queries | 80
+## Naming the steps of a query
+
+Long queries with nested subqueries are hard to read from the inside out. A **common table expression** (CTE) names a subquery up front with **`WITH`**, so the query reads top to bottom, like a program:
+
+```sql shop
+WITH customer_totals AS (
+  SELECT o.customer_id, sum(oi.quantity * oi.unit_price) AS spent
+  FROM orders o
+  JOIN order_items oi ON oi.order_id = o.id
+  WHERE o.status <> 'cancelled'
+  GROUP BY o.customer_id
+),
+average AS (
+  SELECT avg(spent) AS avg_spent FROM customer_totals
+)
+SELECT c.name, round(t.spent, 2) AS spent
+FROM customer_totals t
+JOIN customers c ON c.id = t.customer_id
+CROSS JOIN average a
+WHERE t.spent > a.avg_spent
+ORDER BY t.spent DESC;
+```
+
+Each CTE is like a temporary, named view that exists only for this statement. Later CTEs can use earlier ones (`average` uses `customer_totals`), and the main query can use any of them, as often as it likes.
+
+CTEs don't make queries faster or slower by themselves: since PostgreSQL 12, the planner usually folds them into the main query like subqueries. Use them for **readability**: a complex report written as a sequence of named steps is far easier to check, change and review.
+
+## CTEs with data changes
+
+A CTE can contain `INSERT`, `UPDATE` or `DELETE ... RETURNING`, which lets one statement move data:
+
+```sql shop
+WITH removed AS (
+  DELETE FROM reviews WHERE rating <= 2 RETURNING *
+)
+SELECT count(*) AS removed_reviews, string_agg(comment, '; ') AS comments FROM removed;
+```
+
+## Recursive CTEs: walking hierarchies
+
+Some questions need an unknown number of steps: "everyone who reports to the CTO, directly or indirectly", "all subcategories of Electronics", "every stop on a route". **`WITH RECURSIVE`** handles them. A recursive CTE has two parts joined by `UNION ALL`:
+
+1. the **anchor**: the starting rows;
+2. the **recursive part**: a query that refers to the CTE itself, producing the next level from the previous one.
+
+PostgreSQL runs the anchor, then repeats the recursive part on the rows found in the previous round, until a round finds nothing.
+
+```sql company
+WITH RECURSIVE reports AS (
+  SELECT id, name, title, manager_id, 1 AS depth
+  FROM employees
+  WHERE name = 'Omar Haddad'                     -- anchor: the CTO
+
+  UNION ALL
+
+  SELECT e.id, e.name, e.title, e.manager_id, r.depth + 1
+  FROM employees e
+  JOIN reports r ON e.manager_id = r.id          -- recursive step: their direct reports
+)
+SELECT repeat('  ', depth - 1) || name AS person, title, depth
+FROM reports
+ORDER BY depth, name;
+```
+
+The same pattern walks up a tree (from a category to its ancestors), builds paths, or explores graphs:
+
+```sql shop
+WITH RECURSIVE tree AS (
+  SELECT id, name, parent_id, name AS path
+  FROM categories
+  WHERE parent_id IS NULL
+  UNION ALL
+  SELECT c.id, c.name, c.parent_id, t.path || ' > ' || c.name
+  FROM categories c
+  JOIN tree t ON c.parent_id = t.id
+)
+SELECT path FROM tree ORDER BY path;
+```
+
+Recursive CTEs can also **generate** data (here, the numbers 1 to 10, though `generate_series` is simpler for that):
+
+```sql empty
+WITH RECURSIVE n AS (
+  SELECT 1 AS i
+  UNION ALL
+  SELECT i + 1 FROM n WHERE i < 10
+)
+SELECT string_agg(i::text, ' ') FROM n;
+```
+
+The `WHERE i < 10` stops the recursion. Without a stopping condition (or with a cycle in the data, like an employee who is their own manager's manager), a recursive query runs forever; DevQuest stops it after a while. PostgreSQL 14 added a `CYCLE` clause that detects cycles for you, and you can always add a depth limit (`WHERE depth < 20`).
+
+~~~check
+? What are the two parts of a recursive CTE?
++ An anchor query and a recursive query that refers to the CTE, joined by UNION ALL
+- A SELECT and an INSERT
+- Two CTEs with the same name
+- A WITH and a LOOP
+> The recursive part runs on the previous round's rows until none are produced.
+~~~
+
+📚 **Go deeper:** PostgreSQL documentation, "WITH Queries (Common Table Expressions)"; *SQL: The Complete Reference*, chapter 9 (advanced queries); Markus Winand, "Modern SQL" (modern-sql.com), "WITH RECURSIVE".
+--- goals
+- structure long queries as named steps with WITH
+- use CTEs that change data with RETURNING
+- write recursive CTEs to walk hierarchies and generate rows
+- prevent runaway recursion with stopping conditions and cycle detection
+--- quiz
+? What's the main benefit of a CTE?
++ Readability: complex queries become a sequence of named steps
+- It always makes queries faster
+- It stores results permanently
+- It's required for joins
+> Since PostgreSQL 12 CTEs are usually inlined like subqueries.
+? In a recursive CTE, when does the recursion stop?
++ When a round produces no new rows
+- After 10 rounds
+- When the anchor is empty... or never
+- When ORDER BY runs
+> Make sure the recursive step eventually finds nothing.
+? Which question needs a recursive query?
++ Everyone who reports to the CTO, directly or through managers
+- Each employee's direct manager
+- The number of employees per department
+- The highest salary
+> An unknown number of levels.
+--- exercise code postgres
+::prompt
+Rewrite this nested query with **two CTEs**: `product_sales` (units sold per product, excluding cancelled orders) and `top_products` (products with at least 2 units sold), then select the product `name` and `units` from them, most units first, then by name.
+::dataset shop
+::starter
+SELECT p.name, s.units
+FROM products p
+JOIN (SELECT * FROM (SELECT oi.product_id, sum(oi.quantity) AS units
+                     FROM order_items oi JOIN orders o ON o.id = oi.order_id
+                     WHERE o.status <> 'cancelled'
+                     GROUP BY oi.product_id) x
+      WHERE x.units >= 3) s ON s.product_id = p.id
+ORDER BY s.units DESC, p.name;
+::solution
+WITH product_sales AS (
+  SELECT oi.product_id, sum(oi.quantity) AS units
+  FROM order_items oi
+  JOIN orders o ON o.id = oi.order_id
+  WHERE o.status <> 'cancelled'
+  GROUP BY oi.product_id
+),
+top_products AS (
+  SELECT product_id, units FROM product_sales WHERE units >= 2
+)
+SELECT p.name, t.units
+FROM top_products t
+JOIN products p ON p.id = t.product_id
+ORDER BY t.units DESC, p.name;
+::reference
+SELECT p.name, sum(oi.quantity) AS units FROM order_items oi JOIN orders o ON o.id = oi.order_id JOIN products p ON p.id = oi.product_id WHERE o.status <> 'cancelled' GROUP BY p.id, p.name HAVING sum(oi.quantity) >= 2 ORDER BY 2 DESC, 1;
+::ordered true
+::hints
+- The prompt asks for at least **2** units; the starter's inner filter uses 3.
+- `WITH product_sales AS (...), top_products AS (SELECT ... FROM product_sales WHERE units >= 2) SELECT ...`.
+--- exercise code company
+::prompt
+List **everyone in Sofia Rossi's organisation** (Sofia herself and everyone who reports to her, directly or indirectly): `name`, `title` and `level` (1 for Sofia, 2 for her direct reports, and so on), ordered by `level`, then `name`.
+::dataset company
+::starter
+SELECT name, title
+FROM employees
+WHERE manager_id = 3;
+::solution
+WITH RECURSIVE org AS (
+  SELECT id, name, title, 1 AS level
+  FROM employees
+  WHERE name = 'Sofia Rossi'
+  UNION ALL
+  SELECT e.id, e.name, e.title, o.level + 1
+  FROM employees e
+  JOIN org o ON e.manager_id = o.id
+)
+SELECT name, title, level
+FROM org
+ORDER BY level, name;
+::reference
+WITH RECURSIVE org(id, name, title, level) AS (SELECT id, name, title, 1 FROM employees WHERE id = 3 UNION ALL SELECT e.id, e.name, e.title, org.level + 1 FROM employees e, org WHERE e.manager_id = org.id) SELECT name, title, level FROM org ORDER BY 3, 1;
+::ordered true
+::hints
+- Anchor: Sofia's row, with `1 AS level`.
+- Recursive step: employees whose `manager_id` is the id of someone already found, with `level + 1`.
+--- exercise code postgres
+::prompt
+For each category, return its `name` and `top_level`: the name of the **root** category it belongs to (the ancestor with no parent; a root category is its own top level). Order by `top_level`, then `name`.
+::dataset shop
+::starter
+SELECT name
+FROM categories;
+::solution
+WITH RECURSIVE ancestry AS (
+  SELECT id, name, id AS root_id, name AS root_name
+  FROM categories
+  WHERE parent_id IS NULL
+  UNION ALL
+  SELECT c.id, c.name, a.root_id, a.root_name
+  FROM categories c
+  JOIN ancestry a ON c.parent_id = a.id
+)
+SELECT name, root_name AS top_level
+FROM ancestry
+ORDER BY top_level, name;
+::reference
+SELECT c.name, COALESCE(p.name, c.name) AS top_level FROM categories c LEFT JOIN categories p ON p.id = c.parent_id ORDER BY 2, 1;
+::ordered true
+::hints
+- Start from the roots (`parent_id IS NULL`), carrying the root's name down as you recurse.
+- Each child gets its parent's `root_name`.
+--- cards
+CTE :: WITH name AS (SELECT ...) SELECT ... FROM name — a named step; later CTEs can use earlier ones.
+Data-modifying CTE :: WITH d AS (DELETE ... RETURNING *) SELECT ... FROM d — move data in one statement.
+WITH RECURSIVE :: Anchor UNION ALL recursive step (referring to the CTE); repeats until no new rows.
+Hierarchies :: Recursive CTEs walk org charts, category trees and graphs of unknown depth.
+Runaway recursion :: Add a stopping condition or depth limit; PostgreSQL 14+ has CYCLE detection.
+
+=== lesson sql-window | Window functions | 90
+## Aggregates without collapsing rows
+
+`GROUP BY` collapses each group into one row. Often you want to keep every row **and** see a group-level value next to it: each order with its customer's total, each product with its rank in its category, each day with a running total. That's what **window functions** do:
+
+```sql shop
+SELECT name, category_id, price,
+       round(avg(price) OVER (PARTITION BY category_id), 2) AS category_average,
+       count(*) OVER (PARTITION BY category_id) AS products_in_category
+FROM products
+ORDER BY category_id, price;
+```
+
+`OVER (...)` turns an aggregate into a window function. **`PARTITION BY`** divides the rows into groups (here, categories), and the function is computed over each row's group, but every row stays in the result. `OVER ()` with nothing inside uses all rows:
+
+```sql shop
+SELECT name, price,
+       round(100 * price / sum(price) OVER (), 1) AS percent_of_catalogue_value
+FROM products
+ORDER BY price DESC
+LIMIT 5;
+```
+
+Window functions run **after** `WHERE`, `GROUP BY` and `HAVING`, at the `SELECT` step, so they see the filtered (and grouped) rows, and you can't use them in `WHERE`. To filter on one, use a subquery or CTE.
+
+## Ranking
+
+Ranking functions number rows in an order given by `ORDER BY` inside `OVER`:
+
+```sql shop
+SELECT name, category_id, price,
+       row_number() OVER (PARTITION BY category_id ORDER BY price DESC) AS row_num,
+       rank()       OVER (PARTITION BY category_id ORDER BY price DESC) AS rank,
+       dense_rank() OVER (ORDER BY price DESC) AS price_rank_overall
+FROM products
+ORDER BY category_id, price DESC;
+```
+
+| Function | Ties | Example for prices 50, 40, 40, 30 |
+|---|---|---|
+| `row_number()` | numbered arbitrarily | 1, 2, 3, 4 |
+| `rank()` | share a rank, then skip | 1, 2, 2, 4 |
+| `dense_rank()` | share a rank, no gaps | 1, 2, 2, 3 |
+| `ntile(n)` | split into n buckets | quartiles, percentiles |
+
+The classic use is **top N per group**: the most expensive product in each category.
+
+```sql shop
+WITH ranked AS (
+  SELECT name, category_id, price,
+         row_number() OVER (PARTITION BY category_id ORDER BY price DESC, id) AS rn
+  FROM products
+)
+SELECT category_id, name, price
+FROM ranked
+WHERE rn = 1
+ORDER BY category_id;
+```
+
+## Running totals and moving windows
+
+With `ORDER BY` inside `OVER`, an aggregate becomes **cumulative**: each row sees the rows from the start of its partition up to itself.
+
+```sql shop
+SELECT id, ordered_at::date AS day, shipping,
+       sum(shipping) OVER (ORDER BY ordered_at) AS shipping_to_date,
+       count(*) OVER (PARTITION BY customer_id ORDER BY ordered_at) AS customer_order_number
+FROM orders
+ORDER BY ordered_at;
+```
+
+The rows a window function sees are its **frame**, which you can set explicitly: `ROWS BETWEEN 2 PRECEDING AND CURRENT ROW` gives a three-row **moving average**:
+
+```sql shop
+WITH daily AS (
+  SELECT date_trunc('month', o.ordered_at)::date AS month, sum(oi.quantity * oi.unit_price) AS revenue
+  FROM orders o JOIN order_items oi ON oi.order_id = o.id
+  GROUP BY 1
+)
+SELECT month, revenue,
+       round(avg(revenue) OVER (ORDER BY month ROWS BETWEEN 2 PRECEDING AND CURRENT ROW), 2) AS moving_avg_3_months
+FROM daily
+ORDER BY month;
+```
+
+## Looking at neighbouring rows: LAG and LEAD
+
+`lag(x)` returns the value of `x` in the **previous** row of the window, `lead(x)` in the next one: perfect for changes over time.
+
+```sql shop
+SELECT customer_id, id AS order_id, ordered_at::date AS day,
+       ordered_at::date - lag(ordered_at::date) OVER (PARTITION BY customer_id ORDER BY ordered_at) AS days_since_previous
+FROM orders
+WHERE customer_id IN (1, 2, 3)
+ORDER BY customer_id, ordered_at;
+```
+
+`first_value(x)`, `last_value(x)` and `nth_value(x, n)` read other positions of the frame.
+
+~~~check
+? How is `SELECT name, sum(price) OVER () FROM products` different from `SELECT sum(price) FROM products`?
++ The window version returns every product with the grand total on each row; the aggregate returns one row
+- They're identical
+- The window version is an error
+- The window version sums each row separately
+> Window functions keep the rows.
+~~~
+
+## Named windows
+
+When several functions share a window, name it once with `WINDOW`:
+
+```sql shop
+SELECT name, price,
+       rank() OVER w AS rank,
+       round(price - avg(price) OVER w, 2) AS diff_from_average
+FROM products
+WINDOW w AS (PARTITION BY category_id ORDER BY price DESC)
+ORDER BY category_id, rank;
+```
+
+(Careful: with `ORDER BY` in the window, `avg` is cumulative, so `diff_from_average` here compares with the average **so far** in the ranking. Use a window without `ORDER BY` for the whole category's average.)
+
+📚 **Go deeper:** PostgreSQL documentation, "Window Functions" (tutorial) and "Window Function Calls"; Markus Winand, *SQL Performance Explained* and modern-sql.com on window functions; *SQL: The Complete Reference*, chapter 21 (OLAP features).
+--- goals
+- compute group-level values next to every row with OVER and PARTITION BY
+- rank rows with row_number, rank, dense_rank and ntile, and pick the top N per group
+- compute running totals and moving averages with ordered windows and frames
+- compare rows with their neighbours using lag and lead
+--- quiz
+? What does PARTITION BY do in a window function?
++ Splits the rows into groups over which the function is computed, keeping every row
+- Groups and collapses rows like GROUP BY
+- Sorts the result
+- Filters rows
+> It's GROUP BY without collapsing.
+? Ranking prices 9, 7, 7, 5 with dense_rank gives...
++ 1, 2, 2, 3
+- 1, 2, 3, 4
+- 1, 2, 2, 4
+- 1, 1, 2, 3
+> No gaps after ties.
+? Why can't you write `WHERE row_number() OVER (...) = 1`?
++ Window functions are computed at the SELECT step, after WHERE; filter in an outer query
+- row_number needs PARTITION BY
+- It works fine
+- WHERE can't use numbers
+> Wrap the query in a CTE or subquery.
+? What does `lag(price) OVER (ORDER BY day)` return for the first row?
++ NULL
+- 0
+- The same row's price
+- An error
+> There's no previous row (lag(x, 1, default) can give a default).
+--- exercise code postgres
+::prompt
+For every product, return `name`, `category_id`, `price` and `price_rank`: its rank by price **within its category**, most expensive first, with ties sharing a rank (use `rank()`). Order by `category_id`, then `price_rank`, then `name`. Products without a category form their own group.
+::dataset shop
+::starter
+SELECT name, category_id, price
+FROM products;
+::solution
+SELECT name, category_id, price,
+       rank() OVER (PARTITION BY category_id ORDER BY price DESC) AS price_rank
+FROM products
+ORDER BY category_id, price_rank, name;
+::reference
+SELECT name, category_id, price, (SELECT count(*) + 1 FROM products p2 WHERE p2.category_id IS NOT DISTINCT FROM p.category_id AND p2.price > p.price) AS price_rank FROM products p ORDER BY 2, 4, 1;
+::ordered true
+::hints
+- `rank() OVER (PARTITION BY category_id ORDER BY price DESC)`.
+--- exercise code postgres
+::prompt
+Find each customer's **most recent order**: return `customer`, `order_id` and `ordered_at`, one row per customer who has ordered, ordered by `customer`. Use `row_number()` in a CTE.
+::dataset shop
+::starter
+SELECT c.name AS customer, o.id AS order_id, o.ordered_at
+FROM customers c
+JOIN orders o ON o.customer_id = c.id;
+::solution
+WITH ranked AS (
+  SELECT c.name AS customer, o.id AS order_id, o.ordered_at,
+         row_number() OVER (PARTITION BY c.id ORDER BY o.ordered_at DESC) AS rn
+  FROM customers c
+  JOIN orders o ON o.customer_id = c.id
+)
+SELECT customer, order_id, ordered_at
+FROM ranked
+WHERE rn = 1
+ORDER BY customer;
+::reference
+SELECT DISTINCT ON (c.name) c.name AS customer, o.id AS order_id, o.ordered_at FROM customers c JOIN orders o ON o.customer_id = c.id ORDER BY c.name, o.ordered_at DESC;
+::ordered true
+::hints
+- Number each customer's orders newest first: `row_number() OVER (PARTITION BY c.id ORDER BY o.ordered_at DESC)`.
+- Keep `rn = 1` in the outer query. (PostgreSQL's `DISTINCT ON` is a shortcut for this pattern.)
+--- exercise code postgres
+::prompt
+Show the shop's growth: for each month with orders, return `month` (the first day of the month, as a date), `orders` (orders that month) and `cumulative_orders` (orders up to and including that month), in month order.
+::dataset shop
+::starter
+SELECT date_trunc('month', ordered_at)::date AS month, count(*) AS orders
+FROM orders
+GROUP BY 1;
+::solution
+SELECT date_trunc('month', ordered_at)::date AS month,
+       count(*) AS orders,
+       sum(count(*)) OVER (ORDER BY date_trunc('month', ordered_at)) AS cumulative_orders
+FROM orders
+GROUP BY date_trunc('month', ordered_at)
+ORDER BY month;
+::reference
+WITH m AS (SELECT date_trunc('month', ordered_at)::date AS month, count(*) AS orders FROM orders GROUP BY 1) SELECT month, orders, (SELECT sum(orders) FROM m m2 WHERE m2.month <= m.month) AS cumulative_orders FROM m ORDER BY 1;
+::ordered true
+::hints
+- Window functions run after grouping, so they can use aggregates: `sum(count(*)) OVER (ORDER BY ...)`.
+- Or compute the monthly counts in a CTE, then `sum(orders) OVER (ORDER BY month)`.
+--- exercise code company
+::prompt
+For each employee in a department, return `name`, `department_id`, `salary`, `dept_avg` (their department's average salary, rounded to 0 decimals) and `gap` (their salary minus that average, rounded to 0 decimals). Order by `department_id`, then `salary` descending.
+::dataset company
+::starter
+SELECT name, department_id, salary
+FROM employees
+WHERE department_id IS NOT NULL;
+::solution
+SELECT name, department_id, salary,
+       round(avg(salary) OVER (PARTITION BY department_id), 0) AS dept_avg,
+       round(salary - avg(salary) OVER (PARTITION BY department_id), 0) AS gap
+FROM employees
+WHERE department_id IS NOT NULL
+ORDER BY department_id, salary DESC;
+::reference
+SELECT e.name, e.department_id, e.salary, round(a.av, 0) AS dept_avg, round(e.salary - a.av, 0) AS gap FROM employees e JOIN (SELECT department_id, avg(salary) AS av FROM employees GROUP BY department_id) a ON a.department_id = e.department_id ORDER BY 2, 3 DESC;
+::ordered true
+::hints
+- `avg(salary) OVER (PARTITION BY department_id)` (no ORDER BY inside, so it's the whole department's average).
+--- cards
+Window function :: f(...) OVER (PARTITION BY ... ORDER BY ...) — computed per row over a window, rows kept.
+row_number / rank / dense_rank :: 1,2,3,4 / 1,2,2,4 / 1,2,2,3 for ties; ntile(n) makes buckets.
+Top N per group :: row_number() OVER (PARTITION BY g ORDER BY x DESC) in a CTE, then WHERE rn <= N.
+Running total :: sum(x) OVER (ORDER BY t) — cumulative from the start of the partition.
+Frame :: ROWS BETWEEN 2 PRECEDING AND CURRENT ROW — e.g. moving averages.
+lag / lead :: Previous / next row's value in the window order; NULL at the edges.
+
+=== lesson sql-views | Views and materialized views | 60
+## Saving a query as a view
+
+A **view** is a stored query with a name. You query it like a table, but it holds no data of its own: every time you use it, its query runs.
+
+```sql shop
+CREATE VIEW order_summaries AS
+SELECT o.id, c.name AS customer, o.status, o.ordered_at,
+       sum(oi.quantity * oi.unit_price) AS goods,
+       o.shipping
+FROM orders o
+JOIN customers c ON c.id = o.customer_id
+JOIN order_items oi ON oi.order_id = o.id
+GROUP BY o.id, c.name;
+
+SELECT customer, count(*) AS orders, sum(goods + shipping) AS total
+FROM order_summaries
+WHERE status <> 'cancelled'
+GROUP BY customer
+ORDER BY total DESC
+LIMIT 5;
+```
+
+Views are useful for:
+
+- **simplifying**: complex joins written once, reused everywhere (a reporting team's favourite);
+- **stable interfaces**: applications query the view, and you can change the tables underneath (renaming, splitting) while keeping the view the same;
+- **security**: give a user access to a view showing only some columns or rows, but not to the table (Module 7).
+
+`CREATE OR REPLACE VIEW` updates a view's query (it may add columns at the end, not remove them); `DROP VIEW` removes it.
+
+## Updatable views
+
+A **simple** view (one table, no aggregates, no `DISTINCT`) can be updated: `INSERT`, `UPDATE` and `DELETE` on it change the underlying table. `WITH CHECK OPTION` stops changes that would make a row fall outside the view:
+
+```sql shop
+CREATE VIEW uk_customers AS
+SELECT id, name, email, city, country, joined_on FROM customers WHERE country = 'UK'
+WITH CHECK OPTION;
+
+UPDATE uk_customers SET city = 'Cambridge' WHERE name = 'Alan Turing';
+SELECT name, city FROM customers WHERE id = 3;
+```
+
+```sql shop
+-- error: WITH CHECK OPTION rejects a row that would leave the view
+CREATE VIEW uk_customers AS SELECT * FROM customers WHERE country = 'UK' WITH CHECK OPTION;
+UPDATE uk_customers SET country = 'FR' WHERE id = 3;
+```
+
+More complex views can be made writable with `INSTEAD OF` triggers (Module 7).
+
+## Materialized views: stored results
+
+A **materialized view** runs its query once and **stores the result**, like a table. Reading it is instant, but the data is a snapshot: it only changes when you refresh it.
+
+```sql shop
+CREATE MATERIALIZED VIEW product_stats AS
+SELECT p.id, p.name, count(r.id) AS reviews, round(avg(r.rating), 2) AS rating
+FROM products p
+LEFT JOIN reviews r ON r.product_id = p.id
+GROUP BY p.id, p.name;
+
+INSERT INTO reviews (id, product_id, customer_id, rating, created_on) VALUES (13, 6, 2, 1, '2026-03-01');
+SELECT * FROM product_stats WHERE id = 6;     -- still the old numbers
+
+REFRESH MATERIALIZED VIEW product_stats;
+SELECT * FROM product_stats WHERE id = 6;     -- updated
+```
+
+They suit expensive reports and dashboards that can be a few minutes (or a day) out of date, refreshed on a schedule. `REFRESH MATERIALIZED VIEW CONCURRENTLY` (which needs a unique index on the view) refreshes without blocking readers. A materialized view is the database's built-in way to **denormalize** for speed (Module 5). MySQL has no materialized views; SQL Server has "indexed views"; Oracle has them with automatic refresh options.
+
+~~~check
+? A normal view's underlying table changes. What does the view show?
++ The new data: a view runs its query each time
+- The old data until refreshed
+- An error
+- Nothing
+> Only materialized views store a snapshot.
+~~~
+
+📚 **Go deeper:** *SQL: The Complete Reference*, chapter 14 "Views" (including materialized views) and chapter 15 (views and security); PostgreSQL documentation, "Views", "Updatable Views" and "Materialized Views".
+--- goals
+- create and use views to simplify queries and provide stable interfaces
+- update data through simple views, with WITH CHECK OPTION
+- store expensive results in materialized views and refresh them
+--- quiz
+? What does a (normal) view store?
++ Only its query
+- A copy of the data
+- An index
+- The results of the last run
+> It's a named query.
+? When do you need `REFRESH MATERIALIZED VIEW`?
++ To update a materialized view's stored snapshot
+- After every SELECT on a view
+- To change a view's columns
+- Never; it updates automatically in PostgreSQL
+> Materialized views are snapshots.
+? What does WITH CHECK OPTION do?
++ Rejects inserts and updates through the view that produce rows the view wouldn't show
+- Checks the view's syntax
+- Adds CHECK constraints to the table
+- Refreshes the view
+> It keeps changes inside the view's filter.
+--- exercise code postgres
+::prompt
+Create a view **`customer_overview`** with one row per customer: `id`, `name`, `country`, `orders` (number of orders, 0 if none) and `last_order` (the latest `ordered_at`, NULL if none). Then query it for customers with **no orders** (columns `name` and `country`, ordered by name): that query is the one checked, along with the view's columns.
+::dataset shop
+::starter
+CREATE VIEW customer_overview AS
+SELECT id, name, country
+FROM customers;
+::solution
+CREATE VIEW customer_overview AS
+SELECT c.id, c.name, c.country, count(o.id) AS orders, max(o.ordered_at) AS last_order
+FROM customers c
+LEFT JOIN orders o ON o.customer_id = c.id
+GROUP BY c.id;
+
+SELECT name, country FROM customer_overview WHERE orders = 0 ORDER BY name;
+::reference
+CREATE VIEW customer_overview AS SELECT c.id, c.name, c.country, (SELECT count(*) FROM orders o WHERE o.customer_id = c.id) AS orders, (SELECT max(ordered_at) FROM orders o WHERE o.customer_id = c.id) AS last_order FROM customers c;
+SELECT name, country FROM customer_overview WHERE orders = 0 ORDER BY name;
+::verify
+SELECT (SELECT string_agg(column_name, ',' ORDER BY ordinal_position) FROM information_schema.columns WHERE table_name = 'customer_overview') AS columns,
+       (SELECT string_agg(name || '=' || orders, ', ' ORDER BY name) FROM customer_overview) AS counts;
+::hints
+- A `LEFT JOIN` keeps customers without orders; `count(o.id)` gives them 0.
+- Grouping by `c.id` (the primary key) lets you select the other customer columns.
+--- cards
+View :: CREATE VIEW v AS SELECT ... — a named, stored query; runs every time it's used.
+View uses :: Simplify complex joins, keep a stable interface while tables change, restrict what users see.
+Updatable view :: Simple one-table views accept INSERT/UPDATE/DELETE; WITH CHECK OPTION keeps rows inside the view.
+Materialized view :: Stores the query's result; fast to read, refreshed with REFRESH MATERIALIZED VIEW [CONCURRENTLY].
+
+=== lesson sql-json | JSON in a relational database | 70
+## Semi-structured data
+
+Some data doesn't fit fixed columns well: product specifications that differ per category (a laptop has a CPU, a book has an author), settings, event payloads from other systems, API responses you want to keep. PostgreSQL's **`jsonb`** type stores JSON documents in a column, in a binary form that's fast to query and can be indexed:
+
+```sql shop
+ALTER TABLE products ADD COLUMN specs jsonb NOT NULL DEFAULT '{}';
+
+UPDATE products SET specs = '{"cpu": "M-class 10-core", "ram_gb": 16, "ports": ["usb-c", "hdmi"]}' WHERE id = 1;
+UPDATE products SET specs = '{"author": "Thomas and Hunt", "pages": 352, "edition": 2}' WHERE id = 14;
+UPDATE products SET specs = '{"wireless": true, "battery_hours": 30}' WHERE id = 5;
+
+SELECT id, name, specs FROM products WHERE specs <> '{}';
+```
+
+(`json` also exists: it stores the exact text, including whitespace and duplicate keys. Use `jsonb` unless you need that.)
+
+## Reading values
+
+| Operator | Returns | Example |
+|---|---|---|
+| `->` | the value as `jsonb` | `specs -> 'ports'` |
+| `->>` | the value as `text` | `specs ->> 'cpu'` |
+| `#>` / `#>>` | the value at a path | `specs #>> '{ports,0}'` |
+| `@>` | does the left document **contain** the right one? | `specs @> '{"wireless": true}'` |
+| `?` | does the key exist? | `specs ? 'author'` |
+
+```sql shop
+ALTER TABLE products ADD COLUMN specs jsonb NOT NULL DEFAULT '{}';
+UPDATE products SET specs = '{"cpu": "M-class 10-core", "ram_gb": 16, "ports": ["usb-c", "hdmi"]}' WHERE id = 1;
+UPDATE products SET specs = '{"wireless": true, "battery_hours": 30}' WHERE id = 5;
+
+SELECT name,
+       specs ->> 'cpu' AS cpu,
+       (specs ->> 'ram_gb')::integer AS ram_gb,
+       specs -> 'ports' -> 0 AS first_port,
+       specs @> '{"wireless": true}' AS wireless
+FROM products
+WHERE id IN (1, 5);
+```
+
+`->>` returns text: cast it (`::integer`, `::numeric`) to compare numbers properly. A missing key gives `NULL`.
+
+## Building JSON
+
+Queries can **produce** JSON, which is how many APIs get their responses straight from the database:
+
+```sql shop
+SELECT json_build_object(
+         'customer', c.name,
+         'orders', json_agg(json_build_object('id', o.id, 'status', o.status) ORDER BY o.id)
+       ) AS document
+FROM customers c
+JOIN orders o ON o.customer_id = c.id
+WHERE c.id = 1
+GROUP BY c.name;
+```
+
+`jsonb_build_object`, `jsonb_agg`, `to_jsonb(row)` and `row_to_json` turn rows into documents; `jsonb_set` and the `||` operator change documents; `jsonb_array_elements` and `jsonb_each` turn a JSON array or object back into rows, and `jsonb_to_recordset` turns an array of objects into a table:
+
+```sql empty
+SELECT *
+FROM jsonb_to_recordset('[{"sku": "A1", "qty": 2}, {"sku": "B7", "qty": 5}]') AS item(sku text, qty integer);
+```
+
+PostgreSQL 16 and 17 also support the standard SQL/JSON functions (`JSON_VALUE`, `JSON_QUERY`, `JSON_TABLE`) and JSON path expressions (`jsonb_path_query(specs, '$.ports[*]')`).
+
+~~~check
+? What's the difference between `specs -> 'pages'` and `specs ->> 'pages'`?
++ -> returns jsonb; ->> returns text
+- -> is faster
+- ->> returns a number
+- No difference
+> Cast ->> results to compare them as numbers.
+~~~
+
+## When to use JSON columns
+
+JSON columns are great for data that is **genuinely variable** or **opaque** to your application (stored and returned as a whole). But don't use them to avoid designing tables: values inside JSON can't have foreign keys, types aren't enforced, and queries get more complicated. A good rule: if you filter, join or aggregate on a value regularly, or it must obey rules, make it a column. Many designs mix both: real columns for the core facts, a `jsonb` column for the extras. A **GIN index** (Module 7) makes `@>` and `?` queries fast on large tables.
+
+📚 **Go deeper:** PostgreSQL documentation, "JSON Types" and "JSON Functions and Operators"; *SQL: The Complete Reference*, chapter 25 (SQL and XML, the earlier approach to documents in databases; PostgreSQL also has an `xml` type).
+--- goals
+- store documents in jsonb columns
+- read values with ->, ->>, path operators and containment
+- build JSON from rows, and turn JSON back into rows
+- decide when data belongs in JSON and when in columns
+--- quiz
+? Which operator checks whether a document contains `{"wireless": true}`?
++ `@>`
+- `->>`
+- `?`
+- `=`
+> Containment, and it can use a GIN index.
+? Why prefer jsonb over json in PostgreSQL?
++ It's stored in a binary form that's faster to query and can be indexed
+- json can't store arrays
+- jsonb keeps whitespace
+- json is deprecated
+> json keeps the exact text; jsonb is parsed.
+? `WHERE specs ->> 'ram_gb' > 8`. What's the problem?
++ ->> returns text, so compare `(specs ->> 'ram_gb')::integer > 8`
+- Nothing
+- ->> returns a boolean
+- JSON can't hold numbers
+> Text comparison would be alphabetical (or an error).
+--- exercise code postgres
+::prompt
+The shop starts recording **delivery details** as JSON. Add a column `delivery` of type `jsonb` to `orders`, then store `{"carrier": "PostNL", "tracking": "3S123", "signed": true}` for order **13** and `{"carrier": "Royal Mail", "tracking": "RM991", "signed": false}` for order **12**. Finally, return the orders that have delivery details: `id`, `carrier` (as text) and `signed` (as a boolean), ordered by `id`.
+::dataset shop
+::starter
+ALTER TABLE orders ADD COLUMN delivery jsonb;
+::solution
+ALTER TABLE orders ADD COLUMN delivery jsonb;
+
+UPDATE orders SET delivery = '{"carrier": "PostNL", "tracking": "3S123", "signed": true}' WHERE id = 13;
+UPDATE orders SET delivery = '{"carrier": "Royal Mail", "tracking": "RM991", "signed": false}' WHERE id = 12;
+
+SELECT id, delivery ->> 'carrier' AS carrier, (delivery ->> 'signed')::boolean AS signed
+FROM orders
+WHERE delivery IS NOT NULL
+ORDER BY id;
+::reference
+ALTER TABLE orders ADD COLUMN delivery jsonb;
+UPDATE orders SET delivery = jsonb_build_object('carrier', 'PostNL', 'tracking', '3S123', 'signed', true) WHERE id = 13;
+UPDATE orders SET delivery = jsonb_build_object('carrier', 'Royal Mail', 'tracking', 'RM991', 'signed', false) WHERE id = 12;
+SELECT id, delivery ->> 'carrier' AS carrier, (delivery -> 'signed')::boolean AS signed FROM orders WHERE delivery ? 'carrier' ORDER BY id;
+::ordered true
+::hints
+- JSON literals are written as strings: `'{"carrier": "PostNL", ...}'`.
+- `delivery ->> 'carrier'` gives text; `(delivery ->> 'signed')::boolean` a boolean.
+--- exercise code postgres
+::prompt
+Build one JSON document per **category** that has products: return `category` (its name) and `products`, a JSON array of objects `{"name": ..., "price": ...}` for its products, sorted by price (cheapest first). Order the rows by category name.
+::dataset shop
+::starter
+SELECT cat.name AS category
+FROM categories cat;
+::solution
+SELECT cat.name AS category,
+       jsonb_agg(jsonb_build_object('name', p.name, 'price', p.price) ORDER BY p.price) AS products
+FROM categories cat
+JOIN products p ON p.category_id = cat.id
+GROUP BY cat.id, cat.name
+ORDER BY category;
+::reference
+SELECT cat.name AS category, (SELECT jsonb_agg(jsonb_build_object('name', p.name, 'price', p.price) ORDER BY p.price) FROM products p WHERE p.category_id = cat.id) AS products FROM categories cat WHERE EXISTS (SELECT 1 FROM products p WHERE p.category_id = cat.id) ORDER BY 1;
+::ordered true
+::hints
+- `jsonb_agg(jsonb_build_object('name', p.name, 'price', p.price) ORDER BY p.price)` aggregates per group.
+--- cards
+jsonb :: Binary JSON column type: fast to query, indexable (GIN). json keeps the exact text.
+-> / ->> :: Get a value as jsonb / as text. #> and #>> take a path. Cast ->> to compare numbers.
+@> and ? :: Containment (specs @> '{"wireless": true}') and key existence (specs ? 'author').
+Building JSON :: jsonb_build_object, jsonb_agg, to_jsonb(row); jsonb_to_recordset turns JSON arrays into rows.
+JSON or columns? :: Columns for values you filter, join, constrain or aggregate; JSON for variable or opaque extras.
+
+=== lesson sql-types | Beyond the basics: arrays, enums, domains and composite types | 60
+## Object-relational features
+
+PostgreSQL describes itself as an **object-relational** database: besides tables of simple values, it lets you define your own types and store structured values. Other databases offer some of these (Oracle has object types, MySQL has `ENUM` and `SET`), but PostgreSQL's set is the richest. They're useful in moderation.
+
+## Arrays
+
+Any type can be an array: `text[]`, `integer[]`.
+
+```sql empty
+CREATE TABLE articles (id integer PRIMARY KEY, title text NOT NULL, tags text[] NOT NULL DEFAULT '{}');
+INSERT INTO articles VALUES
+  (1, 'Window functions explained', '{sql,postgres,analytics}'),
+  (2, 'Indexing basics', ARRAY['sql', 'performance']),
+  (3, 'Hello, JSON', '{postgres,json}');
+
+SELECT title, tags[1] AS first_tag, cardinality(tags) AS tag_count
+FROM articles
+WHERE 'postgres' = ANY (tags);
+```
+
+- Arrays are written `'{a,b,c}'` or `ARRAY['a', 'b', 'c']`; indexes start at **1**.
+- `x = ANY (array)` tests membership; `tags @> '{sql}'` tests containment; `unnest(tags)` turns an array into rows:
+
+```sql empty
+CREATE TABLE articles (id integer PRIMARY KEY, tags text[]);
+INSERT INTO articles VALUES (1, '{sql,postgres}'), (2, '{sql,performance}'), (3, '{postgres,json}');
+
+SELECT tag, count(*) AS articles
+FROM articles, unnest(tags) AS tag
+GROUP BY tag
+ORDER BY articles DESC, tag;
+```
+
+Arrays break first normal form (several values in one cell), so the trade-off is the same as with JSON: fine for simple lists you read as a whole (tags, a few phone numbers), but if the elements need their own data, constraints or foreign keys, use a related table.
+
+## Enums
+
+An **enumerated type** is a fixed, ordered list of values:
+
+```sql empty
+CREATE TYPE order_status AS ENUM ('pending', 'paid', 'shipped', 'delivered', 'cancelled');
+CREATE TABLE parcels (id integer PRIMARY KEY, status order_status NOT NULL DEFAULT 'pending');
+INSERT INTO parcels VALUES (1, 'paid'), (2, 'delivered'), (3, 'pending');
+
+SELECT id, status FROM parcels WHERE status < 'delivered' ORDER BY status;
+```
+
+Enums sort in their declared order (so `status < 'delivered'` means "earlier in the workflow"), and reject other values. Adding a value later is easy (`ALTER TYPE order_status ADD VALUE 'returned'`), but removing one isn't, so a `CHECK (status IN (...))` constraint (as the shop uses) or a lookup table is often more flexible.
+
+## Domains
+
+A **domain** is a type with rules attached, defined once and reused in many tables:
+
+```sql empty
+CREATE DOMAIN email AS text CHECK (VALUE ~ '^[^@\s]+@[^@\s]+\.[^@\s]+$');
+CREATE DOMAIN positive_money AS numeric(10, 2) CHECK (VALUE > 0);
+
+CREATE TABLE invoices (id integer PRIMARY KEY, billing_email email NOT NULL, amount positive_money NOT NULL);
+INSERT INTO invoices VALUES (1, 'ap@acme.example', 120.00);
+SELECT * FROM invoices;
+```
+
+```sql empty
+-- error: the domain's CHECK rejects an invalid email
+CREATE DOMAIN email AS text CHECK (VALUE ~ '^[^@\s]+@[^@\s]+\.[^@\s]+$');
+SELECT 'not-an-email'::email;
+```
+
+## Composite types and ranges
+
+A **composite type** groups several fields, like a struct:
+
+```sql empty
+CREATE TYPE address AS (street text, city text, postcode text);
+CREATE TABLE warehouses (id integer PRIMARY KEY, name text, location address);
+INSERT INTO warehouses VALUES (1, 'North', ROW('1 Dock Road', 'Leeds', 'LS1 1AA'));
+SELECT name, (location).city FROM warehouses;
+```
+
+**Range types** (`int4range`, `numrange`, `daterange`, `tstzrange`) represent intervals with operators for overlap (`&&`) and containment (`@>`), which makes bookings and validity periods easy to query, and powers the exclusion constraints mentioned in the constraints lesson:
+
+```sql empty
+SELECT daterange('2026-05-01', '2026-05-08') && daterange('2026-05-07', '2026-05-10') AS overlaps,
+       daterange('2026-05-01', '2026-05-08') @> date '2026-05-08' AS contains_last_day;
+```
+
+(Ranges are half-open by default, `[start, end)`: the 8th isn't included.)
+
+~~~check
+? What is the first element of `ARRAY['a', 'b']` in PostgreSQL?
++ `arr[1]`
+- `arr[0]`
+- `arr.first`
+- `arr(1)`
+> SQL arrays start at 1.
+~~~
+
+📚 **Go deeper:** PostgreSQL documentation, "Arrays", "Enumerated Types", "CREATE DOMAIN", "Composite Types" and "Range Types"; *SQL: The Complete Reference*, chapter 24 "SQL and Objects".
+--- goals
+- store and query arrays, and expand them with unnest
+- define enums, domains and composite types, and know their trade-offs
+- use range types for periods and overlaps
+--- quiz
+? How do you test whether 'sql' is one of an article's tags?
++ `'sql' = ANY (tags)`
+- `tags = 'sql'`
+- `'sql' IN tags`
+- `tags LIKE '%sql%'`
+> ANY (array) tests membership.
+? What's a domain?
++ A base type with constraints, reusable across tables
+- A database server
+- A schema
+- A kind of index
+> e.g. CREATE DOMAIN email AS text CHECK (...).
+? Why might a CHECK constraint or lookup table beat an ENUM for statuses?
++ Removing or renaming enum values is hard; constraints and tables are easier to change
+- ENUMs can't be sorted
+- ENUMs use more space
+- CHECK constraints are faster in every case
+> Enums are rigid by design.
+--- exercise code postgres
+::prompt
+Add a `tags` column (`text[]`, required, default empty) to `products`. Tag products **1, 2 and 3** with `gift` and `tech`, and products **7 and 9** with `gift` and `kitchen`. Then return each tag (`tag`) with the number of products carrying it (`products`), most used first, then alphabetically.
+::dataset shop
+::starter
+ALTER TABLE products ADD COLUMN tags text[];
+::solution
+ALTER TABLE products ADD COLUMN tags text[] NOT NULL DEFAULT '{}';
+
+UPDATE products SET tags = '{gift,tech}' WHERE id IN (1, 2, 3);
+UPDATE products SET tags = '{gift,kitchen}' WHERE id IN (7, 9);
+
+SELECT tag, count(*) AS products
+FROM products, unnest(tags) AS tag
+GROUP BY tag
+ORDER BY products DESC, tag;
+::reference
+ALTER TABLE products ADD COLUMN tags text[] NOT NULL DEFAULT ARRAY[]::text[];
+UPDATE products SET tags = ARRAY['gift', 'tech'] WHERE id <= 3;
+UPDATE products SET tags = ARRAY['gift', 'kitchen'] WHERE id IN (7, 9);
+SELECT t.tag, count(*) AS products FROM products p CROSS JOIN LATERAL unnest(p.tags) AS t(tag) GROUP BY t.tag ORDER BY 2 DESC, 1;
+::ordered true
+::hints
+- Array literals: `'{gift,tech}'` or `ARRAY['gift', 'tech']`.
+- `FROM products, unnest(tags) AS tag` gives one row per product and tag.
+--- cards
+Arrays :: text[], '{a,b}' or ARRAY['a','b']; 1-based; = ANY(arr), @>, unnest(arr) to rows.
+ENUM :: CREATE TYPE s AS ENUM (...): fixed ordered values; adding is easy, removing isn't.
+Domain :: CREATE DOMAIN email AS text CHECK (...) — a reusable type with rules.
+Composite type :: CREATE TYPE address AS (street text, city text) — a struct-like value; read with (col).field.
+Range types :: daterange, tstzrange...; && overlaps, @> contains; half-open [start, end) by default.
+
+=== lesson sql-m6-test | Module 6 test | 150 | exam
+This test covers Module 6: CTEs and recursive queries, window functions, views and materialized views, JSON, and PostgreSQL's arrays, enums, domains, composite and range types.
+
+Before you start, check that you can:
+
+- structure a complex query with CTEs, and walk a hierarchy recursively;
+- rank, number and accumulate with window functions, and pick the top N per group;
+- package queries as views, and snapshots as materialized views;
+- store, query and produce JSON.
+--- goals
+- write analytical queries professionals use every day
+- choose between plain columns, JSON and special types
+--- quiz
+? Which function numbers rows 1, 2, 3... with no ties?
++ row_number()
+- rank()
+- dense_rank()
+- count()
+> rank and dense_rank give ties the same number.
+? What does a materialized view need to show new data?
++ REFRESH MATERIALIZED VIEW
+- Nothing
+- DROP and CREATE every time
+- A trigger always
+> It's a stored snapshot.
+? `sum(x) OVER (ORDER BY day)` computes...
++ a running total up to each day
+- the grand total on every row
+- one row per day
+- the sum of the previous row only
+> An ordered window accumulates.
+? Which query walks a tree of unknown depth?
++ WITH RECURSIVE
+- A self join
+- GROUP BY ROLLUP
+- A window function
+> A self join only goes one level per join.
+--- exercise code postgres
+::prompt
+**Customer value report.** Using CTEs and window functions, return one row per customer who has non-cancelled orders: `name`, `spent` (total goods value of their non-cancelled orders), `rank` (rank by `spent`, highest first, ties sharing a rank), `share_percent` (their share of all such spending, rounded to 1 decimal) and `cumulative_percent` (the running total of `share_percent` in rank order, computed from the unrounded shares and then rounded to 1 decimal; ties broken by name). Order by `rank`, then `name`.
+::dataset shop
+::starter
+SELECT c.name
+FROM customers c;
+::solution
+WITH spending AS (
+  SELECT c.name, sum(oi.quantity * oi.unit_price) AS spent
+  FROM customers c
+  JOIN orders o ON o.customer_id = c.id
+  JOIN order_items oi ON oi.order_id = o.id
+  WHERE o.status <> 'cancelled'
+  GROUP BY c.id, c.name
+)
+SELECT name,
+       spent,
+       rank() OVER (ORDER BY spent DESC) AS rank,
+       round(100 * spent / sum(spent) OVER (), 1) AS share_percent,
+       round(100 * sum(spent) OVER (ORDER BY spent DESC, name) / sum(spent) OVER (), 1) AS cumulative_percent
+FROM spending
+ORDER BY rank, name;
+::reference
+WITH s AS (SELECT o.customer_id, sum(oi.quantity * oi.unit_price) AS spent FROM orders o JOIN order_items oi ON oi.order_id = o.id WHERE o.status <> 'cancelled' GROUP BY o.customer_id), t AS (SELECT sum(spent) AS total FROM s) SELECT c.name, s.spent, rank() OVER (ORDER BY s.spent DESC) AS rank, round(100 * s.spent / t.total, 1) AS share_percent, round(100 * sum(s.spent) OVER (ORDER BY s.spent DESC, c.name ROWS UNBOUNDED PRECEDING) / t.total, 1) AS cumulative_percent FROM s JOIN customers c ON c.id = s.customer_id CROSS JOIN t ORDER BY 3, 1;
+::ordered true
+::hints
+- Compute spending per customer in a CTE first.
+- `sum(spent) OVER ()` is the grand total; `sum(spent) OVER (ORDER BY spent DESC, name)` the running total.
+--- exercise code company
+::prompt
+For each **project**, return `project` (its name), `team` (a JSON array of the names of the people assigned, most hours first) and `top_contributor` (the name of the person with the most hours on it). Include projects with nobody assigned (with `team` as an empty JSON array `[]` and `top_contributor` NULL). Order by project name.
+::dataset company
+::starter
+SELECT p.name AS project
+FROM projects p;
+::solution
+WITH ranked AS (
+  SELECT a.project_id, e.name, a.hours,
+         row_number() OVER (PARTITION BY a.project_id ORDER BY a.hours DESC, e.name) AS rn
+  FROM assignments a
+  JOIN employees e ON e.id = a.employee_id
+)
+SELECT p.name AS project,
+       COALESCE(jsonb_agg(r.name ORDER BY r.hours DESC, r.name) FILTER (WHERE r.name IS NOT NULL), '[]'::jsonb) AS team,
+       max(r.name) FILTER (WHERE r.rn = 1) AS top_contributor
+FROM projects p
+LEFT JOIN ranked r ON r.project_id = p.id
+GROUP BY p.id, p.name
+ORDER BY project;
+::reference
+SELECT p.name AS project, COALESCE((SELECT jsonb_agg(e.name ORDER BY a.hours DESC, e.name) FROM assignments a JOIN employees e ON e.id = a.employee_id WHERE a.project_id = p.id), '[]') AS team, (SELECT e.name FROM assignments a JOIN employees e ON e.id = a.employee_id WHERE a.project_id = p.id ORDER BY a.hours DESC, e.name LIMIT 1) AS top_contributor FROM projects p ORDER BY 1;
+::ordered true
+::hints
+- Correlated subqueries per project are the simplest route: one `jsonb_agg(... ORDER BY a.hours DESC)`, one `ORDER BY hours DESC LIMIT 1`.
+- `COALESCE(..., '[]')` turns "nobody" into an empty array.
