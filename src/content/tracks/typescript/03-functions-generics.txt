@@ -1,0 +1,878 @@
+=== module Module 3 · Functions and generics
+
+=== lesson ts-functions | Typing functions | 80
+## Parameters and return types
+
+You've annotated parameters and return values since Module 1. The rest of a function's signature follows the same JavaScript features you already know:
+
+```ts
+function greet(name: string, greeting = "Hello", punctuation?: string): string {
+  return `${greeting}, ${name}${punctuation ?? "!"}`;
+}
+
+function sum(...numbers: number[]): number {
+  return numbers.reduce((a, b) => a + b, 0);
+}
+
+console.log(greet("Ada"), greet("Grace", "Hi", "."), sum(1, 2, 3));
+```
+
+- A **default value** (`greeting = "Hello"`) makes a parameter optional and gives it a type by inference.
+- `punctuation?: string` is an **optional parameter**: inside the function, it's `string | undefined`. Optional parameters must come after required ones.
+- A **rest parameter** (`...numbers: number[]`) collects the remaining arguments into an array.
+
+Destructured parameters are annotated as a whole object, after the pattern:
+
+```ts
+function createUser({ name, admin = false }: { name: string; admin?: boolean }): string {
+  return `${name}${admin ? " (admin)" : ""}`;
+}
+console.log(createUser({ name: "Ada", admin: true }), createUser({ name: "Bob" }));
+```
+
+(Writing `{ name: string }` inside the pattern doesn't work: in a destructuring pattern, `name: string` means "rename `name` to a variable called `string`".)
+
+## Function types
+
+Functions are values, so they have types too. A **function type** looks like an arrow function with types instead of a body:
+
+```ts
+type BinaryOp = (a: number, b: number) => number;
+
+const add: BinaryOp = (a, b) => a + b;
+const multiply: BinaryOp = (a, b) => a * b;
+
+function applyAll(ops: BinaryOp[], x: number, y: number): number[] {
+  return ops.map((op) => op(x, y));
+}
+
+console.log(applyAll([add, multiply, Math.pow], 2, 5));
+```
+
+Notice that `(a, b) => a + b` needs no annotations: TypeScript knows from `BinaryOp` what `a` and `b` are. This is **contextual typing**: a function written where a function type is expected gets its parameter types from that context. It's why `[1, 2].map((n) => n * 2)` knows `n` is a number.
+
+Callbacks follow the same rule: a parameter's type describes the function it accepts.
+
+```ts
+function retry(times: number, task: (attempt: number) => boolean): boolean {
+  for (let attempt = 1; attempt <= times; attempt++) {
+    if (task(attempt)) return true;
+  }
+  return false;
+}
+
+console.log(retry(3, (attempt) => attempt === 2));
+```
+
+A function that takes **fewer** parameters is accepted where more are offered (that's why you can pass `(item) => ...` to `map`, which offers three arguments). JavaScript ignores extra arguments, and TypeScript follows JavaScript.
+
+## void callbacks
+
+A callback type returning `void` means "I'll ignore what you return", not "you must return nothing". So `numbers.forEach((n) => list.push(n))` is fine, even though `push` returns a number:
+
+```ts
+const seen: string[] = [];
+["a", "b"].forEach((letter) => seen.push(letter));
+console.log(seen);
+```
+
+## this in functions
+
+In the rare cases where a plain function uses `this` (DOM event handlers written with `function`, some library APIs), you can declare its type with a fake first parameter called `this`. It's erased from the output:
+
+```ts
+function describeButton(this: { label: string }, suffix: string): string {
+  return `${this.label}${suffix}`;
+}
+console.log(describeButton.call({ label: "Save" }, "!"));
+```
+
+Calling `describeButton("!")` directly is then a compile error, because `this` wouldn't be set. In class-based code and arrow functions you won't need this.
+
+~~~check
+? `type Handler = (event: string) => void;` Which of these is NOT assignable to Handler?
+- `(e) => console.log(e)`
+- `() => 42`
++ `(event: number) => {}`
+- `(e: string) => e.length`
+> Fewer parameters is fine, and a void return accepts any return value; a parameter of the wrong type isn't.
+~~~
+
+## Return type annotations: when they help
+
+TypeScript infers return types, so annotations are optional. Write them anyway when:
+
+- the function is **exported** or part of an API: the type is documentation, and a change in the body can't silently change it;
+- the function has **several return paths**: the annotation makes each one check against your intent, and errors appear in the function rather than at distant callers;
+- the function is **recursive**: TypeScript sometimes can't infer it.
+
+```ts
+function factorial(n: number): number {
+  return n <= 1 ? 1 : n * factorial(n - 1);
+}
+console.log(factorial(10));
+```
+
+📚 **Go deeper:** TypeScript Handbook, "More on Functions"; *Programming TypeScript*, chapter 4 "Functions" (declaring and invoking, contextual typing, function types); *Effective TypeScript*, item 12 (apply types to entire function expressions).
+--- goals
+- type optional, default and rest parameters, and destructured parameters
+- write function types and use them for callbacks
+- explain contextual typing, and why fewer parameters are accepted
+- understand `void` callbacks and `this` parameters
+- decide when to annotate return types
+--- quiz
+? How do you annotate a destructured parameter?
+- `function f({ name: string })`
++ `function f({ name }: { name: string })`
+- `function f(name: { string })`
+- You can't
+> Inside the pattern, a colon renames; the type goes after the whole pattern.
+? Why does `[1, 2, 3].map((n) => n * 2)` need no annotation on `n`?
+- n is any
++ Contextual typing: map's signature tells TypeScript that n is a number
+- Arrow functions don't need types
+- strict mode is off for callbacks
+> The expected function type supplies the parameter types.
+? What's the type of `p` inside `function f(p?: string)`?
+- string
++ string | undefined
+- string | null
+- any
+> Optional parameters may be omitted, so undefined is included.
+? A parameter type `() => void` receives `() => 42`. What happens?
++ It's accepted; the return value is ignored
+- Compile error: 42 isn't void
+- 42 is converted to undefined at run time
+- Run-time error
+> A void callback means "return value ignored".
+--- exercise code typescript
+::prompt
+Write a small validation library using function types:
+
+- `type Validator = (value: string) => string | null` (an error message, or `null` if valid);
+- `required(message?: string): Validator` (default message `"is required"`; empty or whitespace-only values fail);
+- `minLength(n: number): Validator` (message `must be at least <n> characters`);
+- `matches(pattern: RegExp, message: string): Validator`;
+- `validate(value: string, ...validators: Validator[]): string[]` returns all the messages, in order.
+::starter
+type Validator = unknown;
+::solution
+type Validator = (value: string) => string | null;
+
+function required(message = "is required"): Validator {
+  return (value) => (value.trim() === "" ? message : null);
+}
+
+function minLength(n: number): Validator {
+  return (value) => (value.length < n ? `must be at least ${n} characters` : null);
+}
+
+function matches(pattern: RegExp, message: string): Validator {
+  return (value) => (pattern.test(value) ? null : message);
+}
+
+function validate(value: string, ...validators: Validator[]): string[] {
+  return validators.map((check) => check(value)).filter((m) => m !== null);
+}
+::tests
+const __pw = [required(), minLength(8), matches(/\d/, "needs a digit")];
+assert.deepStrictEqual(validate("", ...__pw), ["is required", "must be at least 8 characters", "needs a digit"]);
+assert.deepStrictEqual(validate("hunter22", ...__pw), []);
+assert.deepStrictEqual(validate("abc", required("please fill in"), minLength(2)), []);
+assert.deepStrictEqual(validate("   ", required("please fill in")), ["please fill in"]);
+assert.deepStrictEqual(validate("x"), []);
+const __v: string[] = validate("a", minLength(3));
+type _t1 = Expect<Equal<Validator, (value: string) => string | null>>;
+function __typeChecks() {
+  // @ts-expect-error
+  validate("a", (value: number) => null);
+  // @ts-expect-error
+  minLength("3");
+}
+::hints
+- Each factory returns an arrow function; thanks to the `Validator` return type, its `value` parameter needs no annotation.
+- `required(message = "is required")` gives a default.
+- Since TypeScript 5.5, `.filter((m) => m !== null)` produces a `string[]` automatically.
+--- cards
+Optional parameter :: function f(x?: string) — x is string | undefined; must come after required parameters.
+Default parameter :: function f(x = 10) — optional, with the type inferred from the default.
+Rest parameter :: function f(...xs: number[]) — remaining arguments as an array.
+Function type :: type Op = (a: number, b: number) => number;
+Contextual typing :: A function written where a function type is expected gets its parameter types from it.
+void callback :: () => void means the return value is ignored, not that returning is forbidden.
+
+=== lesson ts-overloads | Overloads and call signatures | 70
+## One function, several shapes
+
+Some JavaScript functions behave differently depending on their arguments. `document.createElement("canvas")` returns an `HTMLCanvasElement`, while `createElement("img")` returns an `HTMLImageElement`. A single signature can't say "the return type depends on the argument" precisely, so TypeScript has **overloads**: several signatures for one implementation.
+
+```ts
+function parseDate(timestamp: number): Date;
+function parseDate(year: number, month: number, day: number): Date;
+function parseDate(a: number, month?: number, day?: number): Date {
+  return month === undefined ? new Date(a) : new Date(Date.UTC(a, month - 1, day ?? 1));
+}
+
+console.log(parseDate(0).toISOString(), parseDate(2026, 3, 14).toISOString());
+```
+
+- The first two lines are the **overload signatures**: the only ways callers may call the function.
+- The last one is the **implementation signature**, which must be compatible with all overloads, and **isn't visible to callers**: `parseDate(2026, 3)` is an error, because no overload takes two arguments, even though the implementation could.
+
+TypeScript picks the first overload that matches a call, so list the most specific ones first.
+
+## Return types that depend on arguments
+
+Overloads let the return type follow the input:
+
+```ts
+function toArray(value: string): string[];
+function toArray(value: number): number[];
+function toArray(value: string | number): (string | number)[] {
+  return [value];
+}
+
+const words = toArray("hi");
+const digits = toArray(7);
+console.log(words[0].toUpperCase(), digits[0].toFixed(1));
+```
+
+`words` is a `string[]` and `digits` a `number[]`. A single signature taking `string | number` and returning `(string | number)[]` would lose that information.
+
+## Prefer unions (or generics) when they suffice
+
+Overloads are verbose, and the implementation isn't checked against each overload very closely. Use them only when the return type really depends on which call shape is used. If one signature with a union parameter describes the function precisely, prefer that:
+
+```ts
+function lengthOf(value: string | unknown[]): number {
+  return value.length;
+}
+console.log(lengthOf("abc"), lengthOf([1, 2]));
+```
+
+The next lesson, generics, replaces many overloads with a single signature (`toArray<T>(value: T): T[]` would cover both cases above, and every other type too).
+
+~~~check
+? Why is `parseDate(2026, 3)` an error above, though the implementation accepts two numbers?
+- Two arguments are never allowed
++ Callers only see the overload signatures, and none takes two arguments
+- The implementation signature is wrong
+- month must be a string
+> The implementation signature is hidden from callers.
+~~~
+
+## Call signatures and function objects
+
+JavaScript functions can have properties (think of `jQuery.ajax`, or a function with a `.displayName`). An object type with a **call signature** describes them:
+
+```ts
+type Counter = {
+  (): number;
+  count: number;
+  reset(): void;
+};
+
+function makeCounter(): Counter {
+  const counter = () => ++counter.count;
+  counter.count = 0;
+  counter.reset = () => {
+    counter.count = 0;
+  };
+  return counter;
+}
+
+const next = makeCounter();
+next();
+next();
+console.log(next.count, next());
+```
+
+`(): number` is the call signature ("can be called with no arguments, returns a number"). TypeScript understands properties assigned to a function declared with `const` right after it, so this pattern type-checks without any casts. Overloads can be written as several call signatures in such a type, too.
+
+There's also the **construct signature**, `new (...args) => T`, for values that can be called with `new` (that is, classes). You'll meet it in Module 4.
+
+## Overloads in the standard library
+
+You'll see overloads constantly when hovering over built-in functions. `addEventListener` has one per event name (so `"click"` gives a `MouseEvent` and `"keydown"` a `KeyboardEvent`), and `Array.prototype.reduce` has several (with and without an initial value). The editor shows them as "+2 overloads"; press the arrows in the hover to read each one.
+
+📚 **Go deeper:** TypeScript Handbook, "More on Functions: Function Overloads" and "Call Signatures"; *Programming TypeScript*, chapter 4 (overloaded function types).
+--- goals
+- write overload signatures and a compatible implementation signature
+- explain why the implementation signature is hidden from callers
+- choose unions or generics over overloads when they're precise enough
+- type functions with properties using call signatures
+--- quiz
+? Which signature can callers use?
++ Only the overload signatures
+- Only the implementation signature
+- Both
+- Whichever matches first, including the implementation
+> The implementation signature is internal.
+? When are overloads worth it?
+- Always, for clarity
++ When the return type depends on how the function is called and a union can't express it
+- When a function has optional parameters
+- Never, they're deprecated
+> Otherwise one signature with a union (or a generic) is simpler.
+? What does `{ (x: number): string; label: string }` describe?
+- An object with a method called x
++ A function from number to string that also has a label property
+- A class
+- A tuple
+> A call signature inside an object type.
+? In what order should overloads be listed?
++ Most specific first: TypeScript uses the first overload that matches
+- Most general first
+- Alphabetically
+- Order doesn't matter
+> A general overload first would swallow the specific calls.
+--- exercise code typescript
+::prompt
+Write `pick` with **two overloads** so the return type follows the arguments:
+
+- `pick(list: readonly string[], index: number): string | undefined`: one element;
+- `pick(list: readonly string[], indexes: readonly number[]): string[]`: several elements (indexes out of range are skipped).
+
+Then write a `Formatter` type with a call signature `(value: number): string` and a `currency: string` property, and `makeFormatter(currency: string): Formatter` returning a function that formats a number with two decimals and the currency (`12.50 EUR`).
+::starter
+function pick(list: readonly string[], which: number | readonly number[]): string | undefined | string[] {
+  return undefined;
+}
+
+type Formatter = unknown;
+
+function makeFormatter(currency: string): Formatter {
+  return undefined;
+}
+::solution
+function pick(list: readonly string[], index: number): string | undefined;
+function pick(list: readonly string[], indexes: readonly number[]): string[];
+function pick(list: readonly string[], which: number | readonly number[]): string | undefined | string[] {
+  if (typeof which === "number") return list[which];
+  return which.filter((i) => i >= 0 && i < list.length).map((i) => list[i]);
+}
+
+type Formatter = {
+  (value: number): string;
+  currency: string;
+};
+
+function makeFormatter(currency: string): Formatter {
+  const format = (value: number) => `${value.toFixed(2)} ${format.currency}`;
+  format.currency = currency;
+  return format;
+}
+::tests
+const __letters = ["a", "b", "c"];
+const __one = pick(__letters, 1);
+const __many = pick(__letters, [2, 0, 9]);
+type _t1 = Expect<Equal<typeof __one, string | undefined>>;
+type _t2 = Expect<Equal<typeof __many, string[]>>;
+assert.strictEqual(__one, "b");
+assert.strictEqual(pick(__letters, 5), undefined);
+assert.deepStrictEqual(__many, ["c", "a"]);
+const __eur = makeFormatter("EUR");
+assert.strictEqual(__eur(12.5), "12.50 EUR");
+__eur.currency = "USD";
+assert.strictEqual(__eur(3), "3.00 USD");
+type _t3 = Expect<Equal<ReturnType<Formatter>, string>>;
+type _t4 = Expect<Equal<Formatter["currency"], string>>;
+::hints
+- Write the two overload lines (ending in `;`) directly above the implementation.
+- In the implementation, `typeof which === "number"` separates the two cases.
+- `const format = (value: number) => ...; format.currency = currency;` builds a function with a property.
+--- cards
+Overloads :: Several signatures (ending in ;) above one implementation; callers see only the overloads.
+Implementation signature :: Must be compatible with every overload; hidden from callers.
+Overload order :: Most specific first: the first matching overload wins.
+Call signature :: type F = { (x: number): string; label: string } — a callable value with properties.
+Construct signature :: new (...args: A) => T — a type for classes / constructors.
+
+=== lesson ts-generics | Generics | 100
+## The problem: functions that work for any type
+
+Write a function that returns the first element of an array. With what you know so far, you have two poor options:
+
+- `first(list: number[]): number` works only for numbers;
+- `first(list: unknown[]): unknown` works for everything, but loses the type: `first(["a"])` gives `unknown`, so `.toUpperCase()` is an error.
+
+**Generics** solve this with a **type parameter**: a placeholder for a type, chosen at each call.
+
+```ts
+function first<T>(list: readonly T[]): T | undefined {
+  return list[0];
+}
+
+const word = first(["apple", "banana"]);
+const num = first([3, 1, 2]);
+console.log(word?.toUpperCase(), num?.toFixed(1));
+```
+
+`<T>` declares the type parameter. At each call, TypeScript **infers** `T` from the arguments: `string` for the first call, `number` for the second, so `word` is `string | undefined`. You can also pass it explicitly, `first<string>([])`, which is useful when there's nothing to infer from.
+
+Think of a type parameter as a function parameter at the type level: `first` is one function for every `T`. You've been using generic types all along: `Array<T>`, `Map<K, V>`, `Promise<T>`, `Record<K, V>`, `ReadonlyArray<T>`.
+
+## Several type parameters
+
+```ts
+function mapValues<K extends string, A, B>(obj: Record<K, A>, fn: (value: A) => B): Record<K, B> {
+  const out = {} as Record<K, B>;
+  for (const key of Object.keys(obj) as K[]) out[key] = fn(obj[key]);
+  return out;
+}
+
+const lengths = mapValues({ ada: "Lovelace", alan: "Turing" }, (name) => name.length);
+console.log(lengths);
+```
+
+`K`, `A` and `B` are inferred from the object and the callback. (The two `as` casts are a well-known limitation: `{}` doesn't yet have the keys, and `Object.keys` always returns `string[]` because objects may have extra keys at run time. Containing such casts inside small, well-tested helpers is reasonable.)
+
+Naming: single capitals (`T`, `U`, `K` for keys, `V` for values, `E` for elements or errors) are conventional for short functions; descriptive names (`TItem`, `TResponse`) help in longer ones.
+
+## Constraints: `extends`
+
+Sometimes the type parameter must have certain features. A **constraint** says so:
+
+```ts
+function longest<T extends { length: number }>(a: T, b: T): T {
+  return b.length > a.length ? b : a;
+}
+
+console.log(longest("cat", "horse"), longest([1, 2], [1, 2, 3]));
+```
+
+`T extends { length: number }` means "any type, as long as it has a numeric `length`". Inside, `a.length` is allowed; `longest(10, 20)` is a compile error. Note that the function returns `T`, not `{ length: number }`: callers get back exactly the type they passed in (`string`, `number[]`). That's the difference between a generic with a constraint and a plain parameter of the constraint type.
+
+## keyof and indexed access with generics
+
+A classic generic: get a property of an object by name, with full type safety:
+
+```ts
+function getProperty<T, K extends keyof T>(obj: T, key: K): T[K] {
+  return obj[key];
+}
+
+const book = { title: "Dune", year: 1965, inStock: true };
+const year = getProperty(book, "year");
+console.log(year + 1, getProperty(book, "title"));
+```
+
+`keyof T` is the union of `T`'s property names (`"title" | "year" | "inStock"`), and `T[K]` is the type of property `K` (an **indexed access type**). So `year` is a `number`, and `getProperty(book, "author")` is a compile error. Module 5 explores `keyof` and indexed access types further.
+
+~~~check
+? Why is `function longest<T extends { length: number }>(a: T, b: T): T` better than `function longest(a: { length: number }, b: { length: number }): { length: number }`?
+- It runs faster
++ Callers get back their own type (e.g. string), not just "something with a length"
+- It accepts more types
+- It doesn't need a constraint
+> Generics preserve the caller's type.
+~~~
+
+## Generic types and interfaces
+
+Types can have type parameters too:
+
+```ts
+interface ApiResponse<T> {
+  status: number;
+  data: T;
+  receivedAt: string;
+}
+
+type Pair<A, B = A> = [A, B];
+
+const reply: ApiResponse<string[]> = { status: 200, data: ["a", "b"], receivedAt: "2026-01-01" };
+const point: Pair<number> = [1, 2];
+const labelled: Pair<string, number> = ["x", 10];
+console.log(reply.data.length, point, labelled);
+```
+
+`B = A` gives a **default** for a type parameter.
+
+## Generic classes
+
+```ts
+class Stack<T> {
+  private items: T[] = [];
+
+  push(item: T): void {
+    this.items.push(item);
+  }
+
+  pop(): T | undefined {
+    return this.items.pop();
+  }
+
+  get size(): number {
+    return this.items.length;
+  }
+}
+
+const history = new Stack<string>();
+history.push("home");
+history.push("settings");
+console.log(history.pop(), history.size);
+```
+
+`history.push(42)` is a compile error. (Class syntax and `private` are Module 4's topic.)
+
+## When not to use generics
+
+A type parameter used only once is pointless: `function log<T>(value: T): void` is just `function log(value: unknown): void`. A generic should **connect** things: an input to an output, or one parameter to another. A good test: if you can't say what relationship the type parameter expresses, you don't need it. And don't use a generic return type to "cast" values that aren't checked: `function parse<T>(json: string): T` is a lie dressed up as a generic (it's `as T` hidden in a signature). Module 6 shows how to validate instead.
+
+📚 **Go deeper:** TypeScript Handbook, "Generics"; *Programming TypeScript*, chapter 4 (polymorphism, generic type inference, bounded polymorphism); *Effective TypeScript*, items 50 and 51 ("think of generics as functions between types", "avoid unnecessary type parameters").
+--- goals
+- write generic functions, and let TypeScript infer the type arguments
+- constrain type parameters with `extends`
+- combine generics with `keyof` and indexed access types
+- write generic interfaces, type aliases (with defaults) and classes
+- recognise unnecessary and dishonest generics
+--- quiz
+? `function wrap<T>(value: T): { value: T }`. What's the type of `wrap(3)`?
++ `{ value: number }`
+- `{ value: T }`
+- `{ value: unknown }`
+- `{ value: 3 }`
+> T is inferred as number from the argument.
+? What does `T extends { id: string }` mean in `function f<T extends { id: string }>(x: T)`?
+- T is a class that inherits from another
++ T can be any type that has a string id
+- T must be exactly { id: string }
+- x is converted to { id: string }
+> A constraint is a minimum requirement.
+? `getProperty(book, "author")` where book has no author. What happens?
+- Returns undefined
++ Compile error: "author" isn't assignable to keyof typeof book
+- Run-time error
+- Returns any
+> K extends keyof T restricts the key to real property names.
+? Which generic is unnecessary?
++ `function log<T>(x: T): void`
+- `function first<T>(xs: T[]): T | undefined`
+- `function pair<A, B>(a: A, b: B): [A, B]`
+- `function identity<T>(x: T): T`
+> T appears only once, connecting nothing: use unknown.
+? Why is `function parse<T>(json: string): T` considered dishonest?
+- JSON can't be parsed in TypeScript
++ It claims to return any T the caller wants, without checking: an unchecked cast in disguise
+- Generics can't return values
+- T must have a constraint
+> Nothing verifies that the JSON matches T.
+--- exercise code typescript
+::prompt
+Write these generic helpers. Each must keep precise types (the hidden checks verify the inferred types, not just the values):
+
+- `groupBy<T, K extends string>(items: readonly T[], keyOf: (item: T) => K): Partial<Record<K, T[]>>` groups items by key;
+- `chunk<T>(items: readonly T[], size: number): T[][]` splits into chunks (throw `RangeError("size must be at least 1")` for a size below 1);
+- `zip<A, B>(as: readonly A[], bs: readonly B[]): [A, B][]` pairs elements up to the shorter length;
+- `pluck<T, K extends keyof T>(items: readonly T[], key: K): T[K][]`.
+
+(`Partial<X>` makes every property optional: a group exists only if some item has that key.)
+::starter
+function groupBy<T, K extends string>(items: readonly T[], keyOf: (item: T) => K): Partial<Record<K, T[]>> {
+  return {};
+}
+::solution
+function groupBy<T, K extends string>(items: readonly T[], keyOf: (item: T) => K): Partial<Record<K, T[]>> {
+  const groups: Partial<Record<K, T[]>> = {};
+  for (const item of items) {
+    const key = keyOf(item);
+    (groups[key] ??= []).push(item);
+  }
+  return groups;
+}
+
+function chunk<T>(items: readonly T[], size: number): T[][] {
+  if (size < 1) throw new RangeError("size must be at least 1");
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  return out;
+}
+
+function zip<A, B>(as: readonly A[], bs: readonly B[]): [A, B][] {
+  const length = Math.min(as.length, bs.length);
+  return Array.from({ length }, (_, i): [A, B] => [as[i], bs[i]]);
+}
+
+function pluck<T, K extends keyof T>(items: readonly T[], key: K): T[K][] {
+  return items.map((item) => item[key]);
+}
+::tests
+const __people = [
+  { name: "Ada", team: "red", age: 36 },
+  { name: "Bob", team: "blue", age: 25 },
+  { name: "Cy", team: "red", age: 41 },
+] as const;
+const __byTeam = groupBy(__people, (p) => p.team);
+assert.deepStrictEqual(__byTeam.red?.map((p) => p.name), ["Ada", "Cy"]);
+assert.strictEqual(__byTeam.blue?.length, 1);
+type _t1 = Expect<Equal<keyof typeof __byTeam, "red" | "blue">>;
+assert.deepStrictEqual(chunk([1, 2, 3, 4, 5], 2), [[1, 2], [3, 4], [5]]);
+assert.deepStrictEqual(chunk([], 3), []);
+assert.throws(() => chunk([1], 0), RangeError);
+const __z = zip(["a", "b", "c"], [1, 2]);
+type _t2 = Expect<Equal<typeof __z, [string, number][]>>;
+assert.deepStrictEqual(__z, [["a", 1], ["b", 2]]);
+const __ages = pluck([{ name: "Ada", age: 36 }, { name: "Bob", age: 25 }], "age");
+type _t3 = Expect<Equal<typeof __ages, number[]>>;
+assert.deepStrictEqual(__ages, [36, 25]);
+type _t4 = Expect<Equal<ReturnType<typeof chunk<string>>, string[][]>>;
+function __typeChecks() {
+  // @ts-expect-error
+  pluck([{ name: "Ada" }], "age");
+  // @ts-expect-error
+  groupBy([1, 2], (n) => n);
+}
+::hints
+- `(groups[key] ??= []).push(item)` creates a group the first time a key appears.
+- `items.slice(i, i + size)` returns `T[]`.
+- For `zip`, annotate the callback's return type as the tuple `[A, B]` so it isn't inferred as an array: `(_, i): [A, B] => [as[i], bs[i]]`.
+--- exercise code typescript
+::prompt
+Write a generic `class TypedCache<K, V>` with a time-to-live, built on a `Map`:
+
+- `constructor(ttlMs: number, now: () => number = Date.now)` (the clock is injectable so it can be tested);
+- `set(key: K, value: V): this` (returns the cache, for chaining);
+- `get(key: K): V | undefined` (expired entries are deleted and give `undefined`);
+- `getOrCreate(key: K, create: (key: K) => V): V` (returns the cached value or creates, stores and returns a new one);
+- a `size` getter counting only entries that haven't expired.
+::starter
+class TypedCache<K, V> {
+}
+::solution
+class TypedCache<K, V> {
+  private entries = new Map<K, { value: V; expires: number }>();
+
+  constructor(
+    private readonly ttlMs: number,
+    private readonly now: () => number = Date.now,
+  ) {}
+
+  set(key: K, value: V): this {
+    this.entries.set(key, { value, expires: this.now() + this.ttlMs });
+    return this;
+  }
+
+  get(key: K): V | undefined {
+    const entry = this.entries.get(key);
+    if (entry === undefined) return undefined;
+    if (entry.expires <= this.now()) {
+      this.entries.delete(key);
+      return undefined;
+    }
+    return entry.value;
+  }
+
+  getOrCreate(key: K, create: (key: K) => V): V {
+    const cached = this.get(key);
+    if (cached !== undefined) return cached;
+    const value = create(key);
+    this.set(key, value);
+    return value;
+  }
+
+  get size(): number {
+    const time = this.now();
+    let count = 0;
+    for (const entry of this.entries.values()) if (entry.expires > time) count++;
+    return count;
+  }
+}
+::tests
+let __time = 1000;
+const __cache = new TypedCache<string, number>(500, () => __time);
+__cache.set("a", 1).set("b", 2);
+assert.strictEqual(__cache.get("a"), 1);
+assert.strictEqual(__cache.size, 2);
+__time = 1400;
+__cache.set("c", 3);
+__time = 1500;
+assert.strictEqual(__cache.get("a"), undefined);
+assert.strictEqual(__cache.size, 1);
+let __calls = 0;
+const __make = (k: string) => (++__calls, k.length * 10);
+assert.strictEqual(__cache.getOrCreate("hello", __make), 50);
+assert.strictEqual(__cache.getOrCreate("hello", __make), 50);
+assert.strictEqual(__calls, 1);
+assert.strictEqual(__cache.getOrCreate("c", __make), 3);
+const __v: number | undefined = __cache.get("x");
+function __typeChecks() {
+  // @ts-expect-error
+  __cache.set("k", "not a number");
+  // @ts-expect-error
+  __cache.get(42);
+  // @ts-expect-error
+  new TypedCache<string, number>("500");
+}
+::hints
+- Store `{ value, expires }` objects in a `private entries = new Map<K, { value: V; expires: number }>()`.
+- Parameter properties (`constructor(private readonly ttlMs: number, ...)`) declare and assign fields in one go; you can also write the fields out.
+- `getOrCreate` can reuse `get` and `set`.
+--- cards
+Generic function :: function first<T>(xs: T[]): T | undefined — T is chosen (usually inferred) at each call.
+Type argument inference :: TypeScript infers T from the arguments; pass it explicitly (f<string>(...)) when there's nothing to infer from.
+Constraint :: <T extends { length: number }> — T must have at least those features; callers keep their exact type.
+keyof / T[K] :: keyof T: union of property names. T[K]: the type of property K. Typical: <T, K extends keyof T>(o: T, k: K): T[K].
+Generic types :: interface Box<T> { value: T }, type Pair<A, B = A> = [A, B], class Stack<T> {...}.
+Unnecessary generic :: A type parameter used once connects nothing: use unknown or the concrete type instead.
+
+=== lesson ts-m3-test | Module 3 test | 150 | exam
+This test covers Module 3: function signatures (optional, default and rest parameters), function types and contextual typing, overloads and call signatures, and generics with constraints, `keyof` and generic classes.
+
+Before you start, check that you can:
+
+- type callbacks with function types, and explain why fewer parameters are accepted;
+- write overloads when the return type depends on the call;
+- write generic functions and classes that keep the caller's types;
+- constrain type parameters, and recognise unnecessary ones.
+--- goals
+- type functions and callbacks precisely
+- design generic helpers that preserve types
+- choose between overloads, unions and generics
+--- quiz
+? What's the type of `x` in `const x = [1, 2].map((n) => String(n));`?
++ `string[]`
+- `number[]`
+- `unknown[]`
+- `(string | number)[]`
+> map is generic: map<U>(fn: (value: T) => U): U[], and U is inferred as string.
+? `function f<T extends string | number>(x: T): T`. What does `f("a")` return as a type?
+- `string | number`
+- `string`
++ `"a"`
+- `T`
+> With a primitive constraint, TypeScript infers the literal type.
+? Which is a valid function type?
+- `function(a: number): string`
++ `(a: number) => string`
+- `number => string`
+- `Function<number, string>`
+> Function types use arrow syntax with parameter names.
+? An overloaded function has signatures `(x: string): string` and `(x: number): number`. Can you call it with a `string | number` variable?
+- Yes, it returns string | number
++ No: no single overload accepts string | number
+- Yes, it picks the first
+- Only in strict mode
+> Overloads are matched one at a time; add a third overload or use a generic.
+? What does `Partial<Record<"a" | "b", number>>` describe?
++ An object where a and b are optional numbers
+- An array of numbers
+- An object with any keys
+- `{ a: number; b: number }`
+> Partial makes every property optional.
+--- exercise code typescript
+::prompt
+**Typed event emitter.** Write a generic `class Emitter<Events extends Record<string, unknown>>` where each key of `Events` is an event name and its value the type of the payload:
+
+- `on<E extends keyof Events>(event: E, listener: (payload: Events[E]) => void): () => void` registers a listener and returns an "unsubscribe" function;
+- `once<E extends keyof Events>(event: E, listener: (payload: Events[E]) => void): void` listens to one event only;
+- `emit<E extends keyof Events>(event: E, payload: Events[E]): number` calls the listeners in order and returns how many were called;
+- `listenerCount(event: keyof Events): number`.
+
+The hidden checks make sure a wrong payload type or an unknown event name is a compile error.
+::starter
+class Emitter<Events extends Record<string, unknown>> {
+}
+::solution
+class Emitter<Events extends Record<string, unknown>> {
+  private listeners = new Map<keyof Events, ((payload: never) => void)[]>();
+
+  on<E extends keyof Events>(event: E, listener: (payload: Events[E]) => void): () => void {
+    const list = this.listeners.get(event) ?? [];
+    list.push(listener);
+    this.listeners.set(event, list);
+    return () => {
+      const current = this.listeners.get(event) ?? [];
+      this.listeners.set(event, current.filter((l) => l !== listener));
+    };
+  }
+
+  once<E extends keyof Events>(event: E, listener: (payload: Events[E]) => void): void {
+    const off = this.on(event, (payload) => {
+      off();
+      listener(payload);
+    });
+  }
+
+  emit<E extends keyof Events>(event: E, payload: Events[E]): number {
+    const list = [...(this.listeners.get(event) ?? [])] as ((payload: Events[E]) => void)[];
+    for (const listener of list) listener(payload);
+    return list.length;
+  }
+
+  listenerCount(event: keyof Events): number {
+    return this.listeners.get(event)?.length ?? 0;
+  }
+}
+::tests
+type __AppEvents = { login: { user: string }; logout: undefined; score: number };
+const __bus = new Emitter<__AppEvents>();
+const __log: string[] = [];
+const __off = __bus.on("login", ({ user }) => __log.push(`hi ${user}`));
+__bus.on("score", (n) => __log.push(`score ${n.toFixed(1)}`));
+__bus.once("login", (p) => __log.push(`first login ${p.user}`));
+assert.strictEqual(__bus.emit("login", { user: "ada" }), 2);
+assert.strictEqual(__bus.emit("login", { user: "bob" }), 1);
+__off();
+assert.strictEqual(__bus.emit("login", { user: "cy" }), 0);
+assert.strictEqual(__bus.emit("score", 9.5), 1);
+assert.strictEqual(__bus.emit("logout", undefined), 0);
+assert.deepStrictEqual(__log, ["hi ada", "first login ada", "hi bob", "score 9.5"]);
+assert.strictEqual(__bus.listenerCount("score"), 1);
+assert.strictEqual(__bus.listenerCount("login"), 0);
+function __typeChecks() {
+  // @ts-expect-error
+  __bus.emit("score", "high");
+  // @ts-expect-error
+  __bus.emit("signup", {});
+  // @ts-expect-error
+  __bus.on("login", (p) => p.name);
+}
+::hints
+- Store listeners in a `Map<keyof Events, ...>`. The map can't know that each event's listeners take that event's payload, so storing them with a looser function type and converting back in `emit` (one `as`, contained inside the class) is the usual approach.
+- `on` returns an arrow function that removes exactly that listener (filter it out).
+- Copy the listener list before calling them in `emit`, so a `once` listener that unsubscribes doesn't disturb the loop.
+--- exercise code typescript
+::prompt
+Write a generic, type-safe `pipe` for up to four steps using **overloads**, so each step's input must match the previous step's output:
+
+```
+pipe(value, f1)            // f1(value)
+pipe(value, f1, f2)        // f2(f1(value))
+pipe(value, f1, f2, f3)
+pipe(value, f1, f2, f3, f4)
+```
+
+The result type must be the last function's return type.
+::starter
+function pipe(value: unknown, ...fns: ((x: unknown) => unknown)[]): unknown {
+  return fns.reduce((acc, fn) => fn(acc), value);
+}
+::solution
+function pipe<A, B>(value: A, f1: (a: A) => B): B;
+function pipe<A, B, C>(value: A, f1: (a: A) => B, f2: (b: B) => C): C;
+function pipe<A, B, C, D>(value: A, f1: (a: A) => B, f2: (b: B) => C, f3: (c: C) => D): D;
+function pipe<A, B, C, D, E>(value: A, f1: (a: A) => B, f2: (b: B) => C, f3: (c: C) => D, f4: (d: D) => E): E;
+function pipe(value: unknown, ...fns: ((x: unknown) => unknown)[]): unknown {
+  return fns.reduce((acc, fn) => fn(acc), value);
+}
+::tests
+const __r1 = pipe(" Hello ", (s) => s.trim());
+const __r2 = pipe(" Hello ", (s) => s.trim(), (s) => s.length);
+const __r3 = pipe([3, 1, 2], (xs) => xs.toSorted((a, b) => a - b), (xs) => xs.map(String), (xs) => xs.join("-"));
+const __r4 = pipe(4, (n) => n * 2, (n) => n > 5, (b) => (b ? "big" : "small"), (s) => ({ size: s }));
+type _t1 = Expect<Equal<typeof __r2, number>>;
+type _t2 = Expect<Equal<typeof __r3, string>>;
+type _t3 = Expect<Equal<typeof __r4, { size: string }>>;
+assert.strictEqual(__r1, "Hello");
+assert.strictEqual(__r2, 5);
+assert.strictEqual(__r3, "1-2-3");
+assert.deepStrictEqual(__r4, { size: "big" });
+function __typeChecks() {
+  // @ts-expect-error
+  pipe("x", (s) => s.length, (s) => s.toUpperCase());
+}
+::hints
+- One overload per length: `function pipe<A, B, C>(value: A, f1: (a: A) => B, f2: (b: B) => C): C;`.
+- The implementation can stay loosely typed; callers only see the overloads.
+- Each step's parameter type comes from the previous type parameter, which is how TypeScript infers `s` in every callback.
