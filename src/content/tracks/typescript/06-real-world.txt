@@ -1,0 +1,1647 @@
+=== module Module 6 · TypeScript in real projects
+
+=== lesson ts-errors-results | Typed error handling | 85
+## What can go wrong is part of the type
+
+In JavaScript, any function may throw anything, and nothing in its signature says so. TypeScript doesn't change that: there's no `throws` clause, and a caught value is `unknown` (Module 1). This lesson shows how professionals make failures **visible and checkable** anyway.
+
+## Custom error classes
+
+Error subclasses (JavaScript course, Module 7) become more useful with typed fields:
+
+```ts
+class HttpError extends Error {
+  override name = "HttpError";
+
+  constructor(
+    readonly status: number,
+    message: string,
+    options?: { cause?: unknown },
+  ) {
+    super(message, options);
+  }
+
+  get retryable(): boolean {
+    return this.status >= 500;
+  }
+}
+
+class ValidationError extends Error {
+  override name = "ValidationError";
+
+  constructor(readonly fields: Record<string, string>) {
+    super(`Invalid: ${Object.keys(fields).join(", ")}`);
+  }
+}
+
+function handle(error: unknown): string {
+  if (error instanceof ValidationError) return `fix ${Object.keys(error.fields).join(" and ")}`;
+  if (error instanceof HttpError) return error.retryable ? "try again later" : `request failed (${error.status})`;
+  if (error instanceof Error) return `unexpected: ${error.message}`;
+  return `unknown failure: ${String(error)}`;
+}
+
+console.log(handle(new ValidationError({ email: "missing", age: "too low" })));
+console.log(handle(new HttpError(503, "unavailable")));
+console.log(handle("oops"));
+```
+
+`instanceof` narrows `unknown` to each error class, giving typed access to `fields` or `status`. The final `String(error)` branch handles code that throws non-errors (strings, objects), which JavaScript allows. The `cause` option chains a low-level error to the one you rethrow, keeping the original for debugging.
+
+## Results: errors as values
+
+Exceptions are invisible in types. For failures the **caller is expected to handle** (invalid input, "not found", a declined payment), many TypeScript codebases return a **result** instead, a discriminated union:
+
+```ts
+type Result<T, E = string> = { ok: true; value: T } | { ok: false; error: E };
+
+const ok = <T>(value: T): Result<T, never> => ({ ok: true, value });
+const err = <E>(error: E): Result<never, E> => ({ ok: false, error });
+
+function parseAge(input: string): Result<number> {
+  const n = Number(input);
+  if (input.trim() === "" || !Number.isInteger(n)) return err(`"${input}" is not a whole number`);
+  if (n < 0 || n > 150) return err(`${n} is not a realistic age`);
+  return ok(n);
+}
+
+for (const input of ["36", "abc", "200"]) {
+  const result = parseAge(input);
+  console.log(result.ok ? `age ${result.value}` : `error: ${result.error}`);
+}
+```
+
+The caller **can't** use `result.value` without first checking `result.ok`, so failures can't be forgotten. `Result<number, never>` (from `ok`) is assignable to `Result<number, string>` because `never` fits everywhere: that's the bottom type from Module 5 at work.
+
+## Typed error unions
+
+Results shine when the error is itself a discriminated union, so callers can handle each failure differently, with exhaustiveness checking:
+
+```ts
+type Result<T, E> = { ok: true; value: T } | { ok: false; error: E };
+
+type WithdrawError =
+  | { kind: "insufficient-funds"; shortBy: number }
+  | { kind: "account-frozen" }
+  | { kind: "limit-exceeded"; limit: number };
+
+function withdraw(balance: number, amount: number, frozen: boolean): Result<number, WithdrawError> {
+  if (frozen) return { ok: false, error: { kind: "account-frozen" } };
+  if (amount > 500) return { ok: false, error: { kind: "limit-exceeded", limit: 500 } };
+  if (amount > balance) return { ok: false, error: { kind: "insufficient-funds", shortBy: amount - balance } };
+  return { ok: true, value: balance - amount };
+}
+
+function message(e: WithdrawError): string {
+  switch (e.kind) {
+    case "insufficient-funds": return `You need ${e.shortBy} more`;
+    case "account-frozen": return "Your account is frozen";
+    case "limit-exceeded": return `The daily limit is ${e.limit}`;
+  }
+}
+
+const r = withdraw(100, 130, false);
+console.log(r.ok ? r.value : message(r.error));
+```
+
+Add a new failure kind and every `switch` that doesn't handle it stops compiling: the types now document every way the operation can fail.
+
+~~~check
+? Why return `Result<T, E>` instead of throwing for "user not found"?
+- Throwing is not allowed in TypeScript
++ The failure appears in the type, so callers must handle it before using the value
+- Results are faster than exceptions
+- Results can't be ignored at run time
+> Exceptions are invisible in signatures; results aren't.
+~~~
+
+## When to throw, when to return
+
+A common, practical split:
+
+- **Throw** for bugs and truly exceptional situations the immediate caller can't do anything sensible about (a broken invariant, a missing configuration file at startup, programmer errors). Let them travel up to a top-level handler that logs them.
+- **Return a result** for expected failures that are part of the domain (validation, "not found", business rules), especially across module or API boundaries.
+
+Libraries such as `neverthrow` and `Effect` provide rich result types with chaining helpers; a ten-line `Result` type like the one above is often enough.
+
+📚 **Go deeper:** *Programming TypeScript*, chapter 7 "Handling Errors" (returning null, throwing exceptions, returning exceptions, the Option type); TypeScript Handbook, "Narrowing"; MDN, "Error: cause".
+--- goals
+- write custom error classes with typed fields and `cause`
+- narrow caught `unknown` errors with `instanceof`
+- model expected failures with a `Result` type
+- describe each failure with a discriminated union of errors, handled exhaustively
+- decide when to throw and when to return errors
+--- quiz
+? What's the type of `e` in `catch (e)` under strict mode?
+- `Error`
+- `any`
++ `unknown`
+- `Error | string`
+> Anything can be thrown; narrow it before use.
+? `const r: Result<number> = parseAge("x");` How do you get the number safely?
++ Check `r.ok` first; only then is `r.value` available
+- `r.value!`
+- `r.value ?? 0`
+- `(r as any).value`
+> The union forces the check.
+? Why is `Result<number, never>` assignable to `Result<number, string>`?
++ never is assignable to every type, so the error side fits
+- never is the same as string
+- Results ignore their error type
+- It isn't
+> never is the empty set, a subset of everything.
+? Which failure is best thrown rather than returned?
+- A form field is empty
+- A search finds nothing
++ A required configuration value is missing at startup
+- A payment is declined
+> Throw for bugs and unrecoverable situations; return expected failures.
+--- exercise code typescript
+::prompt
+Write a money-transfer function that returns typed failures:
+
+- `type Result<T, E> = { ok: true; value: T } | { ok: false; error: E }`;
+- `type TransferError` as a discriminated union on `kind`: `"same-account"`, `"invalid-amount"` (with `amount: number`), `"unknown-account"` (with `id: string`) and `"insufficient-funds"` (with `available: number`);
+- `transfer(accounts: Map<string, number>, from: string, to: string, amount: number): Result<Map<string, number>, TransferError>` returns a **new** map with updated balances (the original is unchanged). Checks, in order: same account, amount (must be positive with at most 2 decimals), unknown `from`, unknown `to`, funds;
+- `describe(e: TransferError): string` with an exhaustive switch: `cannot transfer to the same account`, `invalid amount -5`, `unknown account X9`, `only 20 available`.
+::starter
+type Result<T, E> = { ok: true; value: T } | { ok: false; error: E };
+::solution
+type Result<T, E> = { ok: true; value: T } | { ok: false; error: E };
+
+type TransferError =
+  | { kind: "same-account" }
+  | { kind: "invalid-amount"; amount: number }
+  | { kind: "unknown-account"; id: string }
+  | { kind: "insufficient-funds"; available: number };
+
+function transfer(accounts: Map<string, number>, from: string, to: string, amount: number): Result<Map<string, number>, TransferError> {
+  const fail = (error: TransferError): Result<Map<string, number>, TransferError> => ({ ok: false, error });
+  if (from === to) return fail({ kind: "same-account" });
+  if (!(amount > 0) || Math.round(amount * 100) !== amount * 100) return fail({ kind: "invalid-amount", amount });
+  const fromBalance = accounts.get(from);
+  if (fromBalance === undefined) return fail({ kind: "unknown-account", id: from });
+  const toBalance = accounts.get(to);
+  if (toBalance === undefined) return fail({ kind: "unknown-account", id: to });
+  if (fromBalance < amount) return fail({ kind: "insufficient-funds", available: fromBalance });
+  const next = new Map(accounts);
+  next.set(from, fromBalance - amount);
+  next.set(to, toBalance + amount);
+  return { ok: true, value: next };
+}
+
+function describe(e: TransferError): string {
+  switch (e.kind) {
+    case "same-account":
+      return "cannot transfer to the same account";
+    case "invalid-amount":
+      return `invalid amount ${e.amount}`;
+    case "unknown-account":
+      return `unknown account ${e.id}`;
+    case "insufficient-funds":
+      return `only ${e.available} available`;
+    default:
+      return e satisfies never;
+  }
+}
+::tests
+const __accounts = new Map([["A1", 100], ["B2", 20]]);
+const __r = transfer(__accounts, "A1", "B2", 30.5);
+assert(__r.ok);
+assert.deepStrictEqual([...__r.value], [["A1", 69.5], ["B2", 50.5]]);
+assert.deepStrictEqual([...__accounts], [["A1", 100], ["B2", 20]]);
+const __msg = (r: Result<unknown, TransferError>) => (r.ok ? "ok" : describe(r.error));
+assert.strictEqual(__msg(transfer(__accounts, "A1", "A1", 5)), "cannot transfer to the same account");
+assert.strictEqual(__msg(transfer(__accounts, "A1", "B2", -5)), "invalid amount -5");
+assert.strictEqual(__msg(transfer(__accounts, "A1", "B2", 0)), "invalid amount 0");
+assert.strictEqual(__msg(transfer(__accounts, "A1", "B2", 1.005)), "invalid amount 1.005");
+assert.strictEqual(__msg(transfer(__accounts, "X9", "B2", 5)), "unknown account X9");
+assert.strictEqual(__msg(transfer(__accounts, "A1", "Z0", 5)), "unknown account Z0");
+assert.strictEqual(__msg(transfer(__accounts, "B2", "A1", 25)), "only 20 available");
+type _t1 = Expect<Equal<Extract<TransferError, { kind: "insufficient-funds" }>, { kind: "insufficient-funds"; available: number }>>;
+function __typeChecks(r: Result<Map<string, number>, TransferError>) {
+  // @ts-expect-error
+  r.value;
+  // @ts-expect-error
+  describe({ kind: "unknown-account" });
+}
+::hints
+- Each check returns `{ ok: false, error: { kind: ..., ... } }`; a small `fail` helper keeps that short.
+- Two decimals at most: `Math.round(amount * 100) === amount * 100`. `!(amount > 0)` also rejects `NaN`.
+- Copy the map with `new Map(accounts)` before changing balances.
+--- cards
+Error subclass :: class HttpError extends Error { constructor(readonly status: number, msg: string) { super(msg) } } — narrow with instanceof.
+cause :: new Error("msg", { cause: original }) keeps the underlying error for debugging.
+Result type :: type Result<T, E> = { ok: true; value: T } | { ok: false; error: E } — failures visible in the type.
+Typed error union :: E as a discriminated union of failure kinds, handled with an exhaustive switch.
+Throw vs return :: Throw for bugs and unrecoverable problems; return results for expected, domain failures.
+
+=== lesson ts-async | Typing asynchronous code | 85
+## Promise<T>
+
+An `async` function always returns a `Promise`, and TypeScript types it as `Promise<T>`, where `T` is what the promise **resolves to**:
+
+```ts
+async function getGreeting(name: string): Promise<string> {
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  return `Hello, ${name}`;
+}
+
+const pending = getGreeting("Ada");
+const text = await pending;
+console.log(text.toUpperCase());
+```
+
+`pending` is a `Promise<string>`; `await pending` is a `string`. Forget the `await` and TypeScript catches it: `pending.toUpperCase()` is an error (a Promise has no such method), which in plain JavaScript would be a confusing run-time crash. The same goes for `if (isAdmin(user))` when `isAdmin` is async: the `typescript-eslint` rule `no-misused-promises` flags it, because a Promise is always truthy.
+
+`new Promise<T>(...)` takes a type argument when there's nothing to infer it from:
+
+```ts
+function delay<T>(ms: number, value: T): Promise<T> {
+  return new Promise<T>((resolve) => setTimeout(() => resolve(value), ms));
+}
+
+console.log(await delay(30, { ready: true }));
+```
+
+## Typing fetch responses
+
+`response.json()` returns `Promise<any>`: TypeScript can't know what a server will send. The safest habit is to treat it as `unknown` and **check** it (next lesson), or, at minimum, to state the expected type in one place:
+
+```ts
+interface User {
+  id: number;
+  name: string;
+  email: string;
+  city: string;
+}
+
+async function getJson<T>(url: string): Promise<T> {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`${response.status} ${response.statusText} for ${url}`);
+  return (await response.json()) as T;
+}
+
+const users = await getJson<User[]>("https://api.example.com/users");
+console.log(users.map((u) => `${u.name} (${u.city})`).slice(0, 2));
+```
+
+That `as T` is an honest, contained cast: one function, clearly documented, where you **trust** the server's contract. In production, APIs change, so validating at this boundary (with a schema, next lesson) is better. (`api.example.com` is DevQuest's built-in demo API, as in the JavaScript course.)
+
+## Combining promises
+
+`Promise.all` keeps each position's type when given a tuple, so parallel requests stay precisely typed:
+
+```ts
+const wait = <T>(ms: number, value: T) => new Promise<T>((r) => setTimeout(() => r(value), ms));
+
+const [count, label, flags] = await Promise.all([wait(30, 42), wait(10, "items"), wait(20, [true, false])]);
+console.log(count + 1, label.toUpperCase(), flags.length);
+
+const settled = await Promise.allSettled([wait(5, "fine"), Promise.reject(new Error("broken"))]);
+for (const r of settled) console.log(r.status === "fulfilled" ? r.value : (r.reason as Error).message);
+```
+
+`count` is a `number`, `label` a `string`, `flags` a `boolean[]`. `Promise.allSettled` returns `PromiseSettledResult<T>` values, a discriminated union on `status` (`"fulfilled"` with `value`, `"rejected"` with `reason: any`).
+
+~~~check
+? What's the type of `x` in `const x = await Promise.all([fetchUser(), fetchPosts()])` where they return `Promise<User>` and `Promise<Post[]>`?
+- `Promise<[User, Post[]]>`
++ `[User, Post[]]`
+- `(User | Post[])[]`
+- `any[]`
+> Promise.all on a tuple gives a tuple of the resolved types; await unwraps the Promise.
+~~~
+
+## Typing callbacks and async functions as values
+
+A function type can return a promise: `type Loader<T> = (id: number) => Promise<T>`. Generic helpers built on that are common in real code, for example a retry wrapper:
+
+```ts
+async function retry<T>(task: () => Promise<T>, attempts: number, delayMs = 10): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      return await task();
+    } catch (error) {
+      lastError = error;
+      await new Promise((r) => setTimeout(r, delayMs * attempt));
+    }
+  }
+  throw new Error(`Failed after ${attempts} attempts`, { cause: lastError });
+}
+
+const result = await retry(async () => {
+  const response = await fetch("https://api.example.com/flaky");
+  if (!response.ok) throw new Error(`status ${response.status}`);
+  return (await response.json()) as { ok: boolean; attempt: number };
+}, 5);
+console.log(result);
+```
+
+`retry` returns whatever the task returns: `T` flows from the callback to the result. (The demo `/flaky` endpoint fails twice before succeeding.)
+
+## Async iteration and cancellation
+
+Two more typed tools you'll meet:
+
+- **Async generators** (`async function*`) return `AsyncGenerator<T>`, consumed with `for await`; useful for paginated APIs.
+- **`AbortSignal`** cancels fetches and timers; pass `{ signal }` options through your functions, typed as `AbortSignal`.
+
+```ts
+interface Page { page: number; items: { id: number; name: string; price: number }[]; nextPage: number | null }
+
+async function* allProducts(signal?: AbortSignal): AsyncGenerator<Page["items"][number]> {
+  let page: number | null = 1;
+  while (page !== null) {
+    const response = await fetch(`https://api.example.com/products?page=${page}`, { signal });
+    const data = (await response.json()) as Page;
+    yield* data.items;
+    page = data.nextPage;
+  }
+}
+
+let total = 0;
+for await (const product of allProducts()) total += product.price;
+console.log(`Total stock value: ${total}`);
+```
+
+📚 **Go deeper:** TypeScript Handbook, "More on Functions" and the `lib.es2015.promise.d.ts` declarations (hover over `Promise.all` to read its overloads); *Programming TypeScript*, chapter 8 "Asynchronous Programming, Concurrency, and Parallelism"; typescript-eslint rules `no-floating-promises` and `no-misused-promises`.
+--- goals
+- type async functions with `Promise<T>`, and understand what `await` gives
+- type `fetch` responses honestly, containing casts in one place
+- use `Promise.all` and `Promise.allSettled` with precise tuple and union types
+- write generic async helpers such as retry
+- type async generators and cancellation signals
+--- quiz
+? What's the return type of `async function f() { return 5; }`?
+- `number`
++ `Promise<number>`
+- `Promise<5>`
+- `void`
+> async functions always return a Promise of what they return.
+? What type does `response.json()` resolve to?
++ `any`, so you should treat it as `unknown` or validate it
+- The type of your interface
+- `object`
+- `string`
+> TypeScript can't know what a server sends.
+? You call an async function without `await` in an `if` condition. What's wrong?
+- Nothing
++ A Promise is always truthy, so the condition is always true
+- It throws
+- It returns undefined
+> Lint rules like no-misused-promises catch this.
+? In `Promise.allSettled`, how do you read a result's value safely?
++ Check `r.status === "fulfilled"` first
+- `r.value!`
+- Use try/catch
+- Results always have a value
+> PromiseSettledResult is a discriminated union on status.
+--- exercise code typescript
+::prompt
+Write a typed client for the demo API (`https://api.example.com`):
+
+- interfaces `User` (`id`, `name`, `email`, `city`) and `Post` (`id`, `userId`, `title`);
+- `class ApiError extends Error` with a readonly `status: number`;
+- `async function getJson<T>(path: string): Promise<T>` that fetches `https://api.example.com` + path, throws `ApiError` with the status and the server's `error` message (the body is `{ "error": "..." }`) when the response isn't ok;
+- `async function userWithPosts(id: number): Promise<{ user: User; posts: Post[] }>`, fetching `/users/<id>` and `/users/<id>/posts` **in parallel**;
+- `async function postCounts(ids: number[]): Promise<Record<number, number | "error">>`: the number of posts per user, with `"error"` for users that fail (one failure must not stop the others).
+::starter
+interface User {
+  id: number;
+  name: string;
+  email: string;
+  city: string;
+}
+
+interface Post {
+  id: number;
+  userId: number;
+  title: string;
+}
+::solution
+interface User {
+  id: number;
+  name: string;
+  email: string;
+  city: string;
+}
+
+interface Post {
+  id: number;
+  userId: number;
+  title: string;
+}
+
+class ApiError extends Error {
+  override name = "ApiError";
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
+async function getJson<T>(path: string): Promise<T> {
+  const response = await fetch(`https://api.example.com${path}`);
+  const body: unknown = await response.json();
+  if (!response.ok) {
+    const message = typeof body === "object" && body !== null && "error" in body && typeof body.error === "string" ? body.error : response.statusText;
+    throw new ApiError(response.status, message);
+  }
+  return body as T;
+}
+
+async function userWithPosts(id: number): Promise<{ user: User; posts: Post[] }> {
+  const [user, posts] = await Promise.all([getJson<User>(`/users/${id}`), getJson<Post[]>(`/users/${id}/posts`)]);
+  return { user, posts };
+}
+
+async function postCounts(ids: number[]): Promise<Record<number, number | "error">> {
+  const results = await Promise.allSettled(ids.map((id) => getJson<Post[]>(`/users/${id}/posts`)));
+  const counts: Record<number, number | "error"> = {};
+  results.forEach((r, i) => {
+    counts[ids[i]] = r.status === "fulfilled" ? r.value.length : "error";
+  });
+  return counts;
+}
+::tests
+const __uwp = await userWithPosts(2);
+assert.strictEqual(__uwp.user.name, "Grace Hopper");
+assert.deepStrictEqual(__uwp.posts.map((p) => p.title), ["The first bug", "Teaching computers English"]);
+await assert.rejects(getJson("/users/99"), (e: unknown) => e instanceof ApiError && e.status === 404 && e.message === "User not found");
+await assert.rejects(userWithPosts(42), ApiError);
+assert.deepStrictEqual(await postCounts([1, 7, 3]), { 1: 2, 7: "error", 3: 2 });
+const __t0 = Date.now();
+await userWithPosts(1);
+assert(Date.now() - __t0 < 190, "the two requests should run in parallel");
+type _t1 = Expect<Equal<Awaited<ReturnType<typeof userWithPosts>>, { user: User; posts: Post[] }>>;
+::hints
+- Read the body once as `unknown`; when the response isn't ok, narrow it to find a string `error` property.
+- `Promise.all([getJson<User>(...), getJson<Post[]>(...)])` runs both requests at once and keeps both types.
+- `Promise.allSettled` never rejects: check each result's `status`.
+--- cards
+Promise<T> :: The type of a promise resolving to T; async functions return Promise<ReturnValue>.
+await :: Unwraps Promise<T> to T. Missing awaits show up as type errors when you use the value.
+response.json() :: Resolves to any: treat it as unknown and validate, or cast once in a typed helper.
+Promise.all tuple :: Promise.all([p1, p2]) resolves to [T1, T2], keeping each type.
+PromiseSettledResult :: { status: "fulfilled"; value: T } | { status: "rejected"; reason: any }.
+AsyncGenerator<T> :: Returned by async function*; consumed with for await...of.
+
+=== lesson ts-runtime-validation | Validating data at the boundaries | 95
+## The boundary problem
+
+Types disappear at run time (Module 1). Everything **inside** your program is checked, but data that **enters** it is not: HTTP responses, request bodies, `JSON.parse`, `localStorage`, environment variables, files, form fields, messages from other services. If you just declare that such data has a type (`as User`), a wrong assumption travels deep into your code before failing.
+
+The professional answer: **validate at the boundary**. Data enters as `unknown`, a validator checks it, and only checked data gets a precise type. Inside, you can trust your types again.
+
+## Hand-written validation
+
+You already know the basic tool: a type guard (Module 2). For anything bigger, writing guards by hand becomes long and repetitive, and the guard and the type can drift apart:
+
+```ts
+interface Settings {
+  theme: "light" | "dark";
+  fontSize: number;
+}
+
+function isSettings(value: unknown): value is Settings {
+  return (
+    typeof value === "object" && value !== null &&
+    "theme" in value && (value.theme === "light" || value.theme === "dark") &&
+    "fontSize" in value && typeof value.fontSize === "number"
+  );
+}
+
+const saved: unknown = JSON.parse('{"theme": "dark", "fontSize": "14"}');
+console.log(isSettings(saved) ? `font ${saved.fontSize}` : "invalid settings, using defaults");
+```
+
+The bug is caught (`fontSize` is a string), but notice the duplication: every property is described twice, once in the interface and once in the guard.
+
+## Schemas: one description, two uses
+
+**Schema libraries** solve this. You describe the data **once**, as a value; the library gives you both a run-time validator and the TypeScript type, **inferred** from the schema. The most popular is **Zod**:
+
+```
+import { z } from "zod";
+
+const Settings = z.object({
+  theme: z.enum(["light", "dark"]),
+  fontSize: z.number().int().min(8).max(32),
+  email: z.string().email().optional(),
+});
+
+type Settings = z.infer<typeof Settings>;
+// { theme: "light" | "dark"; fontSize: number; email?: string | undefined }
+
+const result = Settings.safeParse(JSON.parse(text));
+if (result.success) {
+  useSettings(result.data); // typed as Settings
+} else {
+  console.log(result.error.issues); // what was wrong, and where
+}
+```
+
+Valibot, ArkType and TypeBox work the same way (TypeBox also produces JSON Schema, which OpenAPI tools use). Frameworks build on them: tRPC, Hono and Astro validate request inputs with them, and React Hook Form validates forms.
+
+## How do they do it? Build a tiny one
+
+There's no magic: a schema is an object with a `parse` method, and the type is inferred with the generics and conditional types from Modules 3 and 5. Here's a working miniature:
+
+```ts
+type Schema<T> = { parse(value: unknown, path?: string): T };
+type Infer<S> = S extends Schema<infer T> ? T : never;
+
+class SchemaError extends Error {}
+
+const string = (): Schema<string> => ({
+  parse(value, path = "value") {
+    if (typeof value !== "string") throw new SchemaError(`${path} should be a string`);
+    return value;
+  },
+});
+
+const number = (): Schema<number> => ({
+  parse(value, path = "value") {
+    if (typeof value !== "number" || Number.isNaN(value)) throw new SchemaError(`${path} should be a number`);
+    return value;
+  },
+});
+
+function object<Shape extends Record<string, Schema<unknown>>>(shape: Shape): Schema<{ [K in keyof Shape]: Infer<Shape[K]> }> {
+  return {
+    parse(value, path = "value") {
+      if (typeof value !== "object" || value === null) throw new SchemaError(`${path} should be an object`);
+      const out: Record<string, unknown> = {};
+      for (const key of Object.keys(shape)) out[key] = shape[key].parse((value as Record<string, unknown>)[key], `${path}.${key}`);
+      return out as { [K in keyof Shape]: Infer<Shape[K]> };
+    },
+  };
+}
+
+const User = object({ name: string(), age: number() });
+type User = Infer<typeof User>;
+
+const good: User = User.parse(JSON.parse('{"name": "Ada", "age": 36, "extra": true}'));
+console.log(good);
+try {
+  User.parse(JSON.parse('{"name": "Bob", "age": "old"}'));
+} catch (error) {
+  console.log(error instanceof SchemaError ? error.message : error);
+}
+```
+
+`type User` is computed from the schema: `{ name: string; age: number }`. Add a property to the schema, and both the validation and the type follow. (The two casts are contained inside the library, which is where such code belongs. Unknown properties like `extra` are dropped from the result, as Zod does by default.)
+
+~~~check
+? What does `z.infer<typeof Settings>` give you?
+- A run-time validator
++ The TypeScript type described by the schema, computed at compile time
+- The parsed data
+- A JSON Schema document
+> One description (the schema value) yields both the validator and the type.
+~~~
+
+## Where to validate
+
+Validate **once, at each entry point**, then pass typed data inward:
+
+- **API handlers** (server): request body, query and route parameters;
+- **API clients** (front end): responses from servers you don't control, or that may be a different version;
+- **configuration**: environment variables at startup (fail fast with a clear message);
+- **storage**: `localStorage`, files and caches, which may hold data from an older version of your app.
+
+Inside the program, don't re-validate data that's already typed: that's what the types are for. And prefer `safeParse`-style results (a `Result`, previous lessons) where invalid input is expected, such as forms, and throwing `parse` where it means a bug or misconfiguration.
+
+📚 **Go deeper:** Zod documentation (zod.dev), "Basic usage" and "Type inference"; Valibot (valibot.dev); *Effective TypeScript*, item 74 ("know how to reconstruct types at runtime"); Alexis King, "Parse, don't validate" (blog post).
+--- goals
+- explain why external data must be validated at run time
+- write type guards for small shapes, and recognise when they become duplication
+- use a schema library (Zod and similar) to get a validator and an inferred type from one description
+- understand how schema libraries infer types with generics and conditional types
+- choose where in a system to validate
+--- quiz
+? Data from `fetch` is cast with `as Order`. The server changes a field's type. When do you find out?
+- At compile time
++ Later, somewhere deeper in the code, when the wrong value is used
+- Immediately when the response arrives
+- Never: TypeScript converts it
+> Casts check nothing; validation at the boundary fails early and clearly.
+? What's the main advantage of a schema library over hand-written type guards?
++ The shape is described once, and the type is inferred from it, so they can't drift apart
+- It's faster than typeof checks
+- It removes the need for TypeScript
+- It works without running any code
+> One source of truth for the validator and the type.
+? Where should validation happen?
+- In every function that uses the data
++ Once, where data enters the program (requests, responses, config, storage)
+- Only in tests
+- Only on the server
+> Validated data is typed; inside, trust the types.
+? "Parse, don't validate" means...
++ Turn unknown input into a precisely typed value once, instead of re-checking it everywhere
+- Never check input
+- Use JSON.parse only
+- Validate with regular expressions
+> A parser's output type records what was checked.
+--- exercise code typescript
+::prompt
+Extend the mini schema library from the lesson. `string()`, `number()` and `object()` are provided. Add:
+
+- `boolean(): Schema<boolean>`;
+- `literal<const L extends string | number>(value: L): Schema<L>` (message `<path> should be <value as JSON>`);
+- `optional<T>(schema: Schema<T>): Schema<T | undefined>` (accepts `undefined`);
+- `array<T>(item: Schema<T>): Schema<T[]>` (message `<path> should be an array`; items are checked with paths like `value.tags[2]`);
+- `union<T extends Schema<unknown>[]>(...options: T): Schema<Infer<T[number]>>` (tries each option; if none fits, `<path> does not match any option`).
+
+Then define `const Order = object({...})` so that `Infer<typeof Order>` is `{ id: number; status: "new" | "paid" | "shipped"; items: { sku: string; qty: number }[]; gift: boolean | undefined }`.
+::starter
+type Schema<T> = { parse(value: unknown, path?: string): T };
+type Infer<S> = S extends Schema<infer T> ? T : never;
+
+class SchemaError extends Error {}
+
+const string = (): Schema<string> => ({
+  parse(value, path = "value") {
+    if (typeof value !== "string") throw new SchemaError(`${path} should be a string`);
+    return value;
+  },
+});
+
+const number = (): Schema<number> => ({
+  parse(value, path = "value") {
+    if (typeof value !== "number" || Number.isNaN(value)) throw new SchemaError(`${path} should be a number`);
+    return value;
+  },
+});
+
+function object<Shape extends Record<string, Schema<unknown>>>(shape: Shape): Schema<{ [K in keyof Shape]: Infer<Shape[K]> }> {
+  return {
+    parse(value, path = "value") {
+      if (typeof value !== "object" || value === null) throw new SchemaError(`${path} should be an object`);
+      const out: Record<string, unknown> = {};
+      for (const key of Object.keys(shape)) out[key] = shape[key].parse((value as Record<string, unknown>)[key], `${path}.${key}`);
+      return out as { [K in keyof Shape]: Infer<Shape[K]> };
+    },
+  };
+}
+::solution
+type Schema<T> = { parse(value: unknown, path?: string): T };
+type Infer<S> = S extends Schema<infer T> ? T : never;
+
+class SchemaError extends Error {}
+
+const string = (): Schema<string> => ({
+  parse(value, path = "value") {
+    if (typeof value !== "string") throw new SchemaError(`${path} should be a string`);
+    return value;
+  },
+});
+
+const number = (): Schema<number> => ({
+  parse(value, path = "value") {
+    if (typeof value !== "number" || Number.isNaN(value)) throw new SchemaError(`${path} should be a number`);
+    return value;
+  },
+});
+
+function object<Shape extends Record<string, Schema<unknown>>>(shape: Shape): Schema<{ [K in keyof Shape]: Infer<Shape[K]> }> {
+  return {
+    parse(value, path = "value") {
+      if (typeof value !== "object" || value === null) throw new SchemaError(`${path} should be an object`);
+      const out: Record<string, unknown> = {};
+      for (const key of Object.keys(shape)) out[key] = shape[key].parse((value as Record<string, unknown>)[key], `${path}.${key}`);
+      return out as { [K in keyof Shape]: Infer<Shape[K]> };
+    },
+  };
+}
+
+const boolean = (): Schema<boolean> => ({
+  parse(value, path = "value") {
+    if (typeof value !== "boolean") throw new SchemaError(`${path} should be a boolean`);
+    return value;
+  },
+});
+
+function literal<const L extends string | number>(expected: L): Schema<L> {
+  return {
+    parse(value, path = "value") {
+      if (value !== expected) throw new SchemaError(`${path} should be ${JSON.stringify(expected)}`);
+      return expected;
+    },
+  };
+}
+
+function optional<T>(schema: Schema<T>): Schema<T | undefined> {
+  return {
+    parse(value, path = "value") {
+      return value === undefined ? undefined : schema.parse(value, path);
+    },
+  };
+}
+
+function array<T>(item: Schema<T>): Schema<T[]> {
+  return {
+    parse(value, path = "value") {
+      if (!Array.isArray(value)) throw new SchemaError(`${path} should be an array`);
+      return value.map((v, i) => item.parse(v, `${path}[${i}]`));
+    },
+  };
+}
+
+function union<T extends Schema<unknown>[]>(...options: T): Schema<Infer<T[number]>> {
+  return {
+    parse(value, path = "value") {
+      for (const option of options) {
+        try {
+          return option.parse(value, path) as Infer<T[number]>;
+        } catch (error) {
+          if (!(error instanceof SchemaError)) throw error;
+        }
+      }
+      throw new SchemaError(`${path} does not match any option`);
+    },
+  };
+}
+
+const Order = object({
+  id: number(),
+  status: union(literal("new"), literal("paid"), literal("shipped")),
+  items: array(object({ sku: string(), qty: number() })),
+  gift: optional(boolean()),
+});
+::tests
+type __Order = Infer<typeof Order>;
+type _t1 = Expect<Equal<__Order, { id: number; status: "new" | "paid" | "shipped"; items: { sku: string; qty: number }[]; gift: boolean | undefined }>>;
+type _t2 = Expect<Equal<Infer<ReturnType<typeof literal<"x">>>, "x">>;
+const __ok = Order.parse({ id: 7, status: "paid", items: [{ sku: "A", qty: 2 }], extra: 1 });
+assert.deepStrictEqual(__ok, { id: 7, status: "paid", items: [{ sku: "A", qty: 2 }], gift: undefined });
+assert.strictEqual(Order.parse({ id: 1, status: "new", items: [], gift: true }).gift, true);
+const __fails = (v: unknown) => { try { Order.parse(v); return "passed"; } catch (e) { return e instanceof SchemaError ? e.message : "other error"; } };
+assert.strictEqual(__fails({ id: 1, status: "lost", items: [] }), "value.status does not match any option");
+assert.strictEqual(__fails({ id: 1, status: "new", items: {} }), "value.items should be an array");
+assert.strictEqual(__fails({ id: 1, status: "new", items: [{ sku: "A", qty: 1 }, { sku: 5, qty: 1 }] }), "value.items[1].sku should be a string");
+assert.strictEqual(__fails({ id: 1, status: "new", items: [], gift: "yes" }), "value.gift should be a boolean");
+assert.strictEqual(__fails(null), "value should be an object");
+assert.throws(() => literal(3).parse(4), { message: "value should be 3" });
+::hints
+- Each builder returns an object with a `parse(value, path = "value")` method, like the provided ones.
+- `literal<const L extends string | number>` uses a **const type parameter**, so `literal("new")` infers `"new"` rather than `string`.
+- In `union`, try each option and catch only `SchemaError`; the result needs one cast to `Infer<T[number]>` (the compiler can't connect the loop to the union type).
+--- cards
+Boundary :: Where data enters: HTTP, JSON.parse, storage, env, files, forms. Validate there; trust types inside.
+Schema library :: Zod, Valibot, ArkType, TypeBox: one schema value gives a validator and an inferred type (z.infer).
+safeParse vs parse :: safeParse returns a result (expected bad input); parse throws (bugs, misconfiguration).
+Parse, don't validate :: Turn unknown into a precise type once; the type then records what was checked.
+const type parameter :: function f<const T>(x: T) infers literal types (and readonly tuples) without as const.
+
+=== lesson ts-dom-react | TypeScript in the browser: the DOM and React | 90
+## The DOM is fully typed
+
+TypeScript ships with type declarations for the whole browser API (`lib.dom.d.ts`): every element, event and method. That's why the editor can autocomplete `addEventListener("` with every event name. The types form a hierarchy: `HTMLInputElement` extends `HTMLElement`, which extends `Element`, then `Node`, then `EventTarget`.
+
+In DevQuest, pages can use TypeScript with **`<script lang="ts">`**: the script is type-checked (a page with type errors doesn't run), then its types are stripped. (In a real project, a bundler such as Vite does this for `.ts` files.)
+
+```html
+<label>Name <input id="name"></label>
+<p id="out">Type your name</p>
+<script lang="ts">
+const input = document.querySelector<HTMLInputElement>("#name");
+const out = document.getElementById("out");
+if (input === null || out === null) throw new Error("page is missing elements");
+
+input.addEventListener("input", () => {
+  out.textContent = input.value.trim() ? `Hello, ${input.value.trim()}!` : "Type your name";
+});
+console.log(input.tagName, input.value === "");
+</script>
+```
+
+Three typing points in that small script:
+
+- `querySelector` returns `Element | null`. With a **tag name** (`querySelector("input")`) TypeScript knows the element type automatically; with a CSS selector like `"#name"` it can't, so you give it as a type argument: `querySelector<HTMLInputElement>("#name")`. (That type argument is an unchecked promise, like `as`; if unsure, check with `instanceof`.)
+- Elements may be missing, so the result includes `null`, and you must handle it once. After the `throw`, both are narrowed.
+- Inside the listener, `input` and `out` stay narrowed: they're `const`, and the arrow function is created after the check. (A `function` declaration wouldn't keep the narrowing, because declarations are hoisted and could run before the check.)
+
+## Events
+
+Event listeners receive precisely typed events, chosen by the event name:
+
+```html
+<button id="add">Add</button> <span id="count">0</span>
+<input id="key" placeholder="press a key here">
+<script lang="ts">
+const button = document.getElementById("add");
+const count = document.getElementById("count");
+const keyInput = document.getElementById("key");
+
+if (button && count && keyInput) {
+  let clicks = 0;
+  button.addEventListener("click", (event) => {
+    clicks += event.shiftKey ? 10 : 1;
+    count.textContent = String(clicks);
+  });
+  keyInput.addEventListener("keydown", (event) => {
+    console.log(`key: ${event.key}`);
+  });
+}
+</script>
+```
+
+`event` is a `MouseEvent` for `"click"` (so `shiftKey` exists) and a `KeyboardEvent` for `"keydown"` (so `key` exists), thanks to overloads on `addEventListener`.
+
+One common trap: `event.target` is typed as `EventTarget | null`, not as the element, because with **event delegation** (JavaScript course, Module 11) the target can be any descendant. Narrow it with `instanceof`:
+
+```html
+<ul id="list"><li><button data-id="1">Delete 1</button></li><li><button data-id="2">Delete 2</button></li></ul>
+<script lang="ts">
+const list = document.getElementById("list");
+list?.addEventListener("click", (event) => {
+  const target = event.target;
+  if (!(target instanceof HTMLButtonElement)) return;
+  console.log(`delete item ${target.dataset.id}`);
+  target.closest("li")?.remove();
+});
+document.querySelector<HTMLButtonElement>("[data-id='2']")?.click();
+</script>
+```
+
+`instanceof` checks the real element at run time and narrows its type: the safe way to handle `target`.
+
+## Forms
+
+```html
+<form id="signup">
+  <input name="email" type="email" value="ada@example.com">
+  <input name="age" type="number" value="36">
+  <button>Sign up</button>
+</form>
+<script lang="ts">
+interface Signup { email: string; age: number }
+
+function readSignup(form: HTMLFormElement): Signup {
+  const data = new FormData(form);
+  const email = data.get("email");
+  const age = Number(data.get("age"));
+  if (typeof email !== "string" || !Number.isInteger(age)) throw new Error("invalid form");
+  return { email, age };
+}
+
+const form = document.querySelector<HTMLFormElement>("#signup");
+form?.addEventListener("submit", (event) => {
+  event.preventDefault();
+  console.log(readSignup(form));
+});
+form?.requestSubmit();
+</script>
+```
+
+`FormData.get` returns `FormDataEntryValue | null` (a string, a `File`, or nothing), so a form is a **boundary** like an API response: check the values before trusting them.
+
+~~~check
+? Why is `event.target` typed `EventTarget | null` rather than `HTMLButtonElement`?
+- TypeScript doesn't know about buttons
++ The target can be any element inside the one with the listener (or not an element at all)
+- Events have no target
+- It's a bug in TypeScript
+> Narrow it with instanceof before using element features.
+~~~
+
+## React with TypeScript
+
+React projects are mostly TypeScript today (`npm create vite@latest my-app -- --template react-ts`). Components are functions whose **props** are typed with an interface or type, and JSX is checked against them. React's own types come from the `@types/react` package, which DevQuest doesn't include, so these examples are shown rather than run:
+
+```
+import { useState, type ReactNode } from "react";
+
+interface ButtonProps {
+  label: string;
+  variant?: "primary" | "secondary";
+  disabled?: boolean;
+  onClick: () => void;
+  children?: ReactNode;
+}
+
+function Button({ label, variant = "primary", disabled = false, onClick }: ButtonProps) {
+  return <button className={variant} disabled={disabled} onClick={onClick}>{label}</button>;
+}
+
+interface Todo { id: number; text: string; done: boolean }
+
+function TodoList({ initial }: { initial: Todo[] }) {
+  const [todos, setTodos] = useState<Todo[]>(initial);
+  const [draft, setDraft] = useState("");
+
+  function add(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setTodos((list) => [...list, { id: Date.now(), text: draft, done: false }]);
+    setDraft("");
+  }
+
+  return (
+    <form onSubmit={add}>
+      <input value={draft} onChange={(e) => setDraft(e.target.value)} />
+      <Button label="Add" onClick={() => {}} />
+      <ul>{todos.map((t) => <li key={t.id}>{t.text}</li>)}</ul>
+    </form>
+  );
+}
+```
+
+What TypeScript adds:
+
+- **Props are checked at every use**: `<Button label="Add" />` without `onClick` is an error, as is `variant="danger"`.
+- **`useState` infers** from the initial value (`useState("")` is a string state); give a type argument when the initial value doesn't show the full type: `useState<Todo[]>([])`, `useState<User | null>(null)`.
+- **Event handlers are typed** by the JSX attribute: in `onChange={(e) => ...}` on an `<input>`, `e.target.value` is known to be a string. Written separately, the type is `React.ChangeEvent<HTMLInputElement>`.
+- `ReactNode` is the type of anything renderable (for `children`).
+
+Everything else in this course applies directly: discriminated unions for component state ("loading" / "error" / "loaded"), generics for reusable components (`function List<T>({ items, render }: { items: T[]; render: (item: T) => ReactNode })`), and validated API data.
+
+📚 **Go deeper:** TypeScript Handbook, "DOM Manipulation"; react.dev, "Using TypeScript"; the React TypeScript Cheatsheet (react-typescript-cheatsheet.netlify.app); *Programming TypeScript*, chapter 13 (frontend frameworks).
+--- goals
+- use the DOM's types, `querySelector` type arguments and null checks
+- rely on typed events from `addEventListener`, and narrow `event.target` with `instanceof`
+- read forms as untrusted input
+- type React components' props, state and event handlers
+--- quiz
+? What does `document.querySelector("input")` return?
++ `HTMLInputElement | null`
+- `HTMLInputElement`
+- `Element`
+- `any`
+> A tag-name selector gives the element type; it may still be missing.
+? In `button.addEventListener("click", (e) => ...)`, what's `e`?
++ `MouseEvent`
+- `Event`
+- `any`
+- `PointerEvent | KeyboardEvent`
+> addEventListener's overloads map each event name to its event type.
+? How do you type a React component's props?
+- With PropTypes only
++ With an interface or type for the function's props parameter
+- With `any`
+- You can't
+> Then every JSX use is checked against it.
+? `useState(null)` then setting a user later gives an error. Why?
++ The state was inferred as `null`; write `useState<User | null>(null)`
+- useState can't hold objects
+- null isn't allowed in React
+- setState must be awaited
+> Give a type argument when the initial value doesn't show the full type.
+--- exercise code web
+::prompt
+Build a **typed temperature converter page**. The page has a number input `#celsius`, a `<select id="unit">` with options `f` (Fahrenheit) and `k` (Kelvin), and an output `<output id="result">`.
+
+Write the logic in a `<script lang="ts">`:
+
+- a function `convert(celsius: number, unit: "f" | "k"): number` (F = C × 9/5 + 32, K = C + 273.15);
+- a function `isUnit(value: string): value is "f" | "k"`;
+- an `update` function that reads the input and select, and writes the result with two decimals and the unit (`98.60 °F`, `310.15 K`), or `Enter a number` when the input is empty or not a number. Call it on `input` events from both controls and once at start-up.
+
+Find the elements with type-safe checks (no `!` or `as`); the page must type-check.
+::starter
+<label>Celsius <input id="celsius" type="number" value="37"></label>
+<select id="unit">
+  <option value="f">Fahrenheit</option>
+  <option value="k">Kelvin</option>
+</select>
+<p><output id="result"></output></p>
+<script lang="ts">
+// your code here
+</script>
+::solution
+<label>Celsius <input id="celsius" type="number" value="37"></label>
+<select id="unit">
+  <option value="f">Fahrenheit</option>
+  <option value="k">Kelvin</option>
+</select>
+<p><output id="result"></output></p>
+<script lang="ts">
+function convert(celsius: number, unit: "f" | "k"): number {
+  return unit === "f" ? (celsius * 9) / 5 + 32 : celsius + 273.15;
+}
+
+function isUnit(value: string): value is "f" | "k" {
+  return value === "f" || value === "k";
+}
+
+const celsiusInput = document.querySelector("#celsius");
+const unitSelect = document.querySelector("#unit");
+const result = document.querySelector("#result");
+if (!(celsiusInput instanceof HTMLInputElement) || !(unitSelect instanceof HTMLSelectElement) || !(result instanceof HTMLOutputElement)) {
+  throw new Error("page is missing its controls");
+}
+
+const update = (): void => {
+  const text = celsiusInput.value.trim();
+  const celsius = Number(text);
+  const unit = unitSelect.value;
+  if (text === "" || Number.isNaN(celsius) || !isUnit(unit)) {
+    result.textContent = "Enter a number";
+    return;
+  }
+  result.textContent = `${convert(celsius, unit).toFixed(2)} ${unit === "f" ? "°F" : "K"}`;
+};
+
+celsiusInput.addEventListener("input", update);
+unitSelect.addEventListener("input", update);
+update();
+</script>
+::tests
+assert($("#result") !== null, "the result element should exist");
+assert($("#result").textContent === "98.60 °F", "37 °C should show 98.60 °F at start-up");
+type($("#celsius"), "100");
+assert($("#result").textContent === "212.00 °F", "100 °C is 212.00 °F");
+$("#unit").value = "k";
+$("#unit").dispatchEvent(new Event("input"));
+assert($("#result").textContent === "373.15 K", "100 °C is 373.15 K");
+type($("#celsius"), "");
+assert($("#result").textContent === "Enter a number", "an empty input should ask for a number");
+type($("#celsius"), "-40");
+$("#unit").value = "f";
+$("#unit").dispatchEvent(new Event("input"));
+assert($("#result").textContent === "-40.00 °F", "-40 °C is -40.00 °F");
+::hints
+- `document.querySelector("#celsius")` gives an `Element | null`; `instanceof HTMLInputElement` narrows it safely (and `HTMLSelectElement`, `HTMLOutputElement` for the others).
+- After a check that throws, the three constants stay narrowed in functions created **after** the check, such as `const update = () => { ... }`. A `function update()` declaration doesn't keep the narrowing: declarations are hoisted, so it could be called before the check ran.
+- `unitSelect.value` is a `string`; narrow it with `isUnit` before calling `convert`.
+--- cards
+lib.dom.d.ts :: TypeScript's built-in types for the browser API: elements, events, fetch, storage...
+querySelector :: Tag names infer the element type; CSS selectors need querySelector<HTMLInputElement>(...) or an instanceof check. Result includes null.
+Typed events :: addEventListener("click", e => ...) gives a MouseEvent; "keydown" a KeyboardEvent.
+event.target :: EventTarget | null: narrow with instanceof HTMLButtonElement (and friends).
+React props :: function Button({ label }: ButtonProps) — every JSX use is type-checked.
+useState<T> :: Inferred from the initial value; pass a type argument for null or empty starts: useState<User | null>(null).
+
+=== lesson ts-modules-declarations | Modules and declaration files | 85
+## Modules in TypeScript
+
+TypeScript uses standard ES modules (JavaScript course, Module 11). Types can be exported and imported like values:
+
+```ts
+// file: models.ts
+export interface Product {
+  sku: string;
+  name: string;
+  priceCents: number;
+}
+export type Currency = "EUR" | "USD" | "GBP";
+export const DEFAULT_CURRENCY: Currency = "EUR";
+
+// file: format.ts
+import type { Currency, Product } from "./models.ts";
+
+export function price(p: Product, currency: Currency): string {
+  return `${p.name}: ${(p.priceCents / 100).toFixed(2)} ${currency}`;
+}
+
+// file: main.ts
+import { DEFAULT_CURRENCY, type Product } from "./models.ts";
+import { price } from "./format.ts";
+
+const lamp: Product = { sku: "L-1", name: "Desk lamp", priceCents: 3500 };
+console.log(price(lamp, DEFAULT_CURRENCY));
+```
+
+- **`import type`** imports only types: the whole statement is erased from the output. Inline `type` markers (`import { DEFAULT_CURRENCY, type Product }`) do the same for single names.
+- With the compiler option **`verbatimModuleSyntax`** (recommended), imports that are only used as types **must** be marked with `type`, so every tool (Node, esbuild, Vite) can strip them without type information.
+
+## File extensions in imports
+
+How you write import paths depends on what runs the code:
+
+- **Node.js running `.ts` files directly** (type stripping) needs the real file name: `import { price } from "./format.ts"`. (`tsc` accepts this with `allowImportingTsExtensions`, or rewrites it with `rewriteRelativeImportExtensions`.)
+- **`tsc` compiling to JavaScript for Node** (`"module": "NodeNext"`) expects the name of the **output** file: `import { price } from "./format.js"`, which looks odd in a `.ts` file but is what Node will load after compilation.
+- **Bundlers** (Vite, webpack) accept either, and also extension-less paths (`"./format"`), with `"moduleResolution": "Bundler"`.
+
+DevQuest accepts all three, so use whichever matches the project you're working in.
+
+## Declaration files (.d.ts)
+
+A **declaration file** contains only types: no code. It describes the shape of JavaScript that exists somewhere else. You meet them in three ways:
+
+1. **Built-in**: `lib.dom.d.ts`, `lib.es2023.d.ts`... the types of the platform.
+2. **Bundled with libraries**: most modern npm packages ship `.d.ts` files next to their JavaScript (look for `"types"` in their `package.json`).
+3. **DefinitelyTyped**: for packages written in JavaScript without types, the community maintains types in separate `@types/...` packages: `npm install --save-dev @types/node @types/express`.
+
+When a package has no types at all, write a minimal declaration yourself:
+
+```ts
+// file: slugify.js
+export function slugify(text, separator = "-") {
+  return text.toLowerCase().trim().replace(/[^a-z0-9]+/g, separator).replace(new RegExp(`^${separator}|${separator}$`, "g"), "");
+}
+
+// file: slugify.d.ts
+export declare function slugify(text: string, separator?: string): string;
+
+// file: main.ts
+import { slugify } from "./slugify.js";
+console.log(slugify("  Hello, TypeScript World! "));
+```
+
+`declare` says "this exists at run time; here's its type". A `.d.ts` file next to a `.js` file with the same name is picked up automatically. For an npm package, put `declare module "package-name" { ... }` in a `.d.ts` file in your project (a common place is `src/types/`).
+
+Libraries written in TypeScript generate `.d.ts` files with `tsc --declaration`, so their users get types for free.
+
+~~~check
+? A JavaScript package on npm has no types. What's the first thing to check?
++ Whether `@types/<package>` exists on DefinitelyTyped
+- Rewrite the package in TypeScript
+- Use `any` for everything
+- Disable strict mode
+> Many popular untyped packages have community-maintained types.
+~~~
+
+## Ambient declarations and globals
+
+Some values exist without being imported: globals injected by a script tag, a bundler (`import.meta.env` in Vite), or a runtime. Declare them with `declare`:
+
+```ts
+declare const __APP_VERSION__: string;
+declare function analytics(event: string, data?: Record<string, unknown>): void;
+
+function about(): string {
+  return typeof __APP_VERSION__ === "undefined" ? "development build" : `version ${__APP_VERSION__}`;
+}
+console.log(about());
+```
+
+(Here `__APP_VERSION__` isn't actually defined, so the `typeof` check matters: a `declare` is a promise TypeScript can't verify.)
+
+## Types for JavaScript files: JSDoc
+
+TypeScript can check plain JavaScript too, using **JSDoc comments** for types. With `"allowJs": true` and `"checkJs": true` (or `// @ts-check` at the top of a file), the editor checks `.js` files:
+
+```
+// @ts-check
+/**
+ * @param {number[]} values
+ * @returns {number}
+ */
+export function average(values) {
+  return values.reduce((a, b) => a + b, 0) / values.length;
+}
+```
+
+This is how some projects (Svelte's own source, webpack) get type checking without a build step, and how large JavaScript codebases migrate gradually.
+
+📚 **Go deeper:** TypeScript Handbook, "Modules", "Declaration Files" (Introduction, Do's and Don'ts) and "JS Projects Utilizing TypeScript"; TSConfig reference: `verbatimModuleSyntax`, `allowImportingTsExtensions`, `rewriteRelativeImportExtensions`; *Programming TypeScript*, chapter 10 "Namespaces.Modules" and chapter 11 "Interoperating with JavaScript".
+--- goals
+- import and export types, using `import type` and `verbatimModuleSyntax`
+- choose import path extensions for Node, `tsc` and bundlers
+- explain declaration files, bundled types and `@types` packages
+- write declarations for untyped JavaScript and for globals
+- type-check JavaScript files with JSDoc
+--- quiz
+? What happens to `import type { User } from "./user.ts"` in the output JavaScript?
++ It's removed entirely
+- It imports User at run time
+- It becomes a require call
+- It's an error
+> Type-only imports are erased.
+? What does a `.d.ts` file contain?
+- Compiled JavaScript
++ Only type declarations, no code
+- Tests
+- Configuration
+> Declaration files describe code that exists elsewhere.
+? Where do types for an untyped npm package usually come from?
++ A `@types/...` package from DefinitelyTyped, or your own `declare module` file
+- The package's README
+- They're generated at run time
+- tsconfig.json
+> DefinitelyTyped covers thousands of JavaScript packages.
+? Why does a `.ts` file in a NodeNext project import `"./util.js"`?
++ The path names the compiled output file that Node will load
+- It's a typo that TypeScript tolerates
+- .js files are faster
+- To skip type checking
+> tsc doesn't rewrite paths (unless rewriteRelativeImportExtensions is on).
+--- exercise code typescript
+::prompt
+This project mixes TypeScript with an **untyped JavaScript** module, `legacy-cart.js`, which can't be changed. Write `legacy-cart.d.ts` declaring precise types for it (a `CartLine` interface, and the three exported functions), then complete `main.ts` so that it compiles in strict mode and prints `2 lines, first PEN, total 16.50 EUR`. Also give the constant `lines` in `main.ts` the type `CartLine[]`, using `import type` to import it.
+::starter
+// file: legacy-cart.js
+export function createCart(currency) {
+  return { currency, lines: [] };
+}
+export function addLine(cart, sku, qty, unitPrice) {
+  cart.lines.push({ sku, qty, unitPrice });
+  return cart.lines.length;
+}
+export function cartTotal(cart) {
+  return cart.lines.reduce((sum, line) => sum + line.qty * line.unitPrice, 0);
+}
+
+// file: legacy-cart.d.ts
+
+// file: main.ts
+import { createCart, addLine, cartTotal } from "./legacy-cart.js";
+
+const cart = createCart("EUR");
+addLine(cart, "PEN", 3, 1.5);
+const count = addLine(cart, "BOOK", 1, 12);
+const firstSku: string = cart.lines[0].sku;
+console.log(`${count} lines, first ${firstSku}, total ${cartTotal(cart).toFixed(2)} ${cart.currency}`);
+::solution
+// file: legacy-cart.js
+export function createCart(currency) {
+  return { currency, lines: [] };
+}
+export function addLine(cart, sku, qty, unitPrice) {
+  cart.lines.push({ sku, qty, unitPrice });
+  return cart.lines.length;
+}
+export function cartTotal(cart) {
+  return cart.lines.reduce((sum, line) => sum + line.qty * line.unitPrice, 0);
+}
+
+// file: legacy-cart.d.ts
+export interface CartLine {
+  sku: string;
+  qty: number;
+  unitPrice: number;
+}
+export interface Cart {
+  currency: string;
+  lines: CartLine[];
+}
+export declare function createCart(currency: string): Cart;
+export declare function addLine(cart: Cart, sku: string, qty: number, unitPrice: number): number;
+export declare function cartTotal(cart: Cart): number;
+
+// file: main.ts
+import { createCart, addLine, cartTotal } from "./legacy-cart.js";
+import type { CartLine } from "./legacy-cart.js";
+
+const cart = createCart("EUR");
+addLine(cart, "PEN", 3, 1.5);
+const count = addLine(cart, "BOOK", 1, 12);
+const firstSku: string = cart.lines[0].sku;
+const lines: CartLine[] = cart.lines;
+console.log(`${count} lines, first ${firstSku}, total ${cartTotal(cart).toFixed(2)} ${cart.currency}`);
+::tests
+type __Cart = ReturnType<typeof createCart>;
+type _t1 = Expect<Equal<__Cart["lines"][number], CartLine>>;
+type _t2 = Expect<Equal<ReturnType<typeof cartTotal>, number>>;
+type _t3 = Expect<Equal<CartLine, { sku: string; qty: number; unitPrice: number }>>;
+function __typeChecks() {
+  // @ts-expect-error
+  addLine(cart, "X", "2", 1);
+  // @ts-expect-error
+  createCart();
+}
+::hints
+- In the `.d.ts` file, describe the shapes with interfaces and the functions with `export declare function ...;` (no bodies).
+- A `Cart` interface with `currency: string` and `lines: CartLine[]` lets `createCart` return something useful.
+- In `main.ts`, `import type { CartLine } from "./legacy-cart.js";` brings in the interface without importing any code.
+--- cards
+import type :: Imports only types; erased from the output. Inline form: import { value, type T }.
+verbatimModuleSyntax :: Requires type-only imports to be marked, so any tool can strip them safely.
+Import extensions :: Node type stripping: "./x.ts". tsc + NodeNext: "./x.js". Bundlers: either, or none.
+.d.ts file :: Types only (declare ...), describing JavaScript that exists elsewhere.
+@types :: DefinitelyTyped packages with community types for untyped JavaScript libraries.
+declare module :: declare module "pkg" { ... } provides or extends types for a module.
+JSDoc checking :: // @ts-check plus /** @param {number} x */ comments type-check plain .js files.
+
+=== lesson ts-config-tooling | Configuration and tooling | 80
+## tsconfig.json in depth
+
+Module 1 introduced `tsconfig.json`. Here's what professionals tune, and why.
+
+### The strict family
+
+`"strict": true` turns on a set of flags, each of which you can also set individually:
+
+| Flag | Catches |
+|---|---|
+| `noImplicitAny` | parameters and variables silently typed `any` |
+| `strictNullChecks` | using possibly `null`/`undefined` values |
+| `strictFunctionTypes` | unsafe function parameter types (contravariance, Module 5) |
+| `strictBindCallApply` | wrong arguments to `bind`, `call`, `apply` |
+| `strictPropertyInitialization` | class fields never initialised |
+| `noImplicitThis` | `this` with an implicit `any` type |
+| `useUnknownInCatchVariables` | `catch (e)` typed `any` instead of `unknown` |
+| `alwaysStrict` | emits `"use strict"` |
+
+Beyond `strict`, these are worth turning on in new projects:
+
+- **`noUncheckedIndexedAccess`**: `array[i]` and `record[key]` include `undefined` (Module 2);
+- **`exactOptionalPropertyTypes`**: `email?: string` means "absent or a string", not "may be set to `undefined`";
+- **`noImplicitOverride`**: `override` is required (Module 4);
+- **`noFallthroughCasesInSwitch`**, **`noImplicitReturns`**: classic control-flow mistakes;
+- **`verbatimModuleSyntax`** and **`erasableSyntaxOnly`**: code that any type-stripping tool can handle (Node, esbuild, swc).
+
+### Output and environment
+
+| Option | Meaning |
+|---|---|
+| `target` | JavaScript version emitted (ES2022 is a safe modern choice) |
+| `lib` | which built-in declarations are available (`["ES2023", "DOM"]` for browsers, without DOM for Node) |
+| `module` / `moduleResolution` | `NodeNext` for Node packages; `ESNext` + `Bundler` for Vite and other bundlers |
+| `types` | which `@types` packages are loaded automatically (`["node"]`, `["vite/client"]`) |
+| `outDir`, `rootDir`, `declaration`, `sourceMap` | where output goes; emit `.d.ts`; source maps |
+| `noEmit` | check only (when another tool builds) |
+| `isolatedModules` | each file must be compilable alone (required by esbuild, swc, Vite) |
+| `incremental` / `composite` | faster rebuilds; project references for monorepos |
+| `paths` | import aliases like `@/components/*` (the bundler must be told too) |
+
+Configurations can share settings with **`extends`** (`"extends": "@tsconfig/node22/tsconfig.json"`): the `@tsconfig/bases` packages hold recommended settings for each runtime.
+
+## The toolchain
+
+A modern TypeScript project typically uses:
+
+- **`tsc`** for type checking (`tsc --noEmit`, or `tsc -b` with project references); TypeScript 7's native compiler makes this much faster on large codebases;
+- **a fast transpiler** for building and running: Vite (esbuild and Rollup) for front ends, `tsx` or Node's type stripping for scripts and servers, `tsup` or `tsdown` to bundle libraries;
+- **typescript-eslint** for lint rules that use type information: `no-floating-promises` (forgotten `await`), `no-misused-promises`, `no-unsafe-assignment` (spreading `any`), `switch-exhaustiveness-check`, `consistent-type-imports`;
+- **Prettier** (or Biome) for formatting;
+- **Vitest** (or Jest with ts-jest, or Node's `node:test`) for tests, written in TypeScript;
+- **CI** running `tsc --noEmit`, the linter and the tests on every pull request.
+
+Type-level tests also exist: Vitest's `expectTypeOf(value).toEqualTypeOf<...>()` checks types like the `Expect<Equal<...>>` checks used in this course, and `tsd` does the same for library authors.
+
+~~~check
+? A Vite project builds fine, but CI must catch type errors. Which command does CI run?
++ `tsc --noEmit` (Vite strips types without checking them)
+- `vite build --strict`
+- `node --check`
+- Nothing: Vite already checks types
+> Fast transpilers don't type-check; tsc does.
+~~~
+
+## Migrating a JavaScript project
+
+A proven, gradual path:
+
+1. Add `tsconfig.json` with `allowJs: true`, `checkJs: false` and `strict: false`; make the build pass.
+2. Rename files from `.js` to `.ts` one at a time, starting with leaf modules (utilities, models); fix the errors in each.
+3. Install `@types/...` for dependencies; write small `.d.ts` files for the rest.
+4. Turn on `noImplicitAny`, then `strictNullChecks` (usually the biggest batch of fixes, and the most valuable), then full `strict`.
+5. Add typescript-eslint rules to stop new `any`s creeping in.
+
+At no point does the application stop working: TypeScript was designed for this gradual adoption.
+
+📚 **Go deeper:** TSConfig reference (typescriptlang.org/tsconfig); the `@tsconfig/bases` repository; typescript-eslint documentation, "Linting with Type Information"; TypeScript Handbook, "Migrating from JavaScript"; *Programming TypeScript*, chapter 11 (gradually migrating from JavaScript) and chapter 12 (building and running TypeScript).
+--- goals
+- explain each flag in the `strict` family, and the useful flags beyond it
+- choose `target`, `lib`, `module` and `moduleResolution` for browsers, Node and bundlers
+- assemble a toolchain: tsc, a fast transpiler, typescript-eslint, a formatter and a test runner
+- migrate a JavaScript codebase to TypeScript gradually
+--- quiz
+? Which flag makes `catch (e)` give `e: unknown`?
++ `useUnknownInCatchVariables` (part of strict)
+- `noImplicitAny`
+- `strictNullChecks`
+- `noUncheckedIndexedAccess`
+> It's included in strict since TypeScript 4.4.
+? What does `isolatedModules` guarantee?
+- Every file is a module
++ Each file can be compiled on its own, as esbuild, swc and Vite do
+- Modules can't import each other
+- Output files are minified
+> Some features need whole-program information; this flag forbids them.
+? `exactOptionalPropertyTypes` makes which of these an error, for `name?: string`?
+- `{}`
+- `{ name: "Ada" }`
++ `{ name: undefined }`
+- none
+> The property may be absent or a string, but not explicitly undefined.
+? Which tool catches a forgotten `await` on a promise whose result isn't used?
+- tsc alone
++ typescript-eslint's `no-floating-promises`
+- Prettier
+- Vite
+> Some mistakes need lint rules with type information.
+--- exercise code typescript
+::prompt
+Write a small **tsconfig linter**. Given a typed `TsConfig` (provided), `lintConfig(config: TsConfig): string[]` returns warnings, in this order:
+
+1. `enable strict` when `strict` isn't `true`;
+2. `enable noUncheckedIndexedAccess` when it isn't `true`;
+3. `module NodeNext needs moduleResolution NodeNext` when `module` is `"NodeNext"` and `moduleResolution` is set to anything other than `"NodeNext"` (unset is fine);
+4. `moduleResolution Bundler needs module ESNext or Preserve` when `moduleResolution` is `"Bundler"` and `module` isn't `"ESNext"` or `"Preserve"`;
+5. `a browser project needs the DOM lib` when `kind` is `"browser"` and `lib` is set without any entry equal to `"DOM"` (case-insensitive);
+6. `noEmit with outDir is contradictory` when both are set (`noEmit` true and an `outDir`).
+
+Also write `recommended(kind: "node" | "browser"): TsConfig` returning a config for which `lintConfig` gives no warnings (Node: `module` and `moduleResolution` `"NodeNext"`; browser: `"ESNext"` and `"Bundler"` with `lib` `["ES2023", "DOM"]`, `noEmit` true). Both get `target: "ES2022"`, `strict` and `noUncheckedIndexedAccess`.
+::starter
+interface TsConfig {
+  kind: "node" | "browser";
+  compilerOptions: {
+    target?: string;
+    module?: "NodeNext" | "ESNext" | "Preserve" | "CommonJS";
+    moduleResolution?: "NodeNext" | "Bundler" | "Node10";
+    lib?: string[];
+    strict?: boolean;
+    noUncheckedIndexedAccess?: boolean;
+    noEmit?: boolean;
+    outDir?: string;
+  };
+}
+
+function lintConfig(config: TsConfig): string[] {
+  return [];
+}
+
+function recommended(kind: "node" | "browser"): TsConfig {
+  return { kind, compilerOptions: {} };
+}
+::solution
+interface TsConfig {
+  kind: "node" | "browser";
+  compilerOptions: {
+    target?: string;
+    module?: "NodeNext" | "ESNext" | "Preserve" | "CommonJS";
+    moduleResolution?: "NodeNext" | "Bundler" | "Node10";
+    lib?: string[];
+    strict?: boolean;
+    noUncheckedIndexedAccess?: boolean;
+    noEmit?: boolean;
+    outDir?: string;
+  };
+}
+
+function lintConfig(config: TsConfig): string[] {
+  const o = config.compilerOptions;
+  const warnings: string[] = [];
+  if (o.strict !== true) warnings.push("enable strict");
+  if (o.noUncheckedIndexedAccess !== true) warnings.push("enable noUncheckedIndexedAccess");
+  if (o.module === "NodeNext" && o.moduleResolution !== undefined && o.moduleResolution !== "NodeNext") {
+    warnings.push("module NodeNext needs moduleResolution NodeNext");
+  }
+  if (o.moduleResolution === "Bundler" && o.module !== "ESNext" && o.module !== "Preserve") {
+    warnings.push("moduleResolution Bundler needs module ESNext or Preserve");
+  }
+  if (config.kind === "browser" && o.lib !== undefined && !o.lib.some((l) => l.toLowerCase() === "dom")) {
+    warnings.push("a browser project needs the DOM lib");
+  }
+  if (o.noEmit === true && o.outDir !== undefined) warnings.push("noEmit with outDir is contradictory");
+  return warnings;
+}
+
+function recommended(kind: "node" | "browser"): TsConfig {
+  const base = { target: "ES2022", strict: true, noUncheckedIndexedAccess: true };
+  return kind === "node"
+    ? { kind, compilerOptions: { ...base, module: "NodeNext", moduleResolution: "NodeNext" } }
+    : { kind, compilerOptions: { ...base, module: "ESNext", moduleResolution: "Bundler", lib: ["ES2023", "DOM"], noEmit: true } };
+}
+::tests
+assert.deepStrictEqual(lintConfig({ kind: "node", compilerOptions: {} }), ["enable strict", "enable noUncheckedIndexedAccess"]);
+assert.deepStrictEqual(
+  lintConfig({ kind: "browser", compilerOptions: { strict: true, noUncheckedIndexedAccess: true, module: "CommonJS", moduleResolution: "Bundler", lib: ["ES2023"], noEmit: true, outDir: "dist" } }),
+  ["moduleResolution Bundler needs module ESNext or Preserve", "a browser project needs the DOM lib", "noEmit with outDir is contradictory"],
+);
+assert.deepStrictEqual(lintConfig({ kind: "node", compilerOptions: { strict: true, noUncheckedIndexedAccess: true, module: "NodeNext", moduleResolution: "Node10" } }), ["module NodeNext needs moduleResolution NodeNext"]);
+assert.deepStrictEqual(lintConfig({ kind: "node", compilerOptions: { strict: true, noUncheckedIndexedAccess: true, module: "NodeNext" } }), []);
+assert.deepStrictEqual(lintConfig({ kind: "browser", compilerOptions: { strict: true, noUncheckedIndexedAccess: true, lib: ["es2023", "dom"] } }), []);
+assert.deepStrictEqual(lintConfig(recommended("node")), []);
+assert.deepStrictEqual(lintConfig(recommended("browser")), []);
+assert.strictEqual(recommended("browser").compilerOptions.moduleResolution, "Bundler");
+assert.strictEqual(recommended("node").compilerOptions.target, "ES2022");
+::hints
+- Read `config.compilerOptions` into a short variable, and push warnings in the listed order.
+- "Set to anything other than NodeNext (unset is fine)": `o.moduleResolution !== undefined && o.moduleResolution !== "NodeNext"`.
+- In `recommended`, the literal strings fit the option types because the return type is `TsConfig`: TypeScript checks object literals against it (contextual typing).
+--- cards
+strict family :: noImplicitAny, strictNullChecks, strictFunctionTypes, strictBindCallApply, strictPropertyInitialization, noImplicitThis, useUnknownInCatchVariables, alwaysStrict.
+Beyond strict :: noUncheckedIndexedAccess, exactOptionalPropertyTypes, noImplicitOverride, noFallthroughCasesInSwitch, verbatimModuleSyntax.
+module / moduleResolution :: NodeNext for Node packages; ESNext + Bundler for Vite and bundlers.
+isolatedModules :: Every file compilable alone — required by esbuild, swc and Vite.
+Toolchain :: tsc --noEmit (check) + Vite/tsx/Node (run) + typescript-eslint + Prettier + Vitest + CI.
+Gradual migration :: allowJs, rename leaf files, @types, then noImplicitAny, strictNullChecks, strict.
+
+=== lesson ts-m6-test | Module 6 test | 200 | exam
+This test covers Module 6: typed error handling and results, asynchronous code, validation at boundaries, the DOM and React, modules and declaration files, configuration and tooling.
+
+Before you start, check that you can:
+
+- model expected failures with result types and typed error unions;
+- type promises, parallel requests and async helpers;
+- validate external data at the boundary, and explain schema-based type inference;
+- type DOM code safely, and React props and state;
+- work with `import type`, `.d.ts` files and `@types`;
+- configure a project and its toolchain.
+--- goals
+- apply TypeScript to the parts of real applications where most bugs come from
+- connect typed code safely to the untyped outside world
+- set up and maintain a professional TypeScript project
+--- quiz
+? Which is the safest way to use JSON from an API?
+- `const data = await res.json() as Order`
++ Parse the `unknown` body with a schema, then use the typed result
+- `const data: Order = await res.json()`
+- `// @ts-ignore`
+> The first two compile, but neither checks anything.
+? What is `Awaited<Promise<Promise<number>>>`?
++ `number`
+- `Promise<number>`
+- `Promise<Promise<number>>`
+- `unknown`
+> Awaited unwraps recursively, like await.
+? Which import is erased completely from the JavaScript output?
+- `import { useState } from "react"`
++ `import type { User } from "./models.ts"`
+- `import "./styles.css"`
+- `import * as fs from "node:fs"`
+> Type-only imports leave no trace.
+? A component's state starts as `null` and later holds a `User`. How should it be declared?
++ `useState<User | null>(null)`
+- `useState(null)`
+- `useState<User>(null)`
+- `useState<any>(null)`
+> Give the full type when the initial value doesn't show it.
+? What does `tsc --noEmit` do in a Vite project's CI?
++ Type-checks the project (Vite only strips types)
+- Builds the production bundle
+- Runs the tests
+- Formats the code
+> Checking and building are separate jobs.
+--- exercise code typescript
+::prompt
+**Load a configuration safely.** Environment variables arrive as `Record<string, string | undefined>`. Write:
+
+- `type Result<T, E> = { ok: true; value: T } | { ok: false; error: E }`;
+- `interface AppConfig { port: number; databaseUrl: string; logLevel: "debug" | "info" | "warn" | "error"; features: string[] }`;
+- `loadConfig(env: Record<string, string | undefined>): Result<AppConfig, string[]>`, reading `PORT` (integer 1 to 65535, default 3000), `DATABASE_URL` (required, must start with `postgres://`), `LOG_LEVEL` (one of the four levels, default `info`), `FEATURES` (comma-separated, trimmed, empties dropped; default none). **All** problems are reported together, in this order and wording: `PORT must be an integer from 1 to 65535`, `DATABASE_URL is required`, `DATABASE_URL must start with postgres://`, `LOG_LEVEL must be one of debug, info, warn, error`.
+
+No `as` or `!`.
+::starter
+type Result<T, E> = { ok: true; value: T } | { ok: false; error: E };
+
+interface AppConfig {
+  port: number;
+  databaseUrl: string;
+  logLevel: "debug" | "info" | "warn" | "error";
+  features: string[];
+}
+
+function loadConfig(env: Record<string, string | undefined>): Result<AppConfig, string[]> {
+  return { ok: false, error: [] };
+}
+::solution
+type Result<T, E> = { ok: true; value: T } | { ok: false; error: E };
+
+interface AppConfig {
+  port: number;
+  databaseUrl: string;
+  logLevel: "debug" | "info" | "warn" | "error";
+  features: string[];
+}
+
+const LEVELS = ["debug", "info", "warn", "error"] as const;
+
+function isLevel(value: string): value is AppConfig["logLevel"] {
+  return LEVELS.some((level) => level === value);
+}
+
+function loadConfig(env: Record<string, string | undefined>): Result<AppConfig, string[]> {
+  const errors: string[] = [];
+
+  const portText = env.PORT ?? "3000";
+  const port = Number(portText);
+  if (portText.trim() === "" || !Number.isInteger(port) || port < 1 || port > 65535) errors.push("PORT must be an integer from 1 to 65535");
+
+  const databaseUrl = env.DATABASE_URL;
+  if (databaseUrl === undefined || databaseUrl === "") errors.push("DATABASE_URL is required");
+  else if (!databaseUrl.startsWith("postgres://")) errors.push("DATABASE_URL must start with postgres://");
+
+  const level = env.LOG_LEVEL ?? "info";
+  if (!isLevel(level)) errors.push(`LOG_LEVEL must be one of ${LEVELS.join(", ")}`);
+
+  const features = (env.FEATURES ?? "").split(",").map((f) => f.trim()).filter((f) => f !== "");
+
+  if (errors.length > 0 || databaseUrl === undefined || !isLevel(level)) return { ok: false, error: errors };
+  return { ok: true, value: { port, databaseUrl, logLevel: level, features } };
+}
+::tests
+assert.deepStrictEqual(loadConfig({ DATABASE_URL: "postgres://localhost/app" }), {
+  ok: true,
+  value: { port: 3000, databaseUrl: "postgres://localhost/app", logLevel: "info", features: [] },
+});
+assert.deepStrictEqual(loadConfig({ PORT: "8080", DATABASE_URL: "postgres://db/x", LOG_LEVEL: "debug", FEATURES: " search, ,beta " }), {
+  ok: true,
+  value: { port: 8080, databaseUrl: "postgres://db/x", logLevel: "debug", features: ["search", "beta"] },
+});
+assert.deepStrictEqual(loadConfig({ PORT: "eighty", LOG_LEVEL: "loud" }), {
+  ok: false,
+  error: ["PORT must be an integer from 1 to 65535", "DATABASE_URL is required", "LOG_LEVEL must be one of debug, info, warn, error"],
+});
+assert.deepStrictEqual(loadConfig({ PORT: "70000", DATABASE_URL: "mysql://x" }), {
+  ok: false,
+  error: ["PORT must be an integer from 1 to 65535", "DATABASE_URL must start with postgres://"],
+});
+assert.deepStrictEqual(loadConfig({ PORT: "", DATABASE_URL: "" }), { ok: false, error: ["PORT must be an integer from 1 to 65535", "DATABASE_URL is required"] });
+const __r = loadConfig({ DATABASE_URL: "postgres://a" });
+if (__r.ok) {
+  const __level: "debug" | "info" | "warn" | "error" = __r.value.logLevel;
+}
+::hints
+- Collect messages in an `errors` array instead of returning at the first problem.
+- A type guard `isLevel(value: string): value is AppConfig["logLevel"]` narrows the log level without `as`.
+- At the end, TypeScript needs to know that `databaseUrl` is defined and `level` is valid: re-checking them in the final `if` (cheap) narrows them for the success branch.

@@ -331,6 +331,47 @@ async function stripTypes(code: string) {
   return transform(code, { transforms: ['typescript'], disableESTransforms: true }).code;
 }
 
+/** `<script lang="ts">` in a page (TypeScript DOM lessons). */
+const TS_SCRIPT = /(<script\b[^>]*?)\s+lang=["'](?:ts|typescript)["']([^>]*>)([\s\S]*?)(<\/script>)/gi;
+export const hasTsScripts = (html: string) => /<script\b[^>]*\slang=["'](?:ts|typescript)["']/i.test(html);
+
+/**
+ * Turns a page's TypeScript scripts into JavaScript. With `check`, the scripts are first type-checked together
+ * (classic scripts share one global scope), and type errors are reported with their line in the page.
+ */
+export async function compileTsPage(html: string, check = false): Promise<{ html: string; problems?: string }> {
+  if (!hasTsScripts(html)) return { html };
+  if (check) {
+    const scripts: { pageLine: number; code: string }[] = [];
+    for (const m of html.matchAll(TS_SCRIPT)) {
+      const start = m.index + m[0].length - m[3].length - m[4].length;
+      scripts.push({ pageLine: html.slice(0, start).split('\n').length, code: m[3] });
+    }
+    const diagnostics = await checkTypes(scripts.map((s) => s.code).join('\n'));
+    if (diagnostics?.length) {
+      // Map each line of the combined program back to the page
+      const mapped = diagnostics.map((d) => {
+        let first = 1;
+        for (const s of scripts) {
+          const count = s.code.split('\n').length;
+          if (d.line < first + count) return { ...d, line: s.pageLine + d.line - first };
+          first += count;
+        }
+        return d;
+      });
+      return { html, problems: describeTypeErrors(mapped) };
+    }
+  }
+  const parts: string[] = [];
+  let at = 0;
+  for (const m of html.matchAll(TS_SCRIPT)) {
+    parts.push(html.slice(at, m.index), m[1], m[2], await stripTypes(m[3]), m[4]);
+    at = m.index + m[0].length;
+  }
+  parts.push(html.slice(at));
+  return { html: parts.join('') };
+}
+
 export const warmPython = () => python.warm();
 
 // ---------- SQL ----------
@@ -467,7 +508,17 @@ export function instrumentHtml(html: string, harness = '') {
 }
 
 // Pages that load scripts from a CDN (e.g. React lessons) get longer to finish loading
-export function runWeb(html: string, tests?: string, timeoutMs = /<script[^>]+src=["']https?:/i.test(html) ? 20000 : 6000): Promise<RunResult> {
+export async function runWeb(html: string, tests?: string, timeoutMs = /<script[^>]+src=["']https?:/i.test(html) ? 20000 : 6000): Promise<RunResult> {
+  if (hasTsScripts(html)) {
+    // Like tsc: a page whose TypeScript has type errors doesn't run
+    const page = await compileTsPage(html, true).catch((e: Error) => ({ html, problems: `SyntaxError: ${e.message}` }));
+    if (page.problems) return { ok: false, output: '', error: page.problems, passed: tests ? false : undefined };
+    html = page.html;
+  }
+  return runPage(html, tests, timeoutMs);
+}
+
+function runPage(html: string, tests: string | undefined, timeoutMs: number): Promise<RunResult> {
   const id = Math.random().toString(36).slice(2);
   const frame = document.createElement('iframe');
   const vendors = ensureVendors(html).catch(() => undefined);

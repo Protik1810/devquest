@@ -1082,18 +1082,24 @@ This gives the same `LogLevel.Info` syntax, accepts plain strings, and is erasab
 `value as Type` tells the compiler "trust me, this is a `Type`". It changes nothing at run time:
 
 ```ts
-const input = document.createElement("input");
-document.body.append(input);
-const found = document.querySelector("input") as HTMLInputElement;
-found.value = "typed";
-console.log(found.value);
+interface Config {
+  port: number;
+  host: string;
+}
+
+const saved: unknown = JSON.parse('{"port": 8080, "host": "localhost"}');
+const config = saved as Config;
+console.log(config.port + 1, config.host.toUpperCase());
+
+const broken = JSON.parse('{"port": "eighty"}') as Config;
+console.log(broken.port + 1);
 ```
 
-`querySelector("input")` already returns `HTMLInputElement | null`; the assertion removes `null`. That's acceptable when you know better than the compiler (here, we just added the element), but if you're wrong, the error appears later and somewhere else. TypeScript only allows assertions between types that overlap; `"hello" as number` is an error (you can force it with `as unknown as number`, which is a strong code smell).
+The first assertion happens to be right. The second compiles just as happily and prints `eighty1`: the assertion **didn't check anything**, and the wrong data travels on until something misbehaves far from the cause (here `broken.host.toUpperCase()` would crash). Another everyday example is `document.querySelector("#email") as HTMLInputElement`, which also silently removes the possibility of `null`. TypeScript only allows assertions between types that overlap; `"hello" as number` is an error (you can force it with `as unknown as number`, which is a strong code smell).
 
 Safer alternatives, in order of preference:
 
-1. **Narrow** with a check (`if (found === null) throw ...`, `instanceof`, a type guard).
+1. **Narrow** with a check (`if (el === null) throw ...`, `instanceof`, a type guard), or validate outside data (Module 6).
 2. **`satisfies`** when you want to check, not override.
 3. **`as`** in small, well-understood places (tests, a validated value, the inside of a typed helper).
 
@@ -1133,9 +1139,9 @@ Two compiler options and one lint rule keep `any` under control: `noImplicitAny`
 
 ## Declaration merging and module augmentation
 
-Interfaces with the same name merge (Module 2). This lets you **add** properties to existing types, such as the browser's `Window` or a library's interfaces:
+Interfaces with the same name merge (Module 2). This lets you **add** properties to existing types, such as the browser's `Window` or a library's interfaces. In a web app:
 
-```ts
+```
 declare global {
   interface Window {
     appVersion: string;
@@ -1143,7 +1149,17 @@ declare global {
 }
 
 window.appVersion = "1.4.0";
-console.log(window.appVersion);
+```
+
+The same works for global variables (here runnable, because it doesn't need a browser window):
+
+```ts
+declare global {
+  var appVersion: string;
+}
+
+globalThis.appVersion = "1.4.0";
+console.log(appVersion);
 ```
 
 `declare global` adds to the global scope from inside a module; `declare module "some-library" { interface Options { ... } }` does the same for a library's types (Module 6 covers declaration files). Use this sparingly: it changes a type for the whole project.

@@ -10,7 +10,8 @@
  *
  * JavaScript files become modules (import/export turned into a small CommonJS-style registry); other files
  * (notes.txt, data.json...) become files in the runtime's in-memory `node:fs`. The entry point is main.js
- * (or index.js, or the last JavaScript file). Every line stays on the line where the learner wrote it, so
+ * (or index.js, main.ts or index.ts, or the last code file); TypeScript files (.ts) work the same way once their types
+ * are stripped, and declaration files (.d.ts) are left out. Every line stays on the line where the learner wrote it, so
  * error line numbers still match the editor.
  */
 
@@ -26,7 +27,7 @@ export function usesModules(code: string) {
 /** Registry, resolver and require, kept on one line so the learner's line numbers don't move. */
 const PRELUDE =
   'const __dqMods = {}, __dqCache = {}, process = __dqProcess; ' +
-  'const __dqResolve = (from, spec) => { if (!/^\\.\\.?\\//.test(spec)) return spec; const parts = from.split("/").slice(0, -1); for (const p of spec.split("/")) { if (p === "..") parts.pop(); else if (p !== ".") parts.push(p); } const key = parts.join("/"); return [key, key + ".js", key + "/index.js"].find((k) => k in __dqMods) ?? key; }; ' +
+  'const __dqResolve = (from, spec) => { if (!/^\\.\\.?\\//.test(spec)) return spec; const parts = from.split("/").slice(0, -1); for (const p of spec.split("/")) { if (p === "..") parts.pop(); else if (p !== ".") parts.push(p); } const key = parts.join("/"); return [key, key + ".js", key + "/index.js", key.replace(/\\.(m|c)?js$/, ".$1ts"), key + ".ts", key + "/index.ts"].find((k) => k in __dqMods) ?? key; }; ' +
   // Like Node, using a name an ES module doesn't export is an error, not undefined
   'const __dqExports = (spec, exp) => exp && exp.__esModule ? new Proxy(exp, { get: function __dqExportCheck(t, p) { if (typeof p === "string" && !(p in t) && p !== "then" && p !== "toJSON") throw new SyntaxError("The requested module \'" + spec + "\' does not provide an export named \'" + p + "\'"); return t[p]; } }) : exp; ' +
   'const __dqRequireFrom = (from) => (spec) => { const key = __dqResolve(from, String(spec)); if (key in __dqCache) return __dqExports(spec, __dqCache[key].exports); if (!(key in __dqMods)) return __dqBuiltin(String(spec)); const module = { exports: {} }; __dqCache[key] = module; module.done = __dqMods[key](module.exports, __dqRequireFrom(key), module, "/app/" + key, "/app/" + key.split("/").slice(0, -1).join("/")); return __dqExports(spec, module.exports); }; ' +
@@ -49,9 +50,11 @@ export function bundleModules(code: string, transform: (src: string) => string):
   });
   // No markers: the whole program is one module, main.js
   if (!sections.length) sections.push({ name: 'main.js', marker: -1, from: 0, to: lines.length });
-  const isJs = (name: string) => /\.(m?js|cjs)$/.test(name);
+  // TypeScript files arrive with their types already stripped; declaration files (.d.ts) hold no code at all
+  const isDeclaration = (name: string) => /\.d\.(m|c)?ts$/.test(name);
+  const isJs = (name: string) => /\.(m|c)?[jt]s$/.test(name) && !isDeclaration(name);
   const jsNames = sections.filter((s) => isJs(s.name)).map((s) => s.name);
-  const entry = jsNames.find((n) => n === 'main.js') ?? jsNames.find((n) => n === 'index.js') ?? jsNames[jsNames.length - 1];
+  const entry = jsNames.find((n) => /^(main|index)\.[jt]s$/.test(n)) ?? jsNames[jsNames.length - 1];
 
   const out = [...lines];
   const files: Record<string, string> = {};
@@ -59,6 +62,12 @@ export function bundleModules(code: string, transform: (src: string) => string):
   for (const [i, s] of sections.entries()) {
     const body = lines.slice(s.from, s.to);
     const close = open ? '}); ' : '';
+    if (isDeclaration(s.name)) {
+      if (s.marker >= 0) out[s.marker] = (i === 0 ? PRELUDE : '') + close;
+      for (let j = s.from; j < s.to; j++) out[j] = '';
+      open = false;
+      continue;
+    }
     if (!isJs(s.name)) {
       // A data file: it lives in the in-memory file system; its lines become blank in the program
       files[s.name] = body.join('\n').replace(/\n+$/, '');

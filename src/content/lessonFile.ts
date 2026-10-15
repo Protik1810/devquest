@@ -168,6 +168,7 @@ function parseFill(where: string, lang: CodeLang, content: string): Exercise {
 function buildCheck(where: string, f: Record<string, string>): CodeCheck {
   const stdin = f.stdin !== undefined ? { stdin: f.stdin } : {};
   if (f.reference !== undefined) return { type: 'sql', setup: f.setup ?? '', expected: f.reference, ordered: f.ordered === 'true', ...(f.verify ? { verify: f.verify } : {}) };
+  if (f.tests !== undefined && f.expected !== undefined) throw new Error(`${where}: an exercise is checked by ::tests or by ::expected, not both`);
   if (f.tests !== undefined) return { type: 'tests', code: f.tests + '\n', ...stdin };
   if (f.expected !== undefined) {
     const variants = (f.variants ?? '')

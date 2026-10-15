@@ -22,7 +22,7 @@ import { LANG_META, langLabel } from '../content/langMeta';
 import { oneDark } from '@codemirror/theme-one-dark';
 import type { CodeLang } from '../content/types';
 import { useGame } from '../engine/store';
-import { ensureVendors, instrumentHtml } from '../engine/runners';
+import { compileTsPage, ensureVendors, instrumentHtml } from '../engine/runners';
 
 export const LANG_LABEL = new Proxy({} as Record<CodeLang, string>, { get: (_t, k) => (typeof k === 'string' && k in LANG_META ? langLabel(k as CodeLang) : undefined) });
 
@@ -88,7 +88,15 @@ export function WebPreview({ code, height = 300 }: { code: string; height?: numb
   useEffect(() => {
     let live = true;
     // Load bundled library copies (React lessons) first, so the preview can inline them
-    const t = setTimeout(() => void ensureVendors(code).catch(() => undefined).then(() => live && setDoc(code)), 500);
+    // TypeScript scripts (<script lang="ts">) are stripped to JavaScript; the Run/Check result reports type errors
+    const t = setTimeout(
+      () =>
+        void ensureVendors(code)
+          .catch(() => undefined)
+          .then(() => compileTsPage(code))
+          .then((page) => live && setDoc(page.html), () => live && setDoc(code)),
+      500,
+    );
     return () => {
       live = false;
       clearTimeout(t);
