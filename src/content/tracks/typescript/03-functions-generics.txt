@@ -89,6 +89,57 @@ console.log(describeButton.call({ label: "Save" }, "!"));
 
 Calling `describeButton("!")` directly is then a compile error, because `this` wouldn't be set. In class-based code and arrow functions you won't need this.
 
+`call`, `apply` and `bind` are checked too (thanks to `strictBindCallApply`, part of `strict`): the `this` value and every argument must have the right types.
+
+```ts
+function scale(this: { factor: number }, value: number): number {
+  return value * this.factor;
+}
+
+const double = scale.bind({ factor: 2 });
+console.log(double(21), scale.call({ factor: 3 }, 5), scale.apply({ factor: 4 }, [5]));
+```
+
+`double` has the type `(value: number) => number`; `scale.call({ factor: 3 }, "5")` would be a compile error.
+
+## Generators and iterators
+
+A generator function's return type is `Generator<Yielded, Returned, Next>` (usually only the first matters). Anything that can be used in `for...of` or spread is an `Iterable<T>`, which is the type to accept when a function only needs to loop over its input:
+
+```ts
+function* countdown(from: number): Generator<number, string> {
+  for (let i = from; i > 0; i--) yield i;
+  return "liftoff";
+}
+
+function total(values: Iterable<number>): number {
+  let sum = 0;
+  for (const v of values) sum += v;
+  return sum;
+}
+
+const steps = countdown(2);
+console.log(steps.next(), steps.next(), steps.next());
+console.log(total(countdown(4)), total([1, 2]), total(new Set([5, 5, 6])));
+```
+
+`total` accepts arrays, sets, generators and anything else iterable, because it asks only for what it uses. (The value `"liftoff"` appears only in the final `next()` result; `for...of` and spreading ignore a generator's return value.) A class becomes iterable by implementing `[Symbol.iterator]`, often as a generator method:
+
+```ts
+class Range implements Iterable<number> {
+  constructor(
+    readonly start: number,
+    readonly end: number,
+  ) {}
+
+  *[Symbol.iterator](): Generator<number> {
+    for (let i = this.start; i < this.end; i++) yield i;
+  }
+}
+
+console.log([...new Range(1, 5)], Math.max(...new Range(0, 10)));
+```
+
 ~~~check
 ? `type Handler = (event: string) => void;` Which of these is NOT assignable to Handler?
 - `(e) => console.log(e)`
@@ -119,6 +170,7 @@ console.log(factorial(10));
 - write function types and use them for callbacks
 - explain contextual typing, and why fewer parameters are accepted
 - understand `void` callbacks and `this` parameters
+- type `call`, `apply`, `bind`, generators and iterables
 - decide when to annotate return types
 --- quiz
 ? How do you annotate a destructured parameter?
@@ -200,6 +252,8 @@ Rest parameter :: function f(...xs: number[]) — remaining arguments as an arra
 Function type :: type Op = (a: number, b: number) => number;
 Contextual typing :: A function written where a function type is expected gets its parameter types from it.
 void callback :: () => void means the return value is ignored, not that returning is forbidden.
+Iterable<T> :: Anything usable in for...of or spread (arrays, sets, maps, generators); accept it when you only loop.
+Generator<T, R> :: The return type of function*: yields T, returns R.
 
 === lesson ts-overloads | Overloads and call signatures | 70
 ## One function, several shapes

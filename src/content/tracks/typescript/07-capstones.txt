@@ -1,0 +1,1849 @@
+=== module Capstone projects
+
+=== lesson ts-project | Capstone 1: a type-safe state machine library | 400
+This capstone builds a small library, the kind of code where TypeScript shines: its users describe their states and events once, and the compiler then rejects every impossible transition, typo and missing case. Libraries such as XState work on the same principles.
+
+## How a task like this is approached
+
+1. **Start from the user's code.** Before writing the library, write what you want its users to write, and decide which mistakes should be compile errors.
+2. **Design the types**, then the implementation. For a library, the types *are* most of the design.
+3. **Test both levels**: run-time behaviour with assertions, and type-level behaviour with `@ts-expect-error` and `Expect<Equal<...>>` checks (as this course's hidden checks do).
+4. **Use it for real** in an application, and fix whatever is awkward.
+
+## What users will write
+
+```
+const door = createMachine({
+  initial: "closed",
+  states: {
+    closed: { on: { open: "opened", lock: "locked" } },
+    opened: { on: { close: "closed" } },
+    locked: { on: { unlock: "closed" } },
+  },
+});
+
+door.transition("closed", "open");    // "opened"
+door.transition("closed", "opne");    // compile error: no such event
+// a target state that doesn't exist, like { open: "opend" }, is a compile error too
+```
+
+The states (`"closed" | "opened" | "locked"`) and events (`"open" | "lock" | "close" | "unlock"`) are **inferred** from the configuration: users never write them twice.
+
+## One new tool: NoInfer
+
+To infer the states only from the keys of `states`, and then *check* `initial` and every target against them, the library uses the built-in **`NoInfer<T>`** (TypeScript 5.4). It tells the compiler "don't use this position to infer `T`; just check it". Without it, a typo such as `initial: "closd"` would quietly be added to the inferred states instead of being reported.
+
+```ts
+function pick<const T extends string>(options: T[], fallback: NoInfer<T>): T {
+  return options[0] ?? fallback;
+}
+
+console.log(pick(["small", "large"], "large"));
+```
+
+`pick(["small", "large"], "medium")` is an error: `T` comes only from `options`. (The `const` modifier on `T` infers literal types, as in Module 6.)
+--- goals
+- design a library's types from its users' code
+- infer literal unions from a configuration object, with `const` type parameters and `NoInfer`
+- build a stateful service around a generic machine, with typed subscriptions
+- use the library in a TypeScript web page
+--- exercise code typescript
+::prompt
+**Step 1: the machine.** Write `createMachine(config)` returning a `Machine<S, E>`:
+
+```
+type StateConfig<S extends string, E extends string> = { on?: { [K in E]?: S }; final?: boolean };
+
+interface Machine<S extends string, E extends string> {
+  readonly initial: S;
+  readonly states: readonly S[];          // in the order they appear in the config
+  transition(state: S, event: E): S;      // the next state; the same state if the event isn't handled there
+  can(state: S, event: E): boolean;       // whether the event is handled in that state
+  eventsFrom(state: S): E[];              // the events handled in that state, in config order
+  isFinal(state: S): boolean;
+}
+```
+
+The signature must infer `S` from the keys of `states` and `E` from the keys of every `on`, and must reject unknown target states and an unknown `initial` (use `NoInfer`). A final state can't have transitions: `transition` from a final state throws `Error("<state> is a final state")`.
+::starter
+type StateConfig<S extends string, E extends string> = { on?: { [K in E]?: S }; final?: boolean };
+
+interface Machine<S extends string, E extends string> {
+  readonly initial: S;
+  readonly states: readonly S[];
+  transition(state: S, event: E): S;
+  can(state: S, event: E): boolean;
+  eventsFrom(state: S): E[];
+  isFinal(state: S): boolean;
+}
+
+function createMachine(config: unknown): unknown {
+  return config;
+}
+::solution
+type StateConfig<S extends string, E extends string> = { on?: { [K in E]?: S }; final?: boolean };
+
+interface Machine<S extends string, E extends string> {
+  readonly initial: S;
+  readonly states: readonly S[];
+  transition(state: S, event: E): S;
+  can(state: S, event: E): boolean;
+  eventsFrom(state: S): E[];
+  isFinal(state: S): boolean;
+}
+
+function createMachine<const S extends string, const E extends string>(config: {
+  initial: NoInfer<S>;
+  states: Record<S, StateConfig<NoInfer<S>, E>>;
+}): Machine<S, E> {
+  const states = Object.keys(config.states) as S[];
+  const handlers = (state: S): { [K in E]?: S } => config.states[state].on ?? {};
+  return {
+    initial: config.initial,
+    states,
+    transition(state, event) {
+      if (config.states[state].final) throw new Error(`${state} is a final state`);
+      return handlers(state)[event] ?? state;
+    },
+    can(state, event) {
+      return handlers(state)[event] !== undefined;
+    },
+    eventsFrom(state) {
+      return Object.keys(handlers(state)) as E[];
+    },
+    isFinal(state) {
+      return config.states[state].final === true;
+    },
+  };
+}
+::tests
+const __door = createMachine({
+  initial: "closed",
+  states: {
+    closed: { on: { open: "opened", lock: "locked" } },
+    opened: { on: { close: "closed" } },
+    locked: { on: { unlock: "closed" } },
+  },
+});
+type _t1 = Expect<Equal<typeof __door, Machine<"closed" | "opened" | "locked", "open" | "lock" | "close" | "unlock">>>;
+assert.strictEqual(__door.initial, "closed");
+assert.deepStrictEqual(__door.states, ["closed", "opened", "locked"]);
+assert.strictEqual(__door.transition("closed", "open"), "opened");
+assert.strictEqual(__door.transition("opened", "lock"), "opened");
+assert.strictEqual(__door.can("locked", "unlock"), true);
+assert.strictEqual(__door.can("locked", "open"), false);
+assert.deepStrictEqual(__door.eventsFrom("closed"), ["open", "lock"]);
+assert.deepStrictEqual(__door.eventsFrom("opened"), ["close"]);
+const __order = createMachine({
+  initial: "cart",
+  states: { cart: { on: { pay: "paid" } }, paid: { on: { ship: "shipped" } }, shipped: { final: true } },
+});
+assert.strictEqual(__order.isFinal("shipped"), true);
+assert.strictEqual(__order.isFinal("paid"), false);
+assert.throws(() => __order.transition("shipped", "pay"), { message: "shipped is a final state" });
+assert.deepStrictEqual(__order.eventsFrom("shipped"), []);
+function __typeChecks() {
+  // @ts-expect-error
+  __door.transition("closed", "opne");
+  // @ts-expect-error
+  __door.transition("ajar", "open");
+  // @ts-expect-error
+  createMachine({ initial: "a", states: { a: { on: { go: "c" } }, b: {} } });
+  // @ts-expect-error
+  createMachine({ initial: "z", states: { a: { on: { go: "b" } }, b: {} } });
+}
+::hints
+- Type parameters: `<const S extends string, const E extends string>`; the config parameter is `{ initial: NoInfer<S>; states: Record<S, StateConfig<NoInfer<S>, E>> }`.
+- `Object.keys` returns `string[]`; casting to `S[]` is safe here because the object is exactly the config the types describe.
+- A helper `handlers(state)` returning `config.states[state].on ?? {}` keeps the methods short.
+--- exercise code typescript
+::prompt
+**Step 2: a running service.** The machine from step 1 is provided. Write `interpret(machine)` returning a `Service<S, E>`:
+
+```
+interface Service<S extends string, E extends string> {
+  readonly state: S;                       // starts at machine.initial
+  readonly history: readonly S[];          // every state entered, starting with the initial one
+  send(event: E): boolean;                 // true if the state changed
+  matches(...states: S[]): boolean;        // is the current state one of these?
+  subscribe(listener: (state: S, event: E, previous: S) => void): () => void;
+}
+```
+
+Rules: listeners run only when the state **changes**, in subscription order; the returned function unsubscribes. Sending any event once the machine is in a final state throws `Error("<state> is a final state")` (the machine already does this). `history` must not be modifiable from outside: return a copy or a readonly view.
+::starter
+type StateConfig<S extends string, E extends string> = { on?: { [K in E]?: S }; final?: boolean };
+
+interface Machine<S extends string, E extends string> {
+  readonly initial: S;
+  readonly states: readonly S[];
+  transition(state: S, event: E): S;
+  can(state: S, event: E): boolean;
+  eventsFrom(state: S): E[];
+  isFinal(state: S): boolean;
+}
+
+function createMachine<const S extends string, const E extends string>(config: {
+  initial: NoInfer<S>;
+  states: Record<S, StateConfig<NoInfer<S>, E>>;
+}): Machine<S, E> {
+  const states = Object.keys(config.states) as S[];
+  const handlers = (state: S): { [K in E]?: S } => config.states[state].on ?? {};
+  return {
+    initial: config.initial,
+    states,
+    transition(state, event) {
+      if (config.states[state].final) throw new Error(`${state} is a final state`);
+      return handlers(state)[event] ?? state;
+    },
+    can(state, event) {
+      return handlers(state)[event] !== undefined;
+    },
+    eventsFrom(state) {
+      return Object.keys(handlers(state)) as E[];
+    },
+    isFinal(state) {
+      return config.states[state].final === true;
+    },
+  };
+}
+
+interface Service<S extends string, E extends string> {
+  readonly state: S;
+  readonly history: readonly S[];
+  send(event: E): boolean;
+  matches(...states: S[]): boolean;
+  subscribe(listener: (state: S, event: E, previous: S) => void): () => void;
+}
+
+function interpret<S extends string, E extends string>(machine: Machine<S, E>): Service<S, E> {
+  throw new Error("not implemented");
+}
+::solution
+type StateConfig<S extends string, E extends string> = { on?: { [K in E]?: S }; final?: boolean };
+
+interface Machine<S extends string, E extends string> {
+  readonly initial: S;
+  readonly states: readonly S[];
+  transition(state: S, event: E): S;
+  can(state: S, event: E): boolean;
+  eventsFrom(state: S): E[];
+  isFinal(state: S): boolean;
+}
+
+function createMachine<const S extends string, const E extends string>(config: {
+  initial: NoInfer<S>;
+  states: Record<S, StateConfig<NoInfer<S>, E>>;
+}): Machine<S, E> {
+  const states = Object.keys(config.states) as S[];
+  const handlers = (state: S): { [K in E]?: S } => config.states[state].on ?? {};
+  return {
+    initial: config.initial,
+    states,
+    transition(state, event) {
+      if (config.states[state].final) throw new Error(`${state} is a final state`);
+      return handlers(state)[event] ?? state;
+    },
+    can(state, event) {
+      return handlers(state)[event] !== undefined;
+    },
+    eventsFrom(state) {
+      return Object.keys(handlers(state)) as E[];
+    },
+    isFinal(state) {
+      return config.states[state].final === true;
+    },
+  };
+}
+
+interface Service<S extends string, E extends string> {
+  readonly state: S;
+  readonly history: readonly S[];
+  send(event: E): boolean;
+  matches(...states: S[]): boolean;
+  subscribe(listener: (state: S, event: E, previous: S) => void): () => void;
+}
+
+function interpret<S extends string, E extends string>(machine: Machine<S, E>): Service<S, E> {
+  let current = machine.initial;
+  const history: S[] = [current];
+  let listeners: ((state: S, event: E, previous: S) => void)[] = [];
+  return {
+    get state() {
+      return current;
+    },
+    get history() {
+      return [...history];
+    },
+    send(event) {
+      const previous = current;
+      const next = machine.transition(current, event);
+      if (next === previous) return false;
+      current = next;
+      history.push(next);
+      for (const listener of [...listeners]) listener(next, event, previous);
+      return true;
+    },
+    matches(...states) {
+      return states.includes(current);
+    },
+    subscribe(listener) {
+      listeners.push(listener);
+      return () => {
+        listeners = listeners.filter((l) => l !== listener);
+      };
+    },
+  };
+}
+::tests
+const __traffic = createMachine({
+  initial: "red",
+  states: {
+    red: { on: { next: "green", fault: "broken" } },
+    green: { on: { next: "amber", fault: "broken" } },
+    amber: { on: { next: "red", fault: "broken" } },
+    broken: { final: true },
+  },
+});
+const __svc = interpret(__traffic);
+type _t1 = Expect<Equal<typeof __svc, Service<"red" | "green" | "amber" | "broken", "next" | "fault">>>;
+const __seen: string[] = [];
+const __off = __svc.subscribe((state, event, previous) => __seen.push(`${previous}-${event}->${state}`));
+assert.strictEqual(__svc.state, "red");
+assert.strictEqual(__svc.send("next"), true);
+assert.strictEqual(__svc.send("next"), true);
+assert.strictEqual(__svc.matches("green", "amber"), true);
+assert.strictEqual(__svc.matches("red"), false);
+__off();
+assert.strictEqual(__svc.send("next"), true);
+assert.deepStrictEqual(__seen, ["red-next->green", "green-next->amber"]);
+const __door = interpret(createMachine({ initial: "closed", states: { closed: { on: { open: "opened" } }, opened: { on: { close: "closed" } } } }));
+let __calls = 0;
+__door.subscribe(() => __calls++);
+assert.strictEqual(__door.send("close"), false);
+assert.strictEqual(__calls, 0);
+assert.strictEqual(__svc.send("fault"), true);
+assert.throws(() => __svc.send("next"), { message: "broken is a final state" });
+assert.deepStrictEqual(__svc.history, ["red", "green", "amber", "red", "broken"]);
+const __h = __svc.history as string[];
+try { __h.push("hacked"); } catch {}
+assert.strictEqual(__svc.history.length, 5);
+function __typeChecks() {
+  // @ts-expect-error
+  __svc.send("stop");
+  // @ts-expect-error
+  __svc.matches("blue");
+  __svc.subscribe((state) => {
+    // @ts-expect-error
+    const n: number = state;
+  });
+}
+::hints
+- Keep the current state and the history in variables captured by the returned object; `get state()` and `get history()` make them readable but not assignable.
+- `send` asks the machine for the next state, compares it with the previous one, and only then records it and notifies listeners.
+- Copy the listener list before notifying, so a listener that unsubscribes itself doesn't disturb the loop.
+--- exercise code web
+::prompt
+**Step 3: use it in an application.** This page shows an article in a publishing workflow. The machine library (steps 1 and 2) is already in the script. Write the rest in the same `<script lang="ts">`:
+
+1. A machine `workflow` with the states `draft` (initial), `review`, `approved`, `published` (final) and `rejected`, and these events: draft `submit` → review; review `approve` → approved, `reject` → rejected; approved `publish` → published, `reject` → rejected; rejected `edit` → draft.
+2. A service for it, and a `render()` function that:
+   - writes the state into `#state` as a label from a `Record` covering **every** state (`Draft`, `In review`, `Approved`, `Published`, `Rejected`), so adding a state later becomes a compile error until it has a label;
+   - fills `#actions` with one `<button>` per event available in the current state (`workflow.eventsFrom(...)`), with the event name as its text and a `data-event` attribute;
+   - writes the history into `#history` as the states joined with ` → `.
+3. Event delegation on `#actions`: a click on a button sends its event (narrow `event.target` with `instanceof`, and check that the `data-event` value is a real event with a type guard before sending; no `as`).
+4. Re-render on every state change (subscribe), and render once at start-up.
+::starter
+<h2>Article workflow</h2>
+<p>Status: <strong id="state"></strong></p>
+<div id="actions"></div>
+<p class="muted">History: <span id="history"></span></p>
+<script lang="ts">
+type StateConfig<S extends string, E extends string> = { on?: { [K in E]?: S }; final?: boolean };
+
+interface Machine<S extends string, E extends string> {
+  readonly initial: S;
+  readonly states: readonly S[];
+  transition(state: S, event: E): S;
+  can(state: S, event: E): boolean;
+  eventsFrom(state: S): E[];
+  isFinal(state: S): boolean;
+}
+
+function createMachine<const S extends string, const E extends string>(config: {
+  initial: NoInfer<S>;
+  states: Record<S, StateConfig<NoInfer<S>, E>>;
+}): Machine<S, E> {
+  const states = Object.keys(config.states) as S[];
+  const handlers = (state: S): { [K in E]?: S } => config.states[state].on ?? {};
+  return {
+    initial: config.initial,
+    states,
+    transition(state, event) {
+      if (config.states[state].final) throw new Error(`${state} is a final state`);
+      return handlers(state)[event] ?? state;
+    },
+    can(state, event) {
+      return handlers(state)[event] !== undefined;
+    },
+    eventsFrom(state) {
+      return Object.keys(handlers(state)) as E[];
+    },
+    isFinal(state) {
+      return config.states[state].final === true;
+    },
+  };
+}
+
+interface Service<S extends string, E extends string> {
+  readonly state: S;
+  readonly history: readonly S[];
+  send(event: E): boolean;
+  matches(...states: S[]): boolean;
+  subscribe(listener: (state: S, event: E, previous: S) => void): () => void;
+}
+
+function interpret<S extends string, E extends string>(machine: Machine<S, E>): Service<S, E> {
+  let current = machine.initial;
+  const history: S[] = [current];
+  let listeners: ((state: S, event: E, previous: S) => void)[] = [];
+  return {
+    get state() {
+      return current;
+    },
+    get history() {
+      return [...history];
+    },
+    send(event) {
+      const previous = current;
+      const next = machine.transition(current, event);
+      if (next === previous) return false;
+      current = next;
+      history.push(next);
+      for (const listener of [...listeners]) listener(next, event, previous);
+      return true;
+    },
+    matches(...states) {
+      return states.includes(current);
+    },
+    subscribe(listener) {
+      listeners.push(listener);
+      return () => {
+        listeners = listeners.filter((l) => l !== listener);
+      };
+    },
+  };
+}
+
+// your application code here
+</script>
+::solution
+<h2>Article workflow</h2>
+<p>Status: <strong id="state"></strong></p>
+<div id="actions"></div>
+<p class="muted">History: <span id="history"></span></p>
+<script lang="ts">
+type StateConfig<S extends string, E extends string> = { on?: { [K in E]?: S }; final?: boolean };
+
+interface Machine<S extends string, E extends string> {
+  readonly initial: S;
+  readonly states: readonly S[];
+  transition(state: S, event: E): S;
+  can(state: S, event: E): boolean;
+  eventsFrom(state: S): E[];
+  isFinal(state: S): boolean;
+}
+
+function createMachine<const S extends string, const E extends string>(config: {
+  initial: NoInfer<S>;
+  states: Record<S, StateConfig<NoInfer<S>, E>>;
+}): Machine<S, E> {
+  const states = Object.keys(config.states) as S[];
+  const handlers = (state: S): { [K in E]?: S } => config.states[state].on ?? {};
+  return {
+    initial: config.initial,
+    states,
+    transition(state, event) {
+      if (config.states[state].final) throw new Error(`${state} is a final state`);
+      return handlers(state)[event] ?? state;
+    },
+    can(state, event) {
+      return handlers(state)[event] !== undefined;
+    },
+    eventsFrom(state) {
+      return Object.keys(handlers(state)) as E[];
+    },
+    isFinal(state) {
+      return config.states[state].final === true;
+    },
+  };
+}
+
+interface Service<S extends string, E extends string> {
+  readonly state: S;
+  readonly history: readonly S[];
+  send(event: E): boolean;
+  matches(...states: S[]): boolean;
+  subscribe(listener: (state: S, event: E, previous: S) => void): () => void;
+}
+
+function interpret<S extends string, E extends string>(machine: Machine<S, E>): Service<S, E> {
+  let current = machine.initial;
+  const history: S[] = [current];
+  let listeners: ((state: S, event: E, previous: S) => void)[] = [];
+  return {
+    get state() {
+      return current;
+    },
+    get history() {
+      return [...history];
+    },
+    send(event) {
+      const previous = current;
+      const next = machine.transition(current, event);
+      if (next === previous) return false;
+      current = next;
+      history.push(next);
+      for (const listener of [...listeners]) listener(next, event, previous);
+      return true;
+    },
+    matches(...states) {
+      return states.includes(current);
+    },
+    subscribe(listener) {
+      listeners.push(listener);
+      return () => {
+        listeners = listeners.filter((l) => l !== listener);
+      };
+    },
+  };
+}
+
+const workflow = createMachine({
+  initial: "draft",
+  states: {
+    draft: { on: { submit: "review" } },
+    review: { on: { approve: "approved", reject: "rejected" } },
+    approved: { on: { publish: "published", reject: "rejected" } },
+    published: { final: true },
+    rejected: { on: { edit: "draft" } },
+  },
+});
+type WorkflowState = (typeof workflow.states)[number];
+type WorkflowEvent = Parameters<typeof workflow.transition>[1];
+
+const LABELS: Record<WorkflowState, string> = {
+  draft: "Draft",
+  review: "In review",
+  approved: "Approved",
+  published: "Published",
+  rejected: "Rejected",
+};
+const EVENTS: readonly WorkflowEvent[] = ["submit", "approve", "reject", "publish", "edit"];
+const isEvent = (value: string | undefined): value is WorkflowEvent => EVENTS.some((e) => e === value);
+
+const article = interpret(workflow);
+const stateEl = document.getElementById("state");
+const actionsEl = document.getElementById("actions");
+const historyEl = document.getElementById("history");
+if (stateEl === null || actionsEl === null || historyEl === null) throw new Error("page is missing elements");
+
+const render = (): void => {
+  stateEl.textContent = LABELS[article.state];
+  actionsEl.replaceChildren(
+    ...workflow.eventsFrom(article.state).map((event) => {
+      const button = document.createElement("button");
+      button.textContent = event;
+      button.dataset.event = event;
+      return button;
+    }),
+  );
+  historyEl.textContent = article.history.join(" → ");
+};
+
+actionsEl.addEventListener("click", (event) => {
+  const target = event.target;
+  if (!(target instanceof HTMLButtonElement)) return;
+  const name = target.dataset.event;
+  if (isEvent(name)) article.send(name);
+});
+
+article.subscribe(render);
+render();
+</script>
+::tests
+const buttons = () => $$("#actions button").map((b) => b.dataset.event);
+const press = (name) => click($$("#actions button").find((b) => b.dataset.event === name));
+assert($("#state").textContent === "Draft", "the page should start in Draft");
+assert(JSON.stringify(buttons()) === '["submit"]', "a draft only offers submit");
+press("submit");
+assert($("#state").textContent === "In review", "submit moves the article to In review");
+assert(JSON.stringify(buttons()) === '["approve","reject"]', "review offers approve and reject");
+press("reject");
+assert($("#state").textContent === "Rejected", "reject shows Rejected");
+press("edit");
+press("submit");
+press("approve");
+assert($("#state").textContent === "Approved", "approve shows Approved");
+press("publish");
+assert($("#state").textContent === "Published", "publish shows Published");
+assert(buttons().length === 0, "a published article offers no actions");
+assert($("#history").textContent === "draft → review → rejected → draft → review → approved → published", "the history lists every state");
+assert($$("#actions button").every((b) => b.textContent === b.dataset.event), "buttons show their event name");
+::hints
+- `type WorkflowState = (typeof workflow.states)[number];` and `Parameters<typeof workflow.transition>[1]` derive the state and event unions from the machine.
+- A `Record<WorkflowState, string>` of labels must list every state: exactly the compile-time guarantee the step asks for.
+- `button.dataset.event` is `string | undefined`; a type guard over a readonly list of events narrows it for `send`.
+- Use `const render = () => { ... }` after the element checks, so the narrowed element constants stay narrowed inside it.
+--- cards
+NoInfer<T> :: Marks a position that should be checked against T but not used to infer it (TypeScript 5.4).
+const type parameter :: <const T> infers literal types from arguments, like as const at the call site.
+Type-level tests :: @ts-expect-error and Expect<Equal<A, B>> check that a library's types accept and reject the right code.
+Deriving app types :: (typeof machine.states)[number], Parameters<typeof fn>[1] — never write a union twice.
+
+=== lesson ts-capstone-api | Capstone 2: a typed REST API | 450
+Back-end code is where types protect the most: every request is untrusted input, every route has parameters, and every failure must become the right HTTP status. In this capstone you build the core of a web framework (a router with typed route parameters, error handling and body validation) and then an API on top of it. It works like Express, Fastify and Hono, but runs entirely in memory: a request is a method, a URL and a body, and a response is a status and a body. (Connecting it to a real HTTP server is a few lines with `node:http`, which the JavaScript course's capstone showed.)
+
+## The design
+
+- **Route patterns** such as `/users/:id/posts/:postId` are strings; a template literal type (Module 5) turns them into the union of parameter names, so `req.params.postId` is checked against the pattern.
+- **Handlers** return `{ status, body }` (or a promise of one).
+- **Errors**: handlers throw `HttpError(status, message)` for expected failures; the router turns it into a JSON error response. Anything else is a bug: a 500 response, without leaking details.
+- **Validation**: request bodies arrive as `unknown` and go through a schema (Module 6) before use; invalid bodies become 400 responses.
+
+## REST conventions used
+
+| Request | Meaning | Success |
+|---|---|---|
+| `GET /notes` | list (filters in the query string) | 200 |
+| `POST /notes` | create | 201 with the new resource |
+| `GET /notes/:id` | read one | 200, or 404 |
+| `PATCH /notes/:id` | change some fields | 200 with the updated resource |
+| `DELETE /notes/:id` | delete | 204 with no body |
+
+A path that exists with a different method gives **405 Method Not Allowed**; an unknown path, **404 Not Found**; an invalid body, **400 Bad Request**.
+--- goals
+- type route parameters from path patterns with template literal types
+- build a router with typed handlers, matching and method checks
+- turn expected failures into HTTP errors, and hide unexpected ones
+- validate request bodies with schemas before use
+- implement a REST resource with correct status codes
+--- exercise code typescript
+::prompt
+**Step 1: the router.** Complete the types and the `Router`:
+
+- `RouteParams<P>`: the union of parameter names in a pattern (`RouteParams<"/users/:id/posts/:postId">` is `"id" | "postId"`; no parameters gives `never`);
+- `on(method, pattern, handler)` registers a route (and returns `this` for chaining), plus the shortcuts `get`, `post`, `patch` and `delete`;
+- `handle(method, url, body?)` parses the URL (it may contain a query string), finds the **first** route whose pattern matches the path (same number of segments; `:name` segments match anything and are URL-decoded into `params`; other segments must be equal) **and** whose method matches, and calls its handler with `{ method, path, params, query, body }`. If the path matched only routes with other methods, respond `{ status: 405, body: { error: "Method not allowed" } }`; if nothing matched, `{ status: 404, body: { error: "Not found" } }`.
+::starter
+type RouteParams<P extends string> = never;
+
+type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+
+interface ApiRequest<Params extends string = string> {
+  method: Method;
+  path: string;
+  params: Record<Params, string>;
+  query: URLSearchParams;
+  body: unknown;
+}
+
+interface ApiResponse {
+  status: number;
+  body?: unknown;
+}
+
+type Handler<P extends string> = (req: ApiRequest<RouteParams<P>>) => ApiResponse | Promise<ApiResponse>;
+
+class Router {
+  on<P extends string>(method: Method, pattern: P, handler: Handler<P>): this {
+    return this;
+  }
+
+  async handle(method: Method, url: string, body?: unknown): Promise<ApiResponse> {
+    return { status: 404, body: { error: "Not found" } };
+  }
+}
+::solution
+type RouteParams<P extends string> = P extends `${string}:${infer Name}/${infer Rest}`
+  ? Name | RouteParams<`/${Rest}`>
+  : P extends `${string}:${infer Name}`
+    ? Name
+    : never;
+
+type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+
+interface ApiRequest<Params extends string = string> {
+  method: Method;
+  path: string;
+  params: Record<Params, string>;
+  query: URLSearchParams;
+  body: unknown;
+}
+
+interface ApiResponse {
+  status: number;
+  body?: unknown;
+}
+
+type Handler<P extends string> = (req: ApiRequest<RouteParams<P>>) => ApiResponse | Promise<ApiResponse>;
+
+class Router {
+  #routes: { method: Method; parts: string[]; handler: (req: ApiRequest) => ApiResponse | Promise<ApiResponse> }[] = [];
+
+  on<P extends string>(method: Method, pattern: P, handler: Handler<P>): this {
+    this.#routes.push({ method, parts: pattern.split("/").filter((p) => p !== ""), handler });
+    return this;
+  }
+
+  get<P extends string>(pattern: P, handler: Handler<P>): this {
+    return this.on("GET", pattern, handler);
+  }
+
+  post<P extends string>(pattern: P, handler: Handler<P>): this {
+    return this.on("POST", pattern, handler);
+  }
+
+  patch<P extends string>(pattern: P, handler: Handler<P>): this {
+    return this.on("PATCH", pattern, handler);
+  }
+
+  delete<P extends string>(pattern: P, handler: Handler<P>): this {
+    return this.on("DELETE", pattern, handler);
+  }
+
+  async handle(method: Method, url: string, body?: unknown): Promise<ApiResponse> {
+    const { pathname, searchParams } = new URL(url, "http://localhost");
+    const parts = pathname.split("/").filter((p) => p !== "");
+    let pathMatched = false;
+    for (const route of this.#routes) {
+      const params = matchParts(route.parts, parts);
+      if (params === null) continue;
+      pathMatched = true;
+      if (route.method !== method) continue;
+      return route.handler({ method, path: pathname, params, query: searchParams, body });
+    }
+    return pathMatched ? { status: 405, body: { error: "Method not allowed" } } : { status: 404, body: { error: "Not found" } };
+  }
+}
+
+function matchParts(pattern: string[], parts: string[]): Record<string, string> | null {
+  if (pattern.length !== parts.length) return null;
+  const params: Record<string, string> = {};
+  for (let i = 0; i < pattern.length; i++) {
+    const p = pattern[i];
+    if (p.startsWith(":")) params[p.slice(1)] = decodeURIComponent(parts[i]);
+    else if (p !== parts[i]) return null;
+  }
+  return params;
+}
+::tests
+type _t1 = Expect<Equal<RouteParams<"/users/:id/posts/:postId">, "id" | "postId">>;
+type _t2 = Expect<Equal<RouteParams<"/health">, never>>;
+type _t3 = Expect<Equal<RouteParams<"/files/:name">, "name">>;
+const __router = new Router()
+  .get("/health", () => ({ status: 200, body: { ok: true } }))
+  .get("/users/:id", (req) => ({ status: 200, body: { user: req.params.id } }))
+  .get("/users/:id/posts/:postId", async (req) => ({ status: 200, body: [req.params.id, req.params.postId, req.query.get("sort")] }))
+  .post("/users", (req) => ({ status: 201, body: req.body }))
+  .delete("/users/:id", (req) => ({ status: 204 }));
+assert.deepStrictEqual(await __router.handle("GET", "/health"), { status: 200, body: { ok: true } });
+assert.deepStrictEqual(await __router.handle("GET", "/users/42"), { status: 200, body: { user: "42" } });
+assert.deepStrictEqual(await __router.handle("GET", "/users/7/posts/hello%20world?sort=new"), { status: 200, body: ["7", "hello world", "new"] });
+assert.deepStrictEqual(await __router.handle("POST", "/users", { name: "Ada" }), { status: 201, body: { name: "Ada" } });
+assert.deepStrictEqual(await __router.handle("DELETE", "/users/1"), { status: 204 });
+assert.deepStrictEqual(await __router.handle("PATCH", "/users/1"), { status: 405, body: { error: "Method not allowed" } });
+assert.deepStrictEqual(await __router.handle("GET", "/users/1/friends"), { status: 404, body: { error: "Not found" } });
+assert.deepStrictEqual(await __router.handle("GET", "/"), { status: 404, body: { error: "Not found" } });
+const __first = new Router().get("/a/:x", () => ({ status: 200, body: "param" })).get("/a/b", () => ({ status: 200, body: "fixed" }));
+assert.deepStrictEqual(await __first.handle("GET", "/a/b"), { status: 200, body: "param" });
+function __typeChecks() {
+  new Router().get("/users/:id", (req) => {
+    // @ts-expect-error
+    req.params.userId;
+    return { status: 200 };
+  });
+  // @ts-expect-error
+  new Router().on("FETCH", "/", () => ({ status: 200 }));
+  // @ts-expect-error
+  new Router().get("/", () => ({ body: "missing status" }));
+}
+::hints
+- `RouteParams`: match `` `${string}:${infer Name}/${infer Rest}` `` (a parameter followed by more path) and recurse on `` `/${Rest}` ``; otherwise match `` `${string}:${infer Name}` `` (a final parameter); otherwise `never`.
+- Store routes as `{ method, parts, handler }`, where `parts` is the pattern split on `/` without empty segments.
+- `new URL(url, "http://localhost")` parses a relative URL and gives you `pathname` and `searchParams`.
+- A handler typed `Handler<P>` can be stored where a handler of `ApiRequest<string>` is expected: a request with any string params is a valid request for every route (function parameters are contravariant).
+--- exercise code typescript
+::prompt
+**Step 2: errors and validation.** Your router from step 1 and a small schema library (from Module 6) are provided. Add:
+
+- `class HttpError extends Error` with a readonly `status: number` (constructor `(status, message)`), and `name` set to `"HttpError"`;
+- `parseBody<T>(schema: Schema<T>, body: unknown): T`, which turns a `SchemaError` into `HttpError(400, "Invalid body: " + message)` (other errors pass through);
+- error handling in `Router.handle`: an `HttpError` thrown by a handler (synchronously **or** from an async handler) becomes `{ status, body: { error: message } }`; any other error becomes `{ status: 500, body: { error: "Internal server error" } }`, so internal details never reach the client.
+::starter
+type RouteParams<P extends string> = P extends `${string}:${infer Name}/${infer Rest}`
+  ? Name | RouteParams<`/${Rest}`>
+  : P extends `${string}:${infer Name}`
+    ? Name
+    : never;
+
+type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+
+interface ApiRequest<Params extends string = string> {
+  method: Method;
+  path: string;
+  params: Record<Params, string>;
+  query: URLSearchParams;
+  body: unknown;
+}
+
+interface ApiResponse {
+  status: number;
+  body?: unknown;
+}
+
+type Handler<P extends string> = (req: ApiRequest<RouteParams<P>>) => ApiResponse | Promise<ApiResponse>;
+
+class Router {
+  #routes: { method: Method; parts: string[]; handler: (req: ApiRequest) => ApiResponse | Promise<ApiResponse> }[] = [];
+
+  on<P extends string>(method: Method, pattern: P, handler: Handler<P>): this {
+    this.#routes.push({ method, parts: pattern.split("/").filter((p) => p !== ""), handler });
+    return this;
+  }
+
+  get<P extends string>(pattern: P, handler: Handler<P>): this {
+    return this.on("GET", pattern, handler);
+  }
+
+  post<P extends string>(pattern: P, handler: Handler<P>): this {
+    return this.on("POST", pattern, handler);
+  }
+
+  patch<P extends string>(pattern: P, handler: Handler<P>): this {
+    return this.on("PATCH", pattern, handler);
+  }
+
+  delete<P extends string>(pattern: P, handler: Handler<P>): this {
+    return this.on("DELETE", pattern, handler);
+  }
+
+  async handle(method: Method, url: string, body?: unknown): Promise<ApiResponse> {
+    const { pathname, searchParams } = new URL(url, "http://localhost");
+    const parts = pathname.split("/").filter((p) => p !== "");
+    let pathMatched = false;
+    for (const route of this.#routes) {
+      const params = matchParts(route.parts, parts);
+      if (params === null) continue;
+      pathMatched = true;
+      if (route.method !== method) continue;
+      return route.handler({ method, path: pathname, params, query: searchParams, body });
+    }
+    return pathMatched ? { status: 405, body: { error: "Method not allowed" } } : { status: 404, body: { error: "Not found" } };
+  }
+}
+
+function matchParts(pattern: string[], parts: string[]): Record<string, string> | null {
+  if (pattern.length !== parts.length) return null;
+  const params: Record<string, string> = {};
+  for (let i = 0; i < pattern.length; i++) {
+    const p = pattern[i];
+    if (p.startsWith(":")) params[p.slice(1)] = decodeURIComponent(parts[i]);
+    else if (p !== parts[i]) return null;
+  }
+  return params;
+}
+
+type Schema<T> = { parse(value: unknown, path?: string): T };
+type Infer<S> = S extends Schema<infer T> ? T : never;
+
+class SchemaError extends Error {}
+
+const string = (): Schema<string> => ({
+  parse(value, path = "body") {
+    if (typeof value !== "string") throw new SchemaError(`${path} should be a string`);
+    return value;
+  },
+});
+
+function optional<T>(schema: Schema<T>): Schema<T | undefined> {
+  return { parse: (value, path = "body") => (value === undefined ? undefined : schema.parse(value, path)) };
+}
+
+function array<T>(item: Schema<T>): Schema<T[]> {
+  return {
+    parse(value, path = "body") {
+      if (!Array.isArray(value)) throw new SchemaError(`${path} should be an array`);
+      return value.map((v, i) => item.parse(v, `${path}[${i}]`));
+    },
+  };
+}
+
+function object<Shape extends Record<string, Schema<unknown>>>(shape: Shape): Schema<{ [K in keyof Shape]: Infer<Shape[K]> }> {
+  return {
+    parse(value, path = "body") {
+      if (typeof value !== "object" || value === null || Array.isArray(value)) throw new SchemaError(`${path} should be an object`);
+      const out: Record<string, unknown> = {};
+      for (const key of Object.keys(shape)) out[key] = shape[key].parse((value as Record<string, unknown>)[key], `${path}.${key}`);
+      return out as { [K in keyof Shape]: Infer<Shape[K]> };
+    },
+  };
+}
+
+class HttpError extends Error {}
+
+function parseBody<T>(schema: Schema<T>, body: unknown): T {
+  return schema.parse(body);
+}
+::solution
+type RouteParams<P extends string> = P extends `${string}:${infer Name}/${infer Rest}`
+  ? Name | RouteParams<`/${Rest}`>
+  : P extends `${string}:${infer Name}`
+    ? Name
+    : never;
+
+type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+
+interface ApiRequest<Params extends string = string> {
+  method: Method;
+  path: string;
+  params: Record<Params, string>;
+  query: URLSearchParams;
+  body: unknown;
+}
+
+interface ApiResponse {
+  status: number;
+  body?: unknown;
+}
+
+type Handler<P extends string> = (req: ApiRequest<RouteParams<P>>) => ApiResponse | Promise<ApiResponse>;
+
+class Router {
+  #routes: { method: Method; parts: string[]; handler: (req: ApiRequest) => ApiResponse | Promise<ApiResponse> }[] = [];
+
+  on<P extends string>(method: Method, pattern: P, handler: Handler<P>): this {
+    this.#routes.push({ method, parts: pattern.split("/").filter((p) => p !== ""), handler });
+    return this;
+  }
+
+  get<P extends string>(pattern: P, handler: Handler<P>): this {
+    return this.on("GET", pattern, handler);
+  }
+
+  post<P extends string>(pattern: P, handler: Handler<P>): this {
+    return this.on("POST", pattern, handler);
+  }
+
+  patch<P extends string>(pattern: P, handler: Handler<P>): this {
+    return this.on("PATCH", pattern, handler);
+  }
+
+  delete<P extends string>(pattern: P, handler: Handler<P>): this {
+    return this.on("DELETE", pattern, handler);
+  }
+
+  async handle(method: Method, url: string, body?: unknown): Promise<ApiResponse> {
+    try {
+      const { pathname, searchParams } = new URL(url, "http://localhost");
+      const parts = pathname.split("/").filter((p) => p !== "");
+      let pathMatched = false;
+      for (const route of this.#routes) {
+        const params = matchParts(route.parts, parts);
+        if (params === null) continue;
+        pathMatched = true;
+        if (route.method !== method) continue;
+        return await route.handler({ method, path: pathname, params, query: searchParams, body });
+      }
+      return pathMatched ? { status: 405, body: { error: "Method not allowed" } } : { status: 404, body: { error: "Not found" } };
+    } catch (error) {
+      if (error instanceof HttpError) return { status: error.status, body: { error: error.message } };
+      return { status: 500, body: { error: "Internal server error" } };
+    }
+  }
+}
+
+function matchParts(pattern: string[], parts: string[]): Record<string, string> | null {
+  if (pattern.length !== parts.length) return null;
+  const params: Record<string, string> = {};
+  for (let i = 0; i < pattern.length; i++) {
+    const p = pattern[i];
+    if (p.startsWith(":")) params[p.slice(1)] = decodeURIComponent(parts[i]);
+    else if (p !== parts[i]) return null;
+  }
+  return params;
+}
+
+type Schema<T> = { parse(value: unknown, path?: string): T };
+type Infer<S> = S extends Schema<infer T> ? T : never;
+
+class SchemaError extends Error {}
+
+const string = (): Schema<string> => ({
+  parse(value, path = "body") {
+    if (typeof value !== "string") throw new SchemaError(`${path} should be a string`);
+    return value;
+  },
+});
+
+function optional<T>(schema: Schema<T>): Schema<T | undefined> {
+  return { parse: (value, path = "body") => (value === undefined ? undefined : schema.parse(value, path)) };
+}
+
+function array<T>(item: Schema<T>): Schema<T[]> {
+  return {
+    parse(value, path = "body") {
+      if (!Array.isArray(value)) throw new SchemaError(`${path} should be an array`);
+      return value.map((v, i) => item.parse(v, `${path}[${i}]`));
+    },
+  };
+}
+
+function object<Shape extends Record<string, Schema<unknown>>>(shape: Shape): Schema<{ [K in keyof Shape]: Infer<Shape[K]> }> {
+  return {
+    parse(value, path = "body") {
+      if (typeof value !== "object" || value === null || Array.isArray(value)) throw new SchemaError(`${path} should be an object`);
+      const out: Record<string, unknown> = {};
+      for (const key of Object.keys(shape)) out[key] = shape[key].parse((value as Record<string, unknown>)[key], `${path}.${key}`);
+      return out as { [K in keyof Shape]: Infer<Shape[K]> };
+    },
+  };
+}
+
+class HttpError extends Error {
+  override name = "HttpError";
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
+function parseBody<T>(schema: Schema<T>, body: unknown): T {
+  try {
+    return schema.parse(body);
+  } catch (error) {
+    if (error instanceof SchemaError) throw new HttpError(400, `Invalid body: ${error.message}`);
+    throw error;
+  }
+}
+::tests
+const __User = object({ name: string(), tags: optional(array(string())) });
+const __api = new Router()
+  .get("/teapot", () => {
+    throw new HttpError(418, "I'm a teapot");
+  })
+  .get("/later", async () => {
+    await new Promise((r) => setTimeout(r, 5));
+    throw new HttpError(503, "Try later");
+  })
+  .get("/bug", () => {
+    throw new TypeError("secret.connectionString is undefined");
+  })
+  .post("/users", (req) => {
+    const user = parseBody(__User, req.body);
+    return { status: 201, body: { name: user.name.toUpperCase(), tags: user.tags ?? [] } };
+  });
+assert.deepStrictEqual(await __api.handle("GET", "/teapot"), { status: 418, body: { error: "I'm a teapot" } });
+assert.deepStrictEqual(await __api.handle("GET", "/later"), { status: 503, body: { error: "Try later" } });
+assert.deepStrictEqual(await __api.handle("GET", "/bug"), { status: 500, body: { error: "Internal server error" } });
+assert.deepStrictEqual(await __api.handle("POST", "/users", { name: "ada" }), { status: 201, body: { name: "ADA", tags: [] } });
+assert.deepStrictEqual(await __api.handle("POST", "/users", { name: 3 }), { status: 400, body: { error: "Invalid body: body.name should be a string" } });
+assert.deepStrictEqual(await __api.handle("POST", "/users", { name: "x", tags: ["a", 1] }), { status: 400, body: { error: "Invalid body: body.tags[1] should be a string" } });
+assert.deepStrictEqual(await __api.handle("POST", "/users", "nope"), { status: 400, body: { error: "Invalid body: body should be an object" } });
+assert.deepStrictEqual(await __api.handle("GET", "/nothing"), { status: 404, body: { error: "Not found" } });
+const __e = new HttpError(404, "gone");
+assert.strictEqual(__e.name, "HttpError");
+assert(__e instanceof Error);
+assert.throws(() => parseBody({ parse() { throw new RangeError("boom"); } }, 1), RangeError);
+type _t1 = Expect<Equal<ReturnType<typeof parseBody<{ a: number }>>, { a: number }>>;
+::hints
+- `class HttpError extends Error { override name = "HttpError"; constructor(readonly status: number, message: string) { super(message); } }`.
+- Wrap the body of `handle` in `try { ... } catch (error) { ... }`, and use `return await route.handler(...)`: without `await`, a rejected promise from an async handler would escape the `try`.
+- In `parseBody`, catch, check `error instanceof SchemaError`, and rethrow anything else unchanged.
+--- exercise code typescript
+::prompt
+**Step 3: a notes API.** Using the router, `HttpError`, `parseBody` and the schemas (all provided), write `createNotesApi(): Router` for notes `{ id: number; title: string; body: string; tags: string[] }` stored in memory:
+
+- `GET /notes`: 200 with all notes in creation order; `?tag=x` keeps only notes with that tag;
+- `POST /notes` with `{ title: string; body: string; tags?: string[] }`: 201 with the new note (ids start at 1; tags default to `[]`; the title is trimmed, and an empty title gives 400 `title must not be empty`);
+- `GET /notes/:id`: 200 with the note; 404 `Note <id> not found`; a non-integer id gives 400 `id must be a number`;
+- `PATCH /notes/:id` with any of `title`, `body`, `tags`: 200 with the updated note (only the given fields change; the same title rule applies);
+- `DELETE /notes/:id`: 204 with no body.
+
+Invalid bodies give 400 through `parseBody`. Each call to `createNotesApi()` has its own, empty store.
+::starter
+type RouteParams<P extends string> = P extends `${string}:${infer Name}/${infer Rest}`
+  ? Name | RouteParams<`/${Rest}`>
+  : P extends `${string}:${infer Name}`
+    ? Name
+    : never;
+
+type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+
+interface ApiRequest<Params extends string = string> {
+  method: Method;
+  path: string;
+  params: Record<Params, string>;
+  query: URLSearchParams;
+  body: unknown;
+}
+
+interface ApiResponse {
+  status: number;
+  body?: unknown;
+}
+
+type Handler<P extends string> = (req: ApiRequest<RouteParams<P>>) => ApiResponse | Promise<ApiResponse>;
+
+class Router {
+  #routes: { method: Method; parts: string[]; handler: (req: ApiRequest) => ApiResponse | Promise<ApiResponse> }[] = [];
+
+  on<P extends string>(method: Method, pattern: P, handler: Handler<P>): this {
+    this.#routes.push({ method, parts: pattern.split("/").filter((p) => p !== ""), handler });
+    return this;
+  }
+
+  get<P extends string>(pattern: P, handler: Handler<P>): this {
+    return this.on("GET", pattern, handler);
+  }
+
+  post<P extends string>(pattern: P, handler: Handler<P>): this {
+    return this.on("POST", pattern, handler);
+  }
+
+  patch<P extends string>(pattern: P, handler: Handler<P>): this {
+    return this.on("PATCH", pattern, handler);
+  }
+
+  delete<P extends string>(pattern: P, handler: Handler<P>): this {
+    return this.on("DELETE", pattern, handler);
+  }
+
+  async handle(method: Method, url: string, body?: unknown): Promise<ApiResponse> {
+    try {
+      const { pathname, searchParams } = new URL(url, "http://localhost");
+      const parts = pathname.split("/").filter((p) => p !== "");
+      let pathMatched = false;
+      for (const route of this.#routes) {
+        const params = matchParts(route.parts, parts);
+        if (params === null) continue;
+        pathMatched = true;
+        if (route.method !== method) continue;
+        return await route.handler({ method, path: pathname, params, query: searchParams, body });
+      }
+      return pathMatched ? { status: 405, body: { error: "Method not allowed" } } : { status: 404, body: { error: "Not found" } };
+    } catch (error) {
+      if (error instanceof HttpError) return { status: error.status, body: { error: error.message } };
+      return { status: 500, body: { error: "Internal server error" } };
+    }
+  }
+}
+
+function matchParts(pattern: string[], parts: string[]): Record<string, string> | null {
+  if (pattern.length !== parts.length) return null;
+  const params: Record<string, string> = {};
+  for (let i = 0; i < pattern.length; i++) {
+    const p = pattern[i];
+    if (p.startsWith(":")) params[p.slice(1)] = decodeURIComponent(parts[i]);
+    else if (p !== parts[i]) return null;
+  }
+  return params;
+}
+
+type Schema<T> = { parse(value: unknown, path?: string): T };
+type Infer<S> = S extends Schema<infer T> ? T : never;
+
+class SchemaError extends Error {}
+
+const string = (): Schema<string> => ({
+  parse(value, path = "body") {
+    if (typeof value !== "string") throw new SchemaError(`${path} should be a string`);
+    return value;
+  },
+});
+
+function optional<T>(schema: Schema<T>): Schema<T | undefined> {
+  return { parse: (value, path = "body") => (value === undefined ? undefined : schema.parse(value, path)) };
+}
+
+function array<T>(item: Schema<T>): Schema<T[]> {
+  return {
+    parse(value, path = "body") {
+      if (!Array.isArray(value)) throw new SchemaError(`${path} should be an array`);
+      return value.map((v, i) => item.parse(v, `${path}[${i}]`));
+    },
+  };
+}
+
+function object<Shape extends Record<string, Schema<unknown>>>(shape: Shape): Schema<{ [K in keyof Shape]: Infer<Shape[K]> }> {
+  return {
+    parse(value, path = "body") {
+      if (typeof value !== "object" || value === null || Array.isArray(value)) throw new SchemaError(`${path} should be an object`);
+      const out: Record<string, unknown> = {};
+      for (const key of Object.keys(shape)) out[key] = shape[key].parse((value as Record<string, unknown>)[key], `${path}.${key}`);
+      return out as { [K in keyof Shape]: Infer<Shape[K]> };
+    },
+  };
+}
+
+class HttpError extends Error {
+  override name = "HttpError";
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
+function parseBody<T>(schema: Schema<T>, body: unknown): T {
+  try {
+    return schema.parse(body);
+  } catch (error) {
+    if (error instanceof SchemaError) throw new HttpError(400, `Invalid body: ${error.message}`);
+    throw error;
+  }
+}
+
+interface Note {
+  id: number;
+  title: string;
+  body: string;
+  tags: string[];
+}
+
+function createNotesApi(): Router {
+  return new Router();
+}
+::solution
+type RouteParams<P extends string> = P extends `${string}:${infer Name}/${infer Rest}`
+  ? Name | RouteParams<`/${Rest}`>
+  : P extends `${string}:${infer Name}`
+    ? Name
+    : never;
+
+type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+
+interface ApiRequest<Params extends string = string> {
+  method: Method;
+  path: string;
+  params: Record<Params, string>;
+  query: URLSearchParams;
+  body: unknown;
+}
+
+interface ApiResponse {
+  status: number;
+  body?: unknown;
+}
+
+type Handler<P extends string> = (req: ApiRequest<RouteParams<P>>) => ApiResponse | Promise<ApiResponse>;
+
+class Router {
+  #routes: { method: Method; parts: string[]; handler: (req: ApiRequest) => ApiResponse | Promise<ApiResponse> }[] = [];
+
+  on<P extends string>(method: Method, pattern: P, handler: Handler<P>): this {
+    this.#routes.push({ method, parts: pattern.split("/").filter((p) => p !== ""), handler });
+    return this;
+  }
+
+  get<P extends string>(pattern: P, handler: Handler<P>): this {
+    return this.on("GET", pattern, handler);
+  }
+
+  post<P extends string>(pattern: P, handler: Handler<P>): this {
+    return this.on("POST", pattern, handler);
+  }
+
+  patch<P extends string>(pattern: P, handler: Handler<P>): this {
+    return this.on("PATCH", pattern, handler);
+  }
+
+  delete<P extends string>(pattern: P, handler: Handler<P>): this {
+    return this.on("DELETE", pattern, handler);
+  }
+
+  async handle(method: Method, url: string, body?: unknown): Promise<ApiResponse> {
+    try {
+      const { pathname, searchParams } = new URL(url, "http://localhost");
+      const parts = pathname.split("/").filter((p) => p !== "");
+      let pathMatched = false;
+      for (const route of this.#routes) {
+        const params = matchParts(route.parts, parts);
+        if (params === null) continue;
+        pathMatched = true;
+        if (route.method !== method) continue;
+        return await route.handler({ method, path: pathname, params, query: searchParams, body });
+      }
+      return pathMatched ? { status: 405, body: { error: "Method not allowed" } } : { status: 404, body: { error: "Not found" } };
+    } catch (error) {
+      if (error instanceof HttpError) return { status: error.status, body: { error: error.message } };
+      return { status: 500, body: { error: "Internal server error" } };
+    }
+  }
+}
+
+function matchParts(pattern: string[], parts: string[]): Record<string, string> | null {
+  if (pattern.length !== parts.length) return null;
+  const params: Record<string, string> = {};
+  for (let i = 0; i < pattern.length; i++) {
+    const p = pattern[i];
+    if (p.startsWith(":")) params[p.slice(1)] = decodeURIComponent(parts[i]);
+    else if (p !== parts[i]) return null;
+  }
+  return params;
+}
+
+type Schema<T> = { parse(value: unknown, path?: string): T };
+type Infer<S> = S extends Schema<infer T> ? T : never;
+
+class SchemaError extends Error {}
+
+const string = (): Schema<string> => ({
+  parse(value, path = "body") {
+    if (typeof value !== "string") throw new SchemaError(`${path} should be a string`);
+    return value;
+  },
+});
+
+function optional<T>(schema: Schema<T>): Schema<T | undefined> {
+  return { parse: (value, path = "body") => (value === undefined ? undefined : schema.parse(value, path)) };
+}
+
+function array<T>(item: Schema<T>): Schema<T[]> {
+  return {
+    parse(value, path = "body") {
+      if (!Array.isArray(value)) throw new SchemaError(`${path} should be an array`);
+      return value.map((v, i) => item.parse(v, `${path}[${i}]`));
+    },
+  };
+}
+
+function object<Shape extends Record<string, Schema<unknown>>>(shape: Shape): Schema<{ [K in keyof Shape]: Infer<Shape[K]> }> {
+  return {
+    parse(value, path = "body") {
+      if (typeof value !== "object" || value === null || Array.isArray(value)) throw new SchemaError(`${path} should be an object`);
+      const out: Record<string, unknown> = {};
+      for (const key of Object.keys(shape)) out[key] = shape[key].parse((value as Record<string, unknown>)[key], `${path}.${key}`);
+      return out as { [K in keyof Shape]: Infer<Shape[K]> };
+    },
+  };
+}
+
+class HttpError extends Error {
+  override name = "HttpError";
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
+function parseBody<T>(schema: Schema<T>, body: unknown): T {
+  try {
+    return schema.parse(body);
+  } catch (error) {
+    if (error instanceof SchemaError) throw new HttpError(400, `Invalid body: ${error.message}`);
+    throw error;
+  }
+}
+
+interface Note {
+  id: number;
+  title: string;
+  body: string;
+  tags: string[];
+}
+
+const NewNote = object({ title: string(), body: string(), tags: optional(array(string())) });
+const NotePatch = object({ title: optional(string()), body: optional(string()), tags: optional(array(string())) });
+
+function createNotesApi(): Router {
+  const notes = new Map<number, Note>();
+  let nextId = 1;
+
+  const idOf = (text: string): number => {
+    const id = Number(text);
+    if (!Number.isInteger(id)) throw new HttpError(400, "id must be a number");
+    return id;
+  };
+  const find = (text: string): Note => {
+    const id = idOf(text);
+    const note = notes.get(id);
+    if (note === undefined) throw new HttpError(404, `Note ${id} not found`);
+    return note;
+  };
+  const checkTitle = (title: string): string => {
+    if (title.trim() === "") throw new HttpError(400, "title must not be empty");
+    return title.trim();
+  };
+
+  return new Router()
+    .get("/notes", (req) => {
+      const tag = req.query.get("tag");
+      const list = [...notes.values()].filter((n) => tag === null || n.tags.includes(tag));
+      return { status: 200, body: list };
+    })
+    .post("/notes", (req) => {
+      const input = parseBody(NewNote, req.body);
+      const note: Note = { id: nextId++, title: checkTitle(input.title), body: input.body, tags: input.tags ?? [] };
+      notes.set(note.id, note);
+      return { status: 201, body: note };
+    })
+    .get("/notes/:id", (req) => ({ status: 200, body: find(req.params.id) }))
+    .patch("/notes/:id", (req) => {
+      const note = find(req.params.id);
+      const changes = parseBody(NotePatch, req.body);
+      const updated: Note = {
+        ...note,
+        ...(changes.title !== undefined && { title: checkTitle(changes.title) }),
+        ...(changes.body !== undefined && { body: changes.body }),
+        ...(changes.tags !== undefined && { tags: changes.tags }),
+      };
+      notes.set(note.id, updated);
+      return { status: 200, body: updated };
+    })
+    .delete("/notes/:id", (req) => {
+      notes.delete(find(req.params.id).id);
+      return { status: 204 };
+    });
+}
+::tests
+const __notes = createNotesApi();
+const __call = (method: Method, url: string, body?: unknown) => __notes.handle(method, url, body);
+assert.deepStrictEqual(await __call("GET", "/notes"), { status: 200, body: [] });
+assert.deepStrictEqual(await __call("POST", "/notes", { title: "  Shopping ", body: "milk", tags: ["home"] }), { status: 201, body: { id: 1, title: "Shopping", body: "milk", tags: ["home"] } });
+assert.deepStrictEqual(await __call("POST", "/notes", { title: "Ideas", body: "TypeScript course" }), { status: 201, body: { id: 2, title: "Ideas", body: "TypeScript course", tags: [] } });
+assert.deepStrictEqual(await __call("POST", "/notes", { title: "  ", body: "x" }), { status: 400, body: { error: "title must not be empty" } });
+assert.deepStrictEqual(await __call("POST", "/notes", { title: "No body" }), { status: 400, body: { error: "Invalid body: body.body should be a string" } });
+assert.deepStrictEqual((await __call("GET", "/notes")).body, [
+  { id: 1, title: "Shopping", body: "milk", tags: ["home"] },
+  { id: 2, title: "Ideas", body: "TypeScript course", tags: [] },
+]);
+assert.deepStrictEqual(await __call("GET", "/notes?tag=home"), { status: 200, body: [{ id: 1, title: "Shopping", body: "milk", tags: ["home"] }] });
+assert.deepStrictEqual(await __call("GET", "/notes/2"), { status: 200, body: { id: 2, title: "Ideas", body: "TypeScript course", tags: [] } });
+assert.deepStrictEqual(await __call("GET", "/notes/9"), { status: 404, body: { error: "Note 9 not found" } });
+assert.deepStrictEqual(await __call("GET", "/notes/abc"), { status: 400, body: { error: "id must be a number" } });
+assert.deepStrictEqual(await __call("PATCH", "/notes/2", { tags: ["work"] }), { status: 200, body: { id: 2, title: "Ideas", body: "TypeScript course", tags: ["work"] } });
+assert.deepStrictEqual(await __call("PATCH", "/notes/2", { title: " Big ideas " }), { status: 200, body: { id: 2, title: "Big ideas", body: "TypeScript course", tags: ["work"] } });
+assert.deepStrictEqual(await __call("PATCH", "/notes/2", { title: "" }), { status: 400, body: { error: "title must not be empty" } });
+assert.deepStrictEqual(await __call("PATCH", "/notes/2", { body: 5 }), { status: 400, body: { error: "Invalid body: body.body should be a string" } });
+assert.deepStrictEqual(await __call("PATCH", "/notes/5", {}), { status: 404, body: { error: "Note 5 not found" } });
+assert.deepStrictEqual(await __call("DELETE", "/notes/1"), { status: 204 });
+assert.deepStrictEqual(await __call("DELETE", "/notes/1"), { status: 404, body: { error: "Note 1 not found" } });
+assert.deepStrictEqual(await __call("PUT", "/notes/2"), { status: 405, body: { error: "Method not allowed" } });
+assert.deepStrictEqual((await __call("GET", "/notes")).body, [{ id: 2, title: "Big ideas", body: "TypeScript course", tags: ["work"] }]);
+assert.deepStrictEqual(await createNotesApi().handle("GET", "/notes"), { status: 200, body: [] });
+::hints
+- Keep the notes in a `Map<number, Note>` and a `nextId` counter inside `createNotesApi`, so every API has its own store.
+- Small helpers (`find(idText)` that throws `HttpError` 400 or 404, `checkTitle(title)`) keep the handlers short; the router turns their errors into responses.
+- The schema's `object` sets missing optional fields to `undefined`, so a PATCH must only copy the fields that are defined (spreading `{ title: undefined }` would erase the title).
+--- cards
+Typed route params :: RouteParams<"/users/:id"> = "id" via template literal types with infer, so req.params.id is checked.
+HttpError :: Expected failures carry an HTTP status; the router turns them into { status, body: { error } }.
+500 for bugs :: Unexpected errors become a generic 500: never leak stack traces or internals to clients.
+return await :: Inside try, return await promise so async rejections are caught by the catch block.
+REST status codes :: 200 OK, 201 Created, 204 No Content, 400 Bad Request, 404 Not Found, 405 Method Not Allowed, 500 Internal Server Error.
+
+=== lesson ts-capstone-solo | Capstone 3: build it from a spec | 450
+As in the JavaScript course's final capstone, this one gives you a **specification** and nothing else: you design the types and the code, write your own tests, and submit. Hidden checks then test every rule, **including the types**: in a TypeScript codebase, the exported types are part of the contract other developers rely on.
+
+## The product: a theatre box office
+
+A small theatre sells tickets online. Customers pick seats, which are **held** for a few minutes while they pay; unpaid holds expire and the seats return to sale. Implement the core service as a TypeScript module.
+
+### Types (part of the spec: write them exactly)
+
+```
+type Result<T, E> = { ok: true; value: T } | { ok: false; error: E };
+
+type BookingError =
+  | { kind: "empty-request" }
+  | { kind: "too-many"; max: number }
+  | { kind: "unknown-seat"; seat: string }
+  | { kind: "duplicate-seat"; seat: string }
+  | { kind: "unavailable"; seats: string[] }
+  | { kind: "unknown-hold"; holdId: string }
+  | { kind: "hold-expired"; holdId: string }
+  | { kind: "unknown-ticket"; code: string };
+
+interface Hold { id: string; customer: string; seats: string[]; totalCents: number; expiresAt: number }
+interface Ticket { code: string; seat: string; customer: string; priceCents: number }
+```
+
+### The BoxOffice class
+
+**`new BoxOffice({ rows, seatsPerRow, prices, now, holdMs })`**: `rows` is a list of row letters such as `["A", "B", "C"]`; seats are named row letter plus number from 1 (`"A1"`, `"A2"`...). `prices` maps each row to its price in cents; a row without a price throws `Error("no price for row <row>")`. `now` (default `Date.now`) returns the time in milliseconds; `holdMs` (default 600000, ten minutes) is how long a hold lasts.
+
+**`available(): string[]`**: the seats that are neither held (by an unexpired hold) nor sold, ordered by row (in the order of `rows`), then by number.
+
+**`hold(customer: string, seats: string[]): Result<Hold, BookingError>`**. Checks, in this order:
+
+1. no seats: `empty-request`;
+2. more than 6 seats: `too-many` with `max: 6`;
+3. the first seat that doesn't exist: `unknown-seat`;
+4. the first seat that appears a second time: `duplicate-seat`;
+5. **all** requested seats that aren't available, in request order: `unavailable`.
+
+On success, the hold gets the id `H1`, `H2`... (counting successful holds only), keeps the seats in request order, and has `totalCents` (the sum of the seats' prices) and `expiresAt = now() + holdMs`. A hold is expired when `now() >= expiresAt`.
+
+**`purchase(holdId: string): Result<Ticket[], BookingError>`**: an expired hold gives `hold-expired` (every time it's tried); an id that was never a hold, was released or was already purchased gives `unknown-hold`. Otherwise the seats are sold, and one ticket per seat is returned, in hold order, with the code `<holdId>-<seat>` (like `H1-A2`) and the seat's price.
+
+**`release(holdId: string): boolean`**: cancels an active (unexpired, unpurchased) hold, returning `true`; otherwise `false`.
+
+**`refund(code: string): Result<number, BookingError>`**: refunds a sold ticket, returning its price; the seat becomes available again. Unknown or already refunded codes give `unknown-ticket`.
+
+**`revenueCents(): number`**: the prices of sold tickets, minus refunds.
+
+### Messages
+
+**`describeError(e: BookingError): string`**, with an exhaustive `switch`:
+
+| kind | message |
+|---|---|
+| empty-request | `Choose at least one seat` |
+| too-many | `You can hold at most 6 seats` (using `max`) |
+| unknown-seat | `There is no seat Z9` |
+| duplicate-seat | `Seat A1 was chosen twice` |
+| unavailable | `Not available: A1, B2` |
+| unknown-hold | `No active hold H9` |
+| hold-expired | `Hold H1 has expired` |
+| unknown-ticket | `No ticket H1-A9` |
+
+## How to approach it
+
+1. **Write the types first**, exactly as specified; then the class's public method signatures, returning placeholder errors. Let the compiler tell you what's missing as you go.
+2. **Decide the state**: which data structures answer "is this seat available?" quickly and simply? (A `Map` from hold id to hold record, and one from ticket code to ticket, are a good start. Think about how you'll know whether a hold expired, was released or was purchased.)
+3. **Write tests** with a fake clock (`let t = 0; const office = new BoxOffice({ ..., now: () => t })`) for the tricky rules: expiry at exactly `expiresAt`, seats returning after expiry and refunds, the order of the checks, and `hold-expired` versus `unknown-hold`.
+4. Use the compiler as a second reviewer: no `any`, no `as` and no `!` should be needed.
+
+📚 **Go deeper:** *Programming TypeScript*, chapter 7 (handling errors) and chapter 5 (classes); the System Design track for how a real ticketing system handles thousands of buyers for the same seats (locking and reservations).
+--- goals
+- turn a written specification into precise types and a design
+- model every failure as a typed error, handled exhaustively
+- test time-dependent behaviour with an injected clock
+- deliver code whose types are part of its contract
+--- exercise code typescript
+::prompt
+Implement the box office from the specification above: the types `Result`, `BookingError`, `Hold` and `Ticket` exactly as given, the `BoxOffice` class, and `describeError`. Write your own tests first; the hidden checks test every rule (and the types).
+::starter
+// Your design goes here: types first, then the class, then describeError.
+::solution
+type Result<T, E> = { ok: true; value: T } | { ok: false; error: E };
+
+type BookingError =
+  | { kind: "empty-request" }
+  | { kind: "too-many"; max: number }
+  | { kind: "unknown-seat"; seat: string }
+  | { kind: "duplicate-seat"; seat: string }
+  | { kind: "unavailable"; seats: string[] }
+  | { kind: "unknown-hold"; holdId: string }
+  | { kind: "hold-expired"; holdId: string }
+  | { kind: "unknown-ticket"; code: string };
+
+interface Hold {
+  id: string;
+  customer: string;
+  seats: string[];
+  totalCents: number;
+  expiresAt: number;
+}
+
+interface Ticket {
+  code: string;
+  seat: string;
+  customer: string;
+  priceCents: number;
+}
+
+interface BoxOfficeOptions {
+  rows: string[];
+  seatsPerRow: number;
+  prices: Record<string, number>;
+  now?: () => number;
+  holdMs?: number;
+}
+
+const MAX_SEATS = 6;
+
+class BoxOffice {
+  readonly #seats: string[] = [];
+  readonly #priceOf = new Map<string, number>();
+  readonly #now: () => number;
+  readonly #holdMs: number;
+  readonly #holds = new Map<string, { hold: Hold; status: "active" | "released" | "purchased" }>();
+  readonly #tickets = new Map<string, Ticket>();
+  #nextHold = 1;
+  #revenue = 0;
+
+  constructor({ rows, seatsPerRow, prices, now = Date.now, holdMs = 600_000 }: BoxOfficeOptions) {
+    for (const row of rows) {
+      const price = prices[row];
+      if (price === undefined) throw new Error(`no price for row ${row}`);
+      for (let n = 1; n <= seatsPerRow; n++) {
+        this.#seats.push(`${row}${n}`);
+        this.#priceOf.set(`${row}${n}`, price);
+      }
+    }
+    this.#now = now;
+    this.#holdMs = holdMs;
+  }
+
+  #isExpired(hold: Hold): boolean {
+    return this.#now() >= hold.expiresAt;
+  }
+
+  #taken(): Set<string> {
+    const taken = new Set<string>();
+    for (const { hold, status } of this.#holds.values()) {
+      if (status === "active" && !this.#isExpired(hold)) for (const seat of hold.seats) taken.add(seat);
+    }
+    for (const ticket of this.#tickets.values()) taken.add(ticket.seat);
+    return taken;
+  }
+
+  available(): string[] {
+    const taken = this.#taken();
+    return this.#seats.filter((seat) => !taken.has(seat));
+  }
+
+  hold(customer: string, seats: string[]): Result<Hold, BookingError> {
+    if (seats.length === 0) return { ok: false, error: { kind: "empty-request" } };
+    if (seats.length > MAX_SEATS) return { ok: false, error: { kind: "too-many", max: MAX_SEATS } };
+    const unknown = seats.find((seat) => !this.#priceOf.has(seat));
+    if (unknown !== undefined) return { ok: false, error: { kind: "unknown-seat", seat: unknown } };
+    const duplicate = seats.find((seat, i) => seats.indexOf(seat) !== i);
+    if (duplicate !== undefined) return { ok: false, error: { kind: "duplicate-seat", seat: duplicate } };
+    const taken = this.#taken();
+    const unavailable = seats.filter((seat) => taken.has(seat));
+    if (unavailable.length > 0) return { ok: false, error: { kind: "unavailable", seats: unavailable } };
+    const hold: Hold = {
+      id: `H${this.#nextHold++}`,
+      customer,
+      seats: [...seats],
+      totalCents: seats.reduce((sum, seat) => sum + (this.#priceOf.get(seat) ?? 0), 0),
+      expiresAt: this.#now() + this.#holdMs,
+    };
+    this.#holds.set(hold.id, { hold, status: "active" });
+    return { ok: true, value: { ...hold, seats: [...hold.seats] } };
+  }
+
+  purchase(holdId: string): Result<Ticket[], BookingError> {
+    const record = this.#holds.get(holdId);
+    if (record === undefined || record.status !== "active") return { ok: false, error: { kind: "unknown-hold", holdId } };
+    if (this.#isExpired(record.hold)) return { ok: false, error: { kind: "hold-expired", holdId } };
+    record.status = "purchased";
+    const tickets = record.hold.seats.map((seat): Ticket => ({
+      code: `${holdId}-${seat}`,
+      seat,
+      customer: record.hold.customer,
+      priceCents: this.#priceOf.get(seat) ?? 0,
+    }));
+    for (const ticket of tickets) {
+      this.#tickets.set(ticket.code, ticket);
+      this.#revenue += ticket.priceCents;
+    }
+    return { ok: true, value: tickets };
+  }
+
+  release(holdId: string): boolean {
+    const record = this.#holds.get(holdId);
+    if (record === undefined || record.status !== "active" || this.#isExpired(record.hold)) return false;
+    record.status = "released";
+    return true;
+  }
+
+  refund(code: string): Result<number, BookingError> {
+    const ticket = this.#tickets.get(code);
+    if (ticket === undefined) return { ok: false, error: { kind: "unknown-ticket", code } };
+    this.#tickets.delete(code);
+    this.#revenue -= ticket.priceCents;
+    return { ok: true, value: ticket.priceCents };
+  }
+
+  revenueCents(): number {
+    return this.#revenue;
+  }
+}
+
+function describeError(e: BookingError): string {
+  switch (e.kind) {
+    case "empty-request":
+      return "Choose at least one seat";
+    case "too-many":
+      return `You can hold at most ${e.max} seats`;
+    case "unknown-seat":
+      return `There is no seat ${e.seat}`;
+    case "duplicate-seat":
+      return `Seat ${e.seat} was chosen twice`;
+    case "unavailable":
+      return `Not available: ${e.seats.join(", ")}`;
+    case "unknown-hold":
+      return `No active hold ${e.holdId}`;
+    case "hold-expired":
+      return `Hold ${e.holdId} has expired`;
+    case "unknown-ticket":
+      return `No ticket ${e.code}`;
+    default:
+      return e satisfies never;
+  }
+}
+::tests
+type _t1 = Expect<Equal<Result<1, 2>, { ok: true; value: 1 } | { ok: false; error: 2 }>>;
+type _t2 = Expect<Equal<BookingError,
+  | { kind: "empty-request" }
+  | { kind: "too-many"; max: number }
+  | { kind: "unknown-seat"; seat: string }
+  | { kind: "duplicate-seat"; seat: string }
+  | { kind: "unavailable"; seats: string[] }
+  | { kind: "unknown-hold"; holdId: string }
+  | { kind: "hold-expired"; holdId: string }
+  | { kind: "unknown-ticket"; code: string }>>;
+type _t3 = Expect<Equal<Hold, { id: string; customer: string; seats: string[]; totalCents: number; expiresAt: number }>>;
+type _t4 = Expect<Equal<Ticket, { code: string; seat: string; customer: string; priceCents: number }>>;
+type _t5 = Expect<Equal<ReturnType<BoxOffice["hold"]>, Result<Hold, BookingError>>>;
+type _t6 = Expect<Equal<ReturnType<BoxOffice["purchase"]>, Result<Ticket[], BookingError>>>;
+type _t7 = Expect<Equal<ReturnType<BoxOffice["refund"]>, Result<number, BookingError>>>;
+type _t8 = Expect<Equal<ReturnType<BoxOffice["release"]>, boolean>>;
+
+let __t = 1000;
+const __office = new BoxOffice({ rows: ["A", "B"], seatsPerRow: 3, prices: { A: 5000, B: 3000 }, now: () => __t, holdMs: 60_000 });
+const __err = (r: Result<unknown, BookingError>) => (r.ok ? "ok" : describeError(r.error));
+assert.deepStrictEqual(__office.available(), ["A1", "A2", "A3", "B1", "B2", "B3"]);
+assert.throws(() => new BoxOffice({ rows: ["A", "Z"], seatsPerRow: 2, prices: { A: 1 } }), { message: "no price for row Z" });
+assert.strictEqual(new BoxOffice({ rows: ["A"], seatsPerRow: 1, prices: { A: 1 } }).available().length, 1);
+
+// validation order
+assert.strictEqual(__err(__office.hold("ada", [])), "Choose at least one seat");
+assert.strictEqual(__err(__office.hold("ada", ["A1", "A2", "A3", "B1", "B2", "B3", "C1"])), "You can hold at most 6 seats");
+assert.strictEqual(__err(__office.hold("ada", ["A1", "Z9", "A1", "Y1"])), "There is no seat Z9");
+assert.strictEqual(__err(__office.hold("ada", ["A1", "B2", "A1", "B2"])), "Seat A1 was chosen twice");
+
+// a successful hold
+const __h1 = __office.hold("ada", ["B2", "A1"]);
+assert(__h1.ok);
+assert.deepStrictEqual(__h1.value, { id: "H1", customer: "ada", seats: ["B2", "A1"], totalCents: 8000, expiresAt: 61_000 });
+assert.deepStrictEqual(__office.available(), ["A2", "A3", "B1", "B3"]);
+const __h1copy = __h1.value.seats;
+__h1copy.push("A3");
+assert.strictEqual(__err(__office.hold("bob", ["A3", "A1", "B2"])), "Not available: A1, B2");
+const __h2 = __office.hold("bob", ["A3"]);
+assert(__h2.ok);
+assert.strictEqual(__h2.value.id, "H2");
+
+// purchase
+const __bought = __office.purchase("H1");
+assert(__bought.ok);
+assert.deepStrictEqual(__bought.value, [
+  { code: "H1-B2", seat: "B2", customer: "ada", priceCents: 3000 },
+  { code: "H1-A1", seat: "A1", customer: "ada", priceCents: 5000 },
+]);
+assert.strictEqual(__err(__office.purchase("H1")), "No active hold H1");
+assert.strictEqual(__err(__office.purchase("H42")), "No active hold H42");
+assert.strictEqual(__office.revenueCents(), 8000);
+
+// expiry at exactly expiresAt
+__t = 60_999;
+assert.deepStrictEqual(__office.available(), ["A2", "B1", "B3"]);
+__t = 61_000;
+assert.deepStrictEqual(__office.available(), ["A2", "A3", "B1", "B3"]);
+assert.strictEqual(__err(__office.purchase("H2")), "Hold H2 has expired");
+assert.strictEqual(__err(__office.purchase("H2")), "Hold H2 has expired");
+assert.strictEqual(__office.release("H2"), false);
+
+// release
+const __h3 = __office.hold("cy", ["A2", "A3"]);
+assert(__h3.ok);
+assert.strictEqual(__h3.value.id, "H3");
+assert.strictEqual(__office.release("H3"), true);
+assert.strictEqual(__office.release("H3"), false);
+assert.strictEqual(__err(__office.purchase("H3")), "No active hold H3");
+assert.deepStrictEqual(__office.available(), ["A2", "A3", "B1", "B3"]);
+
+// refunds
+const __refund = __office.refund("H1-A1");
+assert.deepStrictEqual(__refund, { ok: true, value: 5000 });
+assert.strictEqual(__err(__office.refund("H1-A1")), "No ticket H1-A1");
+assert.strictEqual(__err(__office.refund("H9-A9")), "No ticket H9-A9");
+assert.strictEqual(__office.revenueCents(), 3000);
+assert.deepStrictEqual(__office.available(), ["A1", "A2", "A3", "B1", "B3"]);
+assert.strictEqual(__err(__office.hold("dee", ["B2"])), "Not available: B2");
+const __h4 = __office.hold("dee", ["A1"]);
+assert(__h4.ok && __h4.value.id === "H4");
+
+// default hold time
+let __t2 = 0;
+const __o2 = new BoxOffice({ rows: ["A"], seatsPerRow: 1, prices: { A: 10 }, now: () => __t2 });
+const __h = __o2.hold("x", ["A1"]);
+assert(__h.ok && __h.value.expiresAt === 600_000);
+::hints
+- Keep each hold with a status (`"active" | "released" | "purchased"`); "expired" doesn't need storing, because it follows from the time.
+- Compute the taken seats from the active, unexpired holds plus the sold tickets; `available()` and `hold()` can both use it.
+- Return copies of arrays you keep internally, so callers can't change your state by mutating a result.
+--- cards
+Spec-first types :: Write the specified types exactly; they're the contract other code compiles against.
+Derived state :: Store facts (status, expiresAt); compute what follows from them (expired, available) when needed.
+Injected clock :: A now() option makes time-dependent rules testable: move a variable instead of waiting.
+Defensive copies :: Return copies of internal arrays so callers can't mutate your state.
+
+=== lesson ts-whats-next | What's next after TypeScript | 50
+## You've learned TypeScript
+
+You can now describe data precisely (unions, discriminated unions, tuples, interfaces), make the compiler follow your checks (narrowing, type guards, exhaustiveness), write generic code that keeps its callers' types, design classes and interfaces that the compiler checks, compute types from other types (mapped, conditional and template literal types), and connect typed code safely to the outside world (validation, async code, the DOM, declaration files), with a professional project setup. That's the TypeScript a working developer uses every day, and more: Module 5 covered material many professionals only read about.
+
+## Where to go from here
+
+- **Front end**: React with TypeScript is the most common combination in job adverts. Build a small app with `npm create vite@latest -- --template react-ts`, then try a framework (Next.js, Remix or Astro) and a typed data layer (TanStack Query).
+- **Back end**: Node.js with TypeScript, using Fastify, Hono or NestJS (decorators everywhere), a typed database layer (Prisma, Drizzle or Kysely) and Zod for validation. The SQL course comes next in DevQuest's language order and pairs naturally with this.
+- **Full stack**: tRPC or a typed OpenAPI client share types between server and client, so a change in the API breaks the build instead of production.
+- **Type-level skills**: the type-challenges repository (easy and medium levels are realistic interview practice) and the source of well-typed libraries (Zod, TanStack Router).
+- **Other languages**: DevQuest teaches one language at a time. Next in the order is **SQL**, then Java and C#, whose nominal, class-based type systems will feel familiar after TypeScript (and whose differences you'll now understand).
+
+## Keep your skills alive
+
+- Turn on `strict`, `noUncheckedIndexedAccess` and typescript-eslint in every project, even small ones.
+- When an error message confuses you, read it from the bottom up, then hover over each name in the editor.
+- When you reach for `any` or `as`, stop and ask which check would let the compiler work it out instead.
+- Read the release notes of each TypeScript version: they're the best summary of what changed and why.
+
+## Practise more
+
+Revisit the capstones and extend them: guards and actions with typed context for the state machine; middleware, typed query parameters and pagination for the API router; a seat map web page (`<script lang="ts">`) for the box office.
+
+📚 **Go deeper:** Boris Cherny, *Programming TypeScript* (O'Reilly); Dan Vanderkam, *Effective TypeScript* (2nd edition, O'Reilly), 83 specific ways to improve your TypeScript; the TypeScript Handbook and release notes (typescriptlang.org/docs); Matt Pocock's Total TypeScript (free tutorials on advanced types).
+--- goals
+- review what the TypeScript course covered
+- choose a next step: front end, back end, full stack or deeper type-level skills
+- keep TypeScript skills sharp with good defaults and habits
+--- quiz
+? Which setting should every new TypeScript project turn on first?
++ `strict`
+- `allowJs`
+- `skipLibCheck`
+- `experimentalDecorators`
+> strict enables the checks that make TypeScript worth using.
+? You're tempted to write `as User`. What's the better first question?
++ Which check (narrowing or validation) would let the compiler know it's a User?
+- Should it be `as any` instead?
+- Can I disable strict mode?
+- Should I add @ts-ignore?
+> Assertions hide problems; checks prove facts.
+? What makes a discriminated union exhaustive in a switch?
++ Handling every member, enforced with a `never` check in the default branch
+- Adding a default that returns null
+- Using if statements instead
+- Declaring the union with interface
+> An unhandled member isn't assignable to never: a compile error.
+? Where should external data be validated?
+- Everywhere it's used
++ Once, at the boundary where it enters the program
+- Only in tests
+- Nowhere: types are enough
+> Inside the boundary, the types can be trusted.
+--- cards
+TypeScript in one line :: JavaScript with a static, structural type system checked before the code runs.
+Daily habits :: strict on; unknown not any; narrow, don't assert; validate at boundaries; derive types, don't repeat them.
+Next steps :: React + TS, Node + TS (Fastify/Hono/NestJS, Prisma/Drizzle, Zod), tRPC; then SQL in DevQuest.

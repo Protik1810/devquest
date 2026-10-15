@@ -1075,7 +1075,7 @@ function log(level: LogLevel, message: string): string {
 console.log(log(LogLevel.Info, "started"), log("error", "failed"));
 ```
 
-This gives the same `LogLevel.Info` syntax, accepts plain strings, and is erasable. (Declaring a value and a type with the same name is legal: they live in separate namespaces.) You'll still meet enums in many codebases and frameworks, so know both.
+This gives the same `LogLevel.Info` syntax, accepts plain strings, and is erasable. (Declaring a value and a type with the same name is legal: they live in separate namespaces. This **companion object pattern** is also used to pair a type with its helper functions: `type Money = {...}` and `const Money = { add, format }`, imported together by one name.) You'll still meet enums in many codebases and frameworks, so know both.
 
 ## Type assertions: as
 
@@ -1115,6 +1115,25 @@ if (scores.has("ada")) {
 ```
 
 `has` doesn't narrow `get`, so `!` is common here. But `const s = scores.get("ada"); if (s !== undefined) ...` is just as short and checked. Each `!` is a place where a "Cannot read properties of undefined" can come back.
+
+## Definite assignment assertions
+
+A third kind of assertion tells TypeScript that a variable or field **will** be assigned before use, even though it can't see where: `let x!: number;` or, in a class, `name!: string;`. It's used with frameworks that fill fields in for you (Angular's `@ViewChild`, ORMs that create entities), and in tests that set things up in a `beforeEach`:
+
+```ts
+class Report {
+  title!: string;
+
+  init(title: string): this {
+    this.title = title;
+    return this;
+  }
+}
+
+console.log(new Report().init("Q3 sales").title);
+```
+
+Without `!`, strict mode reports *Property 'title' has no initializer*. As with every assertion, if you're wrong, `title` is `undefined` at run time while its type says `string`; prefer a constructor parameter when you can.
 
 ## any: the ultimate escape hatch
 
@@ -1161,6 +1180,8 @@ declare global {
 globalThis.appVersion = "1.4.0";
 console.log(appVersion);
 ```
+
+The same mechanism can add methods to built-in types (`interface Array<T> { last(): T | undefined }` plus an assignment to `Array.prototype.last`), but changing built-in prototypes is discouraged: it affects every library in the program and can clash with future JavaScript features. Prefer a plain function such as `last(array)`.
 
 `declare global` adds to the global scope from inside a module; `declare module "some-library" { interface Options { ... } }` does the same for a library's types (Module 6 covers declaration files). Use this sparingly: it changes a type for the whole project.
 

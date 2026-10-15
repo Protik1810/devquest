@@ -366,6 +366,37 @@ for await (const product of allProducts()) total += product.price;
 console.log(`Total stock value: ${total}`);
 ```
 
+## Typed messages between threads
+
+Web Workers (browser) and `worker_threads` (Node.js) run code in parallel, communicating only by **messages**, which arrive untyped (`event.data` is `any`). A discriminated union for each direction turns the message channel into a checked protocol, the same idea as typed events:
+
+```
+type ToWorker =
+  | { type: "resize"; imageId: string; width: number }
+  | { type: "cancel"; imageId: string };
+
+type FromWorker =
+  | { type: "progress"; imageId: string; percent: number }
+  | { type: "done"; imageId: string; url: string }
+  | { type: "failed"; imageId: string; error: string };
+
+const worker = new Worker(new URL("./resize.worker.ts", import.meta.url), { type: "module" });
+const send = (message: ToWorker) => worker.postMessage(message);
+
+worker.addEventListener("message", (event: MessageEvent<FromWorker>) => {
+  const message = event.data;
+  switch (message.type) {
+    case "progress": showProgress(message.imageId, message.percent); break;
+    case "done": showImage(message.imageId, message.url); break;
+    case "failed": showError(message.imageId, message.error); break;
+  }
+});
+
+send({ type: "resize", imageId: "a1", width: 800 });
+```
+
+Both files import the same two types, so a change to the protocol breaks the build on both sides. (`MessageEvent<FromWorker>` is a promise about the data rather than a check; for messages from code you don't control, validate them like any other boundary.)
+
 📚 **Go deeper:** TypeScript Handbook, "More on Functions" and the `lib.es2015.promise.d.ts` declarations (hover over `Promise.all` to read its overloads); *Programming TypeScript*, chapter 8 "Asynchronous Programming, Concurrency, and Parallelism"; typescript-eslint rules `no-floating-promises` and `no-misused-promises`.
 --- goals
 - type async functions with `Promise<T>`, and understand what `await` gives
@@ -1120,6 +1151,33 @@ How you write import paths depends on what runs the code:
 
 DevQuest accepts all three, so use whichever matches the project you're working in.
 
+## Module mode and script mode
+
+A file with at least one top-level `import` or `export` is a **module**: its declarations are private unless exported. A file without any is a **script**: its top-level declarations are **global**, visible in every other script of the project (and two scripts declaring the same `const` clash). That's why an otherwise empty `export {};` sometimes appears at the end of a file: it turns a script into a module. The compiler option `"moduleDetection": "force"` treats every file as a module, which is what you want in modern projects (and what DevQuest does).
+
+## Namespaces: you'll meet them in older code
+
+Before ES modules existed, TypeScript had its own way to group code: **namespaces** (originally called "internal modules").
+
+```
+namespace Geometry {
+  export const TAU = Math.PI * 2;
+  export function circumference(radius: number): number {
+    return TAU * radius;
+  }
+}
+
+console.log(Geometry.circumference(1).toFixed(3));
+```
+
+A namespace compiles to an object built by a function, so it isn't erasable syntax: Node's type stripping refuses it, and so does DevQuest (it strips types the same way). Today, **use modules instead**: a file is already a namespace. You'll still see `namespace` in declaration files (the types of libraries that expose a global object, such as `declare namespace google.maps { ... }`) and in older codebases.
+
+## CommonJS and dynamic imports
+
+Many npm packages are still CommonJS (`module.exports = ...`). With `"esModuleInterop": true` (on by default with `NodeNext`), you can import them with normal `import` syntax: `import express from "express"`. Declaration files describe such modules with `export = something;`, and very old TypeScript code imports them with `import fs = require("fs")`.
+
+**Dynamic imports** (`await import("./charts.ts")`) load a module on demand, for example to make a web app's first load faster; their result is fully typed as the module's exports.
+
 ## Declaration files (.d.ts)
 
 A **declaration file** contains only types: no code. It describes the shape of JavaScript that exists somewhere else. You meet them in three ways:
@@ -1190,6 +1248,10 @@ export function average(values) {
 
 This is how some projects (Svelte's own source, webpack) get type checking without a build step, and how large JavaScript codebases migrate gradually.
 
+## Triple-slash directives
+
+Occasionally you'll see special comments at the top of a declaration file: `/// <reference types="vite/client" />` pulls in a package's global types (here, the type of `import.meta.env`), and `/// <reference path="./globals.d.ts" />` includes another file. In application code, the `types` compiler option and imports do the same job more visibly, so you rarely write them yourself.
+
 📚 **Go deeper:** TypeScript Handbook, "Modules", "Declaration Files" (Introduction, Do's and Don'ts) and "JS Projects Utilizing TypeScript"; TSConfig reference: `verbatimModuleSyntax`, `allowImportingTsExtensions`, `rewriteRelativeImportExtensions`; *Programming TypeScript*, chapter 10 "Namespaces.Modules" and chapter 11 "Interoperating with JavaScript".
 --- goals
 - import and export types, using `import type` and `verbatimModuleSyntax`
@@ -1197,6 +1259,7 @@ This is how some projects (Svelte's own source, webpack) get type checking witho
 - explain declaration files, bundled types and `@types` packages
 - write declarations for untyped JavaScript and for globals
 - type-check JavaScript files with JSDoc
+- recognise script versus module files, namespaces, CommonJS interop and triple-slash directives
 --- quiz
 ? What happens to `import type { User } from "./user.ts"` in the output JavaScript?
 + It's removed entirely
@@ -1375,6 +1438,25 @@ Type-level tests also exist: Vitest's `expectTypeOf(value).toEqualTypeOf<...>()`
 > Fast transpilers don't type-check; tsc does.
 ~~~
 
+## Building and shipping
+
+- **Project layout**: source in `src/`, compiled output in `dist/` (`rootDir` and `outDir`), tests next to the code or in `test/`; output files are never committed.
+- **Source maps** (`sourceMap`, plus `declarationMap` for libraries) map compiled JavaScript back to your TypeScript, so stack traces, debuggers and **error monitoring** services (Sentry and similar, which receive your source maps during deployment) show your original lines.
+- **Project references** (`"composite": true` and `"references"` in `tsconfig.json`, built with `tsc -b`) split a large repository or monorepo into projects that build incrementally, each with its own settings.
+
+**Publishing a library** to npm needs three things in addition to the compiled JavaScript: `"declaration": true` (emit `.d.ts` files), a `package.json` whose `"exports"` field lists the entry points with a `"types"` condition, and a check that the published types work for users, for example with the `@arethetypeswrong/cli` tool:
+
+```
+{
+  "name": "@acme/money",
+  "type": "module",
+  "exports": {
+    ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" }
+  },
+  "files": ["dist"]
+}
+```
+
 ## Migrating a JavaScript project
 
 A proven, gradual path:
@@ -1393,6 +1475,7 @@ At no point does the application stop working: TypeScript was designed for this 
 - choose `target`, `lib`, `module` and `moduleResolution` for browsers, Node and bundlers
 - assemble a toolchain: tsc, a fast transpiler, typescript-eslint, a formatter and a test runner
 - migrate a JavaScript codebase to TypeScript gradually
+- lay out, build and publish a project with source maps, project references and declaration files
 --- quiz
 ? Which flag makes `catch (e)` give `e: unknown`?
 + `useUnknownInCatchVariables` (part of strict)

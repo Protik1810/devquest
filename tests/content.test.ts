@@ -62,8 +62,8 @@ describe('curriculum integrity', () => {
     }
   });
 
-  it('every Python and JavaScript course lesson states its goals', () => {
-    for (const id of ['python', 'javascript'])
+  it('every Python, JavaScript and TypeScript course lesson states its goals', () => {
+    for (const id of ['python', 'javascript', 'typescript'])
       for (const l of TRACKS.find((t) => t.id === id)!.lessons) expect(l.goals?.length ?? 0, `${l.id} has no --- goals`).toBeGreaterThan(0);
   });
 

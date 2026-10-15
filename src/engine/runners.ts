@@ -327,6 +327,9 @@ async function withSyntaxLocation(error: string, code: string, lang: CodeLang) {
 
 /** TypeScript runs as JavaScript after sucrase strips the types (no type-checking). */
 async function stripTypes(code: string) {
+  // sucrase would silently delete a namespace's code, so say so instead (Node's type stripping rejects them too)
+  const ns = code.match(/^[ \t]*(?:export[ \t]+)?(?:namespace|module)[ \t]+([\w.]+)[ \t]*\{/m);
+  if (ns) throw new Error(`namespace ${ns[1]} (line ${code.slice(0, ns.index).split('\n').length}) can't run here: TypeScript namespaces need the full compiler. Use a module or a plain object instead.`);
   const { transform } = await import('sucrase');
   return transform(code, { transforms: ['typescript'], disableESTransforms: true }).code;
 }
@@ -597,7 +600,8 @@ export async function runCode(lang: CodeLang, code: string, check?: CodeCheck, s
         code = await stripTypes(code);
         if (tests) tests = await stripTypes(tests);
       } catch (e) {
-        return { ok: false, output: '', error: `SyntaxError: ${(e as Error).message}`, passed: check ? false : undefined };
+        const message = (e as Error).message;
+        return { ok: false, output: '', error: message.startsWith('namespace ') ? message : `SyntaxError: ${message}`, passed: check ? false : undefined };
       }
     }
     // JavaScript lessons run in strict mode, like modern modules
