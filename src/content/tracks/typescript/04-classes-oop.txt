@@ -1,0 +1,1078 @@
+=== module Module 4 · Classes and object-oriented TypeScript
+
+=== lesson ts-classes | Classes | 90
+## JavaScript classes, now with types
+
+Everything you learnt about classes in the JavaScript course (Modules 8 and 9) still holds. TypeScript adds types for fields, parameters and methods, plus a few extra keywords for **access control** and **design**.
+
+```ts
+class BankAccount {
+  readonly owner: string;
+  private balance = 0;
+  static readonly overdraftLimit = 100;
+
+  constructor(owner: string, opening: number) {
+    this.owner = owner;
+    this.deposit(opening);
+  }
+
+  deposit(amount: number): void {
+    if (amount <= 0) throw new RangeError("Deposit must be positive");
+    this.balance += amount;
+  }
+
+  withdraw(amount: number): boolean {
+    if (this.balance - amount < -BankAccount.overdraftLimit) return false;
+    this.balance -= amount;
+    return true;
+  }
+
+  get available(): number {
+    return this.balance + BankAccount.overdraftLimit;
+  }
+}
+
+const account = new BankAccount("Ada", 50);
+console.log(account.withdraw(120), account.withdraw(100), account.available);
+```
+
+- **Fields are declared** in the class body with their types (`owner: string`). Under `strict`, every field must be initialised, either where it's declared (`balance = 0`) or in the constructor; otherwise TypeScript reports *Property 'x' has no initializer*.
+- `readonly` fields can only be assigned in the declaration or the constructor.
+- `static` members belong to the class itself (`BankAccount.overdraftLimit`), as in JavaScript.
+- `get`/`set` accessors are typed like methods.
+
+## private, protected, public and #private
+
+TypeScript has three **access modifiers**:
+
+| Modifier | Accessible from |
+|---|---|
+| `public` (the default) | anywhere |
+| `protected` | the class and its subclasses |
+| `private` | only the class itself |
+
+`account.balance` outside the class is a compile error. But remember type erasure: `private` is a **compile-time** check only, and the property is an ordinary property at run time (visible in `console.log` and `JSON.stringify`, and reachable with `account["balance"]`).
+
+JavaScript's own **`#private` fields** (JavaScript course, Module 8) are private **at run time** too:
+
+```ts
+class Token {
+  #value: string;
+
+  constructor(value: string) {
+    this.#value = value;
+  }
+
+  matches(guess: string): boolean {
+    return guess === this.#value;
+  }
+}
+
+const token = new Token("s3cret");
+console.log(token.matches("guess"), token, JSON.stringify(token));
+```
+
+Which to use? `#private` gives real encapsulation (nothing outside can read it); `private` is lighter and allows tests or subclasses to bend the rules with a cast. Many modern codebases prefer `#private` for anything genuinely secret; `private` remains very common, and `protected` has no `#` equivalent.
+
+## Parameter properties
+
+A TypeScript shortcut: put a modifier on a constructor parameter, and it becomes a field automatically:
+
+```ts
+class Point {
+  constructor(
+    public readonly x: number,
+    public readonly y: number,
+  ) {}
+
+  distanceTo(other: Point): number {
+    return Math.hypot(this.x - other.x, this.y - other.y);
+  }
+}
+
+console.log(new Point(0, 0).distanceTo(new Point(3, 4)));
+```
+
+`public readonly x: number` declares the field and assigns it. It's concise and widely used (Angular code is full of it). It's also one of the few TypeScript features that **generate code**, so it isn't "erasable": Node's built-in type stripping rejects it, and the `erasableSyntaxOnly` option forbids it. Projects that run `.ts` files directly in Node write the fields out instead.
+
+~~~check
+? What's the run-time effect of marking a field `private`?
+- The field is hidden from console.log
+- Accessing it from outside throws
++ None: it's checked at compile time only
+- The field is encrypted
+> Use #private for privacy enforced at run time.
+~~~
+
+## Inheritance, abstract classes and override
+
+```ts
+abstract class Employee {
+  constructor(public readonly name: string) {}
+
+  abstract monthlyPay(): number;
+
+  payslip(): string {
+    return `${this.name}: ${this.monthlyPay().toFixed(2)}`;
+  }
+}
+
+class Salaried extends Employee {
+  constructor(name: string, private readonly salary: number) {
+    super(name);
+  }
+
+  override monthlyPay(): number {
+    return this.salary / 12;
+  }
+}
+
+class Contractor extends Employee {
+  constructor(name: string, private readonly rate: number, private readonly hours: number) {
+    super(name);
+  }
+
+  override monthlyPay(): number {
+    return this.rate * this.hours;
+  }
+}
+
+const staff: Employee[] = [new Salaried("Ada", 60000), new Contractor("Bob", 50, 80)];
+for (const person of staff) console.log(person.payslip());
+```
+
+- An **abstract class** can't be instantiated (`new Employee("x")` is an error); it exists to be extended. An **abstract method** has no body, and every concrete subclass **must** implement it (the compiler checks).
+- **`override`** marks a method that replaces a parent's method. With the compiler option `noImplicitOverride`, it's required, which catches two classic bugs: a typo in the method name (it would silently create a new method instead of overriding), and a parent method being renamed (overrides would silently stop overriding).
+
+Abstract classes are the "template method" pattern from the JavaScript course, now checked: `payslip` is written once, and each subclass fills in `monthlyPay`.
+
+## Classes are also types
+
+A class declaration creates two things: a **value** (the constructor function, used with `new`) and a **type** (the shape of its instances). So `staff: Employee[]` uses the class as a type. Because TypeScript is structural, any object with the same public shape matches that type, even if it wasn't created with `new` (as long as the class has no `private`, `protected` or `#private` members: those make a class type behave nominally, so only real instances match).
+
+`typeof Employee` is the type of the **class itself** (its constructor and static members), which is what you need when passing classes around, for example to a factory.
+
+📚 **Go deeper:** TypeScript Handbook, "Classes"; *Programming TypeScript*, chapter 5 "Classes and Interfaces"; *Effective TypeScript*, item on `#private` versus `private`.
+--- goals
+- declare typed fields, constructors, methods, accessors and static members
+- use `public`, `protected`, `private` and `readonly`, and explain how `private` differs from `#private`
+- use parameter properties, and know they aren't erasable syntax
+- design class hierarchies with `abstract` classes and methods, and `override`
+- explain that a class is both a value and a type
+--- quiz
+? In strict mode, what's wrong with `class A { name: string; }`?
++ The field has no initializer and isn't assigned in the constructor
+- Fields can't have types
+- name is a reserved word
+- Nothing
+> strictPropertyInitialization requires every field to be initialised.
+? What does `constructor(private readonly id: number) {}` do?
+- Nothing until you assign this.id
++ Declares a private readonly field id and assigns the argument to it
+- Makes the constructor private
+- Declares a static field
+> That's a parameter property.
+? Why use `override`?
+- It's required to call super
++ It makes the compiler check that the method really replaces a parent method
+- It makes the method private
+- It speeds up method calls
+> Catches typos and parent renames (with noImplicitOverride).
+? What can you NOT do with an abstract class?
+- Extend it
+- Give it concrete methods
++ Create an instance with new
+- Use it as a type
+> Abstract classes exist to be extended.
+? `account["balance"]` where balance is `private`. What happens at run time?
++ It returns the value: private is a compile-time check only
+- It throws
+- It returns undefined
+- It returns "private"
+> TypeScript even allows bracket access to private members as an escape hatch.
+--- exercise code typescript
+::prompt
+Write a class hierarchy for a parking garage:
+
+- `abstract class Vehicle` with a `readonly plate: string` (set in the constructor), an abstract `readonly size: "small" | "large"`, and an abstract method `hourlyRate(): number`;
+- a concrete method on `Vehicle`, `fee(hours: number): number`, which charges `hourlyRate() * Math.ceil(hours)`, at most 8 hours' worth per day (for stays up to 24 hours; longer stays aren't needed);
+- `Motorbike` (small, 1.5 per hour), `Car` (small, 3 per hour) and `Van` (large, 5 per hour), each using `override`;
+- `class Garage` with `#spots` (a private `Map<string, Vehicle>`) and a capacity per size given to the constructor as `{ small: number; large: number }`; `park(v: Vehicle): boolean` (false when full for that size or already parked), `leave(plate: string, hours: number): number | undefined` (the fee, or `undefined` if not parked), and a `free(size)` method.
+::starter
+abstract class Vehicle {
+}
+::solution
+abstract class Vehicle {
+  abstract readonly size: "small" | "large";
+
+  constructor(readonly plate: string) {}
+
+  abstract hourlyRate(): number;
+
+  fee(hours: number): number {
+    return this.hourlyRate() * Math.min(Math.ceil(hours), 8);
+  }
+}
+
+class Motorbike extends Vehicle {
+  override readonly size = "small";
+  override hourlyRate(): number {
+    return 1.5;
+  }
+}
+
+class Car extends Vehicle {
+  override readonly size = "small";
+  override hourlyRate(): number {
+    return 3;
+  }
+}
+
+class Van extends Vehicle {
+  override readonly size = "large";
+  override hourlyRate(): number {
+    return 5;
+  }
+}
+
+class Garage {
+  #spots = new Map<string, Vehicle>();
+
+  constructor(private readonly capacity: { small: number; large: number }) {}
+
+  free(size: "small" | "large"): number {
+    let used = 0;
+    for (const v of this.#spots.values()) if (v.size === size) used++;
+    return this.capacity[size] - used;
+  }
+
+  park(v: Vehicle): boolean {
+    if (this.#spots.has(v.plate) || this.free(v.size) === 0) return false;
+    this.#spots.set(v.plate, v);
+    return true;
+  }
+
+  leave(plate: string, hours: number): number | undefined {
+    const v = this.#spots.get(plate);
+    if (v === undefined) return undefined;
+    this.#spots.delete(plate);
+    return v.fee(hours);
+  }
+}
+::tests
+const __g = new Garage({ small: 2, large: 1 });
+assert.strictEqual(__g.park(new Car("CAR-1")), true);
+assert.strictEqual(__g.park(new Car("CAR-1")), false);
+assert.strictEqual(__g.park(new Motorbike("MB-1")), true);
+assert.strictEqual(__g.park(new Car("CAR-2")), false);
+assert.strictEqual(__g.park(new Van("VAN-1")), true);
+assert.strictEqual(__g.park(new Van("VAN-2")), false);
+assert.strictEqual(__g.free("small"), 0);
+assert.strictEqual(__g.leave("CAR-1", 2.5), 9);
+assert.strictEqual(__g.leave("CAR-1", 1), undefined);
+assert.strictEqual(__g.leave("VAN-1", 20), 40);
+assert.strictEqual(__g.leave("MB-1", 0.2), 1.5);
+assert.strictEqual(__g.free("small"), 2);
+function __typeChecks(v: Vehicle) {
+  // @ts-expect-error
+  new Vehicle("X");
+  // @ts-expect-error
+  v.plate = "changed";
+  // @ts-expect-error
+  __g.spots;
+  const s: "small" | "large" = v.size;
+}
+::hints
+- `abstract readonly size: "small" | "large";` in Vehicle, and `override readonly size = "small";` in subclasses (a `readonly` field initialised with a string keeps its literal type).
+- `Math.min(Math.ceil(hours), 8)` caps the charged hours.
+- Count used spots of a size by looping over `this.#spots.values()`.
+--- cards
+Field declaration :: class A { name: string; count = 0; } — strict mode requires initialisation (here or in the constructor).
+Access modifiers :: public (default), protected (class + subclasses), private (class only). Compile time only.
+#private :: JavaScript private fields: enforced at run time, invisible from outside.
+Parameter property :: constructor(private readonly id: number) {} declares and assigns a field. Not erasable syntax.
+abstract :: Abstract classes can't be instantiated; abstract methods must be implemented by subclasses.
+override :: Marks a method replacing a parent method; noImplicitOverride makes it required and catches typos.
+Class = value + type :: new Foo() uses the value; x: Foo uses the instance type; typeof Foo is the class itself.
+
+=== lesson ts-interfaces-structural | Interfaces, implements and structural typing | 85
+## Programming to an interface
+
+The JavaScript course taught "program to an interface, not an implementation" (Module 9), but JavaScript couldn't check it: an "interface" was just a convention. In TypeScript, it's real:
+
+```ts
+interface Logger {
+  log(message: string): void;
+}
+
+class ConsoleLogger implements Logger {
+  log(message: string): void {
+    console.log(`[console] ${message}`);
+  }
+}
+
+class MemoryLogger implements Logger {
+  readonly lines: string[] = [];
+  log(message: string): void {
+    this.lines.push(message);
+  }
+}
+
+function processOrder(id: number, logger: Logger): void {
+  logger.log(`processing order ${id}`);
+}
+
+const memory = new MemoryLogger();
+processOrder(1, new ConsoleLogger());
+processOrder(2, memory);
+console.log(memory.lines);
+```
+
+`implements Logger` asks the compiler to check that the class has everything `Logger` requires; forget `log` or give it the wrong parameter type and the error appears **on the class**, where it's easy to fix. `processOrder` depends only on the interface, so any logger works, including a test double.
+
+A class can implement **several** interfaces (`class Cache implements Readable, Writable`), but extend only one class.
+
+## implements is optional (structural typing)
+
+Delete `implements Logger` from `MemoryLogger` above and the program still compiles: the class has the right shape, and that's all TypeScript cares about. `implements` only adds an **early check**. So why write it? It documents intent, and it reports mistakes at the class instead of at some distant call site.
+
+Structural typing also means plain objects can satisfy interfaces, which makes testing easy:
+
+```ts
+interface Clock {
+  now(): Date;
+}
+
+function greeting(clock: Clock): string {
+  const hour = clock.now().getUTCHours();
+  return hour < 12 ? "Good morning" : "Good afternoon";
+}
+
+const fakeClock: Clock = { now: () => new Date(Date.UTC(2026, 0, 1, 9)) };
+console.log(greeting(fakeClock));
+```
+
+No mocking library needed: an object literal with a `now` method is a `Clock`.
+
+~~~check
+? A class has every method of interface `Repo` but doesn't say `implements Repo`. Can it be passed where a `Repo` is expected?
++ Yes: TypeScript checks shapes, not declarations
+- No: implements is required
+- Only if it extends Repo
+- Only at run time
+> implements is an optional early check.
+~~~
+
+## Interfaces for classes: what they can't describe
+
+An interface describes the **instance** side: properties and methods. It can't require private members, constructors or static members. To describe a constructor ("a class whose instances are Loggers"), use a **construct signature**:
+
+```ts
+interface Logger {
+  log(message: string): void;
+}
+
+type LoggerClass = new (prefix: string) => Logger;
+
+class PrefixLogger implements Logger {
+  constructor(private prefix: string) {}
+  log(message: string): void {
+    console.log(`${this.prefix} ${message}`);
+  }
+}
+
+function createLogger(Kind: LoggerClass, prefix: string): Logger {
+  return new Kind(prefix);
+}
+
+createLogger(PrefixLogger, ">>").log("ready");
+```
+
+## Assignability: when is A a B?
+
+Structural typing has precise rules. A type `A` is **assignable** to `B` when every required property of `B` exists in `A` with an assignable type. Extra properties in `A` are fine (except in fresh object literals: the excess property check from Module 2). Some consequences:
+
+- `{ name: string; age: number }` is assignable to `{ name: string }`, but not the other way round: more specific types (more properties) fit where less specific ones are expected. The "subtype" is the one with **more** requirements.
+- Methods with **fewer parameters** fit where more are offered (Module 3).
+- **`readonly` properties** don't stop assignment: a `{ readonly x: number }` can be assigned to `{ x: number }`, which then mutates it. `readonly` is a promise about one view of an object, not about the object.
+
+```ts
+interface Named { name: string }
+interface Person { name: string; age: number }
+
+const ada: Person = { name: "Ada", age: 36 };
+const named: Named = ada;
+console.log(named.name);
+```
+
+## Branding: when structural typing is too lenient
+
+Sometimes you *want* two types with the same shape to be incompatible: a `UserId` and an `OrderId` are both strings, and mixing them up is a real bug. A **brand** adds a fake property that no plain string has:
+
+```ts
+type UserId = string & { readonly __brand: "UserId" };
+type OrderId = string & { readonly __brand: "OrderId" };
+
+function userId(raw: string): UserId {
+  if (!/^u_\d+$/.test(raw)) throw new Error(`Invalid user id: ${raw}`);
+  return raw as UserId;
+}
+
+function loadUser(id: UserId): string {
+  return `user ${id}`;
+}
+
+console.log(loadUser(userId("u_42")));
+```
+
+`loadUser("u_42")` is now an error (a plain string isn't a `UserId`), and so is passing an `OrderId`. The only way to get a `UserId` is through `userId()`, which validates: a **smart constructor**. The brand exists only in the types (`&` creates an **intersection** type, Module 5); at run time it's still a plain string.
+
+📚 **Go deeper:** TypeScript Handbook, "Classes: implements Clauses" and "Type Compatibility"; *Programming TypeScript*, chapter 5 (interfaces, implementing, classes are structurally typed) and chapter 6 (simulating nominal types); *Effective TypeScript*, item 64 ("consider brands for nominal typing").
+--- goals
+- define interfaces and implement them with classes
+- explain why `implements` is optional, and why it's still useful
+- use plain objects as test doubles thanks to structural typing
+- describe constructors with construct signatures
+- apply the assignability rules, and add brands for nominal-style types
+--- quiz
+? What does `implements` add?
++ An early check, reported at the class, that it matches the interface
+- The interface's methods are copied into the class
+- Run-time type checking
+- Multiple inheritance of code
+> Without it, the class is still usable wherever its shape fits.
+? Which is assignable to `{ id: number }`?
++ A variable of type `{ id: number; name: string }`
+- `{ id: "1" }`
+- `{}`
+- `{ ID: 1 }`
+> More properties are fine; missing or wrongly typed ones aren't.
+? How do you type "a class whose instances are Loggers" for a factory parameter?
+- `Logger`
+- `class Logger`
++ `new (...args: any[]) => Logger` (a construct signature)
+- `typeof Logger` where Logger is an interface
+> Interfaces only describe instances; construct signatures describe classes.
+? Why brand `type UserId = string & { readonly __brand: "UserId" }`?
+- To make ids faster
++ So plain strings and other ids can't be passed by mistake where a UserId is required
+- To store the brand at run time
+- To encrypt ids
+> Branding simulates nominal typing for same-shaped types.
+--- exercise code typescript
+::prompt
+Implement a **storage interface** twice, then use it:
+
+- `interface KeyValueStore { get(key: string): string | undefined; set(key: string, value: string): void; delete(key: string): boolean; keys(): string[] }`;
+- `class MemoryStore implements KeyValueStore` backed by a `Map`;
+- `class PrefixedStore implements KeyValueStore` that wraps another store and adds a prefix like `"app:"` to every key (its `keys()` returns only its own keys, without the prefix);
+- `function migrate(from: KeyValueStore, to: KeyValueStore): number` copies every key and returns how many were copied.
+::starter
+interface KeyValueStore {
+  get(key: string): string | undefined;
+  set(key: string, value: string): void;
+  delete(key: string): boolean;
+  keys(): string[];
+}
+::solution
+interface KeyValueStore {
+  get(key: string): string | undefined;
+  set(key: string, value: string): void;
+  delete(key: string): boolean;
+  keys(): string[];
+}
+
+class MemoryStore implements KeyValueStore {
+  #data = new Map<string, string>();
+
+  get(key: string): string | undefined {
+    return this.#data.get(key);
+  }
+
+  set(key: string, value: string): void {
+    this.#data.set(key, value);
+  }
+
+  delete(key: string): boolean {
+    return this.#data.delete(key);
+  }
+
+  keys(): string[] {
+    return [...this.#data.keys()];
+  }
+}
+
+class PrefixedStore implements KeyValueStore {
+  constructor(
+    private readonly inner: KeyValueStore,
+    private readonly prefix: string,
+  ) {}
+
+  get(key: string): string | undefined {
+    return this.inner.get(this.prefix + key);
+  }
+
+  set(key: string, value: string): void {
+    this.inner.set(this.prefix + key, value);
+  }
+
+  delete(key: string): boolean {
+    return this.inner.delete(this.prefix + key);
+  }
+
+  keys(): string[] {
+    return this.inner.keys().filter((k) => k.startsWith(this.prefix)).map((k) => k.slice(this.prefix.length));
+  }
+}
+
+function migrate(from: KeyValueStore, to: KeyValueStore): number {
+  const keys = from.keys();
+  for (const key of keys) {
+    const value = from.get(key);
+    if (value !== undefined) to.set(key, value);
+  }
+  return keys.length;
+}
+::tests
+const __base = new MemoryStore();
+const __app = new PrefixedStore(__base, "app:");
+const __user = new PrefixedStore(__base, "user:");
+__app.set("theme", "dark");
+__app.set("lang", "en");
+__user.set("name", "Ada");
+assert.deepStrictEqual(__base.keys(), ["app:theme", "app:lang", "user:name"]);
+assert.deepStrictEqual(__app.keys(), ["theme", "lang"]);
+assert.strictEqual(__app.get("theme"), "dark");
+assert.strictEqual(__user.get("theme"), undefined);
+assert.strictEqual(__app.delete("lang"), true);
+assert.strictEqual(__app.delete("lang"), false);
+const __copy = new MemoryStore();
+assert.strictEqual(migrate(__user, __copy), 1);
+assert.deepStrictEqual(__copy.keys(), ["name"]);
+const __fake = { data: { a: "1" } as Record<string, string>, get(k: string) { return this.data[k]; }, set() {}, delete() { return false; }, keys() { return Object.keys(this.data); } };
+assert.strictEqual(migrate(__fake, __copy), 1);
+assert.strictEqual(__copy.get("a"), "1");
+const __s1: KeyValueStore = new MemoryStore();
+const __s2: KeyValueStore = new PrefixedStore(__s1, "x");
+::hints
+- Write `implements KeyValueStore` on both classes; the compiler then lists anything missing.
+- `PrefixedStore` holds another `KeyValueStore` (composition), so it can wrap a `MemoryStore` or even another `PrefixedStore`.
+- `migrate` only uses the interface, so the hidden checks can pass it a plain object.
+--- exercise code typescript
+::prompt
+Prevent unit mix-ups with **branded types**:
+
+- `type Metres = number & { readonly __unit: "m" }` and `type Feet = number & { readonly __unit: "ft" }`;
+- smart constructors `metres(n: number): Metres` and `feet(n: number): Feet` that throw `RangeError("distance must be a finite, non-negative number")` for negative, `NaN` or infinite values;
+- `toFeet(m: Metres): Feet` (1 m = 3.28084 ft) and `toMetres(f: Feet): Metres`;
+- `addMetres(a: Metres, b: Metres): Metres`.
+
+The hidden checks make sure mixing units, or passing plain numbers, is a compile error.
+::starter
+type Metres = number;
+type Feet = number;
+::solution
+type Metres = number & { readonly __unit: "m" };
+type Feet = number & { readonly __unit: "ft" };
+
+function checkDistance(n: number): void {
+  if (!Number.isFinite(n) || n < 0) throw new RangeError("distance must be a finite, non-negative number");
+}
+
+function metres(n: number): Metres {
+  checkDistance(n);
+  return n as Metres;
+}
+
+function feet(n: number): Feet {
+  checkDistance(n);
+  return n as Feet;
+}
+
+function toFeet(m: Metres): Feet {
+  return feet(m * 3.28084);
+}
+
+function toMetres(f: Feet): Metres {
+  return metres(f / 3.28084);
+}
+
+function addMetres(a: Metres, b: Metres): Metres {
+  return metres(a + b);
+}
+::tests
+const __m = metres(100);
+assert.strictEqual(toFeet(__m).toFixed(1), "328.1");
+assert.strictEqual(toMetres(feet(3.28084)), 1);
+assert.strictEqual(addMetres(__m, metres(5)), 105);
+assert.throws(() => metres(-1), RangeError);
+assert.throws(() => feet(NaN), RangeError);
+assert.throws(() => metres(Infinity), { message: "distance must be a finite, non-negative number" });
+const __plain: number = __m + 1;
+function __typeChecks() {
+  // @ts-expect-error
+  toFeet(100);
+  // @ts-expect-error
+  toFeet(feet(10));
+  // @ts-expect-error
+  addMetres(__m, feet(3));
+  // @ts-expect-error
+  const f: Feet = metres(1);
+}
+::hints
+- A brand is an intersection: `number & { readonly __unit: "m" }`.
+- The smart constructors are the only place that needs `as`; everything else builds values through them.
+- Branded numbers are still numbers, so arithmetic works (and gives plain `number`s).
+--- cards
+implements :: class A implements I — early check that the class matches the interface. Optional: shapes decide.
+Interface for tests :: Any object with the right shape satisfies an interface: object literals make easy test doubles.
+Construct signature :: type Ctor = new (x: string) => Logger — describes a class, for factories.
+Assignability :: A fits B if A has all of B's required properties with assignable types; extra properties are fine.
+Branded type :: type UserId = string & { readonly __brand: "UserId" } — nominal-style typing; create through a validating function.
+
+=== lesson ts-oop-patterns | OOP patterns in TypeScript | 90
+## this types: fluent APIs that survive inheritance
+
+A method returning `this` (the **polymorphic `this` type**) returns "whatever class this object really is", which keeps fluent chains working in subclasses:
+
+```ts
+class QueryBuilder {
+  protected parts: string[] = [];
+
+  where(condition: string): this {
+    this.parts.push(`WHERE ${condition}`);
+    return this;
+  }
+
+  build(): string {
+    return this.parts.join(" ");
+  }
+}
+
+class PagedQueryBuilder extends QueryBuilder {
+  limit(n: number): this {
+    this.parts.push(`LIMIT ${n}`);
+    return this;
+  }
+}
+
+const sql = new PagedQueryBuilder().where("age > 18").limit(10).build();
+console.log(sql);
+```
+
+If `where` returned `QueryBuilder`, then `.where(...).limit(10)` would be an error: a `QueryBuilder` has no `limit`. Returning `this` keeps the subclass type.
+
+## Builder with typed steps
+
+The builder pattern (JavaScript course, Module 9) gets stronger with types: required options can be enforced by the compiler.
+
+```ts
+interface Email {
+  to: string[];
+  subject: string;
+  body: string;
+  cc: string[];
+}
+
+class EmailBuilder {
+  private email: Partial<Email> = { to: [], cc: [] };
+
+  to(address: string): this {
+    this.email.to?.push(address);
+    return this;
+  }
+
+  cc(address: string): this {
+    this.email.cc?.push(address);
+    return this;
+  }
+
+  subject(text: string): this {
+    this.email.subject = text;
+    return this;
+  }
+
+  body(text: string): this {
+    this.email.body = text;
+    return this;
+  }
+
+  build(): Email {
+    const { to = [], cc = [], subject, body } = this.email;
+    if (to.length === 0 || subject === undefined || body === undefined) throw new Error("to, subject and body are required");
+    return { to, cc, subject, body };
+  }
+}
+
+const mail = new EmailBuilder().to("ada@example.com").subject("Hi").body("See you at 3").build();
+console.log(mail);
+```
+
+(Advanced libraries go further, encoding "subject has been set" in the builder's type parameter so that `build()` doesn't even compile until every required step has run. It's elegant but complex; a checked `build()` is usually enough.)
+
+## Mixins: reusable behaviour without deep hierarchies
+
+A **mixin** is a function that takes a class and returns a subclass with extra behaviour. TypeScript types it with a constructor type:
+
+```ts
+type Constructor<T = object> = new (...args: any[]) => T;
+
+function Timestamped<TBase extends Constructor>(Base: TBase) {
+  return class extends Base {
+    createdAt = new Date(Date.UTC(2026, 0, 1));
+  };
+}
+
+function Taggable<TBase extends Constructor>(Base: TBase) {
+  return class extends Base {
+    tags = new Set<string>();
+    tag(...names: string[]): this {
+      for (const name of names) this.tags.add(name);
+      return this;
+    }
+  };
+}
+
+class Note {
+  constructor(public text: string) {}
+}
+
+const RichNote = Taggable(Timestamped(Note));
+const note = new RichNote("Buy milk").tag("home", "urgent");
+console.log(note.text, [...note.tags], note.createdAt.toISOString());
+```
+
+`RichNote` instances have `text`, `createdAt`, `tags` and `tag()`, all typed. (`any[]` in `Constructor` is one of the rare legitimate uses of `any`: TypeScript requires exactly this form for mixin constructors.) Mixins avoid deep inheritance trees ("a TaggableTimestampedNote extends TimestampedNote extends Note"); still, **composition** (an object that *has* a tag set) is often simpler. Reach for mixins when behaviour must appear on the class itself.
+
+## Decorators
+
+**Decorators** are functions applied to classes and class members with `@` syntax. TypeScript 5 implements the standard (ECMAScript) decorator proposal; frameworks such as Angular, NestJS and TypeORM rely on decorators (the older "experimental" version, enabled by `experimentalDecorators`). Here's what a method decorator looks like:
+
+```
+function logged<This, Args extends unknown[], Return>(
+  method: (this: This, ...args: Args) => Return,
+  context: ClassMethodDecoratorContext<This, (this: This, ...args: Args) => Return>,
+) {
+  return function (this: This, ...args: Args): Return {
+    console.log(`calling ${String(context.name)}(${args.join(", ")})`);
+    return method.call(this, ...args);
+  };
+}
+
+class Calculator {
+  @logged
+  add(a: number, b: number): number {
+    return a + b;
+  }
+}
+```
+
+JavaScript engines don't run decorator syntax natively yet (browsers and Node are still implementing it), so it needs compiling by `tsc` or a bundler, and DevQuest can't run it directly. But a decorator is only a function that receives a method and returns a replacement. This is what `@logged` does, written by hand:
+
+```ts
+function logged<Args extends unknown[], Return>(name: string, method: (...args: Args) => Return) {
+  return function (this: unknown, ...args: Args): Return {
+    console.log(`calling ${name}(${args.join(", ")})`);
+    return method.apply(this, args);
+  };
+}
+
+class Calculator {
+  add(a: number, b: number): number {
+    return a + b;
+  }
+}
+Calculator.prototype.add = logged("add", Calculator.prototype.add);
+
+console.log(new Calculator().add(2, 3));
+```
+
+That's the "decorator" pattern from the JavaScript course (Module 9) applied to methods. Use decorators when a framework expects them; in your own code, plain higher-order functions are simpler and need no compiler support.
+
+~~~check
+? Why does `where(...)` return `this` instead of `QueryBuilder`?
+- this is shorter to type
++ So chains keep the subclass type, e.g. PagedQueryBuilder's limit stays available
+- Returning a class name is not allowed
+- To make it private
+> The polymorphic this type follows the actual class.
+~~~
+
+## Making illegal operations impossible: private constructors
+
+A `private constructor` stops anyone outside the class from calling `new`. Combined with static factory methods, it guarantees every instance is valid:
+
+```ts
+class Percentage {
+  private constructor(readonly value: number) {}
+
+  static of(value: number): Percentage {
+    if (value < 0 || value > 100) throw new RangeError(`${value} is not a percentage`);
+    return new Percentage(value);
+  }
+
+  static fromRatio(ratio: number): Percentage {
+    return Percentage.of(Math.round(ratio * 100));
+  }
+
+  toString(): string {
+    return `${this.value}%`;
+  }
+}
+
+console.log(`${Percentage.of(42)} ${Percentage.fromRatio(0.075)}`);
+```
+
+`new Percentage(500)` is a compile error outside the class. The same idea gives a **singleton** (a class with one instance, created by a static `instance()` method), though a module-level `const` is usually a simpler singleton in TypeScript.
+
+## Classes or functions and types?
+
+TypeScript supports both styles well:
+
+- **Classes** fit stateful objects with behaviour and invariants (a bank account, a connection pool, a game entity), and frameworks built around them (Angular, NestJS).
+- **Plain data types plus functions** (discriminated unions with `switch`, Module 2) fit data that crosses boundaries (JSON, messages), and functional styles (React with hooks, Redux).
+
+Most real codebases mix them. The SOLID principles and design patterns from the JavaScript course apply to both; types make them checkable.
+
+📚 **Go deeper:** TypeScript Handbook, "Classes: this Types", "Mixins" and "Decorators"; *Programming TypeScript*, chapter 5 (mixins, decorators, simulating final classes, design patterns: factory and builder); the TC39 decorators proposal (github.com/tc39/proposal-decorators).
+--- goals
+- write fluent APIs with the polymorphic `this` type
+- implement builders and factories with validation
+- create and type mixins
+- explain what decorators are, and write the equivalent higher-order function
+- use private constructors with static factories to guarantee valid instances
+--- quiz
+? What does a method return type of `this` give you?
++ Chained calls keep the type of the actual (sub)class
+- The method becomes static
+- The method can't be overridden
+- this is always any
+> Polymorphic this types make fluent subclass APIs work.
+? What is a mixin in TypeScript?
+- An interface with default methods
++ A function that takes a class and returns a subclass with added behaviour
+- A class with two parents
+- A decorator
+> Mixins compose behaviour into classes.
+? How does a private constructor help?
+- It makes all fields private
++ Instances can only be created through the class's own static methods, which can validate
+- It prevents subclasses from having methods
+- It hides the class from other modules
+> Private constructors plus static factories guarantee invariants.
+? What is a method decorator, under the syntax?
++ A function that receives the method (and context) and may return a replacement
+- A comment for documentation
+- A type annotation
+- An interface
+> @decorator is applied when the class is defined.
+--- exercise code typescript
+::prompt
+Write a fluent, inheritable **HTTP request builder**:
+
+- `class RequestBuilder` with `method(m: "GET" | "POST" | "PUT" | "DELETE"): this`, `header(name: string, value: string): this` (header names are stored in lower case) and `build(): { method: string; url: string; headers: Record<string, string>; body?: string }`; the URL is given to the constructor, and the default method is `"GET"`;
+- `class JsonRequestBuilder extends RequestBuilder` adding `json(data: unknown): this`, which sets the body to `JSON.stringify(data)` and the `content-type` header to `application/json`. Its `build()` throws `Error("GET requests cannot have a body")` if a body is set while the method is GET.
+
+Chains like `new JsonRequestBuilder("/api").json({ a: 1 }).method("POST").header("X-Id", "7").build()` must compile in any order.
+::starter
+class RequestBuilder {
+}
+::solution
+class RequestBuilder {
+  protected request: { method: string; url: string; headers: Record<string, string>; body?: string };
+
+  constructor(url: string) {
+    this.request = { method: "GET", url, headers: {} };
+  }
+
+  method(m: "GET" | "POST" | "PUT" | "DELETE"): this {
+    this.request.method = m;
+    return this;
+  }
+
+  header(name: string, value: string): this {
+    this.request.headers[name.toLowerCase()] = value;
+    return this;
+  }
+
+  build(): { method: string; url: string; headers: Record<string, string>; body?: string } {
+    return { ...this.request, headers: { ...this.request.headers } };
+  }
+}
+
+class JsonRequestBuilder extends RequestBuilder {
+  json(data: unknown): this {
+    this.request.body = JSON.stringify(data);
+    return this.header("Content-Type", "application/json");
+  }
+
+  override build(): { method: string; url: string; headers: Record<string, string>; body?: string } {
+    if (this.request.body !== undefined && this.request.method === "GET") throw new Error("GET requests cannot have a body");
+    return super.build();
+  }
+}
+::tests
+const __r = new JsonRequestBuilder("/api/users").json({ name: "Ada" }).method("POST").header("X-Request-Id", "7").build();
+assert.deepStrictEqual(__r, {
+  method: "POST",
+  url: "/api/users",
+  headers: { "content-type": "application/json", "x-request-id": "7" },
+  body: '{"name":"Ada"}',
+});
+assert.deepStrictEqual(new RequestBuilder("/health").build(), { method: "GET", url: "/health", headers: {} });
+assert.throws(() => new JsonRequestBuilder("/x").json([1]).build(), { message: "GET requests cannot have a body" });
+const __b = new RequestBuilder("/a").header("A", "1");
+const __first = __b.build();
+__b.header("B", "2");
+assert.deepStrictEqual(__first.headers, { a: "1" });
+function __typeChecks() {
+  new JsonRequestBuilder("/x").method("PUT").json({}).header("a", "b");
+  // @ts-expect-error
+  new RequestBuilder("/x").json({});
+  // @ts-expect-error
+  new RequestBuilder("/x").method("PATCH");
+}
+::hints
+- Every chaining method returns `this` (typed as `this`), so `.method("POST")` on a `JsonRequestBuilder` still has `.json`.
+- Make the request state `protected` so the subclass can read and write it.
+- `build()` should return a copy, so later changes to the builder don't change requests already built.
+--- cards
+this type :: A method returning this keeps the real (sub)class type, so fluent chains work after inheritance.
+Builder :: Collects options step by step; build() validates and returns the finished object.
+Mixin :: function M<T extends new (...a: any[]) => object>(Base: T) { return class extends Base { ... } }
+Decorator :: @fn on a class or member; fn receives it and may replace it. Standard decorators in TS 5; frameworks use experimentalDecorators.
+Private constructor :: private constructor + static factory methods = every instance is validated.
+
+=== lesson ts-m4-test | Module 4 test | 150 | exam
+This test covers Module 4: classes with typed fields, access modifiers and `#private`, parameter properties, abstract classes and `override`, interfaces and `implements`, structural typing and brands, `this` types, builders, mixins, decorators and private constructors.
+
+Before you start, check that you can:
+
+- write classes that enforce their invariants;
+- design with abstract classes and interfaces, and explain structural assignability;
+- write fluent and inheritable APIs;
+- choose between classes, interfaces and plain functions.
+--- goals
+- design object-oriented code that the compiler checks
+- combine classes, interfaces and generics
+- explain how TypeScript's structural typing affects class design
+--- quiz
+? Two classes have identical public fields and no private members. Can an instance of one be passed where the other is expected?
++ Yes, structural typing compares shapes
+- No, class names must match
+- Only with implements
+- Only if one extends the other
+> Private or #private members would make them incompatible.
+? Which keyword makes a subclass method fail to compile if the parent has no such method (with noImplicitOverride)?
+- `abstract`
++ `override`
+- `super`
+- `implements`
+> override checks that you're really overriding.
+? Which feature is NOT erasable (it generates code)?
+- `private` fields
+- `implements`
++ Parameter properties (`constructor(private x: number)`)
+- `readonly`
+> Parameter properties add assignments; enums are the other common example.
+? A field must stay secret at run time, even from `console.log`. What do you use?
+- `private`
+- `readonly`
++ `#private`
+- `protected`
+> Only JavaScript's # fields are private at run time (they're not printed as properties).
+? `abstract class A { abstract f(): void }` `class B extends A {}`. What happens?
++ Compile error: B doesn't implement f
+- B gets an empty f
+- Run-time error when calling f
+- Nothing
+> Concrete subclasses must implement every abstract member.
+--- exercise code typescript
+::prompt
+**A typed plugin system.** Write:
+
+- `interface Plugin { readonly name: string; readonly dependsOn?: readonly string[]; setup(app: App): void }`;
+- `class App` with `use(plugin: Plugin): this` (throws `Error("plugin <name> is already registered")` for a duplicate name), `start(): string[]` which runs every plugin's `setup` exactly once, **dependencies first** (in registration order otherwise), and returns the names in the order they ran; a missing dependency throws `Error("plugin <name> needs <dep>")`, and a cycle throws `Error("dependency cycle at <name>")`;
+- `App` also offers `provide<T>(key: string, value: T): void` and `inject<T>(key: string): T` (throwing `Error("nothing provided for <key>")`), so plugins can share services.
+
+(`inject<T>` is the one place where a generic return type is a deliberate, documented unchecked cast: the caller states what it expects.)
+::starter
+interface Plugin {
+  readonly name: string;
+  readonly dependsOn?: readonly string[];
+  setup(app: App): void;
+}
+
+class App {
+}
+::solution
+interface Plugin {
+  readonly name: string;
+  readonly dependsOn?: readonly string[];
+  setup(app: App): void;
+}
+
+class App {
+  #plugins = new Map<string, Plugin>();
+  #services = new Map<string, unknown>();
+
+  use(plugin: Plugin): this {
+    if (this.#plugins.has(plugin.name)) throw new Error(`plugin ${plugin.name} is already registered`);
+    this.#plugins.set(plugin.name, plugin);
+    return this;
+  }
+
+  provide<T>(key: string, value: T): void {
+    this.#services.set(key, value);
+  }
+
+  inject<T>(key: string): T {
+    if (!this.#services.has(key)) throw new Error(`nothing provided for ${key}`);
+    return this.#services.get(key) as T;
+  }
+
+  start(): string[] {
+    const done: string[] = [];
+    const visiting = new Set<string>();
+    const visit = (plugin: Plugin): void => {
+      if (done.includes(plugin.name)) return;
+      if (visiting.has(plugin.name)) throw new Error(`dependency cycle at ${plugin.name}`);
+      visiting.add(plugin.name);
+      for (const dep of plugin.dependsOn ?? []) {
+        const required = this.#plugins.get(dep);
+        if (required === undefined) throw new Error(`plugin ${plugin.name} needs ${dep}`);
+        visit(required);
+      }
+      visiting.delete(plugin.name);
+      plugin.setup(this);
+      done.push(plugin.name);
+    };
+    for (const plugin of this.#plugins.values()) visit(plugin);
+    return done;
+  }
+}
+::tests
+const __events: string[] = [];
+const __app = new App()
+  .use({ name: "routes", dependsOn: ["db", "logger"], setup: (app) => __events.push(`routes using ${app.inject<{ url: string }>("db").url}`) })
+  .use({ name: "logger", setup: () => __events.push("logger") })
+  .use({ name: "db", dependsOn: ["logger"], setup: (app) => { app.provide("db", { url: "postgres://local" }); __events.push("db"); } });
+assert.deepStrictEqual(__app.start(), ["logger", "db", "routes"]);
+assert.deepStrictEqual(__events, ["logger", "db", "routes using postgres://local"]);
+assert.throws(() => new App().use({ name: "a", setup() {} }).use({ name: "a", setup() {} }), { message: "plugin a is already registered" });
+assert.throws(() => new App().use({ name: "a", dependsOn: ["b"], setup() {} }).start(), { message: "plugin a needs b" });
+assert.throws(
+  () => new App().use({ name: "a", dependsOn: ["b"], setup() {} }).use({ name: "b", dependsOn: ["a"], setup() {} }).start(),
+  { message: /dependency cycle at (a|b)/ },
+);
+assert.throws(() => new App().inject("x"), { message: "nothing provided for x" });
+function __typeChecks() {
+  // @ts-expect-error
+  new App().use({ name: "x" });
+  // @ts-expect-error
+  new App().use({ name: "x", setup() {}, dependsOn: "y" });
+}
+::hints
+- A depth-first visit runs a plugin's dependencies before the plugin itself; a `done` list stops plugins from running twice.
+- Keep a `visiting` set of the plugins currently being visited: meeting one of them again means a cycle.
+- Store services as `unknown` in a `Map`, and cast once in `inject`.
