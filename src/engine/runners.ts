@@ -10,6 +10,7 @@ import { PY_TEST_HELPER } from './pyTestHelper';
 import { sameOutput } from './integrity';
 import { JS_RUNTIME, jsRuntimeOn } from './jsRuntime';
 import { bundleModules, usesModules } from './jsModules';
+import { describeTypeErrors, tsCheckWorker, type TsDiagnostic } from './tsCheck';
 
 /** `expected`: for a failed output check, the output that was expected (shown as a line-by-line comparison). */
 export type RunResult = { ok: boolean; output: string; error?: string; passed?: boolean; message?: string; expected?: string; table?: { columns: string[]; values: unknown[][] } };
@@ -172,6 +173,39 @@ class Runner {
 
 const python = new Runner(PY_WORKER, true);
 const javascript = new Runner(JS_WORKER, false);
+
+// TypeScript's type checker (public/vendor/typescript, see tsCheck.ts) in its own long-lived worker
+let tsWorker: Worker | null = null;
+let tsRequest = 0;
+const TS_VENDOR = new URL('./vendor/typescript/', location.href).href;
+
+/** Type errors in TypeScript code (and an exercise's checks), or null if the checker isn't available. */
+export async function checkTypes(code: string, tests?: string): Promise<TsDiagnostic[] | null> {
+  if (!tsWorker) tsWorker = new Worker(URL.createObjectURL(new Blob([tsCheckWorker(TS_VENDOR + 'typescript.js', TS_VENDOR)], { type: 'text/javascript' })));
+  const w = tsWorker;
+  const id = ++tsRequest;
+  return new Promise((resolve) => {
+    // Loading the compiler takes a moment the first time; after that a check takes milliseconds
+    const timer = setTimeout(() => {
+      w.removeEventListener('message', onMsg);
+      resolve(null);
+    }, 30000);
+    const onMsg = (e: MessageEvent) => {
+      if (e.data?.id !== id) return;
+      clearTimeout(timer);
+      w.removeEventListener('message', onMsg);
+      if (e.data.failed) console.warn('TypeScript type checking is unavailable:', e.data.failed);
+      resolve(e.data.failed ? null : e.data.diagnostics);
+    };
+    w.addEventListener('message', onMsg);
+    w.addEventListener('error', () => {
+      clearTimeout(timer);
+      tsWorker = null;
+      resolve(null);
+    }, { once: true });
+    w.postMessage({ id, code, tests });
+  });
+}
 // Lua 5.3 via fengari (a Lua VM in JavaScript), loaded into a classic worker like Pyodide
 const LUA_WORKER = `
 // The bundle is CommonJS-shaped, so give it a module object to fill in
@@ -505,6 +539,9 @@ export async function runCode(lang: CodeLang, code: string, check?: CodeCheck, s
   try {
     let tests = check?.type === 'tests' ? check.code : undefined;
     if (lang === 'typescript') {
+      // Like tsc: a program with type errors doesn't run
+      const problems = await checkTypes(code, tests);
+      if (problems?.length) return { ok: false, output: '', error: describeTypeErrors(problems, tests), passed: check ? false : undefined };
       try {
         code = await stripTypes(code);
         if (tests) tests = await stripTypes(tests);

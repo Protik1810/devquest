@@ -2,6 +2,7 @@
 // (and the desktop app's Content Security Policy can forbid remote scripts):
 //   public/pyodide/  Pyodide core + the Python packages the lessons import (resolved from pyodide-lock.json)
 //   public/vendor/   React 18 UMD + Babel standalone, used by the React lessons' live previews
+//   public/vendor/typescript/  TypeScript's type checker (typescript.js + standard lib declarations) for the TypeScript lessons
 // Files that already exist are skipped. Run: npm run fetch:runtimes  (also runs before every build)
 import fs from 'node:fs';
 import path from 'node:path';
@@ -18,6 +19,31 @@ const VENDOR = {
   'react-dom.development.js': 'https://cdn.jsdelivr.net/npm/react-dom@18.3.1/umd/react-dom.development.js',
   'babel.min.js': 'https://cdn.jsdelivr.net/npm/@babel/standalone@7.26.4/babel.min.js',
 };
+
+// TypeScript's type checker for the TypeScript lessons. The project itself builds with TypeScript 7 (a native
+// compiler); 6.0 is the last release written in JavaScript, which is what can run inside the app's worker.
+export const TS_VERSION = '6.0.3';
+const TS_CDN = `https://cdn.jsdelivr.net/npm/typescript@${TS_VERSION}/`;
+const TS_DIR = path.join(VENDOR_DIR, 'typescript');
+// The standard library declarations a check needs: the ECMAScript editions, the DOM and decorators
+const TS_LIB = /^lib\.(es\d+|es5|esnext|dom|decorators)[\w.]*\.d\.ts$/;
+
+/** Downloads typescript.js and the lib .d.ts files, and writes libs.json listing them. */
+async function fetchTypeScript() {
+  let fetched = 0;
+  if (await download(TS_CDN + 'lib/typescript.js', path.join(TS_DIR, 'typescript.js'))) fetched++;
+  const manifest = path.join(TS_DIR, 'libs.json');
+  let libs;
+  if (fs.existsSync(manifest)) libs = JSON.parse(fs.readFileSync(manifest, 'utf8'));
+  else {
+    const res = await fetch(`https://data.jsdelivr.com/v1/packages/npm/typescript@${TS_VERSION}?structure=flat`);
+    if (!res.ok) throw new Error(`typescript file list: HTTP ${res.status}`);
+    libs = (await res.json()).files.map((f) => f.name.replace(/^\/lib\//, '')).filter((n) => TS_LIB.test(n)).sort();
+  }
+  for (const name of libs) if (await download(TS_CDN + 'lib/' + name, path.join(TS_DIR, name))) fetched++;
+  if (!fs.existsSync(manifest)) fs.writeFileSync(manifest, JSON.stringify(libs));
+  return fetched;
+}
 
 // Packages the lessons need even if no import line names them directly
 const ALWAYS = ['numpy', 'pandas', 'hashlib', 'sqlite3', 'openssl'];
@@ -53,6 +79,7 @@ function pythonImports() {
 async function main() {
   let fetched = 0;
   for (const [name, url] of Object.entries(VENDOR)) if (await download(url, path.join(VENDOR_DIR, name))) fetched++;
+  fetched += await fetchTypeScript();
 
   const core = ['pyodide.js', 'pyodide.mjs', 'pyodide.asm.js', 'pyodide.asm.wasm', 'python_stdlib.zip', 'pyodide-lock.json'];
   for (const f of core) if (await download(PY_CDN + f, path.join(PY_DIR, f))) fetched++;

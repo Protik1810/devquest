@@ -6,6 +6,7 @@
 //   VERBOSE=1 shows each exercise as it runs
 import path from 'node:path';
 import vm from 'node:vm';
+import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { createServer } from 'vite';
 import { transform } from 'sucrase';
@@ -24,7 +25,7 @@ function asProgram(e) {
 }
 
 const server = await createServer({ root, configFile: path.join(root, 'vite.config.ts'), server: { middlewareMode: true }, appType: 'custom', logLevel: 'error' });
-let exercises, JS_RUNTIME, integrity, jsModules;
+let exercises, JS_RUNTIME, integrity, jsModules, tsCheck;
 try {
   const { TRACKS } = await server.ssrLoadModule('/src/content/index.ts');
   const { CHALLENGES } = await server.ssrLoadModule('/src/content/dojo.ts');
@@ -33,6 +34,7 @@ try {
   ({ JS_RUNTIME } = await server.ssrLoadModule('/src/engine/jsRuntime.ts'));
   integrity = await server.ssrLoadModule('/src/engine/integrity.ts');
   jsModules = await server.ssrLoadModule('/src/engine/jsModules.ts');
+  tsCheck = await server.ssrLoadModule('/src/engine/tsCheck.ts');
   exercises = [];
   for (const t of TRACKS)
     for (const l of t.lessons)
@@ -55,8 +57,24 @@ const strip = (src) => transform(src, { transforms: ['typescript'], disableESTra
 let current = null;
 process.on('unhandledRejection', (reason) => current?.__dqUnhandled(reason));
 
+// TypeScript is type-checked first, with the same compiler and libraries as the app (public/vendor/typescript)
+const TS_DIR = path.join(root, 'public', 'vendor', 'typescript');
+let ts = null;
+const readLib = (name) => (fs.existsSync(path.join(TS_DIR, name)) ? fs.readFileSync(path.join(TS_DIR, name), 'utf8') : undefined);
+function typeErrors(code, tests) {
+  if (!ts) {
+    if (!fs.existsSync(path.join(TS_DIR, 'typescript.js'))) throw new Error('TypeScript checker missing: run npm run fetch:runtimes');
+    // A classic script (the project is an ES module package, so require() would not see its exports)
+    ts = new Function('module', 'exports', fs.readFileSync(path.join(TS_DIR, 'typescript.js'), 'utf8') + '\nreturn ts;')({ exports: {} }, {});
+  }
+  const diagnostics = tsCheck.typeCheck(ts, readLib, code, tests);
+  return diagnostics.length ? tsCheck.describeTypeErrors(diagnostics, tests) : null;
+}
+
 async function run(code, tests, stdin, lang = 'javascript') {
   if (lang === 'typescript') {
+    const problems = typeErrors(code, tests);
+    if (problems) return { ok: false, output: '', error: problems };
     try {
       code = strip(code);
       if (tests) tests = strip(tests);
