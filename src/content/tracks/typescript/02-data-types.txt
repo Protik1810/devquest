@@ -1,0 +1,1233 @@
+=== module Module 2 · Describing data
+
+=== lesson ts-arrays-tuples | Arrays, tuples and readonly | 75
+## Array types
+
+An array type is the element type followed by `[]`, or the generic form `Array<T>`:
+
+```ts
+const temperatures: number[] = [18.5, 21, 19.75];
+const tags: Array<string> = ["new", "sale"];
+const matrix: number[][] = [[1, 2], [3, 4]];
+
+temperatures.push(22);
+console.log(temperatures.map((t) => t.toFixed(1)), tags.length, matrix[1][0]);
+```
+
+Arrays of mixed things need a union in brackets: `(string | number)[]` is "an array whose elements are each a string or a number". Without the brackets, `string | number[]` means "a string, or an array of numbers": a different thing entirely.
+
+Inference handles most arrays. An empty array is the exception: write the element type, or TypeScript can't know what will go in it:
+
+```ts
+const names: string[] = [];
+names.push("Ada");
+console.log(names);
+```
+
+## Reading an index may give undefined
+
+What's the type of `names[5]`? By default TypeScript says `string`, even though the array may be shorter. That's a deliberate trade-off for convenience, and a real source of bugs. The compiler option `noUncheckedIndexedAccess` makes every index read `T | undefined`, which forces you to handle the missing case. Many teams turn it on; either way, prefer methods that make the "maybe missing" explicit:
+
+```ts
+const queue = ["first", "second"];
+const next = queue.at(0);
+const last = queue.find((item) => item.startsWith("s"));
+console.log(next?.toUpperCase(), last ?? "none");
+```
+
+`at()` and `find()` return `string | undefined`, so the compiler makes you deal with "not there".
+
+## Tuples: fixed-length arrays with a type per position
+
+A **tuple** is an array whose length and position types are fixed. They're useful for small groups of values where the order is the meaning, such as coordinates or a function returning two things:
+
+```ts
+type Point = [number, number];
+type Entry = [name: string, score: number, passed?: boolean];
+
+const origin: Point = [0, 0];
+const result: Entry = ["Ada", 92];
+
+function minMax(values: number[]): [min: number, max: number] {
+  return [Math.min(...values), Math.max(...values)];
+}
+
+const [low, high] = minMax([4, 9, 1]);
+console.log(origin, result, low, high);
+```
+
+The labels (`name:`, `score:`) are only documentation, shown by the editor. `passed?` is an optional element. You already know a famous tuple from React: `const [count, setCount] = useState(0)`.
+
+There are also **rest elements** in tuples: `[string, ...number[]]` is "a string, followed by any number of numbers", like a CSV row with a label.
+
+A tuple keeps its fixed types only when TypeScript knows it's a tuple. An array literal on its own is inferred as an array, so annotate tuples (or use `as const`, below).
+
+~~~check
+? What is `[string, number]`?
+- An array of strings and numbers in any order
++ A tuple: exactly two elements, a string then a number
+- A string or a number
+- An object with two properties
+> Tuples fix the length and the type at each position.
+~~~
+
+## readonly arrays
+
+Functions that receive an array often shouldn't change it. `readonly string[]` (or `ReadonlyArray<string>`) removes every mutating method from the type:
+
+```ts
+function total(prices: readonly number[]): number {
+  return prices.reduce((sum, p) => sum + p, 0);
+}
+
+const cart = [3.5, 1.25, 10];
+console.log(total(cart));
+```
+
+Inside `total`, `prices.push(1)` or `prices[0] = 0` would be a compile error, while `map`, `filter` and `reduce` still work (they return new arrays). Any normal array can be passed where a `readonly` one is expected, so this costs callers nothing: it's a promise the function makes. Like all types, `readonly` vanishes at run time; it doesn't freeze anything (that's `Object.freeze`).
+
+## as const
+
+`as const` tells TypeScript to infer the narrowest possible type for a literal: every value becomes a literal type, arrays become readonly tuples, and objects get readonly properties:
+
+```ts
+const sizes = ["S", "M", "L"] as const;
+type Size = (typeof sizes)[number];
+
+function label(size: Size): string {
+  return `Size ${size}`;
+}
+console.log(sizes, label("M"));
+```
+
+`sizes` has the type `readonly ["S", "M", "L"]`, and `(typeof sizes)[number]` (the type of any element) is `"S" | "M" | "L"`. This is a common way to keep a runtime list of values and a type in sync: add `"XL"` to the array and the type follows. (`typeof` in a type position asks for the type of a value; `T[number]` gives an array's element type. Module 5 covers these "type operators" in depth.)
+
+📚 **Go deeper:** TypeScript Handbook, "Everyday Types: Arrays" and "Object Types: Tuple Types"; *Programming TypeScript*, chapter 3 (arrays, tuples, read-only arrays).
+--- goals
+- write array types, including arrays of unions and nested arrays
+- explain why indexing can give `undefined`, and use `at`, `find` and `noUncheckedIndexedAccess`
+- use tuples with labels, optional and rest elements
+- protect inputs with `readonly` arrays
+- derive literal union types from a value with `as const`
+--- quiz
+? What's the difference between `(string | number)[]` and `string | number[]`?
++ The first is an array of strings or numbers; the second is a string, or an array of numbers
+- None
+- The first is a tuple
+- The second is invalid
+> Brackets matter: the union applies to elements only when grouped.
+? `function f(xs: readonly number[])`. Which line is a compile error inside `f`?
+- `xs.map((x) => x * 2)`
++ `xs.push(4)`
+- `xs.length`
+- `xs.slice(1)`
+> readonly removes mutating methods; methods that return new arrays remain.
+? What's the type of `x` in `const x = ["a", "b"] as const;`?
+- `string[]`
+- `("a" | "b")[]`
++ `readonly ["a", "b"]`
+- `["a", "b"]`
+> as const makes a readonly tuple of literal types.
+? Does `readonly` stop code from changing an array at run time?
+- Yes, like Object.freeze
++ No, it's a compile-time promise only
+- Only in strict mode
+- Only for tuples
+> Types are erased; use Object.freeze for runtime protection.
+--- exercise code typescript
+::prompt
+Write two functions with precise types:
+
+- `splitName(full: string): [first: string, last: string]` returns the first word and the rest of the name (an empty string if there's only one word), after trimming;
+- `stats(values: readonly number[]): [min: number, max: number, mean: number] | undefined` returns `undefined` for an empty list, and must not modify `values`.
+::starter
+function splitName(full: string) {
+}
+
+function stats(values: readonly number[]) {
+}
+::solution
+function splitName(full: string): [first: string, last: string] {
+  const [first = "", ...rest] = full.trim().split(/\s+/);
+  return [first, rest.join(" ")];
+}
+
+function stats(values: readonly number[]): [min: number, max: number, mean: number] | undefined {
+  if (values.length === 0) return undefined;
+  const sum = values.reduce((a, b) => a + b, 0);
+  return [Math.min(...values), Math.max(...values), sum / values.length];
+}
+::tests
+assert.deepStrictEqual(splitName("  Ada King Lovelace "), ["Ada", "King Lovelace"]);
+assert.deepStrictEqual(splitName("Plato"), ["Plato", ""]);
+const __input = Object.freeze([4, 8, 6]);
+assert.deepStrictEqual(stats(__input), [4, 8, 6]);
+assert.strictEqual(stats([]), undefined);
+type _t1 = Expect<Equal<ReturnType<typeof splitName>, [first: string, last: string]>>;
+type _t2 = Expect<Equal<ReturnType<typeof stats>, [min: number, max: number, mean: number] | undefined>>;
+::hints
+- Write the return types after the parameter lists, e.g. `function splitName(full: string): [first: string, last: string]`.
+- Destructuring with a rest element splits the first word from the others: `const [first = "", ...rest] = words;`.
+- Spread works on readonly arrays: `Math.min(...values)`.
+--- exercise code typescript
+::prompt
+A shop has a fixed list of order statuses. Declare `const STATUSES = [...] as const` with `"pending"`, `"paid"`, `"shipped"` and `"delivered"` (in that order), derive `type Status` from it (don't write the four strings twice), and write:
+
+- `isStatus(value: string): boolean`: whether a string is one of the statuses;
+- `nextStatus(status: Status): Status | null`: the following status in the list, or `null` after `"delivered"`.
+::starter
+const STATUSES = [];
+type Status = string;
+
+function isStatus(value: string): boolean {
+  return false;
+}
+
+function nextStatus(status: Status): Status | null {
+  return null;
+}
+::solution
+const STATUSES = ["pending", "paid", "shipped", "delivered"] as const;
+type Status = (typeof STATUSES)[number];
+
+function isStatus(value: string): boolean {
+  return (STATUSES as readonly string[]).includes(value);
+}
+
+function nextStatus(status: Status): Status | null {
+  return STATUSES[STATUSES.indexOf(status) + 1] ?? null;
+}
+::tests
+assert.strictEqual(isStatus("paid"), true);
+assert.strictEqual(isStatus("lost"), false);
+assert.strictEqual(nextStatus("pending"), "paid");
+assert.strictEqual(nextStatus("shipped"), "delivered");
+assert.strictEqual(nextStatus("delivered"), null);
+type _t1 = Expect<Equal<Status, "pending" | "paid" | "shipped" | "delivered">>;
+function __typeChecks() {
+  // @ts-expect-error
+  nextStatus("lost");
+}
+::hints
+- `type Status = (typeof STATUSES)[number];` turns the tuple's elements into a union.
+- `includes` on a readonly tuple of literals only accepts those literals; widen the array first: `(STATUSES as readonly string[]).includes(value)` (widening a type with `as` is safe).
+- The index after the last element is `undefined`; `?? null` turns it into `null`.
+--- cards
+Array type :: number[] or Array<number>. Arrays of unions need brackets: (string | number)[].
+Tuple :: Fixed length and type per position: [string, number]. Labels and optional elements: [name: string, age?: number].
+noUncheckedIndexedAccess :: Makes arr[i] and record[key] include undefined, forcing you to handle missing elements.
+readonly array :: readonly T[] / ReadonlyArray<T>: no push, splice or index assignment. Compile time only.
+as const :: Narrowest inference: literal types, readonly tuples and readonly properties.
+(typeof arr)[number] :: The union of an array's element types, e.g. from an as const list of allowed values.
+
+=== lesson ts-objects | Object types and interfaces | 80
+## Describing an object's shape
+
+An **object type** lists properties and their types:
+
+```ts
+type Book = {
+  title: string;
+  author: string;
+  year: number;
+  isbn?: string;
+  readonly id: number;
+};
+
+const book: Book = { id: 1, title: "Dune", author: "Frank Herbert", year: 1965 };
+book.year = 1966;
+console.log(book, book.isbn ?? "no ISBN");
+```
+
+- `isbn?: string` is an **optional property**: it may be missing (its type, when read, is `string | undefined`).
+- `readonly id` can't be reassigned after the object is created (`book.id = 2` is an error).
+
+## interface
+
+An **interface** is another way to name an object type:
+
+```ts
+interface Author {
+  name: string;
+  born: number;
+  website?: string;
+}
+
+interface Novelist extends Author {
+  novels: string[];
+}
+
+const herbert: Novelist = { name: "Frank Herbert", born: 1920, novels: ["Dune"] };
+console.log(herbert.name, herbert.novels.length);
+```
+
+`type` and `interface` overlap almost completely for object shapes. The differences:
+
+| | `interface` | `type` |
+|---|---|---|
+| object shapes | ✓ | ✓ |
+| extend another shape | `extends` | intersection `&` (Module 5) |
+| unions, tuples, primitives, computed types | ✗ | ✓ |
+| **declaration merging** (two declarations with the same name combine) | ✓ | ✗ (an error) |
+
+A common team convention, and the one the TypeScript team itself recommends: **use `interface` for object shapes** (especially public ones that others may extend), and **`type` for everything else** (unions, tuples, function types, computed types). Many teams just use `type` everywhere. Both are fine; consistency within a project matters more.
+
+## Excess property checks
+
+Structural typing allows extra properties (the previous module's `Point` example). But when you write an **object literal directly** where a type is expected, TypeScript checks for properties the type doesn't know, because they're almost always typos:
+
+```ts
+interface Options {
+  title: string;
+  color?: string;
+}
+
+function makeButton(options: Options): string {
+  return `[${options.title}${options.color ? ` (${options.color})` : ""}]`;
+}
+
+console.log(makeButton({ title: "Save", color: "green" }));
+```
+
+Change `color` to `colour` in the call and TypeScript reports *Object literal may only specify known properties*. Without this check, the misspelt optional property would be silently ignored. (If the object is first stored in a variable, the check doesn't apply: it might have extra properties for other reasons.)
+
+## Index signatures and Record
+
+Sometimes an object is used as a dictionary with keys you don't know in advance:
+
+```ts
+const stock: { [product: string]: number } = { apples: 12, pears: 0 };
+const prices: Record<string, number> = { apples: 0.5 };
+
+stock.plums = 7;
+console.log(stock, prices.apples);
+```
+
+`{ [key: string]: number }` (an **index signature**) and `Record<string, number>` mean the same thing: any string key, number values. With a union of keys, `Record` gives an object with **exactly** those keys, which is great for lookup tables:
+
+```ts
+type Weekday = "mon" | "tue" | "wed" | "thu" | "fri";
+const openingHours: Record<Weekday, string> = {
+  mon: "9-17", tue: "9-17", wed: "9-13", thu: "9-17", fri: "9-16",
+};
+console.log(openingHours.wed);
+```
+
+Forget `fri` and the compiler tells you. For true dictionaries whose keys come and go at run time, a `Map<string, number>` is usually better than an object (the JavaScript course, Module 6).
+
+~~~check
+? Which type describes "an object with any string keys whose values are booleans"?
+- `{ string: boolean }`
++ `Record<string, boolean>`
+- `boolean[]`
+- `[string, boolean]`
+> `{ string: boolean }` is an object with a single property literally named "string".
+~~~
+
+## Nested and optional data
+
+Real data is nested. Optional chaining and `??` (from the JavaScript course) are how you read it safely, and TypeScript checks every step:
+
+```ts
+interface Profile {
+  name: string;
+  address?: { city: string; postcode?: string };
+}
+
+function postcodeOf(profile: Profile): string {
+  return profile.address?.postcode ?? "unknown";
+}
+
+console.log(postcodeOf({ name: "Ada" }), postcodeOf({ name: "Grace", address: { city: "NYC", postcode: "10001" } }));
+```
+
+Remove the `?.` and the compiler stops you: `profile.address` is possibly `undefined`.
+
+## Optional versus "may be undefined"
+
+`nickname?: string` and `nickname: string | undefined` look similar, but differ: the first may be **left out**, the second must be **present** (possibly as `undefined`). Use `?` for genuinely optional properties; use `| undefined` (or `| null`) when the property must always be given, even if empty, so nobody forgets to think about it.
+
+📚 **Go deeper:** TypeScript Handbook, "Object Types" and "Interfaces vs. Type Aliases" (Everyday Types); *Programming TypeScript*, chapter 3 (objects) and chapter 5 (interfaces); *Effective TypeScript*, items 11 and 13.
+--- goals
+- describe objects with optional and readonly properties
+- choose between `interface` and `type`, and extend interfaces
+- explain excess property checks on object literals
+- type dictionaries with index signatures, `Record` and `Map`
+- read nested optional data safely
+--- quiz
+? What does `email?: string` mean in an object type?
++ The property may be left out; when read, it's string | undefined
+- The property must be a string or null
+- The property is readonly
+- The property can be any type
+> ? marks an optional property.
+? Which can a `type` alias do that an `interface` cannot?
+- Describe an object
+- Have optional properties
++ Name a union such as `"on" | "off"`
+- Be extended
+> Interfaces describe object shapes only; type aliases can name any type.
+? `makeButton({ title: "Save", colour: "red" })` where Options has `color?`. What happens?
+- It compiles; colour is ignored
++ Error: object literal may only specify known properties
+- colour is renamed to color
+- Run-time error
+> Excess property checks catch typos in object literals.
+? `Record<"a" | "b", number>` describes...
+- Any string keys
++ An object with exactly the keys a and b, both numbers
+- An array of two numbers
+- A Map
+> Record with a union of keys requires every key.
+? What's special about interfaces with the same name in one scope?
+- It's an error
++ They merge into one interface (declaration merging)
+- The last one wins
+- The first one wins
+> Declaration merging is used to extend library types such as Window.
+--- exercise code typescript
+::prompt
+Model a library's data and write a summary function:
+
+- `interface Book` with `readonly isbn: string`, `title: string`, `authors: string[]`, `year: number` and optional `edition?: number`;
+- `interface Loan` with `isbn: string`, `member: string` and `due: string` (an ISO date like `"2026-03-01"`);
+- `bookLine(book: Book): string` gives `Dune (1965) by Frank Herbert` and, with an edition, `Clean Code (2008, 2nd ed.) by Robert C. Martin`. Several authors are joined with ` & `. Editions use `1st`, `2nd`, `3rd`, then `4th`, `5th`, ...;
+- `overdue(loans: readonly Loan[], today: string): Record<string, number>` counts overdue loans (due date before today) per member. ISO dates compare correctly as strings.
+::starter
+interface Book {}
+interface Loan {}
+
+function bookLine(book: Book): string {
+  return "";
+}
+
+function overdue(loans: readonly Loan[], today: string): Record<string, number> {
+  return {};
+}
+::solution
+interface Book {
+  readonly isbn: string;
+  title: string;
+  authors: string[];
+  year: number;
+  edition?: number;
+}
+
+interface Loan {
+  isbn: string;
+  member: string;
+  due: string;
+}
+
+function ordinal(n: number): string {
+  const suffix = n === 1 ? "st" : n === 2 ? "nd" : n === 3 ? "rd" : "th";
+  return `${n}${suffix}`;
+}
+
+function bookLine(book: Book): string {
+  const when = book.edition === undefined ? `${book.year}` : `${book.year}, ${ordinal(book.edition)} ed.`;
+  return `${book.title} (${when}) by ${book.authors.join(" & ")}`;
+}
+
+function overdue(loans: readonly Loan[], today: string): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const loan of loans) {
+    if (loan.due < today) counts[loan.member] = (counts[loan.member] ?? 0) + 1;
+  }
+  return counts;
+}
+::tests
+assert.strictEqual(bookLine({ isbn: "1", title: "Dune", authors: ["Frank Herbert"], year: 1965 }), "Dune (1965) by Frank Herbert");
+assert.strictEqual(bookLine({ isbn: "2", title: "Clean Code", authors: ["Robert C. Martin"], year: 2008, edition: 2 }), "Clean Code (2008, 2nd ed.) by Robert C. Martin");
+assert.strictEqual(bookLine({ isbn: "3", title: "SICP", authors: ["Abelson", "Sussman"], year: 1996, edition: 3 }), "SICP (1996, 3rd ed.) by Abelson & Sussman");
+assert.strictEqual(bookLine({ isbn: "4", title: "X", authors: ["A"], year: 2000, edition: 4 }), "X (2000, 4th ed.) by A");
+const __loans: Loan[] = [
+  { isbn: "1", member: "ada", due: "2026-01-10" },
+  { isbn: "2", member: "ada", due: "2026-02-01" },
+  { isbn: "3", member: "bob", due: "2026-03-15" },
+  { isbn: "4", member: "cy", due: "2026-01-31" },
+];
+assert.deepStrictEqual(overdue(__loans, "2026-02-14"), { ada: 2, cy: 1 });
+assert.deepStrictEqual(overdue([], "2026-02-14"), {});
+function __typeChecks(b: Book) {
+  // @ts-expect-error
+  b.isbn = "changed";
+  // @ts-expect-error
+  const missing: Book = { isbn: "9", title: "T", year: 1 };
+  const ok: Book = { isbn: "9", title: "T", authors: [], year: 1 };
+  // @ts-expect-error
+  const extra: Loan = { isbn: "1", member: "m", due: "d", fine: 2 };
+}
+::hints
+- `readonly isbn: string;` and `edition?: number;` inside the interface.
+- Check `book.edition === undefined` to pick between the two formats.
+- Build the counts in a `Record<string, number>`, starting each member at `?? 0`.
+--- cards
+Optional property :: name?: T. May be left out; reads as T | undefined.
+readonly property :: Can't be reassigned after creation (compile time only).
+interface :: Names an object shape; can extend others and merges with same-named declarations.
+type vs interface :: interface for object shapes; type for unions, tuples, functions and computed types. Be consistent.
+Excess property check :: Object literals written directly against a type can't have unknown properties (catches typos).
+Record<K, V> :: An object type with keys K and values V. Record<string, number> = { [key: string]: number }.
+
+=== lesson ts-unions | Union and literal types | 80
+## Either this or that
+
+A **union type** `A | B` says a value is one of several types:
+
+```ts
+function formatId(id: string | number): string {
+  return typeof id === "number" ? `#${id.toString().padStart(5, "0")}` : id.toUpperCase();
+}
+
+console.log(formatId(42), formatId("ab-17"));
+```
+
+With a union, you can only use what **all** members have in common, until you check which one you have. `id.toUpperCase()` directly would be an error (numbers don't have it); after `typeof id === "number"` TypeScript knows which member it's dealing with in each branch. That checking is called **narrowing**, the topic of the next lesson.
+
+## Literal unions: a small set of allowed values
+
+Unions of literal types are one of TypeScript's most used features. They replace "magic strings" with a checked list of allowed values:
+
+```ts
+type Theme = "light" | "dark" | "system";
+type HttpMethod = "GET" | "POST" | "PUT" | "DELETE";
+type DiceRoll = 1 | 2 | 3 | 4 | 5 | 6;
+
+function setTheme(theme: Theme): string {
+  return `Theme set to ${theme}`;
+}
+
+console.log(setTheme("dark"));
+```
+
+`setTheme("drak")` is a compile error, and the editor autocompletes the three allowed values. In plain JavaScript, that typo would just quietly not work.
+
+## null and undefined in unions
+
+In strict mode (`strictNullChecks`), `null` and `undefined` are **not** part of other types. A `string` is always a real string. If a value may be missing, say so with a union:
+
+```ts
+function findUser(id: number): string | null {
+  return id === 1 ? "Ada" : null;
+}
+
+const user = findUser(2);
+console.log(user === null ? "nobody" : user.toUpperCase());
+```
+
+This single rule removes an entire category of bugs, the one Tony Hoare (who invented null references in 1965) called his "billion-dollar mistake": every possibly-missing value is visible in the types, and the compiler makes you handle it.
+
+Which to use for "nothing", `null` or `undefined`? JavaScript itself uses `undefined` for missing properties and array elements, and DOM methods return `null`. Pick one convention for your own APIs (many TypeScript codebases prefer `undefined`, and optional properties `?` are `undefined` anyway) and stay consistent.
+
+## Discriminated unions
+
+The most important pattern in this lesson: a union of object types that share a **literal "tag" property** (here `kind`):
+
+```ts
+type Shape =
+  | { kind: "circle"; radius: number }
+  | { kind: "rectangle"; width: number; height: number }
+  | { kind: "triangle"; base: number; height: number };
+
+function area(shape: Shape): number {
+  switch (shape.kind) {
+    case "circle":
+      return Math.PI * shape.radius ** 2;
+    case "rectangle":
+      return shape.width * shape.height;
+    case "triangle":
+      return (shape.base * shape.height) / 2;
+  }
+}
+
+console.log(area({ kind: "circle", radius: 1 }).toFixed(3), area({ kind: "triangle", base: 4, height: 3 }));
+```
+
+Checking `shape.kind` tells TypeScript exactly which member you have: in the `"circle"` case, `shape.radius` exists and `shape.width` doesn't. This is called a **discriminated** (or **tagged**) **union**, and it's how TypeScript code models "one of several kinds of thing": shapes, events, actions in a Redux store, API responses, states of a form, messages between services. Compare it with the class-based polymorphism of the JavaScript course: here, the data is plain objects (easy to send as JSON) and the behaviour lives in functions with a `switch`.
+
+Notice that `area` has no `default` and no final `return`, and TypeScript doesn't complain: it knows the `switch` covers every possible `kind`. Add a `"square"` member to the union and `area` becomes an error ("Function lacks ending return statement") until you handle it. The next lesson makes this **exhaustiveness check** explicit.
+
+~~~check
+? In `case "rectangle":` above, why is `shape.radius` an error?
+- Rectangles have a radius of 0
++ TypeScript narrowed `shape` to the rectangle member, which has no radius
+- radius is readonly
+- switch statements can't read properties
+> Checking the tag narrows the union to one member.
+~~~
+
+## Modelling states instead of flags
+
+Discriminated unions shine for **states**. Compare two ways to describe a data request:
+
+```ts
+type LoadingFlags = { loading: boolean; error?: string; data?: string[] };
+
+type RequestState =
+  | { status: "idle" }
+  | { status: "loading" }
+  | { status: "failed"; error: string }
+  | { status: "loaded"; data: string[] };
+
+function render(state: RequestState): string {
+  switch (state.status) {
+    case "idle": return "Press load";
+    case "loading": return "Loading...";
+    case "failed": return `Error: ${state.error}`;
+    case "loaded": return state.data.join(", ");
+  }
+}
+
+console.log(render({ status: "loaded", data: ["a", "b"] }), "|", render({ status: "failed", error: "timeout" }));
+```
+
+With `LoadingFlags`, nothing stops nonsense such as `loading: true` with an `error` and `data` at the same time, and every reader must guess which combinations are possible. `RequestState` makes **impossible states impossible to write**: data only exists when the status is `"loaded"`. This idea, "make illegal states unrepresentable", is one of the biggest design benefits of a type system.
+
+📚 **Go deeper:** TypeScript Handbook, "Everyday Types: Union Types" and "Narrowing: Discriminated unions"; *Programming TypeScript*, chapter 3 (union types) and chapter 6 (discriminated unions); *Effective TypeScript*, items 29 and 33 ("design types that always represent valid states").
+--- goals
+- use union types, and know you can only use the members' common features until you narrow
+- replace magic strings with literal union types
+- handle `null` and `undefined` explicitly under strict null checks
+- model variants with discriminated unions, and states with a status tag
+- design types so that invalid states can't be represented
+--- quiz
+? `function f(x: string | number) { return x.toFixed(2); }` gives an error. Why?
+- toFixed doesn't exist
++ toFixed isn't available on every member of the union (strings don't have it)
+- Unions can't have methods
+- x must be annotated as any
+> Until you narrow, only common members are allowed.
+? In strict mode, can a variable of type `string` hold `null`?
+- Yes, always
++ No; it must be declared `string | null`
+- Only inside functions
+- Only if it's optional
+> strictNullChecks keeps null and undefined out of other types.
+? What makes a union "discriminated"?
++ Every member has a common property with a different literal type (the tag)
+- It has exactly two members
+- It contains null
+- It's declared with interface
+> The tag (kind, type, status...) tells TypeScript which member you have.
+? Why prefer `{ status: "loaded"; data: T } | { status: "failed"; error: string } | ...` to `{ loading: boolean; data?: T; error?: string }`?
+- It's shorter
++ Impossible combinations, like data and an error at once, can't be written
+- It's faster at run time
+- Flags can't be optional
+> Make illegal states unrepresentable.
+--- exercise code typescript
+::prompt
+Model payment methods as a **discriminated union** `Payment` with the tag `method`:
+
+- `"card"` with `last4: string` and `brand: "visa" | "mastercard" | "amex"`;
+- `"paypal"` with `email: string`;
+- `"voucher"` with `code: string` and `balance: number`.
+
+Write `describePayment(p: Payment): string` (`Visa ending 4242`, `PayPal (ada@example.com)`, `Voucher ABC (£12.50 left)`; brands are shown capitalised as `Visa`, `Mastercard`, `Amex`) and `canPay(p: Payment, amount: number): boolean`: cards and PayPal can always pay; vouchers only up to their balance.
+::starter
+type Payment = unknown;
+
+function describePayment(p: Payment): string {
+  return "";
+}
+
+function canPay(p: Payment, amount: number): boolean {
+  return false;
+}
+::solution
+type Payment =
+  | { method: "card"; last4: string; brand: "visa" | "mastercard" | "amex" }
+  | { method: "paypal"; email: string }
+  | { method: "voucher"; code: string; balance: number };
+
+function describePayment(p: Payment): string {
+  switch (p.method) {
+    case "card":
+      return `${p.brand[0].toUpperCase()}${p.brand.slice(1)} ending ${p.last4}`;
+    case "paypal":
+      return `PayPal (${p.email})`;
+    case "voucher":
+      return `Voucher ${p.code} (£${p.balance.toFixed(2)} left)`;
+  }
+}
+
+function canPay(p: Payment, amount: number): boolean {
+  return p.method !== "voucher" || amount <= p.balance;
+}
+::tests
+assert.strictEqual(describePayment({ method: "card", last4: "4242", brand: "visa" }), "Visa ending 4242");
+assert.strictEqual(describePayment({ method: "card", last4: "0005", brand: "amex" }), "Amex ending 0005");
+assert.strictEqual(describePayment({ method: "paypal", email: "ada@example.com" }), "PayPal (ada@example.com)");
+assert.strictEqual(describePayment({ method: "voucher", code: "ABC", balance: 12.5 }), "Voucher ABC (£12.50 left)");
+assert.strictEqual(canPay({ method: "paypal", email: "x" }, 1000), true);
+assert.strictEqual(canPay({ method: "voucher", code: "A", balance: 10 }, 10), true);
+assert.strictEqual(canPay({ method: "voucher", code: "A", balance: 10 }, 10.01), false);
+function __typeChecks() {
+  // @ts-expect-error
+  describePayment({ method: "card", last4: "1111", brand: "diners" });
+  // @ts-expect-error
+  describePayment({ method: "paypal", email: "x", balance: 3 });
+  // @ts-expect-error
+  describePayment({ method: "voucher", code: "A" });
+  // @ts-expect-error
+  describePayment({ method: "cash" });
+}
+::hints
+- `type Payment = | { method: "card"; ... } | { method: "paypal"; ... } | { method: "voucher"; ... };`
+- `switch (p.method)` narrows `p` in each case.
+- In `canPay`, after `p.method !== "voucher" ||`, TypeScript knows the right side only runs for vouchers.
+--- cards
+Union type :: A | B: a value of either type. Only the common features are usable until you narrow.
+Literal union :: "light" | "dark": a checked set of allowed values, replacing magic strings.
+strictNullChecks :: null and undefined are separate types; possibly-missing values must say so: string | null.
+Discriminated union :: Object types sharing a literal tag property (kind/type/status); checking the tag narrows to one member.
+Illegal states :: Use a union of states instead of independent flags, so impossible combinations can't be written.
+
+=== lesson ts-narrowing | Narrowing and type guards | 85
+## Narrowing
+
+**Narrowing** is how TypeScript follows your checks: after an `if`, a `switch`, an early `return` or a `throw`, it knows more about a value's type. You've used it since Module 1. This lesson lists all the ways, then shows how to write your own.
+
+```ts
+function lengthOf(value: string | string[] | null): number {
+  if (value === null) return 0;
+  // here: string | string[]
+  if (typeof value === "string") return value.length;
+  // here: string[]
+  return value.reduce((n, s) => n + s.length, 0);
+}
+console.log(lengthOf(null), lengthOf("hey"), lengthOf(["ab", "c"]));
+```
+
+The compiler performs **control-flow analysis**: it follows every path through the function, and each check removes possibilities for the code after it.
+
+## The narrowing toolkit
+
+| Check | Narrows to |
+|---|---|
+| `typeof x === "string"` (also number, boolean, bigint, symbol, undefined, function, object) | that primitive (careful: `typeof null` is `"object"`) |
+| `x === null`, `x !== undefined`, `x == null` (both null and undefined) | without the missing values |
+| truthiness: `if (x)` | removes null and undefined, but also `""`, `0`, `NaN` and `false`: use it with care for strings and numbers |
+| `Array.isArray(x)` | the array member |
+| `x instanceof Date` | that class |
+| `"swim" in animal` | members that have that property |
+| `x.kind === "circle"` | that member of a discriminated union |
+| equality with a literal: `x === "auto"` | that literal |
+
+```ts
+type Fish = { name: string; swim: () => string };
+type Bird = { name: string; fly: () => string };
+
+function move(animal: Fish | Bird): string {
+  if ("swim" in animal) return animal.swim();
+  return animal.fly();
+}
+
+function when(value: Date | string | number): string {
+  if (value instanceof Date) return value.toISOString().slice(0, 10);
+  return new Date(value).toISOString().slice(0, 10);
+}
+
+console.log(move({ name: "Nemo", swim: () => "splash" }), when(0), when(new Date(Date.UTC(2026, 0, 15))));
+```
+
+## Type predicates: your own type guards
+
+Sometimes a check is too complex to write inline, or you need it in many places. A function whose return type is **`value is Type`** is a **type guard**: when it returns `true`, TypeScript narrows the argument to that type.
+
+```ts
+interface User {
+  id: number;
+  name: string;
+}
+
+function isUser(value: unknown): value is User {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "id" in value && typeof value.id === "number" &&
+    "name" in value && typeof value.name === "string"
+  );
+}
+
+const data: unknown = JSON.parse('[{"id": 1, "name": "Ada"}, {"id": "2"}, null]');
+if (Array.isArray(data)) {
+  const users = data.filter(isUser);
+  console.log(users.map((u) => u.name));
+}
+```
+
+`data.filter(isUser)` returns `User[]`: TypeScript understands that the guard removes everything else. Since TypeScript 5.5, simple arrow functions such as `(x) => x !== null` are inferred as type predicates automatically, so `[1, null, 2].filter((x) => x !== null)` is a `number[]`.
+
+Be careful: TypeScript trusts a type predicate completely. If `isUser` returned `true` for something that isn't a user, the compiler would believe it. A guard is a promise you make; test it well.
+
+## Assertion functions
+
+A close relative: an **assertion function** throws if a condition is false, and its return type `asserts value is Type` (or `asserts condition`) narrows the value for the rest of the scope:
+
+```ts
+function assertIsString(value: unknown, label: string): asserts value is string {
+  if (typeof value !== "string") throw new TypeError(`${label} must be a string`);
+}
+
+const input: unknown = "  hello ";
+assertIsString(input, "input");
+console.log(input.trim());
+```
+
+DevQuest's global `assert` (like Node's `node:assert`) is declared this way: after `assert(x !== null)`, TypeScript knows `x` isn't null.
+
+~~~check
+? What does the return type `value is User` mean?
+- The function returns a User
++ When the function returns true, `value` is narrowed to User for the caller
+- The function throws if value isn't a User
+- value is converted to a User
+> It's a type predicate: a boolean function that narrows.
+~~~
+
+## Exhaustiveness checking with never
+
+When every member of a union has been handled, what remains is the type `never` ("no possible value"). That gives a neat trick to make the compiler check that a `switch` is **complete**:
+
+```ts
+type Light = "red" | "amber" | "green";
+
+function assertNever(value: never): never {
+  throw new Error(`Unexpected value: ${JSON.stringify(value)}`);
+}
+
+function next(light: Light): Light {
+  switch (light) {
+    case "red": return "green";
+    case "green": return "amber";
+    case "amber": return "red";
+    default: return assertNever(light);
+  }
+}
+
+console.log(next("red"), next("amber"));
+```
+
+If someone adds `"flashing"` to `Light`, the `default` branch receives a `"flashing"`, which isn't assignable to `never`: a compile error that points exactly at the `switch` that needs updating. (And if invalid data arrives at run time anyway, `assertNever` throws a clear error.) An equivalent shortcut is the `satisfies` operator: `default: light satisfies never;`. Use exhaustiveness checks for every `switch` over a union that will grow.
+
+## Where narrowing gets lost
+
+Narrowing applies to a specific variable at a specific place. It can be lost:
+
+- **In callbacks**: a narrowed `let` variable (or a property) isn't trusted inside a function created later, because it might change before the callback runs. Copy it into a `const` first.
+- **After calls that could change an object's property**: TypeScript is optimistic here, and keeps the narrowing.
+- **Across separate checks stored in booleans**: `const isText = typeof x === "string"; if (isText) ...` works for `const` values since TypeScript 4.4, but not for more complex aliasing.
+
+```ts
+function shout(message: string | undefined): (() => string) | undefined {
+  if (message === undefined) return undefined;
+  const text = message;
+  return () => text.toUpperCase();
+}
+console.log(shout("hi")?.());
+```
+
+📚 **Go deeper:** TypeScript Handbook, "Narrowing" (the whole chapter); *Programming TypeScript*, chapter 6 (refinement, type guards, totality); *Effective TypeScript*, items 22 and 59 (using never for exhaustiveness).
+--- goals
+- explain control-flow narrowing
+- narrow with `typeof`, equality, truthiness, `Array.isArray`, `instanceof`, `in` and tags
+- write type predicates (`value is T`) and assertion functions (`asserts value is T`)
+- make `switch` statements exhaustive with `never`
+- avoid losing narrowing in callbacks
+--- quiz
+? Why is `if (count)` a risky way to check that a `number | undefined` is present?
+- It doesn't narrow at all
++ It also rejects 0, which is a valid number
+- It only works on strings
+- It throws for undefined
+> Truthiness removes undefined, but 0 and NaN too. Prefer `count !== undefined`.
+? After `if ("fly" in animal)` with `animal: Fish | Bird`, what's `animal` inside the if?
++ Bird (the members that have fly)
+- Fish
+- Fish | Bird
+- never
+> The in operator narrows to members with that property.
+? What's the type of `value` in `default:` once every member of the union has been handled?
+- unknown
+- undefined
++ never
+- the full union
+> Nothing is left, so it's never; assigning it to never checks exhaustiveness.
+? What happens if a type predicate `isUser` wrongly returns true for a non-user?
+- TypeScript detects the mistake
++ TypeScript trusts it, so the wrong value is treated as a User
+- It throws
+- The predicate is ignored
+> Predicates are promises the compiler can't verify. Test them.
+? What does `function check(x: unknown): asserts x is string` do when it returns normally?
+- Nothing
++ Narrows x to string for the rest of the scope
+- Converts x to a string
+- Returns true
+> Assertion functions throw on failure and narrow on success.
+--- exercise code typescript
+::prompt
+Messages arrive from a chat server as `unknown` JSON. Write:
+
+- `type Message` as a discriminated union on `type`: `"text"` with `from: string` and `body: string`; `"image"` with `from: string`, `url: string` and optional `caption?: string`; `"leave"` with `from: string`;
+- `isMessage(value: unknown): value is Message`, which checks the tag **and** every required property's type (and `caption`, if present, is a string);
+- `render(m: Message): string` returning `ada: hello`, `ada sent an image: Sunset` (or `ada sent an image` without a caption) and `ada left`, with an exhaustive `switch` using `assertNever` in the `default`.
+::starter
+function assertNever(value: never): never {
+  throw new Error(`Unexpected: ${JSON.stringify(value)}`);
+}
+
+type Message = unknown;
+
+function isMessage(value: unknown): value is Message {
+  return false;
+}
+
+function render(m: Message): string {
+  return "";
+}
+::solution
+function assertNever(value: never): never {
+  throw new Error(`Unexpected: ${JSON.stringify(value)}`);
+}
+
+type Message =
+  | { type: "text"; from: string; body: string }
+  | { type: "image"; from: string; url: string; caption?: string }
+  | { type: "leave"; from: string };
+
+function isMessage(value: unknown): value is Message {
+  if (typeof value !== "object" || value === null || !("type" in value) || !("from" in value)) return false;
+  if (typeof value.from !== "string") return false;
+  switch (value.type) {
+    case "text":
+      return "body" in value && typeof value.body === "string";
+    case "image":
+      return "url" in value && typeof value.url === "string" && (!("caption" in value) || typeof value.caption === "string");
+    case "leave":
+      return true;
+    default:
+      return false;
+  }
+}
+
+function render(m: Message): string {
+  switch (m.type) {
+    case "text":
+      return `${m.from}: ${m.body}`;
+    case "image":
+      return m.caption === undefined ? `${m.from} sent an image` : `${m.from} sent an image: ${m.caption}`;
+    case "leave":
+      return `${m.from} left`;
+    default:
+      return assertNever(m);
+  }
+}
+::tests
+const __raw: unknown = JSON.parse(`[
+  {"type": "text", "from": "ada", "body": "hello"},
+  {"type": "image", "from": "ada", "url": "/s.png", "caption": "Sunset"},
+  {"type": "image", "from": "bob", "url": "/x.png"},
+  {"type": "leave", "from": "cy"},
+  {"type": "text", "from": "ada"},
+  {"type": "image", "from": "ada", "url": "/s.png", "caption": 3},
+  {"type": "dance", "from": "ada"},
+  {"from": "ada", "body": "hi"},
+  {"type": "leave", "from": 7},
+  null, "text", 42
+]`);
+assert(Array.isArray(__raw));
+const __valid = __raw.filter(isMessage);
+assert.strictEqual(__valid.length, 4);
+assert.deepStrictEqual(__valid.map(render), ["ada: hello", "ada sent an image: Sunset", "bob sent an image", "cy left"]);
+function __typeChecks() {
+  // @ts-expect-error
+  render({ type: "text", from: "a" });
+  render({ type: "image", from: "a", url: "u" });
+  // @ts-expect-error
+  render({ type: "leave" });
+}
+::hints
+- Check `typeof value === "object" && value !== null` before using `in`; after `"from" in value`, `value.from` can be read (as unknown) and checked with `typeof`.
+- A `switch (value.type)` on the unknown tag works fine: compare it with each literal.
+- In `render`, `m.caption === undefined` tells you whether there's a caption.
+--- exercise code typescript
+::prompt
+Write an assertion function and use it:
+
+- `assertDefined<T>(value: T, name: string): asserts value is NonNullable<T>` throws `Error("<name> is missing")` when `value` is `null` or `undefined`;
+- `shippingLabel(order: { customer?: { name: string; address?: string | null } })` returns `To: <name>, <address>`, using `assertDefined` (so a missing customer throws `customer is missing`, and a missing or null address throws `address is missing`). No `!` or `as` allowed.
+
+(`<T>` makes the function generic, so it works for any type: Module 3 explains generics. `NonNullable<T>` is `T` without `null` and `undefined`.)
+::starter
+function assertDefined<T>(value: T, name: string): asserts value is NonNullable<T> {
+}
+
+function shippingLabel(order: { customer?: { name: string; address?: string | null } }): string {
+  return "";
+}
+::solution
+function assertDefined<T>(value: T, name: string): asserts value is NonNullable<T> {
+  if (value === null || value === undefined) throw new Error(`${name} is missing`);
+}
+
+function shippingLabel(order: { customer?: { name: string; address?: string | null } }): string {
+  const customer = order.customer;
+  assertDefined(customer, "customer");
+  const address = customer.address;
+  assertDefined(address, "address");
+  return `To: ${customer.name}, ${address}`;
+}
+::tests
+assert.strictEqual(shippingLabel({ customer: { name: "Ada", address: "12 St James's Square" } }), "To: Ada, 12 St James's Square");
+assert.throws(() => shippingLabel({}), { message: "customer is missing" });
+assert.throws(() => shippingLabel({ customer: { name: "Bob" } }), { message: "address is missing" });
+assert.throws(() => shippingLabel({ customer: { name: "Cy", address: null } }), { message: "address is missing" });
+assert.doesNotThrow(() => assertDefined(0, "zero"));
+assert.doesNotThrow(() => assertDefined("", "empty"));
+function __narrows(x: string | null | undefined): string {
+  assertDefined(x, "x");
+  return x.toUpperCase();
+}
+::hints
+- Compare with `null` and `undefined` explicitly: 0 and "" are defined values.
+- Assertion functions must be called on a variable (or property) to narrow it: copy `order.customer` into a `const` first.
+--- cards
+Narrowing :: TypeScript follows checks (if, switch, return, throw) and refines a variable's type for the code after them.
+Narrowing checks :: typeof, === null/undefined, truthiness, Array.isArray, instanceof, "prop" in obj, tag === literal.
+Type predicate :: function isX(v: unknown): v is X { ... } — a boolean function that narrows its argument when true.
+Assertion function :: function check(v: unknown): asserts v is X — throws on failure, narrows after returning.
+Exhaustiveness :: default: return assertNever(x) (or x satisfies never) errors at compile time if a union member isn't handled.
+Narrowing in callbacks :: Narrowed let variables/properties aren't trusted in later callbacks; copy into a const.
+
+=== lesson ts-m2-test | Module 2 test | 150 | exam
+This test covers Module 2: arrays, tuples and `readonly`, `as const`, object types and interfaces, `Record`, union and literal types, discriminated unions, and narrowing with type guards and exhaustiveness checks.
+
+Before you start, check that you can:
+
+- choose between arrays and tuples, and protect inputs with `readonly`;
+- write interfaces with optional and readonly properties, and explain excess property checks;
+- model "one of several kinds" with a discriminated union;
+- narrow values with built-in checks, type predicates and assertion functions;
+- make a `switch` exhaustive.
+--- goals
+- describe real data precisely with arrays, tuples, objects and unions
+- narrow safely from `unknown` and from unions
+- design types that rule out invalid states
+--- quiz
+? What's the inferred type of `const pair = [1, "a"];`?
+- `[number, string]`
++ `(string | number)[]`
+- `readonly [1, "a"]`
+- `any[]`
+> Array literals infer arrays; annotate or use as const for a tuple.
+? `type T = { a: string } | { b: number }`, `x: T`. Which check narrows `x` to `{ b: number }`?
+- `typeof x === "object"`
++ `"b" in x`
+- `x instanceof b`
+- `x.b !== undefined`
+> The in operator narrows unions by property; x.b isn't even readable before narrowing.
+? Which property type must a value always include, even if it's undefined?
+- `note?: string`
++ `note: string | undefined`
+- both
+- neither
+> ? means the property may be left out entirely.
+? A `switch` over a union has `default: assertNever(x)`. A new union member is added. What happens?
++ Compile error at that switch until the new member is handled
+- Run-time error immediately
+- Nothing
+- The default branch handles it silently
+> Unhandled members are not assignable to never.
+? What type does `Object.freeze([1, 2])` give and what does `readonly number[]` do at run time?
+- Both make arrays immutable at run time
++ freeze makes the array immutable at run time; readonly is only a compile-time check
+- readonly freezes the array
+- Neither has any effect
+> Types are erased; freeze is runtime JavaScript.
+? `Record<"S" | "M" | "L", number>` is missing the `L` key. What happens?
++ Compile error: property L is missing
+- L defaults to 0
+- Nothing
+- L becomes undefined at run time without error
+> Record with a literal union requires all keys.
+--- exercise code typescript
+::prompt
+**A traffic-light controller for a pedestrian crossing.** Model its states as a discriminated union `CrossingState` on `phase`:
+
+- `"green"` (cars go) with `since: number` (the second it started);
+- `"amber"` with `since: number`;
+- `"red"` (pedestrians walk) with `since: number` and `pedestrians: number` waiting to cross when it began;
+- `"fault"` with `error: string`.
+
+Events are another union `CrossingEvent` on `type`: `{ type: "tick"; now: number }`, `{ type: "button" }`, `{ type: "fault"; error: string }`, `{ type: "repair"; now: number }`.
+
+Write `step(state: CrossingState, event: CrossingEvent, waiting: number): CrossingState` (a pure function: return a new state, never change the old one):
+
+- any `fault` event → fault state with that error; in fault, only `repair` works (→ green since `now`), everything else leaves the state unchanged;
+- `button` changes nothing by itself (the caller tracks `waiting`);
+- `tick`: green turns amber when at least 30 seconds have passed and `waiting > 0`; amber turns red after 3 seconds (with `pedestrians: waiting`); red turns green after 10 seconds.
+
+Use exhaustive `switch` statements with `assertNever`.
+::starter
+function assertNever(value: never): never {
+  throw new Error(`Unexpected: ${JSON.stringify(value)}`);
+}
+
+type CrossingState = unknown;
+type CrossingEvent = unknown;
+
+function step(state: CrossingState, event: CrossingEvent, waiting: number): CrossingState {
+  return state;
+}
+::solution
+function assertNever(value: never): never {
+  throw new Error(`Unexpected: ${JSON.stringify(value)}`);
+}
+
+type CrossingState =
+  | { phase: "green"; since: number }
+  | { phase: "amber"; since: number }
+  | { phase: "red"; since: number; pedestrians: number }
+  | { phase: "fault"; error: string };
+
+type CrossingEvent =
+  | { type: "tick"; now: number }
+  | { type: "button" }
+  | { type: "fault"; error: string }
+  | { type: "repair"; now: number };
+
+function step(state: CrossingState, event: CrossingEvent, waiting: number): CrossingState {
+  if (event.type === "fault") return { phase: "fault", error: event.error };
+  if (state.phase === "fault") return event.type === "repair" ? { phase: "green", since: event.now } : state;
+  switch (event.type) {
+    case "button":
+    case "repair":
+      return state;
+    case "tick": {
+      const elapsed = event.now - state.since;
+      switch (state.phase) {
+        case "green":
+          return elapsed >= 30 && waiting > 0 ? { phase: "amber", since: event.now } : state;
+        case "amber":
+          return elapsed >= 3 ? { phase: "red", since: event.now, pedestrians: waiting } : state;
+        case "red":
+          return elapsed >= 10 ? { phase: "green", since: event.now } : state;
+        default:
+          return assertNever(state);
+      }
+    }
+    default:
+      return assertNever(event);
+  }
+}
+::tests
+let __s: CrossingState = { phase: "green", since: 0 };
+__s = step(__s, { type: "tick", now: 40 }, 0);
+assert.deepStrictEqual(__s, { phase: "green", since: 0 });
+__s = step(__s, { type: "button" }, 2);
+assert.deepStrictEqual(__s, { phase: "green", since: 0 });
+__s = step(__s, { type: "tick", now: 41 }, 2);
+assert.deepStrictEqual(__s, { phase: "amber", since: 41 });
+__s = step(__s, { type: "tick", now: 43 }, 3);
+assert.deepStrictEqual(__s, { phase: "amber", since: 41 });
+__s = step(__s, { type: "tick", now: 44 }, 3);
+assert.deepStrictEqual(__s, { phase: "red", since: 44, pedestrians: 3 });
+__s = step(__s, { type: "tick", now: 54 }, 0);
+assert.deepStrictEqual(__s, { phase: "green", since: 54 });
+const __before = { phase: "green", since: 0 } as const;
+assert.deepStrictEqual(step(__before, { type: "tick", now: 29 }, 5), { phase: "green", since: 0 });
+__s = step(__s, { type: "fault", error: "bulb" }, 0);
+assert.deepStrictEqual(__s, { phase: "fault", error: "bulb" });
+assert.deepStrictEqual(step(__s, { type: "tick", now: 99 }, 4), { phase: "fault", error: "bulb" });
+assert.deepStrictEqual(step(__s, { type: "repair", now: 100 }, 4), { phase: "green", since: 100 });
+function __typeChecks() {
+  // @ts-expect-error
+  step({ phase: "red", since: 1 }, { type: "button" }, 0);
+  // @ts-expect-error
+  step({ phase: "green", since: 1 }, { type: "tick" }, 0);
+  // @ts-expect-error
+  step({ phase: "fault", error: "x", since: 2 }, { type: "button" }, 0);
+}
+::hints
+- Handle the `fault` event first, then the fault state; after those two checks, TypeScript knows `state` isn't a fault, so `state.since` exists.
+- For `tick`, compute `elapsed = event.now - state.since`, then `switch (state.phase)`.
+- Return the same `state` object when nothing changes, and new objects for transitions.
+--- exercise code typescript
+::prompt
+Write `parseConfig(text: string): Config` for a tiny `key=value` config format, returning a typed object:
+
+```
+type Config = { port: number; host: string; debug: boolean; mode: "dev" | "prod"; tags: string[] };
+```
+
+Rules: blank lines and lines starting with `#` are ignored; keys and values are trimmed; `port` must be an integer from 1 to 65535; `debug` must be `true` or `false`; `mode` must be `dev` or `prod`; `tags` is a comma-separated list (trimmed, empty items dropped). Defaults: `port` 8080, `host` `"localhost"`, `debug` false, `mode` `"dev"`, `tags` `[]`. Throw `Error("line N: ...")` (N counted from 1) for an unknown key (`unknown key "x"`), a line without `=` (`expected key=value`) or an invalid value (`invalid port "abc"`, `invalid debug "yes"`, `invalid mode "test"`).
+::starter
+type Config = { port: number; host: string; debug: boolean; mode: "dev" | "prod"; tags: string[] };
+
+function parseConfig(text: string): Config {
+  return { port: 8080, host: "localhost", debug: false, mode: "dev", tags: [] };
+}
+::solution
+type Config = { port: number; host: string; debug: boolean; mode: "dev" | "prod"; tags: string[] };
+
+function parseConfig(text: string): Config {
+  const config: Config = { port: 8080, host: "localhost", debug: false, mode: "dev", tags: [] };
+  text.split("\n").forEach((raw, index) => {
+    const line = raw.trim();
+    if (line === "" || line.startsWith("#")) return;
+    const fail = (message: string): never => {
+      throw new Error(`line ${index + 1}: ${message}`);
+    };
+    const eq = line.indexOf("=");
+    if (eq === -1) fail("expected key=value");
+    const key = line.slice(0, eq).trim();
+    const value = line.slice(eq + 1).trim();
+    switch (key) {
+      case "port": {
+        const port = Number(value);
+        if (value === "" || !Number.isInteger(port) || port < 1 || port > 65535) fail(`invalid port "${value}"`);
+        config.port = port;
+        break;
+      }
+      case "host":
+        config.host = value;
+        break;
+      case "debug":
+        if (value !== "true" && value !== "false") fail(`invalid debug "${value}"`);
+        config.debug = value === "true";
+        break;
+      case "mode":
+        if (value !== "dev" && value !== "prod") return fail(`invalid mode "${value}"`);
+        config.mode = value;
+        break;
+      case "tags":
+        config.tags = value.split(",").map((t) => t.trim()).filter((t) => t !== "");
+        break;
+      default:
+        fail(`unknown key "${key}"`);
+    }
+  });
+  return config;
+}
+::tests
+assert.deepStrictEqual(parseConfig(""), { port: 8080, host: "localhost", debug: false, mode: "dev", tags: [] });
+assert.deepStrictEqual(
+  parseConfig("# server\nport = 3000\n\nhost=example.com\ndebug = true\nmode=prod\ntags = web, api , ,blue"),
+  { port: 3000, host: "example.com", debug: true, mode: "prod", tags: ["web", "api", "blue"] },
+);
+assert.throws(() => parseConfig("port=80\ncolour=red"), { message: 'line 2: unknown key "colour"' });
+assert.throws(() => parseConfig("\nport"), { message: "line 2: expected key=value" });
+assert.throws(() => parseConfig("port=abc"), { message: 'line 1: invalid port "abc"' });
+assert.throws(() => parseConfig("port=70000"), { message: 'line 1: invalid port "70000"' });
+assert.throws(() => parseConfig("port="), { message: 'line 1: invalid port ""' });
+assert.throws(() => parseConfig("debug=yes"), { message: 'line 1: invalid debug "yes"' });
+assert.throws(() => parseConfig("mode = test"), { message: 'line 1: invalid mode "test"' });
+const __c = parseConfig("mode=prod");
+const __m: "dev" | "prod" = __c.mode;
+::hints
+- Start from a `Config` holding the defaults and fill it in line by line.
+- A helper `fail(message: string): never` that throws makes TypeScript understand that code after a failed check doesn't continue.
+- After `if (value !== "dev" && value !== "prod") return fail(...)`, `value` is narrowed to `"dev" | "prod"`, so it can be assigned to `config.mode` without `as`.

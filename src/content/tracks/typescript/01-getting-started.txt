@@ -1,0 +1,940 @@
+=== module Module 1 · Getting started
+
+=== lesson ts-why | What TypeScript is (and isn't) | 60
+## The bugs JavaScript lets through
+
+You know JavaScript. You also know the bugs it allows without a word: a string where a number was expected (`"5" + 3` is `"53"`), a misspelt property that quietly gives `undefined`, a function called with the wrong arguments, a value that is sometimes `null`. JavaScript finds these only when that line runs, often in front of a user, and sometimes never finds them at all.
+
+**TypeScript** is JavaScript with a **static type system**. You describe what kind of value each variable, parameter and return value holds; the TypeScript **compiler** checks your whole program against those descriptions **before it runs**, and reports every place where the code could do something impossible.
+
+```ts
+function totalPrice(price: number, quantity: number): number {
+  return price * quantity;
+}
+
+console.log(totalPrice(9.99, 3));
+```
+
+That runs. Now press **✎ Edit**, change the call to `totalPrice("9.99", 3)` and press **▶ Run** again: instead of a mysterious `NaN` at run time, you get a precise message about line 5 before anything runs. In an editor such as VS Code, the same message appears as a red underline while you type. That instant feedback is the main reason professionals use TypeScript.
+
+DevQuest checks every piece of TypeScript in this course with the real TypeScript compiler, in **strict** mode (the setting every new project should use). Code with type errors doesn't run, just like a project built with `tsc`.
+
+## Compile time and run time
+
+There are two separate moments in a TypeScript program's life:
+
+1. **Compile time**: the compiler reads your code, checks the types, and produces plain JavaScript with all the type annotations **erased**.
+2. **Run time**: that JavaScript runs in a browser or in Node.js, exactly like any other JavaScript. The types are gone.
+
+```ts
+type User = { name: string; admin: boolean };
+
+const ada: User = { name: "Ada", admin: true };
+console.log(ada, typeof ada);
+```
+
+At run time, `ada` is an ordinary object; nothing remembers that it was a `User`. This has two important consequences:
+
+- **Types cost nothing at run time**: no slowdown, no extra code.
+- **Types don't check anything at run time.** If data comes from outside your program (JSON from a server, a form, a file), TypeScript can't know what's really in it. You'll learn to validate such data in Module 6.
+
+## Structural typing
+
+TypeScript compares types by their **shape**, not by their name. Any value that has the right properties fits, wherever it came from:
+
+```ts
+type Point = { x: number; y: number };
+
+function describe(p: Point): string {
+  return `(${p.x}, ${p.y})`;
+}
+
+const somewhere = { x: 3, y: 4, label: "home" };
+console.log(describe(somewhere));
+```
+
+`somewhere` was never declared as a `Point`, but it has `x` and `y` numbers, so it's accepted. This is the "duck typing" of JavaScript (Module 9 of the JavaScript course), now checked by the compiler. It's called **structural typing**, in contrast to the **nominal typing** of Java and C#, where a class must explicitly declare which types it is.
+
+~~~check
+? What happens to TypeScript's type annotations when the program runs?
+- They're checked again by the browser
++ They've been removed; only plain JavaScript runs
+- They make the program slower
+- They're turned into runtime validation
+> Types exist only at compile time. The JavaScript that runs has none.
+~~~
+
+## Gradual typing: you can start anywhere
+
+Every JavaScript program is (almost) valid TypeScript: TypeScript adds to JavaScript, it doesn't change how JavaScript works. Teams migrate existing projects file by file, and inside a file you only *need* to write types where the compiler can't work them out by itself (which turns out to be surprisingly rare: mostly function parameters).
+
+## What TypeScript is not
+
+- **Not a different language at run time.** It's JavaScript; everything from the JavaScript course still applies.
+- **Not a guarantee of no bugs.** Wrong logic with correct types is still wrong. Tests (Module 7 of the JavaScript course) are still essential; types and tests catch different mistakes.
+- **Not perfectly "sound".** A few escape hatches (`any`, type assertions) let you tell the compiler to trust you. This course shows when they're justified and how to avoid them.
+
+## Who uses it, and which version
+
+TypeScript was created at Microsoft in 2012 and is now the default for professional JavaScript: Angular is written in it, React, Vue and Node projects are increasingly TypeScript-first, and job adverts for front-end and full-stack roles mostly expect it. TypeScript 7 (2026) rewrote the compiler in Go, making it about ten times faster; TypeScript 6 was the last version written in JavaScript, and it's the one DevQuest runs inside the app. For everything in this course, they behave the same.
+
+📚 **Go deeper:** the TypeScript Handbook, "TypeScript for JavaScript Programmers" (typescriptlang.org/docs); Boris Cherny, *Programming TypeScript*, chapters 1 and 2; the TypeScript Playground (typescriptlang.org/play) to experiment online.
+--- goals
+- explain what TypeScript adds to JavaScript, and why teams adopt it
+- tell compile time from run time, and explain type erasure
+- describe structural typing and how it differs from nominal typing
+- know what TypeScript does not do: runtime checks or bug-free code
+--- quiz
+? When does TypeScript find a type error?
++ At compile time, before the program runs (and in the editor as you type)
+- Only when the faulty line runs
+- When the program finishes
+- Only in production
+> The compiler checks the whole program without running it.
+? A server sends JSON that doesn't match your `User` type. What does TypeScript do at run time?
+- Throws a TypeError
+- Converts it into a User
++ Nothing: types were erased; you must validate outside data yourself
+- Refuses to run the program
+> Types only describe what you promise; they can't check data at run time.
+? What does structural typing mean?
+- Types must be declared in a separate file
++ A value fits a type if it has the right shape, whatever it was declared as
+- Every object needs a class
+- Types are checked at run time
+> Shape, not name, decides compatibility.
+? Which statement is true?
+- TypeScript code runs faster than JavaScript
+- TypeScript removes the need for tests
++ TypeScript's output is plain JavaScript, so everything from JavaScript still applies
+- TypeScript can only be used in new projects
+> It's JavaScript plus types; migration can be gradual.
+--- exercise code typescript
+::prompt
+This program has **three type errors** that the compiler reports before anything runs. Read each message, fix the cause (don't remove the type annotations, and don't use `any`), and make it print the expected output.
+::starter
+function formatPrice(cents: number): string {
+  return `$${(cents / 100).toFixed(2)}`;
+}
+
+function lineTotal(priceCents: number, quantity: number): number {
+  return priceCents * quantity;
+}
+
+const quantity = "3";
+console.log(formatPrice(lineTotal(250, quantity)));
+console.log(formatPrice(lineTotal(1999)));
+const label: string = formatPrice(500).lenght;
+console.log(label);
+::solution
+function formatPrice(cents: number): string {
+  return `$${(cents / 100).toFixed(2)}`;
+}
+
+function lineTotal(priceCents: number, quantity: number): number {
+  return priceCents * quantity;
+}
+
+const quantity = 3;
+console.log(formatPrice(lineTotal(250, quantity)));
+console.log(formatPrice(lineTotal(1999, 1)));
+const label: string = String(formatPrice(500).length);
+console.log(label);
+::expected
+$7.50
+$19.99
+5
+::hints
+- `quantity` is the text `"3"`; `lineTotal` needs a number.
+- `lineTotal(1999)` is missing an argument: one item.
+- `lenght` is misspelt, and `.length` is a number while `label` is a `string`: convert it with `String(...)`.
+--- cards
+TypeScript :: JavaScript plus a static type system, checked by a compiler before the code runs.
+Compile time vs run time :: Types are checked at compile time, then erased: the JavaScript that runs has no types.
+Type erasure :: Annotations disappear from the output, so types cost nothing at run time and check nothing at run time.
+Structural typing :: A value fits a type if it has the required shape (properties of the right types), regardless of its declared name.
+Strict mode :: "strict": true in tsconfig.json turns on TypeScript's important safety checks. Always use it.
+
+=== lesson ts-setup | Setting up a TypeScript project | 60
+## Installing the compiler
+
+TypeScript is an npm package, installed per project as a development dependency:
+
+```
+npm install --save-dev typescript
+npx tsc --version
+```
+
+`tsc` is the TypeScript compiler. Start a configuration file with:
+
+```
+npx tsc --init
+```
+
+## tsconfig.json
+
+`tsconfig.json` tells `tsc` which files make up the project and how strict to be. A good modern starting point:
+
+```json
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "outDir": "dist",
+    "rootDir": "src",
+    "sourceMap": true,
+    "skipLibCheck": true
+  },
+  "include": ["src"]
+}
+```
+
+| Option | Meaning |
+|---|---|
+| `target` | which JavaScript version to output (`ES2022` keeps modern syntax such as classes and `async` as they are) |
+| `module` | which module system to output and how imports resolve (`NodeNext` for Node.js, `ESNext` with `"moduleResolution": "Bundler"` for Vite and other bundlers) |
+| `strict` | turns on the whole family of strict checks; **always** on in new projects |
+| `noUncheckedIndexedAccess` | `array[i]` and `record[key]` may be `undefined` (not part of `strict`, but worth it) |
+| `outDir` / `rootDir` | where compiled `.js` files go, and where the source lives |
+| `sourceMap` | maps compiled code back to your `.ts` lines for debugging |
+| `skipLibCheck` | don't type-check library declaration files (faster builds) |
+
+Module 6 goes through the configuration in depth.
+
+## Compiling and running
+
+```
+npx tsc            # check and compile src/*.ts into dist/*.js
+node dist/main.js  # run the output
+npx tsc --watch    # recompile whenever a file changes
+npx tsc --noEmit   # only check types, produce no files (common in CI)
+```
+
+You don't always need a separate build step any more:
+
+- **Node.js 22.18 and later run `.ts` files directly** (`node src/main.ts`) by stripping the types, for code that only uses "erasable" TypeScript syntax (no `enum` or constructor parameter properties; the compiler flag `erasableSyntaxOnly` enforces that). Node doesn't type-check: you still run `tsc --noEmit` to find type errors.
+- **Vite**, **tsx** (`npx tsx src/main.ts`) and test runners like **Vitest** also strip types on the fly.
+
+That's the most common setup today: a fast tool strips types to run the code, while `tsc --noEmit` (in the editor, a pre-commit hook and CI) does the checking.
+
+## The editor is the real tool
+
+The compiler's biggest gift isn't the build: it's the editor integration. VS Code ships with TypeScript built in: hover over any name to see its type, get autocompletion that knows every property, rename a symbol across the whole project safely, and see errors as you type. A popular convention in documentation (used in this course's examples) shows a hover result with a comment:
+
+```ts
+const score = 42;
+//    ^? const score: 42
+let name = "Ada";
+//  ^? let name: string
+console.log(score, name);
+```
+
+(`const score` has the type `42`, because a `const` can never be anything else, while `let name` is a `string`, because it could change. The next lesson explains why.)
+
+## Type checking in DevQuest
+
+DevQuest runs the TypeScript 6 compiler with these settings: `strict`, target ES2022, ES modules with top-level `await`, the DOM types, and the globals the course uses (`assert`, `test`). Every example and exercise is checked, and code with type errors doesn't run.
+
+~~~check
+? Your project is bundled by Vite, which strips types without checking them. How do you catch type errors before merging?
+- You can't: bundlers skip types
++ Run `tsc --noEmit` (in the editor, a pre-commit hook and CI)
+- Run the code and watch for crashes
+- Add `any` to every parameter
+> Stripping makes code run; only tsc (or the editor using it) checks types.
+~~~
+
+📚 **Go deeper:** TypeScript Handbook, "The Basics" and "TSConfig Reference" (typescriptlang.org/tsconfig); Node.js documentation, "Running TypeScript Natively"; *Programming TypeScript*, chapter 2.
+--- goals
+- install TypeScript in a project and create a `tsconfig.json`
+- explain the most important compiler options, starting with `strict`
+- compile with `tsc`, check with `tsc --noEmit`, and run `.ts` files directly with Node.js or tsx
+- use the editor's type information while you code
+--- quiz
+? Which option should every new TypeScript project turn on?
++ `strict`
+- `allowJs`
+- `skipLibCheck`
+- `sourceMap`
+> strict enables the checks that make TypeScript worth using.
+? What does `tsc --noEmit` do?
+- Compiles without checking
++ Checks types without writing any output files
+- Deletes the dist folder
+- Runs the program
+> It's the standard command for type-checking in CI when another tool does the building.
+? `node src/app.ts` works in Node 22.18+. What does Node do with the types?
+- Checks them
++ Strips them without checking
+- Converts them into runtime checks
+- Refuses to run TypeScript
+> Node only removes erasable types; tsc is still needed for checking.
+? What's the main day-to-day benefit of TypeScript in an editor like VS Code?
+- Smaller files
++ Errors, types and autocompletion as you type
+- Faster JavaScript
+- Automatic tests
+> The editor uses the compiler continuously.
+--- exercise fill typescript
+::prompt
+Fill in the annotations so this small program type-checks under `strict` and prints the expected output. Each gap is a type name or a literal type.
+::template
+function repeat(text: ____, times: ____): string {
+  return text.repeat(times);
+}
+const banner: ____ = repeat("=", 10);
+const done: ____ = banner.length === 10;
+console.log(banner, done);
+::answers
+string
+number
+string
+boolean
+::expected
+========== true
+::hints
+- `text.repeat` only exists on strings; `times` counts.
+- `length === 10` is a comparison, which gives true or false.
+--- cards
+tsc :: The TypeScript compiler: checks types and compiles .ts to .js. npx tsc after npm install --save-dev typescript.
+tsconfig.json :: Project configuration: compilerOptions (target, module, strict, outDir...) and which files to include.
+tsc --noEmit :: Type-check only, without output files. Used in CI when Vite/Node/tsx run the code.
+Type stripping :: Node 22.18+, Vite, tsx and Vitest remove types to run TypeScript quickly, without checking them.
+erasableSyntaxOnly :: A compiler flag that rejects TypeScript features Node can't strip (enum, parameter properties, namespaces).
+
+=== lesson ts-basics | Types: the basics | 75
+## Annotations
+
+A **type annotation** is a colon and a type after a name:
+
+```ts
+let title: string = "DevQuest";
+let level: number = 3;
+let active: boolean = true;
+let big: bigint = 9007199254740993n;
+
+function greet(name: string): string {
+  return `Hello, ${name}!`;
+}
+
+console.log(greet(title), level, active, big);
+```
+
+The primitive types are the JavaScript ones, in lowercase: `string`, `number`, `boolean`, `bigint`, `symbol`, `null` and `undefined`. (Avoid the capitalised `String`, `Number` and `Boolean`: those are the wrapper object types, almost never what you want.)
+
+## Inference: let TypeScript work it out
+
+You rarely need to annotate variables. TypeScript **infers** a type from the value:
+
+```ts
+let count = 10;
+const greeting = "hi";
+const items = ["pen", "book"];
+const user = { name: "Ada", age: 36 };
+count = count + 1;
+console.log(count, greeting, items, user);
+```
+
+`count` is a `number`, `items` a `string[]`, `user` a `{ name: string; age: number }`. If you later write `count = "eleven"`, that's an error, exactly as if you had written `: number` yourself.
+
+Where should you write annotations?
+
+- **Function parameters**: always (the compiler can't guess what callers will pass).
+- **Return types**: on exported and important functions, as documentation and a guard against accidentally returning the wrong thing.
+- **Variables**: only when the inferred type isn't what you mean (for example a `let` that starts as `null` but will hold a `User` later).
+
+## Literal types and widening
+
+A `const` can never change, so TypeScript gives it the most precise type possible: the **literal type** of its value. A `let` can change, so its type is **widened** to the general type:
+
+```ts
+const direction = "north";
+let heading = "north";
+heading = "south";
+console.log(direction, heading);
+```
+
+`direction` has the type `"north"` (only that exact string); `heading` has the type `string`. Literal types are the basis of some of TypeScript's most useful patterns, such as `"north" | "south" | "east" | "west"` (Module 2).
+
+~~~check
+? What type does TypeScript infer for `const port = 8080;`?
+- `number`
++ `8080`
+- `any`
+- `const`
+> A const can never change, so its type is the literal 8080.
+~~~
+
+## any, unknown, void and never
+
+Four special types complete the basics:
+
+| Type | Means | Use it... |
+|---|---|---|
+| `any` | "don't check this at all" | almost never: it switches the type system off for that value, and the "any-ness" spreads |
+| `unknown` | "could be anything; check before using" | for values from outside (JSON, errors, user input) |
+| `void` | "returns nothing useful" | as the return type of functions that only do something |
+| `never` | "this can't happen" | for functions that never return (always throw), and impossible branches |
+
+The difference between `any` and `unknown` is crucial. Both accept any value, but `unknown` makes you **prove** what it is before using it:
+
+```ts
+const data: unknown = JSON.parse('{"name": "Ada"}');
+
+if (typeof data === "object" && data !== null && "name" in data && typeof data.name === "string") {
+  console.log(data.name.toUpperCase());
+}
+```
+
+Inside the `if`, TypeScript has **narrowed** `data` step by step to "an object with a `name` that's a string", so `.toUpperCase()` is allowed. With `any`, `data.name.toUpperCase()` would compile even if `name` were missing, and crash at run time. Narrowing gets a whole lesson in Module 2.
+
+```ts
+function log(message: string): void {
+  console.log(`[log] ${message}`);
+}
+function fail(message: string): never {
+  throw new Error(message);
+}
+log("starting");
+try {
+  fail("stopped");
+} catch (error) {
+  console.log(error instanceof Error ? error.message : error);
+}
+```
+
+Notice `catch (error)`: in strict mode, a caught error has the type `unknown` (anything can be thrown in JavaScript), so you check `instanceof Error` before reading `.message`.
+
+## Arrays and objects, briefly
+
+```ts
+const scores: number[] = [90, 85];
+const names: Array<string> = ["Ada", "Grace"];
+const point: { x: number; y: number } = { x: 1, y: 2 };
+scores.push(77);
+console.log(scores, names, point);
+```
+
+`number[]` and `Array<number>` mean the same thing. Object types list properties with `;` (or `,`) between them. Module 2 covers both in depth.
+
+## Type aliases
+
+`type` gives a type a name, so you can reuse it:
+
+```ts
+type Money = number;
+type Product = { name: string; price: Money };
+
+function cheapest(products: Product[]): Product | undefined {
+  return products.toSorted((a, b) => a.price - b.price)[0];
+}
+console.log(cheapest([{ name: "Pen", price: 2 }, { name: "Lamp", price: 25 }]));
+```
+
+The return type `Product | undefined` says "a product, or undefined" (for an empty list): a **union** type, Module 2's main topic.
+
+📚 **Go deeper:** TypeScript Handbook, "Everyday Types"; *Programming TypeScript*, chapter 3 "All About Types"; *Effective TypeScript* (Dan Vanderkam, 2nd ed.), items 18 and 19 on inference.
+--- goals
+- annotate variables, parameters and return values with primitive types
+- rely on type inference, and know where annotations are still needed
+- explain literal types and widening for `const` and `let`
+- choose between `any`, `unknown`, `void` and `never`, preferring `unknown` over `any`
+- write simple array and object types, and name types with `type`
+--- quiz
+? Where are annotations most needed?
++ On function parameters
+- On every variable
+- Only on constants
+- Nowhere: TypeScript infers everything
+> The compiler can't know what callers will pass, so parameters need types.
+? What's the type of `heading` in `let heading = "north";`?
+- `"north"`
++ `string`
+- `any`
+- `"north" | string`
+> let can change, so the literal is widened to string.
+? Why prefer `unknown` to `any` for parsed JSON?
+- unknown is faster
++ unknown forces you to check the value before using it; any switches checking off
+- any can't hold objects
+- unknown converts the value to a string
+> any lets mistakes through silently; unknown makes you prove what the value is.
+? What does a function return type of `never` mean?
+- It returns undefined
+- It returns nothing useful
++ It never returns normally (for example, it always throws)
+- It's not finished yet
+> void: returns without a useful value. never: doesn't return at all.
+? In strict mode, what's the type of `error` in `catch (error)`?
+- `Error`
+- `any`
++ `unknown`
+- `string`
+> Anything can be thrown, so check with instanceof Error before using .message.
+--- exercise code typescript
+::prompt
+Write `describeValue(value: unknown): string` that safely describes any value, using `typeof`, `Array.isArray` and checks for `null`:
+
+- strings: `string of length 5`;
+- numbers: `number 3.5` (and `not a number` for `NaN`);
+- booleans: `boolean true`;
+- `null`: `null`; `undefined`: `undefined`;
+- arrays: `array of 3 items`;
+- other objects: `object with keys a, b` (sorted keys, comma-separated; `object with no keys` if empty);
+- anything else: `other (function)` with its `typeof`.
+
+No `any` allowed: the compiler must be satisfied by your checks.
+::starter
+function describeValue(value: unknown): string {
+  return "";
+}
+::solution
+function describeValue(value: unknown): string {
+  if (typeof value === "string") return `string of length ${value.length}`;
+  if (typeof value === "number") return Number.isNaN(value) ? "not a number" : `number ${value}`;
+  if (typeof value === "boolean") return `boolean ${value}`;
+  if (value === null) return "null";
+  if (value === undefined) return "undefined";
+  if (Array.isArray(value)) return `array of ${value.length} items`;
+  if (typeof value === "object") {
+    const keys = Object.keys(value).sort();
+    return keys.length ? `object with keys ${keys.join(", ")}` : "object with no keys";
+  }
+  return `other (${typeof value})`;
+}
+::tests
+assert.strictEqual(describeValue("hello"), "string of length 5");
+assert.strictEqual(describeValue(3.5), "number 3.5");
+assert.strictEqual(describeValue(NaN), "not a number");
+assert.strictEqual(describeValue(false), "boolean false");
+assert.strictEqual(describeValue(null), "null");
+assert.strictEqual(describeValue(undefined), "undefined");
+assert.strictEqual(describeValue([1, 2, 3]), "array of 3 items");
+assert.strictEqual(describeValue({ b: 1, a: 2 }), "object with keys a, b");
+assert.strictEqual(describeValue({}), "object with no keys");
+assert.strictEqual(describeValue(() => 1), "other (function)");
+::hints
+- Each `typeof` check narrows `value` inside its `if`, so `value.length` is allowed after `typeof value === "string"`.
+- Check `null` before `typeof value === "object"`: `typeof null` is "object".
+- `Object.keys(value)` works once TypeScript knows `value` is an object.
+--- exercise code typescript
+::prompt
+Add **parameter and return type annotations** to these three functions so the program type-checks in strict mode (right now every parameter is implicitly `any`, which strict mode forbids). Use the most precise sensible types: `average` takes an array of numbers, `initials` a full name, and `clamp` three numbers. Don't change the function bodies.
+::starter
+function average(values) {
+  return values.length === 0 ? 0 : values.reduce((a, b) => a + b, 0) / values.length;
+}
+
+function initials(fullName) {
+  return fullName.split(" ").map((part) => part[0].toUpperCase()).join("");
+}
+
+function clamp(value, min, max) {
+  return Math.min(Math.max(value, min), max);
+}
+
+console.log(average([2, 4, 9]), initials("ada king lovelace"), clamp(150, 0, 100));
+::solution
+function average(values: number[]): number {
+  return values.length === 0 ? 0 : values.reduce((a, b) => a + b, 0) / values.length;
+}
+
+function initials(fullName: string): string {
+  return fullName.split(" ").map((part) => part[0].toUpperCase()).join("");
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max);
+}
+
+console.log(average([2, 4, 9]), initials("ada king lovelace"), clamp(150, 0, 100));
+::tests
+function __typeChecks() {
+  // @ts-expect-error
+  average(["2", "4"]);
+  // @ts-expect-error
+  initials(42);
+  // @ts-expect-error
+  clamp(1, 2);
+}
+const __n: number = average([1, 2]) + clamp(5, 0, 10);
+const __s: string = initials("grace hopper");
+assert.strictEqual(__s, "GH");
+assert.strictEqual(__n, 6.5);
+::hints
+- Parameters: `values: number[]`, `fullName: string`, and three `number`s for clamp.
+- Return types go after the parameter list: `function average(values: number[]): number`.
+--- cards
+Type annotation :: name: Type, e.g. let n: number, function f(x: string): boolean.
+Primitive types :: string, number, boolean, bigint, symbol, null, undefined (lowercase).
+Type inference :: TypeScript works out types from values; annotate parameters, let inference handle the rest.
+Literal type :: An exact value as a type: const x = "on" has type "on". let widens it to string.
+any vs unknown :: any disables checking; unknown accepts anything but must be narrowed before use. Prefer unknown.
+void / never :: void: returns nothing useful. never: never returns (always throws) or can't happen.
+type alias :: type Product = { name: string; price: number }; names a type for reuse.
+
+=== lesson ts-reading-errors | Reading type errors | 60
+## Errors are conversations with the compiler
+
+Type errors are the compiler telling you, precisely, where your code doesn't match what you said it would do. Reading them quickly is a core professional skill, because most TypeScript work is a loop of "write, read the error, adjust".
+
+Every error has three parts. In DevQuest:
+
+```
+Type error on line 2: Type 'string' is not assignable to type 'number'. (TS2322)
+```
+
+and in a terminal, from `tsc`:
+
+```
+src/cart.ts:2:1 - error TS2322: Type 'string' is not assignable to type 'number'.
+
+2 total = "ten";
+  ~~~~~
+```
+
+- the **location** (file, line and column);
+- the **message**, which usually says what was given and what was expected;
+- the **code** (`TS2322`), handy for searching.
+
+## The errors you'll meet every day
+
+```ts
+let total: number = 0;
+total = "ten";
+```
+
+**TS2322 "Type X is not assignable to type Y"**: a value of the wrong type went into a variable, property or return value. Read it as "you gave X where Y was promised".
+
+```ts
+function area(width: number, height: number): number {
+  return width * height;
+}
+area(3);
+area(3, "4");
+```
+
+**TS2554 "Expected 2 arguments, but got 1"** and **TS2345 "Argument of type X is not assignable to parameter of type Y"**: a function was called wrongly. The fix is usually at the call site.
+
+```ts
+const user = { name: "Ada", email: "ada@example.com" };
+console.log(user.emial);
+```
+
+**TS2339 "Property 'emial' does not exist on type ..."**: a typo, or a property the type doesn't promise. When the name is close to a real one, the message adds "Did you mean 'email'?" (and the code becomes TS2551).
+
+```ts
+const prices = new Map<string, number>();
+const price = prices.get("tea");
+console.log(price.toFixed(2));
+```
+
+**TS18048 "'price' is possibly 'undefined'"** (TS2532 for "Object is possibly 'undefined'"): the value might not be there. This is TypeScript catching the JavaScript classic "Cannot read properties of undefined" **before** it happens. Handle the missing case: `price?.toFixed(2) ?? "not for sale"`, or check with `if (price === undefined)`.
+
+Others you'll see often:
+
+| Code | Message | Usual cause |
+|---|---|---|
+| TS7006 | Parameter 'x' implicitly has an 'any' type | a parameter without a type, in strict mode |
+| TS2741 | Property 'y' is missing in type ... | an object without a required property |
+| TS2353 | Object literal may only specify known properties | an extra (often misspelt) property in an object literal |
+| TS2304 / TS2552 | Cannot find name 'x' | a typo, or something not imported |
+| TS2367 | This comparison appears to be unintentional | comparing values that can never be equal (`"a" === 1`) |
+| TS18046 | 'x' is of type 'unknown' | using an `unknown` value before narrowing it |
+
+## Long messages: read the last line first
+
+When the mismatch is deep inside an object, TypeScript points straight at the innermost property:
+
+```ts
+type Address = { city: string; zip: string };
+type Customer = { name: string; address: Address };
+
+const c: Customer = { name: "Ada", address: { city: "London", zip: 12345 } };
+console.log(c);
+```
+
+The error is on `zip`: it's a number but should be a string. When the value comes from a variable instead of being written in place, the compiler can't point inside it, so it explains the mismatch as a chain, from the outside in:
+
+```
+Type '{ name: string; address: { city: string; zip: number; }; }' is not assignable to type 'Customer'.
+  The types of 'address.zip' are incompatible between these types.
+    Type 'number' is not assignable to type 'string'.
+```
+
+The first line says where the mismatch starts; the **last** line says what's actually wrong. Read long errors from the bottom up.
+
+~~~check
+? `Argument of type 'string' is not assignable to parameter of type 'number'.` Where is the problem usually fixed?
++ Where the function is called, by passing a number
+- Inside the function, by changing its body
+- In tsconfig.json
+- By adding `any` to the parameter
+> The function says it needs a number; the caller passed a string.
+~~~
+
+## Fix the cause, don't silence the messenger
+
+It's tempting to make an error disappear with `any`, a type assertion (`as number`), or a `// @ts-ignore` comment. Each of these tells the compiler "trust me", and switches off the checking that just found a real problem. Fix the cause instead:
+
+- **Wrong value?** Convert it properly (`Number(text)`, `String(n)`).
+- **Missing case?** Handle `null` and `undefined` (`?.`, `??`, an `if`).
+- **Wrong type description?** Fix the type, if the code was right and the type was wrong.
+
+When you genuinely need to suppress an error (for example in a test that checks that misuse is rejected), use `// @ts-expect-error` on the line above: unlike `@ts-ignore`, it **reports an error itself if the line below stops being an error**, so it can't silently hide anything. DevQuest's hidden checks use it to make sure your types reject wrong code.
+
+📚 **Go deeper:** TypeScript Handbook, "Understanding Errors"; the TypeScript error list at typescript.tv/errors (explanations by code); *Effective TypeScript*, item 1.
+--- goals
+- read a type error's location, message and code
+- recognise the most common errors and their usual causes
+- read long, nested error messages from the last line up
+- fix the cause of an error instead of silencing it, and use `@ts-expect-error` correctly
+--- quiz
+? What does TS2322 "Type 'string' is not assignable to type 'number'" mean?
++ A string value was put where a number was promised
+- A number was put where a string was promised
+- The variable doesn't exist
+- The function has too many arguments
+> "Type X is not assignable to type Y": X was given, Y was expected.
+? `'item' is possibly 'undefined'.` Which is the best fix?
+- `(item as any).price`
++ Handle the missing case, e.g. `if (item === undefined) return;` or `item?.price ?? 0`
+- `// @ts-ignore`
+- Change the type to `any`
+> TypeScript found a real "Cannot read properties of undefined" waiting to happen.
+? A long error mentions `address`, then `zip`, then "Type 'number' is not assignable to type 'string'". What's wrong?
+- The whole object is wrong
++ The `zip` inside `address` is a number but should be a string
+- `address` is missing
+- The name is wrong
+> Read from the last line: the innermost mismatch is the cause.
+? Why prefer `@ts-expect-error` to `@ts-ignore`?
++ It reports an error if there's no longer an error to suppress, so it can't hide problems silently
+- It's faster
+- It works in JavaScript files only
+- It disables strict mode
+> Expectations that stop being true are flagged.
+--- exercise code typescript
+::prompt
+This order summary has **four** type errors. Fix each one properly (no `any`, no `as`, no `@ts-ignore`): handle the possibly-missing values, correct the typo, and pass the right types. The output must match exactly.
+::starter
+type Order = { id: number; customer: string; items: { name: string; qty: number; price: number }[]; coupon?: string };
+
+const orders = new Map<number, Order>([
+  [1, { id: 1, customer: "Ada", items: [{ name: "Pen", qty: 3, price: 1.5 }], coupon: "SAVE10" }],
+  [2, { id: 2, customer: "Grace", items: [{ name: "Lamp", qty: 1, price: 25 }] }],
+]);
+
+function total(order: Order): number {
+  const sum = order.items.reduce((s, item) => s + item.qty * item.price, 0);
+  return order.coupon === "SAVE10" ? sum * 0.9 : sum;
+}
+
+function summary(id: number): string {
+  const order = orders.get(id);
+  const code = order.coupon.toUpperCase();
+  return `${order.costumer}: ${total(order).toFixed(2)} (coupon: ${code})`;
+}
+
+console.log(summary(1));
+console.log(summary("2"));
+console.log(summary(3));
+::solution
+type Order = { id: number; customer: string; items: { name: string; qty: number; price: number }[]; coupon?: string };
+
+const orders = new Map<number, Order>([
+  [1, { id: 1, customer: "Ada", items: [{ name: "Pen", qty: 3, price: 1.5 }], coupon: "SAVE10" }],
+  [2, { id: 2, customer: "Grace", items: [{ name: "Lamp", qty: 1, price: 25 }] }],
+]);
+
+function total(order: Order): number {
+  const sum = order.items.reduce((s, item) => s + item.qty * item.price, 0);
+  return order.coupon === "SAVE10" ? sum * 0.9 : sum;
+}
+
+function summary(id: number): string {
+  const order = orders.get(id);
+  if (order === undefined) return `No order ${id}`;
+  const code = order.coupon?.toUpperCase() ?? "none";
+  return `${order.customer}: ${total(order).toFixed(2)} (coupon: ${code})`;
+}
+
+console.log(summary(1));
+console.log(summary(2));
+console.log(summary(3));
+::expected
+Ada: 4.05 (coupon: SAVE10)
+Grace: 25.00 (coupon: none)
+No order 3
+::hints
+- `orders.get(id)` may be `undefined`: return `No order <id>` in that case.
+- `coupon` is optional: `order.coupon?.toUpperCase() ?? "none"`.
+- `costumer` is a typo, and `summary("2")` passes a string where a number is expected.
+--- cards
+TS2322 :: Type X is not assignable to type Y: a value of the wrong type went where another was promised.
+TS2345 / TS2554 :: Wrong argument type / wrong number of arguments at a call.
+TS2339 :: Property doesn't exist on the type: a typo or an unpromised property.
+TS18048 / TS2532 :: Possibly undefined: handle the missing case before using the value.
+Reading long errors :: Start with the last line: it's the innermost, actual mismatch.
+@ts-expect-error :: Suppresses an expected error on the next line, and errors if there's nothing to suppress. Prefer it to @ts-ignore.
+
+=== lesson ts-m1-test | Module 1 test | 150 | exam
+This test covers Module 1: what TypeScript is, compile time versus run time, setting up a project, basic types and inference, `any` versus `unknown`, and reading type errors.
+
+Before you start, check that you can:
+
+- explain type erasure and structural typing;
+- set up `tsconfig.json` with `strict`, and check types with `tsc --noEmit`;
+- annotate parameters and return values, and predict inferred and literal types;
+- narrow `unknown` values instead of using `any`;
+- read and fix the common type errors.
+--- goals
+- explain how TypeScript fits into JavaScript development
+- write and fix basic type annotations
+- read compiler errors and fix their causes
+--- quiz
+? What is the type of `x` after `const x = [1, 2, 3];`?
++ `number[]`
+- `[1, 2, 3]`
+- `any[]`
+- `Array<any>`
+> Arrays are inferred from their elements; const doesn't freeze an array's contents, so it stays number[].
+? Which of these is a run-time effect of a TypeScript annotation?
+- It checks the value when the line runs
+- It makes the value immutable
++ None: annotations are erased before the code runs
+- It converts the value to the declared type
+> Types disappear at compile time.
+? `function f(x) { return x * 2; }` in strict mode gives which error?
+- TS2322
++ TS7006: Parameter 'x' implicitly has an 'any' type
+- TS2554
+- No error
+> strict forbids implicit any; give the parameter a type.
+? Which accepts any value but must be checked before use?
+- `any`
++ `unknown`
+- `never`
+- `void`
+> unknown is the safe "anything" type.
+? A type `Point = { x: number; y: number }`. Which value can be passed to `f(p: Point)` without an error?
++ A variable holding `{ x: 1, y: 2, z: 3 }`
+- `{ x: 1 }`
+- `{ x: "1", y: 2 }`
+- `[1, 2]`
+> Structural typing: extra properties on an existing variable are fine; missing or wrong ones aren't. (An object literal written directly in the call would trigger the excess property check.)
+? How do you run a `.ts` file directly in Node.js 22.18+?
+- `node --check app.ts`
++ `node app.ts` (types are stripped, not checked)
+- `node compile app.ts`
+- It's impossible
+> Node strips erasable types; tsc --noEmit does the checking.
+--- exercise code typescript
+::prompt
+Write a typed `parseScore(input: unknown): number | null` that turns form or JSON input into a score from 0 to 100:
+
+- numbers are used as they are; strings are trimmed and converted with `Number` (an empty string is not a number);
+- anything else, `NaN`, non-integers and values outside 0 to 100 give `null`.
+
+Then write `averageScore(inputs: unknown[]): string` returning the average of the valid scores with one decimal, like `"84.5 (from 2 scores)"`, or `"no valid scores"`.
+::starter
+function parseScore(input: unknown): number | null {
+  return null;
+}
+
+function averageScore(inputs: unknown[]): string {
+  return "";
+}
+::solution
+function parseScore(input: unknown): number | null {
+  let n: number;
+  if (typeof input === "number") n = input;
+  else if (typeof input === "string" && input.trim() !== "") n = Number(input.trim());
+  else return null;
+  if (!Number.isInteger(n) || n < 0 || n > 100) return null;
+  return n;
+}
+
+function averageScore(inputs: unknown[]): string {
+  const scores = inputs.map(parseScore).filter((s): s is number => s !== null);
+  if (scores.length === 0) return "no valid scores";
+  const avg = scores.reduce((a, b) => a + b, 0) / scores.length;
+  return `${avg.toFixed(1)} (from ${scores.length} score${scores.length === 1 ? "" : "s"})`;
+}
+::tests
+assert.strictEqual(parseScore(87), 87);
+assert.strictEqual(parseScore(" 92 "), 92);
+assert.strictEqual(parseScore(""), null);
+assert.strictEqual(parseScore("abc"), null);
+assert.strictEqual(parseScore(101), null);
+assert.strictEqual(parseScore(-1), null);
+assert.strictEqual(parseScore(7.5), null);
+assert.strictEqual(parseScore(null), null);
+assert.strictEqual(parseScore({ score: 50 }), null);
+assert.strictEqual(averageScore([80, "89", "x", null, 150]), "84.5 (from 2 scores)");
+assert.strictEqual(averageScore([70]), "70.0 (from 1 score)");
+assert.strictEqual(averageScore(["", undefined]), "no valid scores");
+const __r: number | null = parseScore(5);
+// @ts-expect-error
+const __bad: number = parseScore(5);
+::hints
+- Narrow with `typeof input === "number"` and `typeof input === "string"`; everything else returns null.
+- `Number.isInteger(n)` is false for NaN and decimals.
+- To keep only numbers from a `(number | null)[]`, filter with a type predicate: `.filter((s): s is number => s !== null)` (Module 2 explains it).
+--- exercise code typescript
+::prompt
+**Fix the types, not the logic.** This module compiles nothing right now: five type errors, some because the code is wrong and some because the **types** are wrong (too strict or too loose for what the code really does). Fix each one in the right place, without `any`, `as` or comments that suppress errors, so it prints the expected output.
+::starter
+type Product = { name: string; price: number; tags: string };
+
+const catalogue: Product[] = [
+  { name: "Notebook", price: 3.5, tags: ["paper", "office"] },
+  { name: "Pen", price: 1.25, tags: [] },
+];
+
+function find(name: string): Product {
+  return catalogue.find((p) => p.name === name);
+}
+
+function priceTag(product: Product): string {
+  return `${product.name}: $${product.price.toFixed(2)}${product.tags.length ? ` [${product.tags.join(", ")}]` : ""}`;
+}
+
+const notebook = find("Notebook");
+console.log(priceTag(notebook));
+const missing = find("Stapler");
+console.log(missing === undefined ? "Stapler: not found" : priceTag(missing));
+let count: string = catalogue.length;
+console.log(`${count} products`);
+::solution
+type Product = { name: string; price: number; tags: string[] };
+
+const catalogue: Product[] = [
+  { name: "Notebook", price: 3.5, tags: ["paper", "office"] },
+  { name: "Pen", price: 1.25, tags: [] },
+];
+
+function find(name: string): Product | undefined {
+  return catalogue.find((p) => p.name === name);
+}
+
+function priceTag(product: Product): string {
+  return `${product.name}: $${product.price.toFixed(2)}${product.tags.length ? ` [${product.tags.join(", ")}]` : ""}`;
+}
+
+const notebook = find("Notebook");
+console.log(notebook === undefined ? "Notebook: not found" : priceTag(notebook));
+const missing = find("Stapler");
+console.log(missing === undefined ? "Stapler: not found" : priceTag(missing));
+let count: number = catalogue.length;
+console.log(`${count} products`);
+::expected
+Notebook: $3.50 [paper, office]
+Stapler: not found
+2 products
+::hints
+- `tags` holds lists of strings: its type should be `string[]`.
+- `Array.prototype.find` can return `undefined`, so `find` must say `Product | undefined`, and every caller must handle it.
+- `catalogue.length` is a number.

@@ -1,0 +1,9 @@
++++ track
+id: typescript
+title: TypeScript
+icon: 🔷
+tier: 1
+color: #3178c6
+kind: language
+blurb: JavaScript with a type system, taught to professional depth for people who know JavaScript: everyday types, narrowing, functions and generics, classes and structural typing, advanced types (mapped, conditional and template literal types), error handling, async code, runtime validation, declaration files, tsconfig and tooling. Every lesson's code is checked by the real TypeScript compiler, with exercises that require wrong code to fail to compile.
++++

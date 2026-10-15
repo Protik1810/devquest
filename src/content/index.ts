@@ -28,8 +28,10 @@ export const python = parseTrackFile(...Object.keys(pythonFiles).sort().map((f) 
 /** The JavaScript course, likewise one file per module (tracks/javascript/NN-*.txt). */
 const javascriptFiles = import.meta.glob<string>('./tracks/javascript/*.txt', { query: '?raw', import: 'default', eager: true });
 export const javascript = parseTrackFile(...Object.keys(javascriptFiles).sort().map((f) => javascriptFiles[f]));
+/** The TypeScript course (tracks/typescript/NN-*.txt). */
+const typescriptFiles = import.meta.glob<string>('./tracks/typescript/*.txt', { query: '?raw', import: 'default', eager: true });
+export const typescript = parseTrackFile(...Object.keys(typescriptFiles).sort().map((f) => typescriptFiles[f]));
 import { SKILL_TRACKS } from './skills';
-import { typescript } from './langs/typescript';
 import { go } from './langs/go';
 import { java } from './langs/java';
 import { kotlin } from './langs/kotlin';
@@ -50,6 +52,7 @@ import { solidity } from './langs/solidity';
 // Classify the original tracks: languages vs core engineering vs specializations
 Object.assign(python, { kind: 'language', lang: 'python', fields: ['Backend', 'Data & AI', 'Automation', 'Security'] });
 Object.assign(javascript, { kind: 'language', lang: 'javascript', fields: ['Frontend', 'Full-Stack', 'Backend (Node.js)'] });
+Object.assign(typescript, { kind: 'language', lang: 'typescript', fields: ['Frontend', 'Full-Stack', 'Backend (Node.js)'] });
 Object.assign(sql, { kind: 'language', lang: 'sql', fields: ['Backend', 'Data', 'Every developer'] });
 for (const t of [foundations, shell, git, dsa, systems, networking, web, devops, architecture, career]) t.kind = 'core';
 for (const t of [polyglot, ai]) t.kind = 'skill';

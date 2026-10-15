@@ -49,6 +49,9 @@ declare const it: typeof test;
 declare function describe(name: string, fn: () => void): void;
 declare function beforeEach(fn: () => unknown): void;
 declare function afterEach(fn: () => unknown): void;
+// For checks about types themselves: type _t = Expect<Equal<Actual, Wanted>> is an error unless they're identical
+type Equal<X, Y> = (<T>() => T extends X ? 1 : 2) extends <T>() => T extends Y ? 1 : 2 ? true : false;
+type Expect<T extends true> = T;
 declare function __dqRequire(path: string): any;
 declare function __dqTests(): { name: string; fn: () => unknown }[];
 declare function __dqBuiltin(name: string): any;
@@ -152,6 +155,8 @@ export function describeTypeErrors(diagnostics: TsDiagnostic[], tests?: string):
       const line = testLines[d.line - 1]?.trim() ?? '';
       // "Unused '@ts-expect-error' directive": the checks wanted this line to be a type error
       if (d.code === 2578) return `The checks expect a type error on this line, but your types allow it:\n  ${testLines[d.line]?.trim() ?? line}`;
+      // Expect<Equal<A, B>> failed
+      if (d.code === 2344 && /'false' does not satisfy the constraint 'true'/.test(d.message)) return `The checks expected these types to be identical, but they're not:\n  ${line}`;
       return `Type error in the checks (${line}):\n  ${d.message}`;
     }
     return `Type error${d.line ? ` on line ${d.line}` : ''}: ${d.message} (TS${d.code})`;
