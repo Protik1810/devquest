@@ -36,7 +36,8 @@ function pgRun(code: string, setup?: string, verify?: string, timeoutMs = 20000)
 
 export const warmPostgres = () => void pgRun('SELECT 1');
 
-const key = (row: unknown[]) => JSON.stringify(row);
+// Compare values, not JavaScript types: count(*) (bigint) and a cast to integer should give the same row
+const key = (row: unknown[]) => JSON.stringify(row.map((v) => (v === null ? null : String(v))));
 function sameTable(a: Table | null | undefined, b: Table | null | undefined, ordered: boolean) {
   if (!a || !b) return a === b;
   if (a.columns.join() !== b.columns.join()) return false;

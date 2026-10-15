@@ -1,0 +1,539 @@
+=== module Module 3 · Summarising data
+
+=== lesson sql-agg | Aggregates and GROUP BY | 75
+## From rows to answers
+
+Questions about data are usually about **many rows at once**: how many customers? what's the average price? how much did we sell? **Aggregate functions** turn a set of rows into one value:
+
+```sql shop
+SELECT count(*) AS products,
+       min(price) AS cheapest,
+       max(price) AS dearest,
+       round(avg(price), 2) AS average_price,
+       sum(stock) AS items_in_stock
+FROM products;
+```
+
+| Function | Returns |
+|---|---|
+| `count(*)` | the number of rows |
+| `count(column)` | the number of rows where the column **isn't NULL** |
+| `count(DISTINCT column)` | the number of different non-NULL values |
+| `sum(x)`, `avg(x)` | total and mean of the non-NULL values |
+| `min(x)`, `max(x)` | smallest and largest (works for numbers, text and dates) |
+
+Aggregates **ignore NULLs** (except `count(*)`, which counts rows). That's usually what you want, but be aware of it:
+
+```sql shop
+SELECT count(*) AS customers,
+       count(email) AS with_email,
+       count(DISTINCT country) AS countries
+FROM customers;
+```
+
+`avg(rating)` over reviews where some ratings were NULL would average only the known ratings. And an aggregate over **no rows** returns `NULL` (except `count`, which returns 0): `sum(x)` of nothing is `NULL`, so write `COALESCE(sum(x), 0)` when you need a number.
+
+`WHERE` filters rows **before** they're aggregated:
+
+```sql shop
+SELECT count(*) AS delivered_orders
+FROM orders
+WHERE status = 'delivered';
+```
+
+## GROUP BY: one result row per group
+
+**`GROUP BY`** splits the rows into groups that share the same value, and computes the aggregates for **each group**:
+
+```sql shop
+SELECT status, count(*) AS orders
+FROM orders
+GROUP BY status
+ORDER BY orders DESC;
+```
+
+Think of it as sorting the rows into piles (one per status), then summarising each pile into one row. You can group by several columns (one group per combination) and by expressions:
+
+```sql shop
+SELECT order_id,
+       count(*) AS lines,
+       sum(quantity) AS items,
+       sum(quantity * unit_price) AS goods_total
+FROM order_items
+GROUP BY order_id
+ORDER BY order_id;
+```
+
+```sql shop
+SELECT date_trunc('month', ordered_at)::date AS month, count(*) AS orders
+FROM orders
+GROUP BY date_trunc('month', ordered_at)
+ORDER BY month;
+```
+
+## The GROUP BY rule
+
+In a grouped query, every column in `SELECT` must either be **in the `GROUP BY`** or **inside an aggregate**. This fails:
+
+```sql shop
+-- error: which name should the group show? There are several per country.
+SELECT country, name, count(*)
+FROM customers
+GROUP BY country;
+```
+
+Each country group contains several customers, so "the name" of a group has no single value. The error message (`column "customers.name" must appear in the GROUP BY clause or be used in an aggregate function`) is one you'll meet often; the fix is to decide what you mean: group by name too, or aggregate it (`min(name)`, `string_agg(name, ', ')`, `count(name)`).
+
+(MySQL's old default mode silently picked an arbitrary name from the group. That "worked", and produced wrong reports for years in many companies; since MySQL 5.7 the `ONLY_FULL_GROUP_BY` mode rejects it too. PostgreSQL does allow other columns of a table when you group by its **primary key**, because they're then guaranteed to have one value per group.)
+
+~~~check
+? Which query is valid?
+- `SELECT country, city, count(*) FROM customers GROUP BY country;`
++ `SELECT country, count(DISTINCT city) FROM customers GROUP BY country;`
+- `SELECT name, count(*) FROM customers;`
+- `SELECT country, name FROM customers GROUP BY country;`
+> Every selected column must be grouped or aggregated.
+~~~
+
+## HAVING: filtering groups
+
+`WHERE` can't use aggregates, because it runs before grouping. To filter **groups**, use **`HAVING`**, which runs after:
+
+```sql shop
+SELECT customer_id, count(*) AS orders
+FROM orders
+WHERE status <> 'cancelled'
+GROUP BY customer_id
+HAVING count(*) >= 2
+ORDER BY orders DESC, customer_id;
+```
+
+Read it as: take orders, drop cancelled ones (`WHERE`), group by customer, keep customers with at least two orders (`HAVING`).
+
+## The complete processing order
+
+You now know all the main clauses. Logically, a query is processed in this order:
+
+1. `FROM` (and joins, Module 4): which rows exist;
+2. `WHERE`: keep matching rows;
+3. `GROUP BY`: form groups;
+4. `HAVING`: keep matching groups;
+5. `SELECT`: compute the output columns (and aggregates);
+6. `DISTINCT`;
+7. `ORDER BY`;
+8. `LIMIT` / `OFFSET`.
+
+It explains most "why doesn't this work?" questions: `WHERE` (step 2) runs before groups exist (step 3) and before aggregates are computed, and only `ORDER BY` comes late enough to use `SELECT` aliases. (PostgreSQL relaxes this slightly by letting `GROUP BY` refer to output column names or positions, as in `GROUP BY 1`.)
+
+## Joining text: string_agg
+
+`string_agg(expression, separator)` concatenates the values in each group, which is perfect for readable reports:
+
+```sql shop
+SELECT country, string_agg(name, ', ' ORDER BY name) AS customers
+FROM customers
+GROUP BY country
+ORDER BY country;
+```
+
+(MySQL calls it `GROUP_CONCAT`, SQL Server `STRING_AGG` too.) Similarly, `array_agg` collects the values into an array.
+
+📚 **Go deeper:** *SQL: The Complete Reference*, chapter 8 "Summary Queries"; PostgreSQL documentation, "Aggregate Functions" and "The GROUP BY and HAVING Clauses".
+--- goals
+- summarise rows with count, sum, avg, min and max, and know how they treat NULL
+- compute aggregates per group with GROUP BY
+- follow the GROUP BY rule, and understand its error message
+- filter groups with HAVING, and rows with WHERE
+- recite the logical processing order of a query
+--- quiz
+? What's the difference between `count(*)` and `count(email)`?
++ count(*) counts rows; count(email) counts rows where email isn't NULL
+- None
+- count(email) counts distinct emails
+- count(*) ignores NULL rows
+> Aggregates on a column skip NULLs.
+? What does `sum(amount)` return when no rows match?
+- 0
++ NULL
+- An error
+- An empty string
+> Use COALESCE(sum(amount), 0) when you need a number.
+? Where do you filter on `count(*) > 5`?
+- WHERE
++ HAVING
+- ORDER BY
+- GROUP BY
+> HAVING filters groups after aggregation.
+? Which runs first?
++ WHERE
+- HAVING
+- SELECT
+- ORDER BY
+> FROM, WHERE, GROUP BY, HAVING, SELECT, DISTINCT, ORDER BY, LIMIT.
+? `SELECT city, count(*) FROM customers GROUP BY city` with one NULL city. What happens to that customer?
++ They form their own group with city NULL
+- They're dropped
+- They're counted in every group
+- The query fails
+> GROUP BY puts all NULLs together in one group.
+--- exercise code postgres
+::prompt
+Compute statistics for the reviews: the number of reviews (`reviews`), the number that have a comment (`with_comment`), and the average rating rounded to 2 decimals (`average_rating`).
+::dataset shop
+::starter
+SELECT
+FROM reviews;
+::solution
+SELECT count(*) AS reviews,
+       count(comment) AS with_comment,
+       round(avg(rating), 2) AS average_rating
+FROM reviews;
+::reference
+SELECT count(*) AS reviews, count(comment) AS with_comment, round(avg(rating), 2) AS average_rating FROM reviews;
+::hints
+- `count(comment)` counts only the rows where the comment isn't NULL.
+- `round(avg(rating), 2)`.
+--- exercise code postgres
+::prompt
+For each product that has been reviewed, return the `product_id`, the number of reviews (`reviews`) and the lowest and highest rating (`lowest`, `highest`). Order by `product_id`.
+::dataset shop
+::starter
+SELECT product_id
+FROM reviews;
+::solution
+SELECT product_id, count(*) AS reviews, min(rating) AS lowest, max(rating) AS highest
+FROM reviews
+GROUP BY product_id
+ORDER BY product_id;
+::reference
+SELECT product_id, count(*) AS reviews, min(rating) AS lowest, max(rating) AS highest FROM reviews GROUP BY product_id ORDER BY product_id;
+::ordered true
+::hints
+- `GROUP BY product_id`, with three aggregates.
+--- exercise code postgres
+::prompt
+Which customers have spent the most on shipping? Considering only orders that **weren't cancelled**, return each `customer_id` whose total shipping (`shipping_paid`) is **more than 5**, highest first, then by `customer_id`.
+::dataset shop
+::starter
+SELECT customer_id, sum(shipping) AS shipping_paid
+FROM orders
+WHERE sum(shipping) > 5
+GROUP BY customer_id;
+::solution
+SELECT customer_id, sum(shipping) AS shipping_paid
+FROM orders
+WHERE status <> 'cancelled'
+GROUP BY customer_id
+HAVING sum(shipping) > 5
+ORDER BY shipping_paid DESC, customer_id;
+::reference
+SELECT customer_id, sum(shipping) AS shipping_paid FROM orders WHERE status <> 'cancelled' GROUP BY customer_id HAVING sum(shipping) > 5 ORDER BY 2 DESC, 1;
+::ordered true
+::hints
+- Aggregates can't go in `WHERE`: the row filter (not cancelled) goes in `WHERE`, the group filter in `HAVING`.
+--- exercise code postgres
+::prompt
+Report the number of orders **per month of 2025**: columns `month` (the month number, 1 to 12) and `orders`, for months that had orders, in month order.
+::dataset shop
+::starter
+SELECT ordered_at
+FROM orders;
+::solution
+SELECT extract(month FROM ordered_at) AS month, count(*) AS orders
+FROM orders
+WHERE ordered_at >= '2025-01-01' AND ordered_at < '2026-01-01'
+GROUP BY month
+ORDER BY month;
+::reference
+SELECT extract(month FROM ordered_at) AS month, count(*) AS orders FROM orders WHERE ordered_at >= '2025-01-01' AND ordered_at < '2026-01-01' GROUP BY 1 ORDER BY 1;
+::ordered true
+::hints
+- Filter the year with a range in `WHERE`.
+- Group by `extract(month FROM ordered_at)` (PostgreSQL lets `GROUP BY` use the alias `month`).
+--- cards
+Aggregates :: count, sum, avg, min, max (and string_agg, array_agg): many rows → one value. They skip NULLs.
+count(*) vs count(col) :: count(*) counts rows; count(col) counts non-NULL values; count(DISTINCT col) distinct ones.
+GROUP BY :: One output row per group of equal values; aggregates are computed per group.
+GROUP BY rule :: Every selected column must be grouped or aggregated (or functionally dependent on a grouped primary key).
+WHERE vs HAVING :: WHERE filters rows before grouping; HAVING filters groups after aggregation.
+Logical order :: FROM → WHERE → GROUP BY → HAVING → SELECT → DISTINCT → ORDER BY → LIMIT.
+
+=== lesson sql-grouping | Conditional aggregates and subtotals | 70
+## Several counts in one pass: FILTER
+
+Often you want several counts side by side ("how many orders of each status, per customer?"). Instead of several queries, put the condition **inside** the aggregate. The standard SQL way is **`FILTER`**:
+
+```sql shop
+SELECT customer_id,
+       count(*) AS orders,
+       count(*) FILTER (WHERE status = 'delivered') AS delivered,
+       count(*) FILTER (WHERE status = 'cancelled') AS cancelled,
+       sum(shipping) FILTER (WHERE status <> 'cancelled') AS shipping_paid
+FROM orders
+GROUP BY customer_id
+ORDER BY customer_id;
+```
+
+Databases without `FILTER` (MySQL, SQL Server) use a `CASE` inside the aggregate, which you'll see in a lot of existing code:
+
+```sql shop
+SELECT customer_id,
+       sum(CASE WHEN status = 'delivered' THEN 1 ELSE 0 END) AS delivered,
+       count(CASE WHEN status = 'cancelled' THEN 1 END) AS cancelled
+FROM orders
+GROUP BY customer_id
+ORDER BY customer_id;
+```
+
+(`count(CASE ... THEN 1 END)` works because a `CASE` without `ELSE` gives `NULL`, which `count` skips.) Turning row values into columns like this is called **pivoting**.
+
+## Percentages and ratios
+
+Combining aggregates gives ratios. Remember integer division (Module 1): cast or multiply by `100.0` first.
+
+```sql shop
+SELECT count(*) FILTER (WHERE status = 'cancelled') AS cancelled,
+       count(*) AS total,
+       round(100.0 * count(*) FILTER (WHERE status = 'cancelled') / count(*), 1) AS cancel_rate_percent
+FROM orders;
+```
+
+## DISTINCT inside aggregates
+
+`count(DISTINCT x)` counts different values; `sum(DISTINCT x)` and `string_agg(DISTINCT x, ...)` also exist:
+
+```sql shop
+SELECT count(DISTINCT customer_id) AS customers_who_ordered,
+       count(DISTINCT date_trunc('month', ordered_at)) AS active_months
+FROM orders;
+```
+
+~~~check
+? What does `count(*) FILTER (WHERE rating = 5)` count?
+- All rows, but only if one has rating 5
++ The rows in each group whose rating is 5
+- The number of different ratings
+- The sum of ratings equal to 5
+> FILTER restricts the rows that one aggregate sees.
+~~~
+
+## Subtotals and grand totals: ROLLUP, CUBE and GROUPING SETS
+
+Reports often need totals at several levels: per category and month, per category, and overall. **`GROUPING SETS`** computes several groupings in one query:
+
+```sql shop
+SELECT status, extract(year FROM ordered_at) AS year, count(*) AS orders
+FROM orders
+GROUP BY GROUPING SETS ((status, year), (status), ())
+ORDER BY status NULLS LAST, year NULLS LAST;
+```
+
+Each grouping set produces its own rows; the columns not in a set are `NULL` in those rows (so a row with `year` NULL is a per-status subtotal, and the row with both NULL is the grand total). Two shortcuts:
+
+- **`ROLLUP (a, b)`** means `GROUPING SETS ((a, b), (a), ())`: a hierarchy of subtotals, like the subtotal lines of a spreadsheet;
+- **`CUBE (a, b)`** means every combination: `(a, b), (a), (b), ()`.
+
+```sql shop
+SELECT extract(year FROM ordered_at) AS year,
+       extract(quarter FROM ordered_at) AS quarter,
+       count(*) AS orders,
+       sum(shipping) AS shipping
+FROM orders
+GROUP BY ROLLUP (year, quarter)
+ORDER BY year NULLS LAST, quarter NULLS LAST;
+```
+
+When a grouping column can itself contain `NULL`, you can't tell a real `NULL` from a subtotal's `NULL`; the function **`GROUPING(column)`** returns 1 for subtotal rows, so you can label them:
+
+```sql shop
+SELECT CASE WHEN GROUPING(status) = 1 THEN 'ALL' ELSE status END AS status,
+       count(*) AS orders
+FROM orders
+GROUP BY ROLLUP (status)
+ORDER BY GROUPING(status), status;
+```
+
+These features come from **data warehousing** (OLAP: online analytical processing), where reports summarise huge fact tables along many "dimensions"; the analytics capstone returns to them.
+
+📚 **Go deeper:** PostgreSQL documentation, "Aggregate Expressions" (FILTER) and "GROUPING SETS, CUBE, and ROLLUP"; *SQL: The Complete Reference*, chapter 21 (data warehousing).
+--- goals
+- compute several conditional aggregates in one query with FILTER or CASE
+- calculate ratios and percentages without integer-division mistakes
+- count distinct values inside aggregates
+- produce subtotals and grand totals with GROUPING SETS, ROLLUP and CUBE, labelled with GROUPING
+--- quiz
+? Which is the standard SQL way to count only some rows within an aggregate?
++ `count(*) FILTER (WHERE ...)`
+- `count(*) WHERE ...`
+- `count_if(...)`
+- `HAVING count(*)`
+> FILTER attaches a condition to one aggregate.
+? With integer counts, what is `3 / 4 * 100`?
++ 0
+- 75
+- 75.0
+- An error
+> 3 / 4 is integer division (0); write 100.0 * 3 / 4 for 75.0.
+? What does `ROLLUP (year, month)` produce?
++ Groups for (year, month), (year) and a grand total
+- Every combination of year and month, including (month) alone
+- Only the grand total
+- Only (year, month)
+> CUBE would add (month) alone.
+? In a ROLLUP result, how do you recognise the grand total row?
++ Its grouping columns are NULL (GROUPING() returns 1 for them)
+- It's always the first row
+- It has a special TOTAL keyword
+- It's in a separate result set
+> GROUPING distinguishes subtotal NULLs from data NULLs.
+--- exercise code postgres
+::prompt
+Pivot the reviews: for each `product_id`, return `reviews` (how many), `positive` (ratings of 4 or 5) and `negative` (ratings of 1 or 2), ordered by `product_id`. Use `FILTER`.
+::dataset shop
+::starter
+SELECT product_id, count(*) AS reviews
+FROM reviews
+GROUP BY product_id;
+::solution
+SELECT product_id,
+       count(*) AS reviews,
+       count(*) FILTER (WHERE rating >= 4) AS positive,
+       count(*) FILTER (WHERE rating <= 2) AS negative
+FROM reviews
+GROUP BY product_id
+ORDER BY product_id;
+::reference
+SELECT product_id, count(*) AS reviews, count(CASE WHEN rating >= 4 THEN 1 END) AS positive, count(CASE WHEN rating <= 2 THEN 1 END) AS negative FROM reviews GROUP BY product_id ORDER BY product_id;
+::ordered true
+::hints
+- `count(*) FILTER (WHERE rating >= 4) AS positive`.
+--- exercise code postgres
+::prompt
+For each order **status**, return `status`, `orders` and `share_percent`: the percentage of all orders with that status, rounded to 1 decimal. The total number of orders comes from a **scalar subquery**, `(SELECT count(*) FROM orders)`, a query inside the query that returns one value (Module 4 covers subqueries). Order by `orders` descending, then `status`.
+::dataset shop
+::starter
+SELECT status, count(*) AS orders
+FROM orders
+GROUP BY status;
+::solution
+SELECT status,
+       count(*) AS orders,
+       round(100.0 * count(*) / (SELECT count(*) FROM orders), 1) AS share_percent
+FROM orders
+GROUP BY status
+ORDER BY orders DESC, status;
+::reference
+SELECT status, count(*) AS orders, round(count(*) * 100.0 / (SELECT count(*) FROM orders), 1) AS share_percent FROM orders GROUP BY status ORDER BY 2 DESC, 1;
+::ordered true
+::hints
+- `(SELECT count(*) FROM orders)` gives the total as a single value you can divide by.
+- Multiply by `100.0` first to avoid integer division.
+--- exercise code postgres
+::prompt
+Build a revenue report from `order_items` with **subtotals**: one row per (`order_id`) with its revenue (`sum(quantity * unit_price)`), plus a **grand total** row. Columns: `order_id` and `revenue`. Use `ROLLUP`, and order by `order_id` with the total last.
+::dataset shop
+::starter
+SELECT order_id, sum(quantity * unit_price) AS revenue
+FROM order_items
+GROUP BY order_id;
+::solution
+SELECT order_id, sum(quantity * unit_price) AS revenue
+FROM order_items
+GROUP BY ROLLUP (order_id)
+ORDER BY order_id NULLS LAST;
+::reference
+SELECT order_id, sum(quantity * unit_price) AS revenue FROM order_items GROUP BY GROUPING SETS ((order_id), ()) ORDER BY order_id NULLS LAST;
+::ordered true
+::hints
+- `GROUP BY ROLLUP (order_id)` adds a grand-total row where `order_id` is NULL.
+- `ORDER BY order_id NULLS LAST` puts it at the end.
+--- cards
+FILTER :: agg(...) FILTER (WHERE cond) — an aggregate over only some of the group's rows.
+Pivot with CASE :: sum(CASE WHEN cond THEN 1 ELSE 0 END) or count(CASE WHEN cond THEN 1 END) — for databases without FILTER.
+Percentages :: round(100.0 * part / total, 1) — the .0 avoids integer division.
+GROUPING SETS :: Several groupings in one query: GROUPING SETS ((a, b), (a), ()).
+ROLLUP / CUBE :: ROLLUP(a, b) = (a,b),(a),(); CUBE(a, b) = every combination.
+GROUPING(col) :: 1 when the row is a subtotal over col (its NULL means "all"), 0 otherwise.
+
+=== lesson sql-m3-test | Module 3 test | 120 | exam
+This test covers Module 3: aggregate functions, `GROUP BY` and `HAVING`, the logical processing order, conditional aggregates with `FILTER`, and subtotals with `ROLLUP` and `GROUPING SETS`.
+
+Before you start, check that you can:
+
+- choose the right aggregate, and predict how it treats `NULL`;
+- follow the `GROUP BY` rule;
+- decide whether a condition belongs in `WHERE` or `HAVING`;
+- pivot values into columns, and add subtotals.
+--- goals
+- answer summary questions about data in one query
+- build report-style results with conditional aggregates and subtotals
+--- quiz
+? Which query finds countries with more than 3 customers?
++ `SELECT country FROM customers GROUP BY country HAVING count(*) > 3;`
+- `SELECT country FROM customers WHERE count(*) > 3 GROUP BY country;`
+- `SELECT country, count(*) > 3 FROM customers;`
+- `SELECT DISTINCT country FROM customers HAVING count(*) > 3;`
+> Group, then filter groups with HAVING.
+? What is `avg(x)` over the values 2, 4 and NULL?
++ 3
+- 2
+- NULL
+- 6
+> NULL is ignored: (2 + 4) / 2.
+? What does `count(DISTINCT city)` do with NULL cities?
++ Ignores them
+- Counts them as one value
+- Counts each NULL separately
+- Fails
+> count(col) never counts NULLs.
+? `GROUP BY CUBE (a, b)` produces how many grouping sets?
+- 2
+- 3
++ 4
+- 1
+> (a, b), (a), (b) and ().
+--- exercise code postgres
+::prompt
+For each `product_id` in `order_items`, return `units_sold` (total quantity), `revenue` (total of quantity × unit price) and `orders` (number of different orders), keeping only products with **revenue above 300**. Sort by revenue, highest first.
+::dataset shop
+::starter
+SELECT product_id
+FROM order_items
+GROUP BY product_id;
+::solution
+SELECT product_id,
+       sum(quantity) AS units_sold,
+       sum(quantity * unit_price) AS revenue,
+       count(DISTINCT order_id) AS orders
+FROM order_items
+GROUP BY product_id
+HAVING sum(quantity * unit_price) > 300
+ORDER BY revenue DESC;
+::reference
+SELECT product_id, sum(quantity) AS units_sold, sum(quantity * unit_price) AS revenue, count(DISTINCT order_id) AS orders FROM order_items GROUP BY product_id HAVING sum(quantity * unit_price) > 300 ORDER BY 3 DESC;
+::ordered true
+::hints
+- Three aggregates; the revenue condition goes in `HAVING`.
+--- exercise code postgres
+::prompt
+Customer activity by country: for each `country`, return `customers`, `with_email` (customers that have an email) and `joined_2026` (customers who joined in 2026 or later), plus a **grand total** row where `country` shows `TOTAL`. Order by country, with the total last.
+::dataset shop
+::starter
+SELECT country, count(*) AS customers
+FROM customers
+GROUP BY country;
+::solution
+SELECT CASE WHEN GROUPING(country) = 1 THEN 'TOTAL' ELSE country END AS country,
+       count(*) AS customers,
+       count(email) AS with_email,
+       count(*) FILTER (WHERE joined_on >= '2026-01-01') AS joined_2026
+FROM customers
+GROUP BY ROLLUP (country)
+ORDER BY GROUPING(country), country;
+::reference
+SELECT COALESCE(country, 'TOTAL') AS country, count(*) AS customers, count(email) AS with_email, count(*) FILTER (WHERE joined_on >= '2026-01-01') AS joined_2026 FROM customers GROUP BY GROUPING SETS ((country), ()) ORDER BY GROUPING(country), 1;
+::ordered true
+::hints
+- `GROUP BY ROLLUP (country)` adds the total row.
+- Label it with `CASE WHEN GROUPING(country) = 1 THEN 'TOTAL' ELSE country END`.
+- `count(email)` skips NULL emails; `FILTER (WHERE joined_on >= '2026-01-01')` counts recent members.

@@ -44,7 +44,7 @@ async function run(code, setup, verify) {
   return core.runScript(db, code, setup, verify);
 }
 
-const key = (row) => JSON.stringify(row);
+const key = (row) => JSON.stringify(row.map((v) => (v === null ? null : String(v))));
 function sameTable(a, b, ordered) {
   if (!a || !b) return a === b;
   if (a.columns.join() !== b.columns.join()) return false;
