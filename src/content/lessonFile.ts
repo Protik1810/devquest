@@ -106,10 +106,16 @@ function parseLesson(trackId: string, block: string): Lesson {
   return lesson;
 }
 
-function fields(content: string) {
+const KNOWN_FIELDS = new Set(['prompt', 'starter', 'solution', 'hints', 'expected', 'setup', 'reference', 'verify', 'ordered', 'tests', 'variants', 'stdin', 'cases', 'lines', 'distractors', 'template', 'answers']);
+
+function fields(content: string, where: string) {
   const out: Record<string, string> = {};
   const parts = content.split(/^::(\w+)[ \t]*$/m);
-  for (let i = 1; i < parts.length; i += 2) out[parts[i]] = parts[i + 1].replace(/^\n/, '').replace(/\s+$/, '');
+  for (let i = 1; i < parts.length; i += 2) {
+    // A misspelt or invented field would otherwise be ignored without a word
+    if (!KNOWN_FIELDS.has(parts[i])) throw new Error(`${where}: unknown field ::${parts[i]}`);
+    out[parts[i]] = parts[i + 1].replace(/^\n/, '').replace(/\s+$/, '');
+  }
   return out;
 }
 
@@ -121,7 +127,7 @@ const listItems = (text: string) =>
     .filter(Boolean);
 
 function parseCode(where: string, lang: CodeLang, content: string): Exercise {
-  const f = fields(content);
+  const f = fields(content, where);
   for (const need of ['prompt', 'starter', 'solution']) if (f[need] === undefined) throw new Error(`${where}: exercise needs ::${need}`);
   const exercise: CodeExercise = {
     kind: 'code',
@@ -136,7 +142,7 @@ function parseCode(where: string, lang: CodeLang, content: string): Exercise {
 }
 
 function parseParsons(where: string, lang: CodeLang, content: string): Exercise {
-  const f = fields(content);
+  const f = fields(content, where);
   for (const need of ['prompt', 'lines']) if (f[need] === undefined) throw new Error(`${where}: parsons exercise needs ::${need}`);
   const lines = f.lines.split('\n').filter((l) => l.trim());
   if (lines.length < 3) throw new Error(`${where}: a parsons exercise needs at least 3 lines`);
@@ -151,7 +157,7 @@ export const CHECK_BLOCK = /^~~~check\n([\s\S]*?)^~~~[ \t]*$/gm;
 export const BLANK = '____';
 
 function parseFill(where: string, lang: CodeLang, content: string): Exercise {
-  const f = fields(content);
+  const f = fields(content, where);
   for (const need of ['prompt', 'template', 'answers']) if (f[need] === undefined) throw new Error(`${where}: fill exercise needs ::${need}`);
   const answers = f.answers.split('\n').map((l) => l.trim()).filter(Boolean);
   const gaps = f.template.split(BLANK).length - 1;

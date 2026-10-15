@@ -1,0 +1,1469 @@
+=== module Module 5 · Advanced types
+
+=== lesson ts-type-relationships | How types relate: sets, intersections and satisfies | 90
+## Types are sets of values
+
+The most useful mental model for TypeScript's type system: **a type is a set of values**.
+
+- `boolean` is the set `{ true, false }`; the literal type `"red"` is a set with one value; `string` is the infinite set of all strings.
+- A union `A | B` is the **union** of two sets: values in either.
+- `never` is the **empty set**: no value has type `never`.
+- `unknown` is the set of **all** values. It's called the **top type**; `never` is the **bottom type**.
+
+"A is **assignable** to B" then simply means **A is a subset of B**: every value of A is also a value of B. `"red"` is assignable to `string`, `string` is assignable to `string | number`, and everything is assignable to `unknown`. A type that's a subset is called a **subtype**; the larger one is a **supertype**.
+
+This model explains things that look odd at first. An object type `{ name: string }` is the set of **all objects that have a string `name`**, including those with more properties. So `{ name: string; age: number }` is a *smaller* set (more requirements, fewer values): it's a subtype, even though it has more properties.
+
+## Intersection types
+
+An **intersection** `A & B` is a value that is **both** an A and a B: it has all properties of both.
+
+```ts
+type Timestamps = { createdAt: string; updatedAt: string };
+type Article = { title: string; body: string };
+type StoredArticle = Article & Timestamps & { id: number };
+
+const post: StoredArticle = {
+  id: 1, title: "Types as sets", body: "...",
+  createdAt: "2026-01-01", updatedAt: "2026-01-02",
+};
+console.log(Object.keys(post).length, post.title);
+```
+
+Intersections combine object types like `interface ... extends` does (`interface StoredArticle extends Article, Timestamps { id: number }` is the equivalent). Two differences: `&` works with any types, including unions; and conflicting properties don't produce an error at the declaration, but a property of type `never` (`{ id: string } & { id: number }` has `id: never`, because no value is both). `extends` reports the conflict immediately, which is one reason to prefer interfaces for object hierarchies.
+
+Intersecting **primitives** makes the set smaller: `string & number` is `never`, and `string & { __brand: "Email" }` is the branded string from Module 4.
+
+~~~check
+? What is `"a" | "b"` intersected with `"b" | "c"`, i.e. `("a" | "b") & ("b" | "c")`?
+- `"a" | "b" | "c"`
++ `"b"`
+- `never`
+- `string`
+> An intersection keeps only the values that are in both sets.
+~~~
+
+## unknown and never in unions and intersections
+
+The set model predicts how the special types behave:
+
+| Expression | Result | Why |
+|---|---|---|
+| `T \| never` | `T` | adding the empty set changes nothing |
+| `T & unknown` | `T` | intersecting with everything changes nothing |
+| `T \| unknown` | `unknown` | the union with everything is everything |
+| `T & never` | `never` | nothing is in the empty set |
+
+`never` showing up in a union where it disappears is the basis of many advanced types (the conditional types lesson uses it to filter unions).
+
+## Variance: when is a container of A a container of B?
+
+If `Dog` is a subtype of `Animal`, is `Dog[]` a subtype of `Animal[]`? Is a function taking a `Dog` usable where a function taking an `Animal` is expected? These questions are about **variance**:
+
+- **Covariance** (same direction): `Dog[]` is assignable to `Animal[]`, and a function returning `Dog` fits where one returning `Animal` is expected. Producers can be more specific.
+- **Contravariance** (opposite direction): a function **taking** an `Animal` fits where a function taking a `Dog` is expected, **not** the other way round. Consumers can be more general.
+
+```ts
+interface Animal { name: string }
+interface Dog extends Animal { bark(): string }
+
+const feedAnimal = (a: Animal) => `${a.name} fed`;
+const walkDog = (d: Dog) => `${d.name} walked, ${d.bark()}`;
+
+const dogHandlers: ((d: Dog) => string)[] = [feedAnimal, walkDog];
+const rex: Dog = { name: "Rex", bark: () => "woof" };
+console.log(dogHandlers.map((handle) => handle(rex)));
+```
+
+`feedAnimal` can handle any animal, so it can certainly handle a dog. The reverse, using `walkDog` where any animal might arrive, would call `bark()` on a cat. With `strict` (`strictFunctionTypes`), TypeScript rejects it.
+
+One known hole: arrays are covariant even though they're mutable. You can assign a `Dog[]` to an `Animal[]` variable, then push a cat into it. TypeScript accepts this for convenience; `readonly` arrays (where nothing can be pushed) are genuinely safe to treat covariantly. Methods declared with method syntax (`walk(d: Dog): void` in an interface) are also checked more loosely ("bivariantly") than function-typed properties (`walk: (d: Dog) => void`), for historical compatibility.
+
+## satisfies: check without widening
+
+You often want to check a value against a type **without** losing the more precise type TypeScript inferred. An annotation replaces the inferred type; **`satisfies`** checks it and keeps the inferred type:
+
+```ts
+type Colour = string | [r: number, g: number, b: number];
+
+const annotated: Record<string, Colour> = { primary: "#3178c6", accent: [255, 128, 0] };
+const checked = { primary: "#3178c6", accent: [255, 128, 0] } satisfies Record<string, Colour>;
+
+console.log(checked.primary.toUpperCase(), checked.accent[0]);
+```
+
+With the annotation, `annotated.primary` is `Colour` (string or tuple), so `.toUpperCase()` would be an error, and `annotated.anything` is allowed (any string key). With `satisfies`, TypeScript still verifies every value is a valid `Colour` (a typo like `[255, 128]` is caught), but `checked.primary` remains a `string`, `checked.accent` a tuple, and only the two real keys exist. Use `satisfies` for configuration objects and lookup tables: you get both the check and the precision.
+
+📚 **Go deeper:** TypeScript Handbook, "Type Compatibility" and "Object Types: Intersection Types"; TypeScript 4.9 release notes ("The satisfies operator"); *Programming TypeScript*, chapter 6 (subtypes and supertypes, variance, widening); *Effective TypeScript*, item 7 ("think of types as sets of values").
+--- goals
+- reason about types as sets of values, with `unknown` as the top type and `never` as the bottom type
+- combine types with intersections, and know how they differ from `extends`
+- predict how `never` and `unknown` behave in unions and intersections
+- explain covariance and contravariance, and the array and method exceptions
+- use `satisfies` to check a value without widening its type
+--- quiz
+? In the "types as sets" model, what does "A is assignable to B" mean?
++ A is a subset of B
+- A has more properties than B
+- A and B have the same name
+- B is a subset of A
+> Every value of A is also a value of B.
+? What is `string & number`?
+- `string | number`
++ `never`
+- `unknown`
+- An error
+> No value is both a string and a number.
+? A function `(a: Animal) => void` is used where `(d: Dog) => void` is expected. Is that safe?
++ Yes: it handles any animal, so it handles dogs (parameters are contravariant)
+- No, never
+- Only if Dog extends Animal is removed
+- Only with any
+> Consumers can be more general.
+? What does `satisfies` do that an annotation doesn't?
+- Converts the value
++ Checks the value against the type while keeping the more precise inferred type
+- Runs a check at run time
+- Makes the value readonly
+> Annotation: the declared type wins. satisfies: the check passes, inference stays.
+--- exercise code typescript
+::prompt
+Define the **route table** of a small web app with `satisfies`, so that it is checked and still precise:
+
+- `type Route = { path: string; method: "GET" | "POST"; auth: boolean }`;
+- `const routes = { ... } satisfies Record<string, Route>` with three routes: `home` (`GET /`, no auth), `login` (`POST /login`, no auth) and `profile` (`GET /me`, auth);
+- `type RouteName = keyof typeof routes` must be exactly `"home" | "login" | "profile"`;
+- `function protectedRoutes(): RouteName[]` returns the names of routes requiring auth.
+
+Also write `type WithId<T> = T & { id: string }` and `function withId<T extends object>(value: T, id: string): WithId<T>`.
+::starter
+type Route = { path: string; method: "GET" | "POST"; auth: boolean };
+
+const routes: Record<string, Route> = {};
+type RouteName = string;
+::solution
+type Route = { path: string; method: "GET" | "POST"; auth: boolean };
+
+const routes = {
+  home: { path: "/", method: "GET", auth: false },
+  login: { path: "/login", method: "POST", auth: false },
+  profile: { path: "/me", method: "GET", auth: true },
+} satisfies Record<string, Route>;
+
+type RouteName = keyof typeof routes;
+
+function protectedRoutes(): RouteName[] {
+  return (Object.keys(routes) as RouteName[]).filter((name) => routes[name].auth);
+}
+
+type WithId<T> = T & { id: string };
+
+function withId<T extends object>(value: T, id: string): WithId<T> {
+  return { ...value, id };
+}
+::tests
+type _t1 = Expect<Equal<RouteName, "home" | "login" | "profile">>;
+type _t2 = Expect<Equal<(typeof routes)["login"]["method"], "POST">>;
+assert.deepStrictEqual(protectedRoutes(), ["profile"]);
+assert.strictEqual(routes.profile.path, "/me");
+const __u = withId({ name: "Ada" }, "u1");
+const __name: string = __u.name;
+const __id: string = __u.id;
+assert.deepStrictEqual(__u, { name: "Ada", id: "u1" });
+function __typeChecks() {
+  // @ts-expect-error
+  routes.settings;
+  // @ts-expect-error
+  const bad = { x: { path: "/", method: "PATCH", auth: false } } satisfies Record<string, Route>;
+}
+::hints
+- Replace the annotation with `satisfies Record<string, Route>` after the object literal.
+- `keyof typeof routes` gives the key union; `Object.keys` returns `string[]`, so cast it to `RouteName[]` (safe here: `routes` is a literal with exactly these keys).
+- `(typeof routes)["login"]["method"]` is `"POST"` only if the method keeps its literal type, which `satisfies` (with a literal union in `Route`) preserves.
+--- cards
+Types as sets :: A type is a set of values; assignable = subset. unknown = all values (top), never = no values (bottom).
+Intersection :: A & B: values that are both; for objects, all properties of both. Conflicts become never.
+never / unknown algebra :: T | never = T, T & unknown = T, T | unknown = unknown, T & never = never.
+Variance :: Return types and readonly arrays are covariant; function parameters are contravariant (strictFunctionTypes).
+satisfies :: value satisfies Type — checks the value but keeps its precise inferred type.
+
+=== lesson ts-type-operators | Type operators and utility types | 90
+## Computing types from other types
+
+Professional TypeScript avoids writing the same information twice. Instead of maintaining several similar types by hand, you **derive** them with type operators, so they can never drift apart.
+
+### typeof: the type of a value
+
+In a type position, `typeof x` gives the type TypeScript inferred for the value `x`:
+
+```ts
+const defaults = { theme: "dark", fontSize: 14, showTips: true };
+type Settings = typeof defaults;
+
+function update(changes: Partial<Settings>): Settings {
+  return { ...defaults, ...changes };
+}
+console.log(update({ fontSize: 16 }));
+```
+
+### keyof: the property names
+
+`keyof T` is the union of `T`'s keys:
+
+```ts
+interface Product { id: number; name: string; price: number }
+type ProductKey = keyof Product;
+
+function sortBy(products: Product[], key: ProductKey): Product[] {
+  return products.toSorted((a, b) => (a[key] < b[key] ? -1 : a[key] > b[key] ? 1 : 0));
+}
+
+const items: Product[] = [{ id: 2, name: "Pen", price: 2 }, { id: 1, name: "Lamp", price: 25 }];
+console.log(sortBy(items, "name").map((p) => p.name));
+```
+
+`ProductKey` is `"id" | "name" | "price"`, and stays correct when `Product` changes. `keyof typeof obj` gives the keys of a value.
+
+### Indexed access types: T[K]
+
+`T["name"]` is the type of a property; a union of keys gives a union of their types; `T[number]` gives an array's element type:
+
+```ts
+type Order = { id: number; customer: { name: string; email: string }; lines: { sku: string; qty: number }[] };
+
+type Customer = Order["customer"];
+type Line = Order["lines"][number];
+type IdOrCustomer = Order["id" | "customer"];
+
+const line: Line = { sku: "A-1", qty: 2 };
+const who: Customer = { name: "Ada", email: "ada@example.com" };
+const key: IdOrCustomer = 42;
+console.log(line, who.name, key);
+```
+
+(Note that indexed access uses brackets and string literal types: `Order.customer` isn't valid type syntax.)
+
+## Built-in utility types
+
+TypeScript ships a set of generic **utility types**, all built from these operators (you'll build several yourself in the next two lessons):
+
+| Utility | Result |
+|---|---|
+| `Partial<T>` | every property optional |
+| `Required<T>` | every property required |
+| `Readonly<T>` | every property readonly |
+| `Pick<T, "a" \| "b">` | only those properties |
+| `Omit<T, "a">` | all properties except those |
+| `Record<K, V>` | an object with keys K and values V |
+| `Exclude<U, X>` | members of union U not assignable to X |
+| `Extract<U, X>` | members of union U assignable to X |
+| `NonNullable<T>` | T without null and undefined |
+| `ReturnType<F>` / `Parameters<F>` | a function type's return type / parameter tuple |
+| `Awaited<P>` | what a Promise resolves to (recursively) |
+| `InstanceType<C>` | the instance type of a class type |
+
+```ts
+interface User {
+  id: number;
+  name: string;
+  email: string;
+  passwordHash: string;
+  createdAt: string;
+}
+
+type PublicUser = Omit<User, "passwordHash">;
+type NewUser = Pick<User, "name" | "email">;
+type UserPatch = Partial<Omit<User, "id" | "createdAt">>;
+
+function toPublic({ passwordHash, ...rest }: User): PublicUser {
+  return rest;
+}
+
+const user: User = { id: 1, name: "Ada", email: "ada@example.com", passwordHash: "x9!", createdAt: "2026-01-01" };
+const patch: UserPatch = { email: "ada@new.example" };
+const signup: NewUser = { name: "Grace", email: "grace@example.com" };
+console.log(toPublic(user), patch, signup);
+```
+
+A single source of truth (`User`) and several derived **views** of it: add a field to `User` and every derived type follows. This is the everyday use of type operators: API request and response types, form types, database rows.
+
+~~~check
+? Which type is `{ name: string; email: string }` when `User` has id, name, email and passwordHash?
+- `Omit<User, "name" | "email">`
++ `Pick<User, "name" | "email">`
+- `Partial<User>`
+- `Extract<User, "name" | "email">`
+> Pick keeps the listed properties; Omit removes them. Extract filters unions.
+~~~
+
+## Utility types for functions
+
+`ReturnType`, `Parameters` and `Awaited` let you reuse the types of functions you don't control, such as a library function whose result type isn't exported:
+
+```ts
+async function fetchProfile(id: number, withPosts = false) {
+  return { id, name: "Ada", posts: withPosts ? ["Hello"] : [] };
+}
+
+type Profile = Awaited<ReturnType<typeof fetchProfile>>;
+type FetchArgs = Parameters<typeof fetchProfile>;
+
+const args: FetchArgs = [7, true];
+const profile: Profile = await fetchProfile(...args);
+console.log(profile);
+```
+
+`Profile` is `{ id: number; name: string; posts: string[] }`, worked out from the function itself.
+
+## Unions of keys, Exclude and Extract
+
+```ts
+type Event =
+  | { type: "click"; x: number; y: number }
+  | { type: "key"; key: string }
+  | { type: "scroll"; delta: number };
+
+type EventType = Event["type"];
+type PointerEvent = Extract<Event, { type: "click" }>;
+type NotScroll = Exclude<EventType, "scroll">;
+
+const e: PointerEvent = { type: "click", x: 1, y: 2 };
+const t: NotScroll = "key";
+console.log(e, t);
+```
+
+`Event["type"]` collects the tags of a discriminated union (`"click" | "key" | "scroll"`), and `Extract<Event, { type: "click" }>` picks one member by its tag. These two are used constantly in reducers and event systems.
+
+📚 **Go deeper:** TypeScript Handbook, "Type Manipulation" (keyof, typeof, indexed access) and "Utility Types"; *Programming TypeScript*, chapter 6 (type operators, built-in utility types); *Effective TypeScript*, item 15 ("use type operations and generic types to avoid repeating yourself").
+--- goals
+- derive types from values with `typeof` and from keys with `keyof`
+- use indexed access types, including `T[number]` and unions of keys
+- apply the built-in utility types to build views of a single source type
+- reuse function types with `ReturnType`, `Parameters` and `Awaited`
+- select union members with `Extract`, `Exclude` and tag lookups
+--- quiz
+? What's `keyof { a: number; b: string }`?
++ `"a" | "b"`
+- `number | string`
+- `["a", "b"]`
+- `string`
+> keyof gives the union of property names.
+? `type Item = Cart["items"][number]` where `items: { sku: string }[]`. What's Item?
++ `{ sku: string }`
+- `number`
+- `{ sku: string }[]`
+- `string`
+> [number] takes the element type of an array.
+? What does `Awaited<ReturnType<typeof load>>` give for `async function load(): Promise<User[]>`?
+- `Promise<User[]>`
++ `User[]`
+- `User`
+- `() => Promise<User[]>`
+> ReturnType gives the Promise; Awaited unwraps it.
+? Why derive `PublicUser` with `Omit<User, "passwordHash">` instead of writing it out?
+- It's faster at run time
++ It stays in sync when User changes: one source of truth
+- Omit hides the field at run time
+- Written types can't have fewer fields
+> Derived types can't drift apart.
+--- exercise code typescript
+::prompt
+An API returns products in this shape:
+
+```
+interface ApiProduct { id: string; title: string; priceCents: number; stock: number; tags: string[]; internalNotes: string }
+```
+
+Using **only type operators and utility types** (no property written out again), define:
+
+- `type ProductSummary`: `id`, `title` and `priceCents` only;
+- `type ProductUpdate`: every property except `id` and `internalNotes`, all optional;
+- `type Tag`: the element type of `tags`;
+- `type ProductField`: the keys of `ApiProduct` except `internalNotes`.
+
+Then write `summarise(p: ApiProduct): ProductSummary` (returning only those three properties) and `applyUpdate(p: ApiProduct, changes: ProductUpdate): ApiProduct` (returning a new object).
+::starter
+interface ApiProduct { id: string; title: string; priceCents: number; stock: number; tags: string[]; internalNotes: string }
+
+type ProductSummary = unknown;
+type ProductUpdate = unknown;
+type Tag = unknown;
+type ProductField = unknown;
+::solution
+interface ApiProduct { id: string; title: string; priceCents: number; stock: number; tags: string[]; internalNotes: string }
+
+type ProductSummary = Pick<ApiProduct, "id" | "title" | "priceCents">;
+type ProductUpdate = Partial<Omit<ApiProduct, "id" | "internalNotes">>;
+type Tag = ApiProduct["tags"][number];
+type ProductField = Exclude<keyof ApiProduct, "internalNotes">;
+
+function summarise(p: ApiProduct): ProductSummary {
+  return { id: p.id, title: p.title, priceCents: p.priceCents };
+}
+
+function applyUpdate(p: ApiProduct, changes: ProductUpdate): ApiProduct {
+  return { ...p, ...changes };
+}
+::tests
+type _t1 = Expect<Equal<ProductSummary, { id: string; title: string; priceCents: number }>>;
+type _t2 = Expect<Equal<Required<ProductUpdate>, { title: string; priceCents: number; stock: number; tags: string[] }>>;
+type _t3 = Expect<Equal<Tag, string>>;
+type _t4 = Expect<Equal<ProductField, "id" | "title" | "priceCents" | "stock" | "tags">>;
+type _t5 = Expect<Equal<ProductUpdate, { title?: string; priceCents?: number; stock?: number; tags?: string[] }>>;
+const __p: ApiProduct = { id: "p1", title: "Lamp", priceCents: 2500, stock: 3, tags: ["home"], internalNotes: "fragile" };
+assert.deepStrictEqual(summarise(__p), { id: "p1", title: "Lamp", priceCents: 2500 });
+const __u = applyUpdate(__p, { stock: 2, tags: ["home", "sale"] });
+assert.deepStrictEqual(__u, { ...__p, stock: 2, tags: ["home", "sale"] });
+assert.strictEqual(__p.stock, 3);
+::hints
+- `Pick<ApiProduct, "id" | "title" | "priceCents">`.
+- Combine utilities: `Partial<Omit<ApiProduct, "id" | "internalNotes">>`.
+- `ApiProduct["tags"][number]` and `Exclude<keyof ApiProduct, "internalNotes">`.
+- `summarise` must not just return `p`: build a new object with the three properties (the hidden checks compare values exactly).
+--- cards
+typeof (type position) :: type T = typeof value — the inferred type of a value.
+keyof :: keyof T — union of T's property names. keyof typeof obj for a value's keys.
+Indexed access :: T["prop"], T["a" | "b"], T[number] (array element type).
+Pick / Omit :: Pick<T, K> keeps properties K; Omit<T, K> removes them.
+Partial / Required / Readonly :: Make all properties optional / required / readonly.
+Exclude / Extract :: Filter a union: remove / keep members assignable to a type.
+ReturnType / Parameters / Awaited :: A function's return type / parameter tuple / a Promise's resolved type.
+
+=== lesson ts-mapped-types | Mapped types | 90
+## Transforming every property
+
+A **mapped type** builds a new object type by looping over keys:
+
+```ts
+type Flags<T> = { [K in keyof T]: boolean };
+
+interface Features {
+  darkMode: string;
+  beta: number;
+  analytics: object;
+}
+
+const enabled: Flags<Features> = { darkMode: true, beta: false, analytics: true };
+console.log(enabled);
+```
+
+`[K in keyof T]` is like a `for...of` over the keys of `T`: for each key `K`, the new type has a property `K` of the type after the colon. Typically that type uses `T[K]`, the original property's type:
+
+```ts
+type Nullable<T> = { [K in keyof T]: T[K] | null };
+type Getters<T> = { [K in keyof T]: () => T[K] };
+
+interface Point { x: number; y: number }
+
+const blank: Nullable<Point> = { x: null, y: 4 };
+const lazy: Getters<Point> = { x: () => 1, y: () => 2 };
+console.log(blank, lazy.x() + lazy.y());
+```
+
+## Modifiers: readonly and ?
+
+Mapped types can add or remove the `readonly` and `?` modifiers with `+` and `-` (`+` is the default). This is exactly how the built-in utilities are written:
+
+```ts
+type MyPartial<T> = { [K in keyof T]?: T[K] };
+type MyRequired<T> = { [K in keyof T]-?: T[K] };
+type MyReadonly<T> = { readonly [K in keyof T]: T[K] };
+type Mutable<T> = { -readonly [K in keyof T]: T[K] };
+
+interface Config { readonly host: string; port?: number }
+
+const full: MyRequired<Config> = { host: "localhost", port: 80 };
+const editable: Mutable<Config> = { host: "a" };
+editable.host = "b";
+console.log(full, editable);
+```
+
+Mapped types over `keyof T` like these are **homomorphic**: they keep the original modifiers (a property that was optional stays optional, unless you use `-?`).
+
+## Mapping over any union of keys
+
+The keys don't have to come from `keyof`. Any union of string literals works, which is how `Record` is defined:
+
+```ts
+type MyRecord<K extends PropertyKey, V> = { [P in K]: V };
+
+type Permission = "read" | "write" | "admin";
+const defaults: MyRecord<Permission, boolean> = { read: true, write: false, admin: false };
+console.log(defaults);
+```
+
+(`PropertyKey` is the built-in `string | number | symbol`: everything that can be an object key.)
+
+## Key remapping with as
+
+Since TypeScript 4.1, `as` in a mapped type renames keys, or **filters them out** by mapping them to `never`:
+
+```ts
+type Setters<T> = { [K in keyof T as `set${Capitalize<string & K>}`]: (value: T[K]) => void };
+type OnlyStrings<T> = { [K in keyof T as T[K] extends string ? K : never]: T[K] };
+
+interface Person { name: string; age: number; city: string }
+
+const setters: Setters<Person> = {
+  setName: (v) => console.log("name ->", v),
+  setAge: (v) => console.log("age ->", v.toFixed(0)),
+  setCity: (v) => console.log("city ->", v),
+};
+setters.setAge(37);
+
+const text: OnlyStrings<Person> = { name: "Ada", city: "London" };
+console.log(text);
+```
+
+`` `set${Capitalize<string & K>}` `` is a **template literal type** (two lessons on), turning `"name"` into `"setName"`. `T[K] extends string ? K : never` is a **conditional type** (next lesson): keys whose values aren't strings become `never` and disappear.
+
+~~~check
+? What does `{ [K in keyof T]-?: T[K] }` do?
+- Makes every property optional
++ Makes every property required (removes ?)
+- Removes every property
+- Makes every property readonly
+> -? removes the optional modifier: that's Required<T>.
+~~~
+
+## Recursive mapped types
+
+A mapped type can refer to itself, to transform nested objects:
+
+```ts
+type DeepReadonly<T> = { readonly [K in keyof T]: T[K] extends object ? DeepReadonly<T[K]> : T[K] };
+
+interface Settings {
+  theme: { colours: { primary: string }; font: string };
+  volume: number;
+}
+
+const settings: DeepReadonly<Settings> = { theme: { colours: { primary: "#000" }, font: "serif" }, volume: 5 };
+console.log(settings.theme.colours.primary);
+```
+
+`settings.theme.colours.primary = "#fff"` is now a compile error at every level; built-in `Readonly<T>` only protects the top level. (Functions are objects too, so a fully general version handles them separately; libraries such as `type-fest` contain carefully tested versions of such helpers.)
+
+📚 **Go deeper:** TypeScript Handbook, "Mapped Types"; *Programming TypeScript*, chapter 6 (mapped types, the Record type); *Effective TypeScript*, item 61 ("use Record types to keep values in sync").
+--- goals
+- write mapped types with `[K in keyof T]` and `T[K]`
+- add and remove `readonly` and `?` modifiers, and rebuild `Partial`, `Required`, `Readonly` and `Record`
+- remap and filter keys with `as`
+- write recursive mapped types such as `DeepReadonly`
+--- quiz
+? What's `{ [K in "a" | "b"]: number }`?
++ `{ a: number; b: number }`
+- `number[]`
+- `{ K: number }`
+- `"a" | "b"`
+> The mapped type creates one property per key.
+? How does a mapped type remove a key?
+- With delete
++ By remapping it to never with `as`
+- By setting it to undefined
+- It can't
+> Keys mapped to never are dropped.
+? What does "homomorphic" mean for `{ [K in keyof T]: ... }`?
++ It keeps T's readonly and optional modifiers
+- It removes all modifiers
+- It's recursive
+- It only works on arrays
+> Mapping over keyof T preserves modifiers unless you change them with + or -.
+? How deep does the built-in `Readonly<T>` go?
+- All levels
++ Only the top-level properties
+- Only arrays
+- Only primitives
+> Nested objects stay mutable; write a recursive type for deep immutability.
+--- exercise code typescript
+::prompt
+Write these mapped types (the hidden checks test the types themselves):
+
+- `Mutable<T>`: removes `readonly` from every property;
+- `Optional<T, K extends keyof T>`: makes only the properties `K` optional, keeping the rest as they are (hint: an intersection of two mapped or utility types);
+- `Validators<T>`: for each property, an optional function `(value: T[K]) => string | null`;
+- `EventHandlers<T>`: for each property `name`, a property `onNameChange` holding `(next: T[K], previous: T[K]) => void`.
+
+Then write `validate<T extends object>(value: T, rules: Validators<T>): string[]` returning `"<key>: <message>"` for each failing rule.
+::starter
+type Mutable<T> = T;
+type Optional<T, K extends keyof T> = T;
+type Validators<T> = {};
+type EventHandlers<T> = {};
+
+function validate<T extends object>(value: T, rules: Validators<T>): string[] {
+  return [];
+}
+::solution
+type Mutable<T> = { -readonly [K in keyof T]: T[K] };
+type Optional<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>;
+type Validators<T> = { [K in keyof T]?: (value: T[K]) => string | null };
+type EventHandlers<T> = { [K in keyof T as `on${Capitalize<string & K>}Change`]: (next: T[K], previous: T[K]) => void };
+
+function validate<T extends object>(value: T, rules: Validators<T>): string[] {
+  const errors: string[] = [];
+  for (const key of Object.keys(rules) as (keyof T)[]) {
+    const message = rules[key]?.(value[key]);
+    if (message) errors.push(`${String(key)}: ${message}`);
+  }
+  return errors;
+}
+::tests
+interface __User { readonly id: number; name: string; email?: string }
+type _t1 = Expect<Equal<Mutable<__User>, { id: number; name: string; email?: string }>>;
+type _t2 = Expect<Equal<Required<Optional<__User, "name">>, { readonly id: number; name: string; email: string }>>;
+const __draft: Optional<{ title: string; body: string }, "body"> = { title: "Hi" };
+type _t3 = Expect<Equal<Validators<{ age: number }>, { age?: (value: number) => string | null }>>;
+type _t4 = Expect<Equal<EventHandlers<{ name: string; age: number }>, { onNameChange: (next: string, previous: string) => void; onAgeChange: (next: number, previous: number) => void }>>;
+const __errors = validate({ name: "", age: 15, email: "ada@example.com" }, {
+  name: (n) => (n.trim() ? null : "is required"),
+  age: (a) => (a >= 18 ? null : "must be an adult"),
+  email: (e) => (e.includes("@") ? null : "is invalid"),
+});
+assert.deepStrictEqual(__errors, ["name: is required", "age: must be an adult"]);
+function __typeChecks() {
+  // @ts-expect-error
+  validate({ age: 3 }, { age: (a: string) => null });
+  // @ts-expect-error
+  validate({ age: 3 }, { height: () => null });
+}
+::hints
+- `-readonly [K in keyof T]` removes the modifier.
+- `Optional` = the other properties unchanged, intersected with the chosen ones made optional: `Omit<T, K> & Partial<Pick<T, K>>`.
+- `as \`on${Capitalize<string & K>}Change\`` renames keys (`string & K` keeps only string keys, which `Capitalize` requires).
+- In `validate`, loop over `Object.keys(rules) as (keyof T)[]` and call `rules[key]?.(value[key])`.
+--- cards
+Mapped type :: { [K in keyof T]: NewType } — builds a property for each key. Use T[K] for the original type.
+Modifiers :: readonly / ? added with + (default), removed with - : -readonly, -?.
+Homomorphic mapped type :: Mapping over keyof T preserves T's modifiers.
+Key remapping :: [K in keyof T as NewKey] renames keys; mapping to never removes them.
+Recursive mapped type :: type DeepReadonly<T> = { readonly [K in keyof T]: T[K] extends object ? DeepReadonly<T[K]> : T[K] }.
+
+=== lesson ts-conditional-types | Conditional types and infer | 100
+## If-then-else for types
+
+A **conditional type** chooses between two types based on a test:
+
+```ts
+type IsString<T> = T extends string ? "yes" : "no";
+
+type A = IsString<"hello">;
+type B = IsString<42>;
+
+const a: A = "yes";
+const b: B = "no";
+console.log(a, b);
+```
+
+`T extends U ? X : Y` reads "if `T` is assignable to `U`, then `X`, otherwise `Y`". The `extends` here is the same assignability (subset) test as in generic constraints.
+
+A practical example: a function whose return type depends on its input type, without overloads:
+
+```ts
+type Parsed<T extends string | number> = T extends string ? number : string;
+
+function convert<T extends string | number>(value: T): Parsed<T> {
+  return (typeof value === "string" ? Number(value) : String(value)) as Parsed<T>;
+}
+
+const n = convert("42");
+const s = convert(7);
+console.log(n + 1, s.padStart(3, "0"));
+```
+
+(TypeScript can't check that the implementation's `typeof` test matches the conditional type, hence the `as`. Conditional return types are a power tool: overloads are often clearer for two or three cases.)
+
+## Distribution over unions
+
+When a conditional type is applied to a **union**, it's applied to each member separately, and the results are joined. This is called **distribution**, and it's what makes conditional types able to filter unions:
+
+```ts
+type MyExclude<T, U> = T extends U ? never : T;
+type MyExtract<T, U> = T extends U ? T : never;
+
+type Status = "draft" | "published" | "archived";
+type Live = MyExclude<Status, "archived">;
+type Draftish = MyExtract<Status, "draft" | "deleted">;
+
+const live: Live = "published";
+const d: Draftish = "draft";
+console.log(live, d);
+```
+
+`MyExclude<"draft" | "published" | "archived", "archived">` becomes `("draft" extends "archived" ? never : "draft") | ...`, which is `"draft" | "published" | never`, and `never` disappears from unions (lesson 1 of this module). These are exactly the built-in `Exclude` and `Extract`. `NonNullable<T>` is `T & {}` today, but was once `T extends null | undefined ? never : T`.
+
+Distribution only happens when the checked type is a **naked type parameter** (`T extends ...`). To test the union as a whole, wrap both sides in brackets: `[T] extends [string] ? ...`.
+
+~~~check
+? What is `MyExclude<"a" | "b" | "c", "a" | "c">` with `type MyExclude<T, U> = T extends U ? never : T`?
+- `"a" | "c"`
++ `"b"`
+- `never`
+- `"a" | "b" | "c"`
+> Each member is tested; only "b" isn't assignable to "a" | "c".
+~~~
+
+## infer: extracting types
+
+Inside the `extends` clause, **`infer X`** declares a type variable that TypeScript fills in by pattern matching:
+
+```ts
+type ElementOf<T> = T extends readonly (infer E)[] ? E : never;
+type Unpromise<T> = T extends Promise<infer V> ? V : T;
+type MyReturnType<F> = F extends (...args: any[]) => infer R ? R : never;
+type FirstArg<F> = F extends (first: infer A, ...rest: any[]) => any ? A : never;
+
+type E = ElementOf<string[]>;
+type V = Unpromise<Promise<number>>;
+type R = MyReturnType<() => boolean>;
+type P = FirstArg<(id: number, name: string) => void>;
+
+const values: [E, V, R, P] = ["a", 1, true, 2];
+console.log(values);
+```
+
+"If `T` looks like an array of *something*, call that something `E` and give me `E`." That's how `ReturnType`, `Parameters`, `Awaited` and `InstanceType` are implemented.
+
+## Recursive conditional types
+
+Conditional types can call themselves, which allows types that process nested structures:
+
+```ts
+type Flatten<T> = T extends readonly (infer E)[] ? Flatten<E> : T;
+type DeepAwaited<T> = T extends Promise<infer V> ? DeepAwaited<V> : T;
+
+type F = Flatten<number[][][]>;
+type W = DeepAwaited<Promise<Promise<string>>>;
+
+const f: F = 3;
+const w: W = "done";
+console.log(f, w);
+```
+
+`DeepAwaited` is essentially the built-in `Awaited`. TypeScript limits recursion depth (to about a thousand levels with tail-recursive conditional types), which is plenty for real code.
+
+## Where conditional types are used
+
+You'll write conditional types rarely in application code and read them often in library types: React's prop helpers, ORMs that compute query result types, validation libraries such as Zod (`z.infer<typeof schema>`), and router libraries that type URL parameters. Knowing how to read `T extends X ? Y : Z` and `infer` lets you understand those error messages, and occasionally write a small helper that removes a lot of duplication.
+
+📚 **Go deeper:** TypeScript Handbook, "Conditional Types"; *Programming TypeScript*, chapter 6 (conditional types, distributive conditionals, the infer keyword, built-in conditional types); the type-challenges repository (github.com/type-challenges/type-challenges) for practice.
+--- goals
+- write conditional types `T extends U ? X : Y`
+- explain distribution over unions, and how to prevent it
+- extract types with `infer`
+- write recursive conditional types
+- rebuild `Exclude`, `Extract`, `ReturnType` and `Awaited`
+--- quiz
+? What is `string extends T ? 1 : 2` when T is `string | number`?
++ 1
+- 2
+- 1 | 2
+- never
+> string is assignable to string | number. (T isn't the checked type here, so no distribution.)
+? Why does `Exclude<"a" | "b", "a">` give `"b"`?
+- Exclude removes the first member
++ The conditional type distributes over each member, mapping "a" to never, which vanishes from the union
+- It's a special built-in rule
+- Because "b" comes last
+> Distribution plus never disappearing from unions.
+? What does `infer` do?
+- Infers a function's return type at run time
++ Declares a type variable inside extends, filled in by pattern matching
+- Disables type checking
+- Creates a generic function
+> Example: T extends Promise<infer V> ? V : T.
+? How do you stop a conditional type from distributing over a union T?
++ Wrap both sides in brackets: [T] extends [U] ? X : Y
+- Use infer
+- Use keyof
+- It can't be stopped
+> Distribution only applies to naked type parameters.
+--- exercise code typescript
+::prompt
+Write these conditional types (all checked at the type level):
+
+- `UnwrapArray<T>`: the element type if `T` is an array (readonly or not), otherwise `T` itself;
+- `FunctionKeys<T>`: the union of keys of `T` whose values are functions;
+- `ArgsOf<F>`: the parameter tuple of a function type, or `never` if `F` isn't a function (without using `Parameters`);
+- `DeepPartial<T>`: like `Partial`, but recursive into nested objects (arrays and functions can be left as they are);
+- `IsUnion<T>`: `true` if `T` is a union of two or more types, otherwise `false`.
+::starter
+type UnwrapArray<T> = T;
+type FunctionKeys<T> = keyof T;
+type ArgsOf<F> = never;
+type DeepPartial<T> = Partial<T>;
+type IsUnion<T> = false;
+::solution
+type UnwrapArray<T> = T extends readonly (infer E)[] ? E : T;
+type FunctionKeys<T> = { [K in keyof T]: T[K] extends (...args: any[]) => any ? K : never }[keyof T];
+type ArgsOf<F> = F extends (...args: infer A) => any ? A : never;
+type DeepPartial<T> = {
+  [K in keyof T]?: T[K] extends (...args: any[]) => any ? T[K] : T[K] extends readonly unknown[] ? T[K] : T[K] extends object ? DeepPartial<T[K]> : T[K];
+};
+type IsUnion<T, U = T> = T extends unknown ? ([U] extends [T] ? false : true) : never;
+::tests
+type _t1 = Expect<Equal<UnwrapArray<string[]>, string>>;
+type _t2 = Expect<Equal<UnwrapArray<readonly number[]>, number>>;
+type _t3 = Expect<Equal<UnwrapArray<boolean>, boolean>>;
+interface __Api { url: string; get(path: string): string; post: (path: string, body: unknown) => void; retries: number }
+type _t4 = Expect<Equal<FunctionKeys<__Api>, "get" | "post">>;
+type _t5 = Expect<Equal<ArgsOf<(a: number, b?: string) => void>, [a: number, b?: string]>>;
+type _t6 = Expect<Equal<ArgsOf<string>, never>>;
+interface __Conf { server: { host: string; tls: { cert: string } }; tags: string[]; port: number }
+const __partial: DeepPartial<__Conf> = { server: { tls: {} } };
+type _t7 = Expect<Equal<DeepPartial<__Conf>["server"], { host?: string; tls?: { cert?: string } } | undefined>>;
+type _t8 = Expect<Equal<DeepPartial<__Conf>["tags"], string[] | undefined>>;
+type _t9 = Expect<Equal<IsUnion<"a" | "b">, true>>;
+type _t10 = Expect<Equal<IsUnion<"a">, false>>;
+type _t11 = Expect<Equal<IsUnion<string>, false>>;
+console.log("all types check");
+::hints
+- `T extends readonly (infer E)[] ? E : T` matches both mutable and readonly arrays.
+- For `FunctionKeys`, map each key to itself or `never`, then index the mapped type with `[keyof T]` to collect the union of values.
+- `IsUnion`: distribute over `T` while keeping the whole union in a second parameter `U = T`; for a union, one member alone (`T`) is smaller than the whole (`U`), so `[U] extends [T]` fails.
+--- cards
+Conditional type :: T extends U ? X : Y — X if T is assignable to U, else Y.
+Distribution :: A conditional on a naked type parameter applies to each union member; never results vanish.
+Non-distributive :: [T] extends [U] ? X : Y tests the union as a whole.
+infer :: T extends Promise<infer V> ? V : T — pattern-match and capture a type.
+Built from conditionals :: Exclude, Extract, ReturnType, Parameters, Awaited, InstanceType.
+Values of a mapped type :: { [K in keyof T]: ... }[keyof T] collects the property types into a union.
+
+=== lesson ts-template-literal-types | Template literal types | 85
+## String types built from strings
+
+**Template literal types** use the backtick syntax of JavaScript template strings, at the type level:
+
+```ts
+type Size = "sm" | "md" | "lg";
+type Colour = "red" | "blue";
+type ButtonClass = `btn-${Colour}-${Size}`;
+
+const cls: ButtonClass = "btn-blue-lg";
+console.log(cls);
+```
+
+With unions inside, TypeScript generates every combination: `ButtonClass` is a union of six strings (`"btn-red-sm" | "btn-red-md" | ...`). A typo like `"btn-blu-lg"` is a compile error.
+
+Placeholders can also be general types: `` `${number}px` `` matches `"12px"` and `"1.5px"`, and `` `#${string}` `` any string starting with `#`.
+
+```ts
+type Pixels = `${number}px`;
+type CssVar = `--${string}`;
+
+function setStyle(name: CssVar, value: Pixels): string {
+  return `${name}: ${value};`;
+}
+console.log(setStyle("--gap", "12px"));
+```
+
+## Intrinsic string types
+
+Four built-in types transform string literal types: `Uppercase<S>`, `Lowercase<S>`, `Capitalize<S>` and `Uncapitalize<S>`.
+
+```ts
+type Method = "get" | "post";
+type Upper = Uppercase<Method>;
+type HandlerName = `handle${Capitalize<Method>}`;
+
+const m: Upper = "POST";
+const h: HandlerName = "handleGet";
+console.log(m, h);
+```
+
+## Combining with mapped types
+
+Template literal types are most useful together with key remapping (the mapped types lesson). The classic example: deriving event handler names from an object's properties.
+
+```ts
+type ChangeHandlers<T> = {
+  [K in keyof T & string as `on${Capitalize<K>}Changed`]: (value: T[K]) => void;
+};
+
+interface FormValues { email: string; age: number; subscribed: boolean }
+
+const handlers: ChangeHandlers<FormValues> = {
+  onEmailChanged: (v) => console.log("email", v.toLowerCase()),
+  onAgeChanged: (v) => console.log("age", v + 1),
+  onSubscribedChanged: (v) => console.log("subscribed", !v),
+};
+handlers.onAgeChanged(36);
+```
+
+(`keyof T & string` keeps only string keys: `Capitalize` can't work on number or symbol keys.)
+
+## Parsing strings with infer
+
+`infer` works inside template literal types, which lets types **parse** strings. Web frameworks use this to type URL parameters from a route pattern:
+
+```ts
+type RouteParams<Path extends string> =
+  Path extends `${string}:${infer Param}/${infer Rest}`
+    ? Param | RouteParams<`/${Rest}`>
+    : Path extends `${string}:${infer Param}`
+      ? Param
+      : never;
+
+type Params = RouteParams<"/users/:userId/posts/:postId">;
+
+function link<P extends string>(pattern: P, params: Record<RouteParams<P>, string>): string {
+  return pattern.replace(/:(\w+)/g, (_, name: string) => (params as Record<string, string>)[name]);
+}
+
+const p: Params = "postId";
+console.log(p, link("/users/:userId/posts/:postId", { userId: "7", postId: "42" }));
+```
+
+`RouteParams` matches "anything, a colon, a parameter name, a slash, the rest", collects the name, and recurses on the rest. Forget `postId` in the call to `link` and the compiler tells you. That's how libraries such as Express's types, React Router and Hono type route parameters.
+
+~~~check
+? How many members does `` `${"a" | "b"}-${"x" | "y" | "z"}` `` have?
+- 2
+- 5
++ 6
+- 1
+> Every combination: 2 × 3.
+~~~
+
+## Limits
+
+Template literal types are checked at compile time against **literal** strings. A plain `string` variable (from user input, for example) isn't assignable to `` `${number}px` ``, because TypeScript can't know its contents: you validate it at run time first (with a type guard, Module 2). And very large combinations (unions of thousands of strings) slow the compiler down; TypeScript refuses unions above 100,000 members.
+
+📚 **Go deeper:** TypeScript Handbook, "Template Literal Types"; TypeScript 4.1 release notes; *Effective TypeScript*, item 54 ("use template literal types to model DSLs and relationships between strings").
+--- goals
+- build string literal unions with template literal types
+- use `Uppercase`, `Lowercase`, `Capitalize` and `Uncapitalize`
+- derive key names with template literals in mapped types
+- parse string literal types with `infer`
+- know the limits: literal strings only, and union size
+--- quiz
+? Which string is assignable to `` `${number}px` ``?
++ `"2.5px"`
+- `"px"`
+- `"2 px"`
+- `"twopx"`
+> ${number} matches any string that's a valid number.
+? What's `Capitalize<"userName">`?
+- `"USERNAME"`
++ `"UserName"`
+- `"Username"`
+- `"username"`
+> Only the first character changes.
+? Why write `keyof T & string` inside a template literal mapped type?
+- To make keys optional
++ Capitalize and template literals need string keys; keyof can include numbers and symbols
+- To sort keys
+- It's required for all mapped types
+> Intersecting with string keeps only string keys.
+? A route string comes from user input as a `string`. Can it be passed where a template literal type is required?
+- Yes, always
++ Not directly: check it at run time first (for example with a type guard)
+- Only in strict mode
+- Only if it starts with /
+> Template literal types are compile-time checks on literals.
+--- exercise code typescript
+::prompt
+Type a small **CSS-in-TS** helper:
+
+- `type Unit = "px" | "rem" | "%"`; `type Length = \`${number}${Unit}\`` (for example `"12px"`, `"1.5rem"`);
+- `type Side = "top" | "right" | "bottom" | "left"`; `type MarginProp = \`margin${Capitalize<Side>}\`` (`"marginTop"` and so on);
+- `type CssVars<T extends string> = { [K in T as \`--${K}\`]: string }`;
+- `function margin(sides: Partial<Record<MarginProp, Length>>): string` returning CSS declarations like `margin-top: 4px; margin-left: 1rem;` (in the order given, camelCase converted to kebab-case);
+- `function isLength(value: string): value is Length` (a number followed by one of the units, nothing else).
+::starter
+type Unit = "px" | "rem" | "%";
+type Length = string;
+type Side = "top" | "right" | "bottom" | "left";
+type MarginProp = string;
+type CssVars<T extends string> = Record<string, string>;
+::solution
+type Unit = "px" | "rem" | "%";
+type Length = `${number}${Unit}`;
+type Side = "top" | "right" | "bottom" | "left";
+type MarginProp = `margin${Capitalize<Side>}`;
+type CssVars<T extends string> = { [K in T as `--${K}`]: string };
+
+function margin(sides: Partial<Record<MarginProp, Length>>): string {
+  return Object.entries(sides)
+    .map(([prop, value]) => `${prop.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)}: ${value};`)
+    .join(" ");
+}
+
+function isLength(value: string): value is Length {
+  return /^-?\d+(\.\d+)?(px|rem|%)$/.test(value);
+}
+::tests
+type _t1 = Expect<Equal<MarginProp, "marginTop" | "marginRight" | "marginBottom" | "marginLeft">>;
+type _t2 = Expect<Equal<CssVars<"brand" | "gap">, { "--brand": string; "--gap": string }>>;
+const __len: Length = "1.5rem";
+assert.strictEqual(margin({ marginTop: "4px", marginLeft: "1rem" }), "margin-top: 4px; margin-left: 1rem;");
+assert.strictEqual(margin({}), "");
+assert.strictEqual(isLength("12px"), true);
+assert.strictEqual(isLength("-0.5rem"), true);
+assert.strictEqual(isLength("50%"), true);
+assert.strictEqual(isLength("12 px"), false);
+assert.strictEqual(isLength("px"), false);
+assert.strictEqual(isLength("12em"), false);
+const __input: string = "8px";
+if (isLength(__input)) margin({ marginBottom: __input });
+function __typeChecks() {
+  // @ts-expect-error
+  margin({ marginTop: "4em" });
+  // @ts-expect-error
+  margin({ marginMiddle: "4px" });
+  // @ts-expect-error
+  const v: CssVars<"x"> = { x: "1" };
+  // @ts-expect-error
+  margin({ marginTop: __input });
+}
+::hints
+- `` type Length = `${number}${Unit}`; `` combines a number with each unit.
+- `` `margin${Capitalize<Side>}` `` produces the four property names.
+- Convert camelCase with `prop.replace(/[A-Z]/g, (c) => "-" + c.toLowerCase())`.
+--- cards
+Template literal type :: `btn-${Colour}` — string literal types built like template strings; unions give every combination.
+${number} / ${string} :: Placeholders matching any number-like / any string at that position.
+Intrinsic string types :: Uppercase, Lowercase, Capitalize, Uncapitalize.
+Key renaming :: [K in keyof T & string as `on${Capitalize<K>}`]: ...
+Parsing with infer :: S extends `${infer Head}/${infer Tail}` ? ... — types that parse string literals (route params).
+
+=== lesson ts-escape-hatches | Enums, assertions and escape hatches | 80
+## Enums
+
+An **enum** gives names to a set of constants. It's one of the few TypeScript features that exist at run time:
+
+```ts
+enum Direction {
+  Up,
+  Down,
+  Left,
+  Right,
+}
+
+enum LogLevel {
+  Debug = "debug",
+  Info = "info",
+  Error = "error",
+}
+
+function move(d: Direction): string {
+  return `moving ${Direction[d]} (${d})`;
+}
+
+console.log(move(Direction.Left), LogLevel.Error, Object.keys(LogLevel));
+```
+
+- A **numeric enum** numbers its members from 0 (`Up = 0`, `Down = 1`...), and also creates a reverse mapping (`Direction[2]` is `"Left"`).
+- A **string enum** gives each member a string value, which reads better in logs and JSON.
+
+Enums are compiled into real objects, so they're **not erasable syntax** (Node's type stripping and `erasableSyntaxOnly` reject them). They also have quirks: numeric enums accept any number in some situations, and enums are nominal (a string can't be passed where a string enum is expected, even with the right value).
+
+For these reasons many teams prefer a **union of string literals**, possibly with an `as const` object for named access:
+
+```ts
+const LogLevel = {
+  Debug: "debug",
+  Info: "info",
+  Error: "error",
+} as const;
+type LogLevel = (typeof LogLevel)[keyof typeof LogLevel];
+
+function log(level: LogLevel, message: string): string {
+  return `[${level}] ${message}`;
+}
+
+console.log(log(LogLevel.Info, "started"), log("error", "failed"));
+```
+
+This gives the same `LogLevel.Info` syntax, accepts plain strings, and is erasable. (Declaring a value and a type with the same name is legal: they live in separate namespaces.) You'll still meet enums in many codebases and frameworks, so know both.
+
+## Type assertions: as
+
+`value as Type` tells the compiler "trust me, this is a `Type`". It changes nothing at run time:
+
+```ts
+const input = document.createElement("input");
+document.body.append(input);
+const found = document.querySelector("input") as HTMLInputElement;
+found.value = "typed";
+console.log(found.value);
+```
+
+`querySelector("input")` already returns `HTMLInputElement | null`; the assertion removes `null`. That's acceptable when you know better than the compiler (here, we just added the element), but if you're wrong, the error appears later and somewhere else. TypeScript only allows assertions between types that overlap; `"hello" as number` is an error (you can force it with `as unknown as number`, which is a strong code smell).
+
+Safer alternatives, in order of preference:
+
+1. **Narrow** with a check (`if (found === null) throw ...`, `instanceof`, a type guard).
+2. **`satisfies`** when you want to check, not override.
+3. **`as`** in small, well-understood places (tests, a validated value, the inside of a typed helper).
+
+## The non-null assertion: !
+
+`value!` is a shorthand assertion that removes `null` and `undefined`:
+
+```ts
+const scores = new Map([["ada", 90]]);
+if (scores.has("ada")) {
+  console.log(scores.get("ada")! + 5);
+}
+```
+
+`has` doesn't narrow `get`, so `!` is common here. But `const s = scores.get("ada"); if (s !== undefined) ...` is just as short and checked. Each `!` is a place where a "Cannot read properties of undefined" can come back.
+
+## any: the ultimate escape hatch
+
+`any` turns checking off for a value, and spreads: anything derived from an `any` is also `any`. Legitimate uses are rare: migrating JavaScript code gradually, and a few generic type tricks (the mixin constructor in Module 4). When you need "any value", you almost always mean `unknown`.
+
+Two compiler options and one lint rule keep `any` under control: `noImplicitAny` (part of `strict`) forbids accidental `any`; `typescript-eslint`'s `no-explicit-any` and `no-unsafe-*` rules flag explicit `any` and its spread.
+
+## Comments that switch checks off
+
+- `// @ts-expect-error` suppresses the error on the next line, and errors if there isn't one (Module 1). Use it in tests of types, and with an explanation for known compiler limitations.
+- `// @ts-ignore` suppresses silently, forever. Avoid it.
+- `// @ts-nocheck` at the top of a file disables checking for the whole file (sometimes used during migration).
+
+~~~check
+? `const el = document.getElementById("app")!;` What can go wrong?
+- Nothing: ! checks that the element exists
++ If there's no #app element, el is null at run time and the error appears later
+- It throws immediately if the element is missing
+- ! makes the element readonly
+> ! only silences the compiler; it doesn't check anything.
+~~~
+
+## Declaration merging and module augmentation
+
+Interfaces with the same name merge (Module 2). This lets you **add** properties to existing types, such as the browser's `Window` or a library's interfaces:
+
+```ts
+declare global {
+  interface Window {
+    appVersion: string;
+  }
+}
+
+window.appVersion = "1.4.0";
+console.log(window.appVersion);
+```
+
+`declare global` adds to the global scope from inside a module; `declare module "some-library" { interface Options { ... } }` does the same for a library's types (Module 6 covers declaration files). Use this sparingly: it changes a type for the whole project.
+
+📚 **Go deeper:** TypeScript Handbook, "Enums", "Everyday Types: Type Assertions" and "Declaration Merging"; *Programming TypeScript*, chapter 3 (enums) and chapter 6 (escape hatches: type assertions, nonnull assertions, definite assignment assertions); *Effective TypeScript*, items 9 and 43 to 48 (on assertions and any).
+--- goals
+- use numeric and string enums, and know why many teams prefer unions with `as const` objects
+- use type assertions (`as`) and non-null assertions (`!`) only when justified, preferring narrowing
+- keep `any` contained, and know `@ts-expect-error`, `@ts-ignore` and `@ts-nocheck`
+- extend existing types with declaration merging and `declare global`
+--- quiz
+? Which TypeScript feature generates JavaScript code (it isn't just erased)?
++ `enum`
+- `interface`
+- `type`
+- `as const`
+> Enums become objects at run time.
+? What does `x as HTMLInputElement` do at run time?
+- Converts x
+- Checks x and throws if wrong
++ Nothing: it only changes the type the compiler uses
+- Creates a new element
+> Assertions are compile-time only.
+? Which is the safest way to handle `document.querySelector("#form")` possibly being null?
+- `!`
+- `as HTMLFormElement`
++ Check it: `if (form === null) throw new Error("form missing")`, or `instanceof HTMLFormElement`
+- `// @ts-ignore`
+> Narrowing checks at run time; assertions just hope.
+? Why is `"hello" as number` an error?
++ Assertions are only allowed between types that overlap
+- Strings can never be asserted
+- as only works on objects
+- It isn't an error
+> You'd have to go through unknown, which signals something is very wrong.
+--- exercise code typescript
+::prompt
+Refactor this module to remove **every** escape hatch (`any`, `as`, `!` and `@ts-ignore`) while keeping the behaviour. `parseRole` must accept `unknown` (not `any`). Replace the enum with an `as const` object plus a union type named `Role` (keeping `Role.Admin`-style access working), and use narrowing where the code used assertions.
+::starter
+enum Role {
+  Admin = "admin",
+  Editor = "editor",
+  Viewer = "viewer",
+}
+
+const permissions = new Map<Role, string[]>([
+  [Role.Admin, ["read", "write", "delete"]],
+  [Role.Editor, ["read", "write"]],
+  [Role.Viewer, ["read"]],
+]);
+
+function can(role: Role, action: string): boolean {
+  return permissions.get(role)!.includes(action);
+}
+
+function parseRole(raw: any): Role {
+  // @ts-ignore
+  if (!Object.values(Role).includes(raw)) throw new Error(`Unknown role: ${raw}`);
+  return raw as Role;
+}
+
+for (const raw of ["admin", "viewer", "guest"]) {
+  try {
+    const role = parseRole(raw);
+    console.log(`${role}: write=${can(role, "write")}`);
+  } catch (error) {
+    console.log((error as Error).message);
+  }
+}
+::solution
+const Role = {
+  Admin: "admin",
+  Editor: "editor",
+  Viewer: "viewer",
+} as const;
+type Role = (typeof Role)[keyof typeof Role];
+
+const permissions: Record<Role, string[]> = {
+  [Role.Admin]: ["read", "write", "delete"],
+  [Role.Editor]: ["read", "write"],
+  [Role.Viewer]: ["read"],
+};
+
+function can(role: Role, action: string): boolean {
+  return permissions[role].includes(action);
+}
+
+function isRole(raw: unknown): raw is Role {
+  return Object.values(Role).some((role) => role === raw);
+}
+
+function parseRole(raw: unknown): Role {
+  if (!isRole(raw)) throw new Error(`Unknown role: ${raw}`);
+  return raw;
+}
+
+for (const raw of ["admin", "viewer", "guest"]) {
+  try {
+    const role = parseRole(raw);
+    console.log(`${role}: write=${can(role, "write")}`);
+  } catch (error) {
+    console.log(error instanceof Error ? error.message : String(error));
+  }
+}
+::tests
+type _t1 = Expect<Equal<Role, "admin" | "editor" | "viewer">>;
+type _t2 = Expect<Equal<(typeof Role)["Editor"], "editor">>;
+type _t3 = Expect<Equal<Parameters<typeof parseRole>[0], unknown>>;
+assert.strictEqual(can(Role.Admin, "delete"), true);
+assert.strictEqual(can("editor", "delete"), false);
+assert.strictEqual(parseRole("viewer"), Role.Viewer);
+assert.throws(() => parseRole("guest"), { message: "Unknown role: guest" });
+assert.throws(() => parseRole(42), { message: "Unknown role: 42" });
+::hints
+- `const Role = { Admin: "admin", ... } as const; type Role = (typeof Role)[keyof typeof Role];`
+- A `Record<Role, string[]>` always has every role, so no `!` is needed.
+- Write a type guard `isRole(raw: unknown): raw is Role`, and use `error instanceof Error` in the catch.
+--- cards
+enum :: Named constants compiled to an object (numeric with reverse mapping, or string). Not erasable.
+as const object + union :: const X = {...} as const; type X = (typeof X)[keyof typeof X] — enum-like, erasable, accepts literals.
+Type assertion (as) :: Overrides the inferred type without any run-time check. Only between overlapping types.
+Non-null assertion (!) :: x! removes null/undefined from the type. No run-time check.
+any :: Turns checking off and spreads. Use unknown instead; ban with noImplicitAny and lint rules.
+declare global :: Adds to global types (e.g. interface Window) from a module, via declaration merging.
+
+=== lesson ts-m5-test | Module 5 test | 200 | exam
+This test covers Module 5: types as sets, intersections, variance and `satisfies`, type operators and utility types, mapped types, conditional types with `infer`, template literal types, enums, assertions and escape hatches.
+
+Before you start, check that you can:
+
+- derive types from a single source with `typeof`, `keyof`, indexed access and utility types;
+- write mapped types with modifiers and key remapping;
+- write conditional types with distribution and `infer`;
+- combine template literal types with mapped types;
+- avoid escape hatches, or contain them.
+--- goals
+- compute types from other types to avoid duplication
+- read and write the advanced type features used by libraries
+- know when advanced types are worth their complexity
+--- quiz
+? What is `{ a: 1; b: "x" }[keyof { a: 1; b: "x" }]`?
++ `1 | "x"`
+- `"a" | "b"`
+- `{ a: 1 } | { b: "x" }`
+- `never`
+> Indexing with all keys gives the union of value types.
+? What's the result of `Exclude<"a" | "b" | "c", "a" | "b">`?
++ `"c"`
+- `"a" | "b"`
+- `never`
+- `"a" | "b" | "c"`
+> Exclude removes the assignable members.
+? What does `T[K] extends Function ? never : K` do inside `[K in keyof T as ...]`?
++ Removes the keys whose values are functions
+- Keeps only function keys
+- Makes functions optional
+- Nothing
+> Mapping a key to never filters it out.
+? Which is equivalent to the built-in `Partial<T>`?
+- `{ [K in keyof T]-?: T[K] }`
++ `{ [K in keyof T]?: T[K] }`
+- `{ readonly [K in keyof T]: T[K] }`
+- `T | undefined`
+> ? adds the optional modifier to every property.
+? `const theme = {...} satisfies Theme` versus `const theme: Theme = {...}`. Which keeps literal property types?
++ satisfies
+- the annotation
+- both
+- neither
+> satisfies checks without replacing the inferred type.
+--- exercise code typescript
+::prompt
+**A typed reducer**, the pattern behind Redux, React's `useReducer` and many state machines. Given this definition of actions as a **map from action type to payload**:
+
+```
+type ActionMap = {
+  add: { id: string; text: string };
+  toggle: { id: string };
+  remove: { id: string };
+  clearDone: undefined;
+};
+```
+
+1. Derive `type Action` (a discriminated union on `type`) from `ActionMap` with a mapped type: payload-less actions (payload `undefined`) are just `{ type: "clearDone" }`, the others `{ type: "add"; payload: { id: string; text: string } }`, and so on. Don't write the members out by hand.
+2. Write `type Todo = { id: string; text: string; done: boolean }` and `reducer(state: readonly Todo[], action: Action): Todo[]` with an exhaustive `switch` (using `satisfies never` or an `assertNever`). It never mutates `state`.
+3. Write a generic action creator `act<T extends keyof ActionMap>(type: T, ...payload: ActionMap[T] extends undefined ? [] : [ActionMap[T]]): Action`, so that `act("clearDone")` and `act("toggle", { id: "1" })` compile while `act("toggle")` doesn't.
+::starter
+type ActionMap = {
+  add: { id: string; text: string };
+  toggle: { id: string };
+  remove: { id: string };
+  clearDone: undefined;
+};
+
+type Action = { type: string; payload?: unknown };
+::solution
+type ActionMap = {
+  add: { id: string; text: string };
+  toggle: { id: string };
+  remove: { id: string };
+  clearDone: undefined;
+};
+
+type Action = {
+  [K in keyof ActionMap]: ActionMap[K] extends undefined ? { type: K } : { type: K; payload: ActionMap[K] };
+}[keyof ActionMap];
+
+type Todo = { id: string; text: string; done: boolean };
+
+function reducer(state: readonly Todo[], action: Action): Todo[] {
+  switch (action.type) {
+    case "add":
+      return [...state, { ...action.payload, done: false }];
+    case "toggle":
+      return state.map((t) => (t.id === action.payload.id ? { ...t, done: !t.done } : t));
+    case "remove":
+      return state.filter((t) => t.id !== action.payload.id);
+    case "clearDone":
+      return state.filter((t) => !t.done);
+    default:
+      action satisfies never;
+      return [...state];
+  }
+}
+
+function act<T extends keyof ActionMap>(type: T, ...payload: ActionMap[T] extends undefined ? [] : [ActionMap[T]]): Action {
+  return (payload.length ? { type, payload: payload[0] } : { type }) as Action;
+}
+::tests
+type _t1 = Expect<Equal<Action,
+  | { type: "add"; payload: { id: string; text: string } }
+  | { type: "toggle"; payload: { id: string } }
+  | { type: "remove"; payload: { id: string } }
+  | { type: "clearDone" }>>;
+const __start: readonly Todo[] = Object.freeze([]);
+let __s = reducer(__start, act("add", { id: "1", text: "Learn mapped types" }));
+__s = reducer(__s, act("add", { id: "2", text: "Learn infer" }));
+__s = reducer(__s, act("toggle", { id: "1" }));
+assert.deepStrictEqual(__s, [{ id: "1", text: "Learn mapped types", done: true }, { id: "2", text: "Learn infer", done: false }]);
+const __before = __s;
+__s = reducer(__s, act("clearDone"));
+assert.deepStrictEqual(__s.map((t) => t.id), ["2"]);
+assert.strictEqual(__before.length, 2);
+assert.deepStrictEqual(reducer(__s, act("remove", { id: "2" })), []);
+assert.deepStrictEqual(act("clearDone"), { type: "clearDone" });
+function __typeChecks() {
+  // @ts-expect-error
+  act("toggle");
+  // @ts-expect-error
+  act("clearDone", undefined);
+  // @ts-expect-error
+  act("add", { id: "3" });
+  // @ts-expect-error
+  act("rename", { id: "1" });
+}
+::hints
+- Map each key to its action type, then index with `[keyof ActionMap]` to get the union: `{ [K in keyof ActionMap]: ... }[keyof ActionMap]`.
+- Inside the mapped type, `ActionMap[K] extends undefined ? { type: K } : { type: K; payload: ActionMap[K] }`.
+- The rest parameter's type is a tuple chosen by a conditional type: `[]` (no argument) or `[ActionMap[T]]` (one).
+- Building the action from generic pieces needs one `as Action` in `act`: TypeScript can't relate the generic tuple to the union.
+--- exercise code typescript
+::prompt
+**Type-safe paths into nested objects.** Write:
+
+- `type Paths<T>`: the union of all dot-separated paths to **leaf** values (anything that isn't a plain nested object) in `T`, for example `"server.host" | "server.port" | "debug"`;
+- `type PathValue<T, P extends string>`: the type of the value at path `P`;
+- `function get<T, P extends Paths<T>>(obj: T, path: P): PathValue<T, P>` reading the value at run time.
+
+Arrays count as leaves.
+::starter
+type Paths<T> = string;
+type PathValue<T, P extends string> = unknown;
+
+function get<T, P extends Paths<T>>(obj: T, path: P): PathValue<T, P> {
+  return undefined as PathValue<T, P>;
+}
+::solution
+type Paths<T> = {
+  [K in keyof T & string]: T[K] extends readonly unknown[] ? K : T[K] extends object ? `${K}.${Paths<T[K]>}` : K;
+}[keyof T & string];
+
+type PathValue<T, P extends string> = P extends `${infer Head}.${infer Rest}`
+  ? Head extends keyof T
+    ? PathValue<T[Head], Rest>
+    : never
+  : P extends keyof T
+    ? T[P]
+    : never;
+
+function get<T, P extends Paths<T>>(obj: T, path: P): PathValue<T, P> {
+  let current: unknown = obj;
+  for (const key of path.split(".")) {
+    current = (current as Record<string, unknown>)[key];
+  }
+  return current as PathValue<T, P>;
+}
+::tests
+const __config = {
+  server: { host: "localhost", port: 8080, tls: { enabled: false } },
+  debug: true,
+  tags: ["a", "b"],
+};
+type __C = typeof __config;
+type _t1 = Expect<Equal<Paths<__C>, "server.host" | "server.port" | "server.tls.enabled" | "debug" | "tags">>;
+type _t2 = Expect<Equal<PathValue<__C, "server.port">, number>>;
+type _t3 = Expect<Equal<PathValue<__C, "server.tls.enabled">, boolean>>;
+type _t4 = Expect<Equal<PathValue<__C, "tags">, string[]>>;
+const __port = get(__config, "server.port");
+type _t5 = Expect<Equal<typeof __port, number>>;
+assert.strictEqual(__port, 8080);
+assert.strictEqual(get(__config, "server.tls.enabled"), false);
+assert.deepStrictEqual(get(__config, "tags"), ["a", "b"]);
+assert.strictEqual(get(__config, "debug"), true);
+function __typeChecks() {
+  // @ts-expect-error
+  get(__config, "server.hostname");
+  // @ts-expect-error
+  get(__config, "server");
+}
+::hints
+- `Paths`: for each string key, if the value is an array it's a leaf (`K`); if it's an object, prefix the nested paths: `` `${K}.${Paths<T[K]>}` ``; otherwise `K`. Collect with `[keyof T & string]`.
+- `PathValue`: split off the first segment with `` P extends `${infer Head}.${infer Rest}` `` and recurse into `T[Head]`.
+- The run-time `get` walks the keys from `path.split(".")`; it needs a cast, because the compiler can't follow string paths through values.

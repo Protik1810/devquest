@@ -153,4 +153,11 @@ Text.
     expect(() => parseTrackFile(`${header}\n=== lesson d1 | First | 40\nText.\n--- exercize code python\n`)).toThrow(/misspelt/);
     expect(() => parseTrackFile(`${header}\n=== lesson d1 | First | 40\nText.\n=== lessson d2 | Second | 40\n`)).toThrow(/misspelt/);
   });
+
+  it('rejects unknown exercise fields', () => {
+    const exercise = (field: string) =>
+      `${header}\n=== lesson d1 | First | 40\nText.\n--- exercise code python\n::prompt\nP\n::starter\nx\n::solution\ny\n::${field}\nprint(1)\n`;
+    expect(() => parseTrackFile(exercise('expected'))).not.toThrow();
+    expect(() => parseTrackFile(exercise('expectd'))).toThrow(/unknown field ::expectd/);
+  });
 });
