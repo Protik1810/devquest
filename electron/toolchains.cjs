@@ -70,7 +70,7 @@ function which(name, extraDirs = []) {
 }
 
 // ---------- process helpers ----------
-function run(cmd, args, { cwd, timeoutMs = 30000, verbatim = false } = {}) {
+function run(cmd, args, { cwd, timeoutMs = 30000, verbatim = false, stdin } = {}) {
   return new Promise((resolve) => {
     // .bat/.cmd launchers (kotlinc, some SDK shims) must go through cmd.exe; quote everything ourselves
     const batch = isWin && /\.(bat|cmd)$/i.test(cmd);
@@ -80,6 +80,9 @@ function run(cmd, args, { cwd, timeoutMs = 30000, verbatim = false } = {}) {
     let stdout = '';
     let stderr = '';
     let timedOut = false;
+    // Typed input for the program (Scanner, input(), readLine...); without it, reading hits end of input at once
+    child.stdin.on('error', () => {});
+    child.stdin.end(stdin ? (stdin.endsWith('\n') ? stdin : stdin + '\n') : '');
     const cap = (s, d) => (s.length < MAX_OUTPUT ? s + d.toString() : s);
     child.stdout.on('data', (d) => (stdout = cap(stdout, d)));
     child.stderr.on('data', (d) => (stderr = cap(stderr, d)));
@@ -214,7 +217,7 @@ async function detect(force = false) {
 }
 
 // ---------- running a program ----------
-async function runProgram(lang, code) {
+async function runProgram(lang, code, stdin) {
   const d = await detect();
   const t = d.tools;
   if (!d.langs[lang]) return { ok: false, output: '', error: `No ${lang} toolchain found on this computer.`, missing: true };
@@ -306,7 +309,7 @@ async function runProgram(lang, code) {
   try {
     let output = '';
     for (const [cmd, args, opts, compile] of steps) {
-      const r = await run(cmd, args, { cwd: dir, ...opts });
+      const r = await run(cmd, args, { cwd: dir, ...opts, ...(compile ? {} : { stdin }) });
       if (r.timedOut) return { ok: false, output, error: `⏱ Timed out after ${(opts.timeoutMs ?? 30000) / 1000}s.${compile ? '' : ' Is there an infinite loop?'}` };
       if (compile) {
         if (r.code !== 0) {

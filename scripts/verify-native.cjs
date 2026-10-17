@@ -30,24 +30,40 @@ function applyVariants(code, variants) {
       continue;
     }
     const problems = [];
-    const sol = await t.runProgram(e.lang, e.solution);
+    const sol = await t.runProgram(e.lang, e.solution, e.check.stdin);
     const compileOnly = !!langs[e.lang].compileOnly;
     if (!sol.ok) problems.push(`solution failed: ${(sol.error || sol.output || '').slice(0, 300)}`);
     else if (!compileOnly && norm(sol.output) !== norm(e.check.expected)) problems.push(`solution output differs:\n   got:  ${JSON.stringify(norm(sol.output)).slice(0, 300)}\n   want: ${JSON.stringify(norm(e.check.expected)).slice(0, 300)}`);
     if (!compileOnly) {
-      const st = await t.runProgram(e.lang, e.starter);
+      const st = await t.runProgram(e.lang, e.starter, e.check.stdin);
       if (st.ok && norm(st.output) === norm(e.check.expected)) problems.push('starter already passes');
     }
     if (e.check.variants?.length && !compileOnly) {
-      const v = await t.runProgram(e.lang, applyVariants(e.solution, e.check.variants));
+      const v = await t.runProgram(e.lang, applyVariants(e.solution, e.check.variants), e.check.stdin);
       if (!v.ok) problems.push(`hidden variant breaks the reference: ${(v.error || v.output || '').slice(0, 300)}`);
       else if (norm(v.output) === norm(e.check.expected)) problems.push('hidden variant does not change the output');
+    }
+    for (const [n, c] of (compileOnly ? [] : e.check.cases ?? []).entries()) {
+      const r = await t.runProgram(e.lang, e.solution, c.stdin);
+      if (!r.ok || norm(r.output) !== norm(c.expected)) problems.push(`input case ${n + 1} differs:\n   got:  ${JSON.stringify(norm(r.output || r.error)).slice(0, 300)}\n   want: ${JSON.stringify(norm(c.expected)).slice(0, 300)}`);
     }
     if (problems.length) {
       bad++;
       console.log(`✗ ${e.id} (${e.lang})\n   ${problems.join('\n   ')}`);
     } else console.log(`✓ ${e.id}`);
   }
-  console.log(`\n${native.length - bad - skipped}/${native.length} OK${skipped ? `, ${skipped} skipped (toolchain not installed)` : ''}`);
-  process.exit(bad ? 1 : 0);
+  // Lesson examples must run, except those marked as showing an error ("// error" comment)
+  const examplesFile = path.join(root, '.cache', 'examples.json');
+  const examples = fs.existsSync(examplesFile) ? JSON.parse(fs.readFileSync(examplesFile, 'utf8')).filter((x) => langs[x.lang] && (!only || x.lang === only || x.id.includes(only))) : [];
+  let badExamples = 0;
+  for (const x of examples) {
+    const r = await t.runProgram(x.lang, x.code);
+    const shouldFail = /^\s*\/\/ error\b/im.test(x.code);
+    if (r.ok === shouldFail) {
+      badExamples++;
+      console.log(`✗ example in ${x.id}: ${shouldFail ? 'marked "// error" but ran' : (r.error || '').split('\n').slice(0, 4).join('\n   ')}\n   ${x.code.split('\n').find((l) => l.trim() && !l.startsWith('import'))}`);
+    }
+  }
+  console.log(`\n${native.length - bad - skipped}/${native.length} OK${skipped ? `, ${skipped} skipped (toolchain not installed)` : ''}; ${examples.length - badExamples}/${examples.length} lesson examples OK`);
+  process.exit(bad || badExamples ? 1 : 0);
 })();

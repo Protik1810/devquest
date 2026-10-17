@@ -4,7 +4,7 @@ import type { CodeLang, NativeLang } from '../content/types';
 /** Desktop-only bridge to compilers/interpreters installed on the learner's PC (electron/toolchains.cjs). */
 type ToolsBridge = {
   detect: (force?: boolean) => Promise<Partial<Record<NativeLang, { tool: string; compileOnly?: boolean } | null>>>;
-  run: (lang: NativeLang, code: string) => Promise<{ ok: boolean; output: string; error?: string; compileError?: boolean; missing?: boolean }>;
+  run: (lang: NativeLang, code: string, stdin?: string) => Promise<{ ok: boolean; output: string; error?: string; compileError?: boolean; missing?: boolean }>;
 };
 
 const bridge = (globalThis as { devquestTools?: ToolsBridge }).devquestTools;
@@ -31,9 +31,9 @@ export function localTool(lang: CodeLang) {
   return useTools.getState().langs[lang as NativeLang] ?? null;
 }
 
-export async function runLocal(lang: NativeLang, code: string) {
+export async function runLocal(lang: NativeLang, code: string, stdin?: string) {
   if (!bridge) throw new Error('Local toolchains are only available in the desktop app.');
-  return bridge.run(lang, code);
+  return bridge.run(lang, code, stdin);
 }
 
 /** Official download pages, shown when a toolchain is missing. */

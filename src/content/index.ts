@@ -27,6 +27,9 @@ export const python = parseTrackFile(...Object.keys(pythonFiles).sort().map((f) 
 /** The JavaScript course, likewise one file per module (tracks/javascript/NN-*.txt). */
 const javascriptFiles = import.meta.glob<string>('./tracks/javascript/*.txt', { query: '?raw', import: 'default', eager: true });
 export const javascript = parseTrackFile(...Object.keys(javascriptFiles).sort().map((f) => javascriptFiles[f]));
+/** The Java course (tracks/java/NN-*.txt); programs run on the learner's own JDK in the desktop app. */
+const javaFiles = import.meta.glob<string>('./tracks/java/*.txt', { query: '?raw', import: 'default', eager: true });
+export const java = parseTrackFile(...Object.keys(javaFiles).sort().map((f) => javaFiles[f]));
 /** The SQL course (tracks/sql/NN-*.txt), on PostgreSQL with the sample databases in tracks/sql/datasets. */
 const sqlFiles = import.meta.glob<string>('./tracks/sql/*.txt', { query: '?raw', import: 'default', eager: true });
 export const sql = parseTrackFile(...Object.keys(sqlFiles).sort().map((f) => sqlFiles[f]));
@@ -35,7 +38,6 @@ const typescriptFiles = import.meta.glob<string>('./tracks/typescript/*.txt', { 
 export const typescript = parseTrackFile(...Object.keys(typescriptFiles).sort().map((f) => typescriptFiles[f]));
 import { SKILL_TRACKS } from './skills';
 import { go } from './langs/go';
-import { java } from './langs/java';
 import { kotlin } from './langs/kotlin';
 import { csharp } from './langs/csharp';
 import { rust } from './langs/rust';
@@ -55,6 +57,7 @@ import { solidity } from './langs/solidity';
 Object.assign(python, { kind: 'language', lang: 'python', fields: ['Backend', 'Data & AI', 'Automation', 'Security'] });
 Object.assign(javascript, { kind: 'language', lang: 'javascript', fields: ['Frontend', 'Full-Stack', 'Backend (Node.js)'] });
 Object.assign(typescript, { kind: 'language', lang: 'typescript', fields: ['Frontend', 'Full-Stack', 'Backend (Node.js)'] });
+Object.assign(java, { kind: 'language', lang: 'java', fields: ['Backend (enterprise)', 'Android', 'Big data'] });
 Object.assign(sql, { kind: 'language', lang: 'sql', fields: ['Backend', 'Data', 'Every developer'] });
 for (const t of [foundations, shell, git, dsa, systems, networking, web, devops, architecture, career]) t.kind = 'core';
 for (const t of [polyglot, ai]) t.kind = 'skill';

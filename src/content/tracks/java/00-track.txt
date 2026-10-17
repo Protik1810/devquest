@@ -1,0 +1,9 @@
++++ track
+id: java
+title: Java
+icon: ☕
+tier: 1
+color: #e76f00
+kind: language
+blurb: The language of enterprise back ends, Android and big data, taught in modern Java 21 from first principles to professional practice: types and control flow, methods and arrays, object-oriented design with classes, interfaces, records, enums and sealed types, exceptions, collections, generics, lambdas and streams, java.time, files, packages and modules, Maven and Gradle, testing with JUnit, concurrency with virtual threads, and how the JVM works. Programs run on the JDK installed on your computer in the desktop app.
++++

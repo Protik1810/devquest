@@ -118,7 +118,7 @@ function registerNetBridge() {
   });
   registerSaveBridge();
   handle('tools:detect', (_e, force) => toolchains.detect(!!force).then((d) => d.langs));
-  handle('tools:run', (_e, { lang, code }) => toolchains.runProgram(String(lang), String(code)));
+  handle('tools:run', (_e, { lang, code, stdin }) => toolchains.runProgram(String(lang), String(code), typeof stdin === 'string' ? stdin : undefined));
   handle('net:abort', (_e, id) => {
     const s = streams.get(id);
     if (s) {

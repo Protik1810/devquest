@@ -1,7 +1,7 @@
 import initSqlJs, { type Database, type SqlJsStatic } from 'sql.js';
 import sqlWasmUrl from 'sql.js/dist/sql-wasm.wasm?url';
 import fengariUrl from 'fengari-web/dist/fengari-web.bundle.js?url';
-import type { CodeCheck, CodeLang } from '../content/types';
+import type { CodeCheck, CodeLang, NativeLang } from '../content/types';
 import mongoShell from './mongoShell.js?raw';
 import { runPostgres } from './postgres';
 import { registerMysql, translateMysql } from './mysql';
@@ -11,6 +11,8 @@ import { sameOutput } from './integrity';
 import { JS_RUNTIME, jsRuntimeOn } from './jsRuntime';
 import { bundleModules, usesModules } from './jsModules';
 import { describeTypeErrors, tsCheckWorker, type TsDiagnostic } from './tsCheck';
+import { localTool, runLocal, runsInApp } from './localRun';
+import { LANG_META } from '../content/langMeta';
 
 /** `expected`: for a failed output check, the output that was expected (shown as a line-by-line comparison). */
 export type RunResult = { ok: boolean; output: string; error?: string; passed?: boolean; message?: string; expected?: string; table?: { columns: string[]; values: unknown[][] } };
@@ -571,6 +573,12 @@ export async function tracePython(code: string, stdin?: string, prelude?: string
 export async function runExample(lang: CodeLang, code: string, prelude?: string[], stdin?: string, setup?: string): Promise<RunResult> {
   // SQL course examples run on a fresh copy of their sample database
   if (lang === 'postgres') return runPostgres(code, undefined, setup);
+  // Compiled languages (Java...) run on the learner's own toolchain in the desktop app
+  if (!runsInApp(lang)) {
+    if (!localTool(lang)) return { ok: false, output: '', error: `${LANG_META[lang].label} examples run in the DevQuest desktop app when ${LANG_META[lang].label} is installed on your computer.` };
+    const r = await runLocal(lang as NativeLang, code, stdin);
+    return r.ok ? { ok: true, output: r.output } : { ok: false, output: r.output, error: r.error };
+  }
   if (lang !== 'python') return runCode(lang, code, undefined, stdin);
   const r = await python.run(code, undefined, 15000, stdin, { prelude });
   return r.ok ? { ok: true, output: r.output } : { ok: false, output: r.output, error: r.error };

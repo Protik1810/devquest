@@ -1,0 +1,720 @@
+=== module Module 1 · Getting started
+
+=== lesson java-why | What Java is | 50
+## Write once, run anywhere
+
+Java was created at Sun Microsystems by James Gosling's team and released in 1995. Its big idea was **portability**: you compile a Java program once, into **bytecode**, and that bytecode runs on any computer that has a **Java Virtual Machine** (JVM), whether it runs Windows, Linux or macOS, on a laptop, a server or (originally) a set-top box.
+
+```
+Main.java  --javac (compiler)-->  Main.class (bytecode)  --java (JVM)-->  runs on any OS
+```
+
+Thirty years later, Java is one of the most used programming languages in the world:
+
+- **Enterprise back ends**: banks, insurers, airlines, retailers and governments run huge systems on Java, often with the **Spring** framework.
+- **Android**: Android apps were written in Java for a decade (Kotlin, which runs on the same JVM, is now preferred, and the Kotlin course builds on this one).
+- **Big data and infrastructure**: Hadoop, Kafka, Elasticsearch, Cassandra and Spark are written in Java or other JVM languages.
+- **Tools and games**: IntelliJ IDEA, Minecraft (Java Edition) and countless desktop and server tools.
+
+Learning Java also teaches you the ideas behind C#, Kotlin, Scala and a large part of C++: it's the classic language for **object-oriented programming**, and most textbooks on software design use it.
+
+## What makes Java Java
+
+- **Statically typed**: every variable has a type, checked by the compiler before the program runs (like TypeScript, and unlike Python and JavaScript). Many mistakes are caught early.
+- **Object-oriented**: code is organised into **classes**; nearly everything is an object.
+- **Garbage collected**: you create objects and the JVM frees the memory when they're no longer used (unlike C and C++).
+- **Compiled and fast**: the JVM's **JIT compiler** turns frequently used bytecode into optimised machine code while the program runs, so long-running Java programs are very fast.
+- **A huge standard library and ecosystem**: collections, networking, concurrency, dates, files, plus hundreds of thousands of open-source libraries on Maven Central.
+- **Backward compatible**: code written for Java 1.4 in 2002 generally still compiles and runs today.
+
+## Versions
+
+Java has a new version every six months; every two years one is a **Long-Term Support** (LTS) release that companies use for years: **8** (2014, still found in older systems), **11**, **17**, **21** (2023) and **25** (2025). This course uses **Java 21** and points out modern features (records, switch expressions, pattern matching, virtual threads) that older code bases don't have.
+
+Java is open source (**OpenJDK**). You install a **JDK** (Java Development Kit: compiler, JVM and tools) from a distributor: Eclipse Temurin (Adoptium), Microsoft, Amazon Corretto, Oracle and others all build the same OpenJDK code.
+
+## Running Java in DevQuest
+
+Java can't run inside a browser tab, so DevQuest runs your programs with the **JDK installed on your computer**, in the desktop app (the next lesson shows how to install one). On the web and on Android, the AI tutor checks your code by tracing it, or you compare your answer with the solution.
+
+Here is a complete Java program. In the desktop app, press **▶ Run**:
+
+```java
+public class Main {
+    public static void main(String[] args) {
+        System.out.println("Hello from the JVM!");
+        System.out.println("Java version: " + Runtime.version().feature());
+    }
+}
+```
+
+The next lessons take this program apart line by line.
+
+~~~check
+? What does the Java compiler (javac) produce?
+- Machine code for one processor
++ Bytecode, which the JVM runs on any operating system
+- JavaScript
+- A Python script
+> The JVM, with its JIT compiler, turns bytecode into machine code at run time.
+~~~
+
+📚 **Go deeper:** Herbert Schildt, *Java: The Complete Reference*, chapters 1 and 2 (history and overview); dev.java, the official learning site ("Getting Started with Java"); the OpenJDK project (openjdk.org).
+--- goals
+- explain how Java source code becomes bytecode run by the JVM
+- describe where Java is used and why it remains popular
+- name Java's main characteristics: static typing, objects, garbage collection, JIT compilation
+- know the LTS versions and what a JDK is
+--- quiz
+? What does "write once, run anywhere" mean for Java?
++ Compiled bytecode runs unchanged on any system with a JVM
+- Java code never needs to be compiled
+- Java runs inside every browser
+- Java programs can't have bugs on other systems
+> The JVM hides the differences between operating systems.
+? What is the JDK?
+- A Java web framework
++ The Java Development Kit: compiler, JVM and tools
+- A database
+- A text editor
+> The JRE (runtime only) is no longer distributed separately.
+? Which is a Long-Term Support version of Java?
+- 20
++ 21
+- 22
+- 23
+> LTS releases: 8, 11, 17, 21, 25.
+? Who frees the memory of objects you no longer use in Java?
+- You, with free()
++ The garbage collector
+- The compiler
+- The operating system when the program ends only
+> Automatic memory management.
+--- exercise code java
+::prompt
+Change the program so that it prints exactly these two lines:
+
+```
+Hello, Java!
+Bytecode runs on the JVM.
+```
+::starter
+public class Main {
+    public static void main(String[] args) {
+        System.out.println("Hello, world!");
+    }
+}
+::solution
+public class Main {
+    public static void main(String[] args) {
+        System.out.println("Hello, Java!");
+        System.out.println("Bytecode runs on the JVM.");
+    }
+}
+::expected
+Hello, Java!
+Bytecode runs on the JVM.
+::hints
+- Each `System.out.println(...)` prints one line.
+- Text goes between double quotes, and every statement ends with a semicolon.
+--- cards
+JVM :: Java Virtual Machine: runs bytecode on any OS, with a JIT compiler and garbage collector.
+javac / java :: javac compiles .java source to .class bytecode; java runs it on the JVM.
+JDK :: Java Development Kit: compiler, JVM and tools. OpenJDK builds: Temurin, Microsoft, Corretto, Oracle...
+LTS versions :: 8, 11, 17, 21, 25 — supported for years; new feature releases every 6 months.
+Java's traits :: Statically typed, object-oriented, garbage-collected, JIT-compiled, backward compatible.
+
+=== lesson java-setup | Installing Java and running programs | 55
+## Install a JDK
+
+1. Download a **JDK 21** (or newer LTS) from **adoptium.net** (Eclipse Temurin) or **learn.microsoft.com/java/openjdk**, choosing your operating system. On Linux: `sudo apt install openjdk-21-jdk`; on macOS with Homebrew: `brew install openjdk@21`.
+2. Check it in a terminal:
+
+```
+java -version
+javac -version
+```
+
+Both should print 21 or later. If the command isn't found, the installer didn't add Java to your `PATH`: reopen the terminal, or set `JAVA_HOME` to the JDK folder and add its `bin` folder to `PATH`.
+
+DevQuest's desktop app finds the JDK automatically (see **Languages** in the sidebar). Once it shows Java as available, **▶ Run** works in every Java lesson.
+
+## Compile, then run
+
+Save this as `Main.java` (the file name must match the public class name, including capitals):
+
+```java
+public class Main {
+    public static void main(String[] args) {
+        int apples = 5;
+        int pears = 3;
+        System.out.println("Fruit: " + (apples + pears));
+    }
+}
+```
+
+Then, in the folder containing it:
+
+```
+javac Main.java      # compiles: creates Main.class (bytecode)
+java Main            # runs the class Main on the JVM
+```
+
+Since Java 11 you can skip the separate step for a single file: `java Main.java` compiles it in memory and runs it. That's what DevQuest does. Larger programs (several files, libraries) use a build tool, **Maven** or **Gradle** (Module 6).
+
+## One file, several classes
+
+In a real project, each public class has its own file. In DevQuest, an exercise is a single file, so the convention is:
+
+- `public class Main` comes **first**, with the `main` method;
+- other classes go **below** it, without `public`.
+
+```java
+public class Main {
+    public static void main(String[] args) {
+        Greeter greeter = new Greeter();
+        System.out.println(greeter.greet("Ada"));
+    }
+}
+
+class Greeter {
+    String greet(String name) {
+        return "Hello, " + name + "!";
+    }
+}
+```
+
+## Editors and IDEs
+
+Java is usually written in an **IDE** (integrated development environment), which compiles as you type, completes code and refactors safely:
+
+- **IntelliJ IDEA** (Community Edition is free): the most popular Java IDE;
+- **VS Code** with the "Extension Pack for Java";
+- **Eclipse**, long the standard, still widely used in companies.
+
+## JShell: Java's REPL
+
+`jshell` (in the JDK) lets you type Java expressions and see results immediately, without a class or `main`. It's great for experimenting:
+
+```
+$ jshell
+jshell> 7 / 2
+$1 ==> 3
+jshell> "Java".toUpperCase()
+$2 ==> "JAVA"
+jshell> /exit
+```
+
+~~~check
+? A file contains `public class Calculator`. What must the file be called?
++ Calculator.java
+- calculator.java
+- Main.java
+- Calculator.class
+> The file name must match the public class name exactly.
+~~~
+
+📚 **Go deeper:** dev.java, "Getting Started" and "Launching Single-File Source-Code Programs"; *Java: The Complete Reference*, chapter 2 (a first simple program); the JShell User's Guide (docs.oracle.com).
+--- goals
+- install a JDK and check it with java -version and javac -version
+- compile with javac and run with java, or run a single file directly
+- follow the one-public-class-per-file rule, and DevQuest's single-file convention
+- choose an IDE, and experiment with JShell
+--- quiz
+? What does `javac Main.java` produce?
++ Main.class, containing bytecode
+- Main.exe
+- A running program
+- Main.jar
+> java Main then runs it.
+? What does `java Main.java` do (Java 11+)?
++ Compiles the file in memory and runs it
+- Only checks the syntax
+- Converts it to JavaScript
+- Nothing: you must use javac first
+> The single-file source launcher.
+? In DevQuest's single-file programs, where does `public class Main` go?
++ First, with other classes below it without `public`
+- Last
+- In a separate file
+- Anywhere
+> The first top-level class must contain main.
+--- exercise code java
+::prompt
+Complete the class `Greeter` below `Main` so that the program prints:
+
+```
+Hello, Ada!
+Hello, Linus!
+```
+
+`greet` takes a name and **returns** the greeting (it doesn't print it).
+::starter
+public class Main {
+    public static void main(String[] args) {
+        Greeter greeter = new Greeter();
+        System.out.println(greeter.greet("Ada"));
+        System.out.println(greeter.greet("Linus"));
+    }
+}
+
+class Greeter {
+    String greet(String name) {
+        return "";
+    }
+}
+::solution
+public class Main {
+    public static void main(String[] args) {
+        Greeter greeter = new Greeter();
+        System.out.println(greeter.greet("Ada"));
+        System.out.println(greeter.greet("Linus"));
+    }
+}
+
+class Greeter {
+    String greet(String name) {
+        return "Hello, " + name + "!";
+    }
+}
+::expected
+Hello, Ada!
+Hello, Linus!
+::variants
+"Linus" => "Grace"
+::hints
+- Join strings with `+`: `"Hello, " + name + "!"`.
+--- cards
+Install :: JDK 21+ from adoptium.net (Temurin) or Microsoft; check with java -version and javac -version.
+Compile and run :: javac Main.java → Main.class; java Main. Single file: java Main.java.
+File naming :: A public class Foo lives in Foo.java (case matters).
+JShell :: Java's interactive REPL for trying expressions: jshell.
+IDEs :: IntelliJ IDEA, VS Code + Java extensions, Eclipse.
+
+=== lesson java-basics | Hello, Java: the structure of a program | 65
+## Taking the first program apart
+
+```java
+public class Main {
+    public static void main(String[] args) {
+        // This line prints a greeting
+        System.out.println("Hello, Java!");
+    }
+}
+```
+
+| Part | Meaning |
+|---|---|
+| `public class Main { ... }` | declares a **class** named `Main`. All Java code lives inside classes. |
+| `public static void main(String[] args)` | the **entry point**: the JVM starts here. `public`: callable from outside; `static`: belongs to the class, no object needed; `void`: returns nothing; `String[] args`: the command-line arguments. |
+| `{ }` | **braces** group code into blocks (Python uses indentation; Java uses braces, and indents for readability). |
+| `System.out.println(...)` | prints a value and a line break. `System.out.print` prints without the line break. |
+| `;` | ends each **statement**. Forgetting one is the most common beginner error. |
+| `// ...` | a comment, ignored by the compiler (`/* ... */` spans lines; `/** ... */` is a Javadoc comment). |
+
+Java is **case-sensitive**: `System` and `system` are different names, and `Main` isn't `main`.
+
+## Values and variables
+
+A **variable** stores a value, and in Java every variable has a **type** that never changes:
+
+```java
+public class Main {
+    public static void main(String[] args) {
+        String name = "Duke";
+        int year = 1995;
+        double version = 21.0;
+        boolean fun = true;
+
+        System.out.println(name + " was born in " + year);
+        System.out.println("Version " + version + ", fun: " + fun);
+
+        year = year + 31;
+        System.out.println("Now it's " + year);
+    }
+}
+```
+
+- `String` (text), `int` (whole numbers), `double` (decimal numbers) and `boolean` (`true`/`false`) are the everyday types; the next module covers all of them.
+- A variable is declared once, with its type (`int year = 1995;`), then assigned new values without the type (`year = ...`).
+- `+` joins strings, and turns numbers into text when one side is a string.
+
+Since Java 10, **`var`** lets the compiler infer the type of a local variable from its value: `var count = 3;` is still an `int`, forever. It saves typing when the type is obvious.
+
+## printf and formatted text
+
+`System.out.printf` formats values with placeholders, like C and Python's `%` formatting:
+
+```java
+public class Main {
+    public static void main(String[] args) {
+        String item = "Coffee";
+        int quantity = 3;
+        double price = 2.5;
+        System.out.printf("%s x%d = %.2f%n", item, quantity, quantity * price);
+        System.out.println(String.format("%-8s|%5d|", item, quantity));
+    }
+}
+```
+
+`%s` is a string, `%d` an integer, `%.2f` a decimal with 2 places, `%n` a line break; widths like `%5d` (right-aligned) and `%-8s` (left-aligned) line up columns. `String.format` (or `"...".formatted(...)`) returns the text instead of printing it.
+
+~~~check
+? What's wrong with `System.out.println("Hi")` (no semicolon)?
+- Nothing
++ It's a compile error: statements must end with ;
+- It prints without a line break
+- It runs but warns
+> The compiler reports "';' expected".
+~~~
+
+📚 **Go deeper:** *Java: The Complete Reference*, chapter 2 "An Overview of Java"; dev.java, "Java Language Basics"; the `java.util.Formatter` documentation (format strings).
+--- goals
+- explain each part of a Java program: class, main method, statements and blocks
+- print text with println, print and printf
+- declare and assign typed variables, and use var
+- write comments
+--- quiz
+? Which line declares Java's entry point?
++ `public static void main(String[] args)`
+- `public class Main`
+- `import java.util.*;`
+- `System.out.println()`
+> The JVM looks for this exact signature.
+? What does `static` mean on main?
++ It belongs to the class, so the JVM can call it without creating an object
+- It never changes
+- It's private
+- It returns a value
+> Instance methods need an object first.
+? What does `printf("%.2f", 3.14159)` print?
++ 3.14
+- 3.14159
+- 3
+- %.2f
+> Two decimal places.
+? `var x = 10;` then `x = "ten";`. What happens?
++ Compile error: x is an int
+- x becomes a String
+- It prints a warning
+- It works: var means any type
+> var infers a fixed type.
+--- exercise code java
+::prompt
+Write a program that stores a product name (`"Keyboard"`), a quantity (`4`) and a unit price (`39.9`) in variables, then prints:
+
+```
+Product: Keyboard
+Quantity: 4
+Total: 159.60
+```
+
+Use `printf` (or `String.format`) to show the total with exactly two decimals.
+::starter
+public class Main {
+    public static void main(String[] args) {
+        // declare the variables here
+
+    }
+}
+::solution
+public class Main {
+    public static void main(String[] args) {
+        String product = "Keyboard";
+        int quantity = 4;
+        double unitPrice = 39.9;
+        System.out.println("Product: " + product);
+        System.out.println("Quantity: " + quantity);
+        System.out.printf("Total: %.2f%n", quantity * unitPrice);
+    }
+}
+::expected
+Product: Keyboard
+Quantity: 4
+Total: 159.60
+::variants
+39.9 => 12.5
+::hints
+- `String product = "Keyboard";`, `int quantity = 4;`, `double unitPrice = 39.9;`.
+- `System.out.printf("Total: %.2f%n", quantity * unitPrice);`
+--- exercise code java
+::prompt
+Print a small receipt table with `printf` widths, exactly like this (names left-aligned in 10 characters, prices right-aligned in 8 characters with 2 decimals):
+
+```
+Tea           2.50
+Sandwich      6.75
+Total         9.25
+```
+
+Compute the total from the two prices.
+::starter
+public class Main {
+    public static void main(String[] args) {
+        double tea = 2.5;
+        double sandwich = 6.75;
+    }
+}
+::solution
+public class Main {
+    public static void main(String[] args) {
+        double tea = 2.5;
+        double sandwich = 6.75;
+        System.out.printf("%-10s%8.2f%n", "Tea", tea);
+        System.out.printf("%-10s%8.2f%n", "Sandwich", sandwich);
+        System.out.printf("%-10s%8.2f%n", "Total", tea + sandwich);
+    }
+}
+::expected
+Tea           2.50
+Sandwich      6.75
+Total         9.25
+::variants
+6.75 => 4.25
+::hints
+- `%-10s` left-aligns text in 10 characters; `%8.2f` right-aligns a number in 8 characters with 2 decimals.
+--- cards
+main method :: public static void main(String[] args) — where the JVM starts.
+Statement :: Ends with ; — blocks are grouped with { }.
+println / print / printf :: Line with newline / without / formatted: %s %d %.2f %n, widths %5d %-8s.
+Typed variable :: int n = 5; — the type never changes. var infers it: var n = 5;
+Comments :: // line, /* block */, /** Javadoc */.
+
+=== lesson java-errors | Reading compiler errors and exceptions | 55
+## Two kinds of errors
+
+Java reports problems at two moments:
+
+1. **Compile errors**: `javac` refuses to compile a program that breaks the language's rules or types. Nothing runs.
+2. **Exceptions**: a compiled program hits a problem while running (dividing by zero, an invalid index) and stops with a **stack trace**.
+
+Static typing moves many mistakes from the second kind to the first, which is good: compile errors appear immediately, on the exact line, before any user sees them.
+
+## Compile errors
+
+```java
+// error: a misspelt method name
+public class Main {
+    public static void main(String[] args) {
+        System.out.printn("Hello");
+    }
+}
+```
+
+The compiler answers:
+
+```
+Main.java:4: error: cannot find symbol
+        System.out.printn("Hello");
+                  ^
+  symbol:   method printn(String)
+  location: variable out of type PrintStream
+1 error
+```
+
+Read it as: **file and line** (`Main.java:4`), **what's wrong** (`cannot find symbol`), the line with a `^` under the problem, and details. The common ones:
+
+| Message | Usual cause |
+|---|---|
+| `';' expected` | a missing semicolon (reported on the line where the compiler noticed, often the next line) |
+| `cannot find symbol` | a typo, wrong capitalisation, a missing variable or import |
+| `incompatible types: String cannot be converted to int` | a value of the wrong type |
+| `missing return statement` | a method that should return a value doesn't on every path |
+| `variable x might not have been initialized` | using a local variable before giving it a value |
+| `class Main is public, should be declared in a file named Main.java` | the file name doesn't match |
+| `reached end of file while parsing` | a missing closing brace `}` |
+
+```java
+// error: assigning text to an int variable
+public class Main {
+    public static void main(String[] args) {
+        int age = "thirty";
+        System.out.println(age);
+    }
+}
+```
+
+When several errors appear, **fix the first one first**: later errors are often consequences of it.
+
+## Exceptions and stack traces
+
+```java
+// error: this program compiles, then fails while running
+public class Main {
+    public static void main(String[] args) {
+        int[] scores = {90, 85, 77};
+        System.out.println("First: " + scores[0]);
+        System.out.println("Fourth: " + scores[3]);
+    }
+}
+```
+
+```
+First: 90
+Exception in thread "main" java.lang.ArrayIndexOutOfBoundsException: Index 3 out of bounds for length 3
+	at Main.main(Main.java:6)
+```
+
+The first line names the **exception class** and a message; the lines starting with `at` are the **stack trace**: the chain of method calls that led there, innermost first, each with its file and line. In a big application, look for the first `at` line in **your** code. Common runtime exceptions:
+
+| Exception | Means |
+|---|---|
+| `NullPointerException` | using a variable that holds `null` (no object) |
+| `ArrayIndexOutOfBoundsException` | an index outside an array |
+| `ArithmeticException: / by zero` | integer division by zero |
+| `NumberFormatException` | `Integer.parseInt("abc")` |
+| `ClassCastException` | converting an object to a type it isn't |
+
+Module 5 shows how to catch and handle exceptions.
+
+~~~check
+? A program reports 5 compile errors. Which should you fix first?
++ The first one: later errors are often caused by it
+- The last one
+- The longest one
+- Any; they're independent
+> One missing brace can produce many messages.
+~~~
+
+📚 **Go deeper:** *Java: The Complete Reference*, chapter 10 (exception basics); dev.java, "Exceptions"; Oracle's "Troubleshooting Guide" (reading stack traces).
+--- goals
+- tell compile errors from runtime exceptions
+- read a compiler message's file, line, description and caret
+- recognise the most common compile errors and their causes
+- read a stack trace and find where an exception happened
+--- quiz
+? When are type errors like `incompatible types` reported?
++ At compile time, before the program runs
+- When the line runs
+- Never
+- Only in the IDE
+> javac checks types for the whole program.
+? `Main.java:12: error: ';' expected`. Where's the missing semicolon?
++ At the end of line 11 or 12, near where the compiler noticed
+- On line 1
+- At the end of the file
+- In another file
+> The compiler reports where it realised something was missing.
+? What does `NullPointerException` mean?
++ The program used a reference that holds null as if it were an object
+- A number was divided by zero
+- A file is missing
+- The program ran out of memory
+> Module 4 shows how to avoid nulls.
+--- exercise code java
+::prompt
+This program has **three compile errors**. Fix them so it prints:
+
+```
+Total items: 7
+Average: 3.5
+```
+::starter
+public class Main {
+    public static void main(String[] args) {
+        int first = 3
+        int second = 4;
+        int total = first + secnd;
+        double average = total / 2.0;
+        system.out.println("Total items: " + total);
+        System.out.println("Average: " + average);
+    }
+}
+::solution
+public class Main {
+    public static void main(String[] args) {
+        int first = 3;
+        int second = 4;
+        int total = first + second;
+        double average = total / 2.0;
+        System.out.println("Total items: " + total);
+        System.out.println("Average: " + average);
+    }
+}
+::expected
+Total items: 7
+Average: 3.5
+::hints
+- A semicolon is missing at the end of a line.
+- `secnd` is a typo.
+- Java is case-sensitive: `system` should be `System`.
+--- cards
+Compile error :: Reported by javac before running: file:line, message, caret. Fix the first one first.
+Exception :: A problem while running; the program stops with a stack trace unless it's caught.
+Stack trace :: Exception class and message, then "at Class.method(File.java:line)" lines, innermost first.
+Common exceptions :: NullPointerException, ArrayIndexOutOfBoundsException, ArithmeticException, NumberFormatException.
+
+=== lesson java-m1-test | Module 1 test | 120 | exam
+This test covers Module 1: what Java and the JVM are, installing and running Java, the structure of a program, printing and variables, and reading errors.
+
+Before you start, check that you can:
+
+- explain how Java code is compiled and run;
+- write a `Main` class with a `main` method that prints formatted output;
+- declare variables of the basic types;
+- read and fix compile errors.
+--- goals
+- write and run small Java programs
+- read Java's error messages confidently
+--- quiz
+? Which command runs a single source file directly (Java 11+)?
++ `java Main.java`
+- `javac Main.java --run`
+- `jshell Main.java`
+- `run Main`
+> The source-file launcher compiles in memory.
+? What does `System.out.print("A"); System.out.print("B");` print?
++ AB
+- A then B on separate lines
+- A B
+- Nothing
+> print doesn't add a line break.
+? Which declaration is valid Java?
++ `double price = 9.99;`
+- `price = 9.99;` (first use)
+- `double price := 9.99;`
+- `let price = 9.99;`
+> Declare with a type (or var) the first time.
+? What does `%n` mean in printf?
++ A line break
+- A number
+- Nothing
+- A null value
+> Platform-independent newline.
+--- exercise code java
+::prompt
+Write a program that describes a book using variables (`title` = `"Effective Java"`, `author` = `"Joshua Bloch"`, `pages` = `412`, `price` = `45.0`) and prints:
+
+```
+"Effective Java" by Joshua Bloch
+412 pages, $45.00
+Price per 100 pages: $10.92
+```
+
+The last line divides the price by the pages and multiplies by 100, with two decimals. (A double quote inside a string is written `\"`.)
+::starter
+public class Main {
+    public static void main(String[] args) {
+    }
+}
+::solution
+public class Main {
+    public static void main(String[] args) {
+        String title = "Effective Java";
+        String author = "Joshua Bloch";
+        int pages = 412;
+        double price = 45.0;
+        System.out.println("\"" + title + "\" by " + author);
+        System.out.printf("%d pages, $%.2f%n", pages, price);
+        System.out.printf("Price per 100 pages: $%.2f%n", price / pages * 100);
+    }
+}
+::expected
+"Effective Java" by Joshua Bloch
+412 pages, $45.00
+Price per 100 pages: $10.92
+::variants
+412 => 300
+::hints
+- `"\"" + title + "\" by " + author` prints the quotes.
+- `printf("%d pages, $%.2f%n", pages, price)`.

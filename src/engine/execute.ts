@@ -46,7 +46,7 @@ async function runPlain(lang: CodeLang, mode: ExecMode, code: string, stdin?: st
     const r = await runCode(lang, code, undefined, stdin);
     return { ok: r.ok, output: r.output ?? '' };
   }
-  const r = await runLocal(lang as NativeLang, code);
+  const r = await runLocal(lang as NativeLang, code, stdin);
   return { ok: r.ok, output: r.output ?? '' };
 }
 
@@ -78,7 +78,7 @@ export async function execute(lang: CodeLang, code: string, check: CodeCheck | u
 
   if (mode === 'local') {
     const tool = localTool(lang)!;
-    const r = await runLocal(lang as NativeLang, code);
+    const r = await runLocal(lang as NativeLang, code, check && 'stdin' in check ? check.stdin : stdin);
     if (!r.ok) return { ok: false, output: r.output, error: r.error, passed: check ? false : undefined, mode, tool: tool.tool };
     if (tool.compileOnly) {
       // Solidity: solc proves it compiles; behaviour is judged by the AI when available

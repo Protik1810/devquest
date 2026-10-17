@@ -18,7 +18,7 @@ if (trusted) {
   // Local compilers/interpreters for languages that can't run in the browser (see toolchains.cjs)
   contextBridge.exposeInMainWorld('devquestTools', {
     detect: (force) => ipcRenderer.invoke('tools:detect', force),
-    run: (lang, code) => ipcRenderer.invoke('tools:run', { lang, code }),
+    run: (lang, code, stdin) => ipcRenderer.invoke('tools:run', { lang, code, stdin }),
   });
 
   // Durable save file in the app data folder (mirrors localStorage; see src/engine/deviceSave.ts)

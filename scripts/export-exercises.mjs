@@ -17,9 +17,15 @@ try {
         .filter((e) => e.kind === 'code')
         .forEach((e, i, all) => out.push({ id: all.length > 1 ? `${l.id}#${i + 1}` : l.id, track: t.id, ...pick(e) }));
   for (const c of CHALLENGES) out.push({ id: c.id, track: 'dojo', ...pick(c.exercise) });
+  // Runnable examples in lesson text for native languages (```java ...), checked by verify-native too
+  const examples = [];
+  for (const t of TRACKS)
+    for (const l of t.lessons)
+      for (const m of (l.body ?? '').matchAll(/^```(java)[ \t]*\n([\s\S]*?)^```[ \t]*$/gm)) examples.push({ id: l.id, lang: m[1], code: m[2] });
   fs.mkdirSync(path.join(root, '.cache'), { recursive: true });
   fs.writeFileSync(path.join(root, '.cache', 'exercises.json'), JSON.stringify(out, null, 1));
-  console.log(`exported ${out.length} code exercises`);
+  fs.writeFileSync(path.join(root, '.cache', 'examples.json'), JSON.stringify(examples, null, 1));
+  console.log(`exported ${out.length} code exercises and ${examples.length} native lesson examples`);
 } finally {
   await server.close();
 }

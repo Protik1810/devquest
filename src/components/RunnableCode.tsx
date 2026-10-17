@@ -9,7 +9,7 @@ import { DATASETS } from '../content/sqlDatasets';
 import { Inline, shuffleOptions } from './Quiz';
 
 /** Fence languages whose examples can run inside a lesson. */
-export const RUNNABLE: Record<string, CodeLang> = { python: 'python', py: 'python', javascript: 'javascript', js: 'javascript', typescript: 'typescript', ts: 'typescript', lua: 'lua', html: 'web' };
+export const RUNNABLE: Record<string, CodeLang> = { python: 'python', py: 'python', javascript: 'javascript', js: 'javascript', typescript: 'typescript', ts: 'typescript', lua: 'lua', html: 'web', java: 'java' };
 
 /**
  * A code example in lesson text that the learner can run, edit and (for Python) step through.
@@ -28,7 +28,7 @@ export function RunnableCode({ lang, code, earlier, dataset }: { lang: CodeLang;
   const bump = useGame((s) => s.bump);
   const python = lang === 'python';
   const web = lang === 'web';
-  const usesInput = (python && /\binput\(/.test(src)) || (lang === 'javascript' && /\bprompt\(/.test(src));
+  const usesInput = (python && /\binput\(/.test(src)) || (lang === 'javascript' && /\bprompt\(/.test(src)) || (lang === 'java' && /System\.in\b/.test(src));
   const prelude = (on: boolean) => (on && earlier.length ? earlier : undefined);
 
   const run = async (on = withEarlier) => {
@@ -82,7 +82,7 @@ export function RunnableCode({ lang, code, earlier, dataset }: { lang: CodeLang;
       </div>
       {usesInput && (
         <label className="stdin-box small">
-          ⌨️ Typed input for <code>{python ? 'input()' : 'prompt()'}</code>, one line per call
+          ⌨️ Typed input for <code>{python ? 'input()' : lang === 'java' ? 'Scanner' : 'prompt()'}</code>, one line per call
           <textarea rows={2} value={stdin} onChange={(e) => setStdin(e.target.value)} spellCheck={false} />
         </label>
       )}
