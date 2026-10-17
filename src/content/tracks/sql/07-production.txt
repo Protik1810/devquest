@@ -1,0 +1,1336 @@
+=== module Module 7 · SQL in production
+
+=== lesson sql-transactions | Transactions and concurrency | 85
+## All or nothing
+
+Moving money between two accounts is two updates: take from one, add to the other. If the program crashes between them, money vanishes. A **transaction** groups statements so that they all happen, or none do:
+
+```sql empty
+CREATE TABLE accounts (id integer PRIMARY KEY, owner text NOT NULL, balance numeric(10, 2) NOT NULL CHECK (balance >= 0));
+INSERT INTO accounts VALUES (1, 'Ada', 100), (2, 'Grace', 50);
+
+BEGIN;
+UPDATE accounts SET balance = balance - 30 WHERE id = 1;
+UPDATE accounts SET balance = balance + 30 WHERE id = 2;
+COMMIT;
+
+SELECT * FROM accounts ORDER BY id;
+```
+
+- **`BEGIN`** starts a transaction;
+- **`COMMIT`** makes all its changes permanent and visible to others, at once;
+- **`ROLLBACK`** cancels all of them, as if they never happened:
+
+```sql empty
+CREATE TABLE accounts (id integer PRIMARY KEY, owner text NOT NULL, balance numeric(10, 2) NOT NULL);
+INSERT INTO accounts VALUES (1, 'Ada', 100), (2, 'Grace', 50);
+
+BEGIN;
+DELETE FROM accounts;
+SELECT count(*) AS inside_the_transaction FROM accounts;
+ROLLBACK;
+
+SELECT count(*) AS after_rollback FROM accounts;
+```
+
+Without `BEGIN`, PostgreSQL runs each statement in its own transaction (**autocommit**). If any statement in a transaction fails, PostgreSQL marks the whole transaction as failed: every following statement is refused until `ROLLBACK`. That's deliberate: you can't accidentally commit half a job.
+
+## ACID
+
+Transactions give four guarantees, known as **ACID**:
+
+| | Guarantee |
+|---|---|
+| **Atomicity** | all of the transaction's changes happen, or none |
+| **Consistency** | it moves the database from one valid state to another: every constraint holds at commit |
+| **Isolation** | concurrent transactions don't see each other's unfinished work |
+| **Durability** | once committed, changes survive crashes (PostgreSQL writes them to its write-ahead log first) |
+
+## Savepoints
+
+A **savepoint** marks a point inside a transaction you can roll back to, without abandoning the whole transaction:
+
+```sql empty
+CREATE TABLE log (id integer PRIMARY KEY, message text);
+
+BEGIN;
+INSERT INTO log VALUES (1, 'kept');
+SAVEPOINT before_risky_part;
+INSERT INTO log VALUES (2, 'undone');
+ROLLBACK TO SAVEPOINT before_risky_part;
+INSERT INTO log VALUES (3, 'also kept');
+COMMIT;
+
+SELECT * FROM log ORDER BY id;
+```
+
+## Concurrency: many users at once
+
+A busy database runs hundreds of transactions at the same time. PostgreSQL uses **MVCC** (multi-version concurrency control): an update writes a new version of the row instead of overwriting it, so **readers never wait for writers and writers never wait for readers**. Each transaction sees a consistent **snapshot** of the data. (Old row versions are cleaned up later by **VACUUM**, which runs automatically.)
+
+Two writers updating the **same row** do wait for each other: the second blocks until the first commits or rolls back.
+
+## Isolation levels
+
+How much transactions can see of each other is set by the **isolation level**. The SQL standard defines four, by the anomalies they prevent:
+
+| Level | Dirty read | Non-repeatable read | Phantom read | Serialization anomaly |
+|---|---|---|---|---|
+| Read uncommitted | possible (not in PostgreSQL) | possible | possible | possible |
+| **Read committed** (PostgreSQL's default) | no | possible | possible | possible |
+| Repeatable read | no | no | no in PostgreSQL | possible |
+| Serializable | no | no | no | no |
+
+- **Dirty read**: seeing another transaction's uncommitted changes.
+- **Non-repeatable read**: reading the same row twice in one transaction and getting different values, because someone committed in between.
+- **Phantom read**: running the same query twice and getting new rows.
+- **Serialization anomaly**: the combined result is impossible in any one-at-a-time order.
+
+The famous bug of read committed is the **lost update**. Two clerks sell the last items in stock at the same time:
+
+| Time | Transaction A | Transaction B |
+|---|---|---|
+| 1 | `SELECT stock ...` → 1 | |
+| 2 | | `SELECT stock ...` → 1 |
+| 3 | `UPDATE ... SET stock = 0` (computed in the app: 1 − 1) | |
+| 4 | `COMMIT` | `UPDATE ... SET stock = 0` (also 1 − 1) |
+| 5 | | `COMMIT`: two items sold, stock says 0, one item is oversold |
+
+Three standard fixes:
+
+1. **Let the database do the arithmetic, atomically, with a guard**: `UPDATE products SET stock = stock - 1 WHERE id = 7 AND stock >= 1` (and check that one row was updated). This is usually the best.
+2. **Lock the row** when reading it: `SELECT ... FOR UPDATE` makes the second transaction wait until the first commits, then read the new value.
+3. **Optimistic locking**: store a `version` number and update with `WHERE id = 7 AND version = 3`; if no row changed, someone else got there first, so reload and retry. Common in ORMs and web applications.
+
+Stricter isolation (`BEGIN ISOLATION LEVEL SERIALIZABLE`) prevents such anomalies automatically, at the cost of having to **retry** transactions that the database aborts with a serialization failure (error 40001).
+
+## Deadlocks
+
+If A locks row 1 then wants row 2, while B holds row 2 and wants row 1, both wait forever: a **deadlock**. PostgreSQL detects it and aborts one of them (error 40P01). Prevent deadlocks by always locking rows in the same order (for example, by id), and keep transactions **short**: never wait for user input inside one.
+
+~~~check
+? What does PostgreSQL do with the remaining statements after an error inside a transaction?
++ It refuses them until you ROLLBACK
+- It runs them anyway
+- It commits automatically
+- It retries the failed statement
+> A failed transaction can only be rolled back.
+~~~
+
+📚 **Go deeper:** *SQL: The Complete Reference*, chapter 12 "Transaction Processing" (locking, versioning); PostgreSQL documentation, "Transactions" (tutorial), "Concurrency Control" (MVCC, isolation, explicit locking); Martin Kleppmann, *Designing Data-Intensive Applications*, chapter 7.
+--- goals
+- group statements into transactions with BEGIN, COMMIT and ROLLBACK, and use savepoints
+- explain the ACID guarantees
+- describe MVCC, isolation levels and the anomalies they prevent
+- prevent lost updates with atomic updates, row locks or optimistic locking
+- avoid and handle deadlocks and serialization failures
+--- quiz
+? What does ROLLBACK do?
++ Undoes every change made since BEGIN
+- Undoes the last statement only
+- Restores yesterday's backup
+- Commits and then undoes
+> All or nothing.
+? Which ACID property says committed data survives a crash?
+- Atomicity
+- Consistency
+- Isolation
++ Durability
+> PostgreSQL writes to the write-ahead log before confirming a commit.
+? What is PostgreSQL's default isolation level?
++ Read committed
+- Serializable
+- Repeatable read
+- Read uncommitted
+> Each statement sees data committed before it started.
+? Which update avoids a lost update when decreasing stock?
++ `UPDATE products SET stock = stock - 1 WHERE id = 7 AND stock >= 1`
+- Read the stock in the application, subtract, then `SET stock = <new value>`
+- `UPDATE products SET stock = 0 WHERE id = 7`
+- Two separate transactions
+> The database computes from the current value atomically.
+? Two transactions lock the same two rows in opposite orders. What can happen?
++ A deadlock: PostgreSQL aborts one of them
+- Both succeed in parallel
+- Both are silently rolled back
+- Data is corrupted
+> Lock rows in a consistent order.
+--- exercise code postgres
+::prompt
+Transfer **40** from Ada's account (id 1) to Grace's (id 2) **inside a transaction**, record the transfer in the `transfers` table (`from_id`, `to_id`, `amount`) in the same transaction, and commit. Then show that a rollback undoes work: start a second transaction, delete all transfers, and roll it back. The checker looks at the final balances and transfers.
+::dataset empty
+::setup
+CREATE TABLE accounts (id integer PRIMARY KEY, owner text NOT NULL, balance numeric(10, 2) NOT NULL CHECK (balance >= 0));
+CREATE TABLE transfers (id integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY, from_id integer NOT NULL REFERENCES accounts, to_id integer NOT NULL REFERENCES accounts, amount numeric(10, 2) NOT NULL);
+INSERT INTO accounts VALUES (1, 'Ada', 100), (2, 'Grace', 50);
+::starter
+UPDATE accounts SET balance = balance - 40 WHERE id = 1;
+UPDATE accounts SET balance = balance + 40 WHERE id = 2;
+::solution
+BEGIN;
+UPDATE accounts SET balance = balance - 40 WHERE id = 1;
+UPDATE accounts SET balance = balance + 40 WHERE id = 2;
+INSERT INTO transfers (from_id, to_id, amount) VALUES (1, 2, 40);
+COMMIT;
+
+BEGIN;
+DELETE FROM transfers;
+ROLLBACK;
+::reference
+BEGIN;
+UPDATE accounts SET balance = balance + CASE id WHEN 1 THEN -40 WHEN 2 THEN 40 END WHERE id IN (1, 2);
+INSERT INTO transfers (from_id, to_id, amount) VALUES (1, 2, 40);
+COMMIT;
+::verify
+SELECT (SELECT string_agg(owner || '=' || balance, ', ' ORDER BY id) FROM accounts) AS balances,
+       (SELECT string_agg(from_id || '->' || to_id || ':' || amount, ', ') FROM transfers) AS transfers;
+::hints
+- Wrap the two updates and the insert between `BEGIN;` and `COMMIT;`.
+- The second transaction is `BEGIN; DELETE FROM transfers; ROLLBACK;`: after the rollback, the transfer is still there.
+--- exercise code postgres
+::prompt
+Implement **optimistic locking**. The `products` table has a `version` column. A web form loaded product 7 when its version was **1**, and the user now saves a new price of **47.50**. Write the update so that it only succeeds if the version is still 1, increments the version, and returns the `id` and new `version` with `RETURNING`. In this database, someone else already saved a change (the version is now 2), so the correct update changes **nothing**: then write a second update that retries with the current version (2), setting the price to 47.50.
+::dataset empty
+::setup
+CREATE TABLE products (id integer PRIMARY KEY, name text NOT NULL, price numeric(8, 2) NOT NULL, version integer NOT NULL DEFAULT 1);
+INSERT INTO products VALUES (7, 'Chef''s Knife', 46.00, 2);
+::starter
+UPDATE products SET price = 47.50 WHERE id = 7;
+::solution
+UPDATE products
+SET price = 47.50, version = version + 1
+WHERE id = 7 AND version = 1
+RETURNING id, version;
+
+UPDATE products
+SET price = 47.50, version = version + 1
+WHERE id = 7 AND version = 2
+RETURNING id, version;
+::reference
+UPDATE products SET price = 47.50, version = 3 WHERE id = 7 AND version = 2;
+::verify
+SELECT id, price, version FROM products;
+::hints
+- Put the expected version in the `WHERE`: `WHERE id = 7 AND version = 1`, and `SET version = version + 1`.
+- The first update matches no row (the version is 2): in an application, that's the signal to reload and retry.
+--- cards
+Transaction :: BEGIN ... COMMIT (or ROLLBACK): all statements take effect together, or none do.
+Failed transaction :: After an error, PostgreSQL refuses further statements until ROLLBACK.
+Savepoint :: SAVEPOINT s; ... ROLLBACK TO SAVEPOINT s — undo part of a transaction.
+ACID :: Atomicity, Consistency, Isolation, Durability.
+MVCC :: Updates create new row versions; readers and writers don't block each other; VACUUM cleans up.
+Isolation levels :: Read committed (PostgreSQL default), repeatable read, serializable (may need retries on 40001).
+Lost update fixes :: Atomic UPDATE ... SET x = x - 1 WHERE x >= 1; SELECT ... FOR UPDATE; optimistic version column.
+Deadlock :: Two transactions waiting for each other's locks; PostgreSQL aborts one (40P01). Lock in a consistent order.
+
+=== lesson sql-indexes | Indexes and query performance | 90
+## Why queries get slow
+
+On 20 rows, every query is instant. On 20 million, a query that reads the whole table (a **sequential scan**) can take seconds. An **index** is a separate data structure, sorted by one or more columns, that lets the database jump straight to the matching rows, like the index at the back of a book.
+
+This example builds a table of 200,000 events, then runs the same query before and after creating an index. **`EXPLAIN ANALYZE`** shows the **plan** the database chose and how long each step took:
+
+```sql empty
+CREATE TABLE events (id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY, user_id integer NOT NULL, kind text NOT NULL, created_at timestamptz NOT NULL);
+INSERT INTO events (user_id, kind, created_at)
+SELECT (i * 7919) % 5000, (ARRAY['view', 'click', 'buy'])[1 + i % 3], timestamptz '2026-01-01' + i * interval '1 minute'
+FROM generate_series(1, 200000) AS i;
+ANALYZE events;
+
+EXPLAIN ANALYZE SELECT * FROM events WHERE user_id = 42;
+```
+
+`Seq Scan on events` with `Rows Removed by Filter: 199960`: the database read every row to find 40. Now with an index:
+
+```sql empty
+CREATE TABLE events (id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY, user_id integer NOT NULL, kind text NOT NULL, created_at timestamptz NOT NULL);
+INSERT INTO events (user_id, kind, created_at)
+SELECT (i * 7919) % 5000, (ARRAY['view', 'click', 'buy'])[1 + i % 3], timestamptz '2026-01-01' + i * interval '1 minute'
+FROM generate_series(1, 200000) AS i;
+CREATE INDEX events_user_id_idx ON events (user_id);
+ANALYZE events;
+
+EXPLAIN ANALYZE SELECT * FROM events WHERE user_id = 42;
+```
+
+The plan now uses `events_user_id_idx`, and the execution time drops by a factor of about a hundred. On a real server with millions of rows and data on disk, the difference is between milliseconds and minutes.
+
+## How a B-tree index works
+
+The default index type is a **B-tree**: a balanced tree of sorted keys, a few levels deep even for billions of rows, where each leaf points to rows in the table. Finding one value takes a handful of page reads instead of all of them. Because it's sorted, a B-tree helps with:
+
+- equality: `WHERE user_id = 42`;
+- ranges: `WHERE created_at >= '2026-03-01' AND created_at < '2026-04-01'`, `BETWEEN`, `<`, `>`;
+- prefix matches: `WHERE name LIKE 'Ada%'` (with the right operator class);
+- sorting: `ORDER BY created_at DESC LIMIT 10` can read the index in order and stop early;
+- `min` and `max`.
+
+It doesn't help with `LIKE '%ada%'` (no fixed prefix), functions of the column (`WHERE lower(email) = ...`, unless you index that expression), or conditions that match most of the table (reading the index and then most rows would be slower than one sequential scan, so the planner rightly ignores the index).
+
+## Reading plans
+
+`EXPLAIN` shows the plan without running the query; `EXPLAIN ANALYZE` runs it and adds real times and row counts. The common nodes:
+
+| Node | Means |
+|---|---|
+| `Seq Scan` | reads the whole table |
+| `Index Scan` | walks the index, fetching matching rows |
+| `Index Only Scan` | answers from the index alone, without touching the table |
+| `Bitmap Index Scan` + `Bitmap Heap Scan` | collects matching row locations from the index, then reads them in physical order (good for medium-sized results) |
+| `Nested Loop`, `Hash Join`, `Merge Join` | join algorithms |
+| `Sort`, `HashAggregate`, `Limit` | as named |
+
+The planner chooses using **statistics** about each column (collected by `ANALYZE`, which runs automatically). When estimated rows (`rows=40`) and actual rows are very different, the statistics are stale or the query is hard to estimate: a common cause of bad plans.
+
+## Multi-column, expression and partial indexes
+
+```sql empty
+CREATE TABLE events (id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY, user_id integer NOT NULL, kind text NOT NULL, created_at timestamptz NOT NULL);
+INSERT INTO events (user_id, kind, created_at)
+SELECT (i * 7919) % 5000, (ARRAY['view', 'click', 'buy'])[1 + i % 3], timestamptz '2026-01-01' + i * interval '1 minute'
+FROM generate_series(1, 200000) AS i;
+CREATE INDEX events_user_time_idx ON events (user_id, created_at DESC);
+ANALYZE events;
+
+EXPLAIN ANALYZE
+SELECT * FROM events WHERE user_id = 42 ORDER BY created_at DESC LIMIT 5;
+```
+
+- A **multi-column** index on `(user_id, created_at)` serves "this user's latest events" directly: filter on the first column, read in the order of the second. Column order matters: it also serves queries on `user_id` alone, but not on `created_at` alone (like a phone book sorted by surname, then first name).
+- An **expression index** indexes a computed value: `CREATE INDEX ON customers (lower(email))` serves `WHERE lower(email) = 'ada@example.com'`.
+- A **partial index** covers only some rows: `CREATE INDEX ON orders (ordered_at) WHERE status = 'pending'` is small and fast for "pending orders" queries.
+- A **unique index** enforces uniqueness (that's how `UNIQUE` and primary keys are implemented).
+
+Other index types serve other data: **GIN** for arrays, `jsonb` containment and full-text search; **GiST** for ranges, geometry and exclusion constraints; **BRIN** for huge, naturally ordered tables (logs by time); hash for equality only.
+
+## The cost of indexes
+
+Indexes aren't free: every `INSERT`, `UPDATE` and `DELETE` must update every index on the table, and each takes disk space. So:
+
+- index columns used in frequent `WHERE`, `JOIN` and `ORDER BY` clauses, **foreign keys** in particular (PostgreSQL doesn't index them automatically; joins and parent deletes need them);
+- don't index everything "just in case";
+- measure with `EXPLAIN ANALYZE` before and after, on realistic data;
+- on a live production table, use `CREATE INDEX CONCURRENTLY`, which doesn't block writes while it builds;
+- find slow queries with the `pg_stat_statements` extension and the slow query log (`log_min_duration_statement`).
+
+~~~check
+? Index on `(country, city)`. Which query can use it efficiently?
++ `WHERE country = 'UK'`
+- `WHERE city = 'London'`
+- `WHERE lower(city) = 'london'`
+- `WHERE city LIKE '%don'`
+> A multi-column index works for its leading column(s).
+~~~
+
+📚 **Go deeper:** Markus Winand, *SQL Performance Explained* and use-the-index-luke.com (free); PostgreSQL documentation, "Indexes" and "Using EXPLAIN"; *SQL: The Complete Reference*, chapter 13 (indexes) and chapter 7 (multitable query performance).
+--- goals
+- explain what an index is, and how a B-tree speeds up lookups, ranges and sorting
+- read EXPLAIN and EXPLAIN ANALYZE plans, and recognise the main node types
+- design multi-column, expression, partial and unique indexes
+- weigh the write and storage cost of indexes, and index foreign keys
+--- quiz
+? What does `EXPLAIN ANALYZE` do that `EXPLAIN` doesn't?
++ Runs the query and reports actual times and row counts
+- Creates missing indexes
+- Shows the query's result
+- Updates statistics
+> EXPLAIN alone only shows the planned strategy.
+? Why might the planner ignore an index on `status` for `WHERE status = 'delivered'`?
++ Most rows match, so a sequential scan is cheaper
+- Indexes only work on numbers
+- The index is broken
+- WHERE can't use indexes
+> Indexes pay off for selective conditions.
+? Which query can't use a normal B-tree index on `email`?
++ `WHERE email LIKE '%@gmail.com'`
+- `WHERE email = 'a@x.dev'`
+- `WHERE email > 'm'`
+- `ORDER BY email`
+> A leading wildcard has no prefix to search for.
+? What's the main cost of an index?
++ Slower writes and more storage: every change must update it
+- Slower reads
+- It locks the table permanently
+- It disables constraints
+> Index what queries need, no more.
+? PostgreSQL creates an index automatically for...
++ primary keys and unique constraints
+- every foreign key
+- every column
+- every WHERE clause
+> Foreign keys need their own index.
+--- exercise code postgres
+::prompt
+The `events` table (200,000 rows) is loaded. The product team runs this query constantly:
+
+```
+SELECT * FROM events WHERE kind = 'buy' AND user_id = 1234 ORDER BY created_at DESC LIMIT 20;
+```
+
+Create **one index** that lets PostgreSQL answer it **without a sequential scan** and **without a separate sort** step. The checker runs `EXPLAIN` on the query, and checks that your index lists the filter columns first and the sort column after them.
+::dataset empty
+::setup
+CREATE TABLE events (id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY, user_id integer NOT NULL, kind text NOT NULL, created_at timestamptz NOT NULL);
+INSERT INTO events (user_id, kind, created_at)
+SELECT (i * 7919) % 5000, (ARRAY['view', 'click', 'buy'])[1 + i % 3], timestamptz '2026-01-01' + i * interval '1 minute'
+FROM generate_series(1, 200000) AS i;
+ANALYZE events;
+::starter
+-- CREATE INDEX ...
+::solution
+CREATE INDEX events_user_kind_time_idx ON events (user_id, kind, created_at DESC);
+ANALYZE events;
+::reference
+CREATE INDEX ON events (kind, user_id, created_at);
+ANALYZE events;
+::verify
+CREATE OR REPLACE FUNCTION pg_temp.plan_nodes(q text) RETURNS text LANGUAGE plpgsql AS $f$
+DECLARE plan json;
+BEGIN
+  EXECUTE 'EXPLAIN (FORMAT JSON) ' || q INTO plan;
+  RETURN plan::text;
+END $f$;
+SELECT pg_temp.plan_nodes($$SELECT * FROM events WHERE kind = 'buy' AND user_id = 1234 ORDER BY created_at DESC LIMIT 20$$) ~ '"Node Type": "Seq Scan"' AS uses_seq_scan,
+       EXISTS (SELECT 1 FROM pg_indexes WHERE tablename = 'events'
+               AND indexdef ~ '\((user_id, kind|kind, user_id), created_at( DESC)?\)') AS serves_filter_and_order;
+::hints
+- Both equality columns (`user_id`, `kind`) go first, in either order; the sort column (`created_at`) goes last.
+- A B-tree can be read backwards, so `created_at` or `created_at DESC` both avoid the sort.
+--- exercise code postgres
+::prompt
+The shop's support team searches customers by email **ignoring case** (`WHERE lower(email) = lower($1)`), and the warehouse constantly lists **pending** orders by date. Create:
+
+1. an index that serves the case-insensitive email search, and **also guarantees** that no two customers share an email that differs only in case (`Ada@Example.com` vs `ada@example.com`);
+2. a **partial** index on `orders (ordered_at)` covering only pending orders.
+
+The checker inspects your indexes and tries to insert a customer with a differently-cased duplicate email.
+::dataset shop
+::starter
+CREATE INDEX ON customers (email);
+::solution
+CREATE UNIQUE INDEX customers_email_lower_idx ON customers (lower(email));
+CREATE INDEX orders_pending_idx ON orders (ordered_at) WHERE status = 'pending';
+::reference
+CREATE UNIQUE INDEX ON customers (lower(email));
+CREATE INDEX ON orders (ordered_at) WHERE status = 'pending';
+::verify
+CREATE OR REPLACE FUNCTION pg_temp.attempt(stmt text) RETURNS text LANGUAGE plpgsql AS $f$
+BEGIN
+  BEGIN
+    EXECUTE stmt;
+    RAISE EXCEPTION '__accepted__';
+  EXCEPTION WHEN others THEN
+    IF SQLERRM = '__accepted__' THEN RETURN 'accepted'; END IF;
+    RETURN SQLSTATE;
+  END;
+END $f$;
+SELECT (SELECT count(*) FROM pg_indexes WHERE tablename = 'customers' AND indexdef ILIKE '%UNIQUE%lower(email)%') AS unique_lower_email,
+       (SELECT count(*) FROM pg_indexes WHERE tablename = 'orders' AND indexdef ILIKE '%(ordered_at)%WHERE%pending%') AS partial_pending,
+       pg_temp.attempt($$INSERT INTO customers (id, name, email, country, joined_on) VALUES (99, 'Copy', 'ADA@example.com', 'UK', now())$$) AS case_duplicate;
+::hints
+- An **expression index** on `lower(email)`; make it `UNIQUE` to enforce the rule.
+- `CREATE INDEX ... ON orders (ordered_at) WHERE status = 'pending';`
+--- cards
+Index :: A sorted structure (B-tree by default) that finds rows without scanning the whole table.
+Seq Scan vs Index Scan :: Read every row vs jump to matches; the planner picks by estimated cost.
+EXPLAIN ANALYZE :: Shows the chosen plan with actual times and rows; compare estimates with reality.
+Multi-column index :: (a, b) serves a, or a and b, and ORDER BY b after a = ...; not b alone.
+Expression / partial index :: ON t (lower(email)); ON t (col) WHERE status = 'pending'.
+Index types :: B-tree (default), GIN (jsonb, arrays, full text), GiST (ranges, geometry), BRIN (huge ordered tables), hash.
+Index costs :: Slower writes, more storage. Index foreign keys; CREATE INDEX CONCURRENTLY on live tables.
+
+=== lesson sql-catalog | The system catalog | 55
+## The database describes itself
+
+Every database keeps a description of its own structure, the **system catalog**, stored in tables you can query with ordinary SQL. Tools like `psql`'s `\d`, pgAdmin and ORMs read it to show tables, generate code and compare schemas.
+
+There are two views of it:
+
+- **`information_schema`**: the SQL standard's catalog, available (with variations) in PostgreSQL, MySQL, SQL Server and others. Portable, but slower and less detailed.
+- **`pg_catalog`**: PostgreSQL's own catalog tables (`pg_class`, `pg_attribute`, `pg_constraint`, `pg_index`...), complete and fast, but specific to PostgreSQL.
+
+## Tables, columns and constraints
+
+```sql shop
+SELECT table_name, column_name, data_type, is_nullable, column_default
+FROM information_schema.columns
+WHERE table_schema = 'public' AND table_name = 'products'
+ORDER BY ordinal_position;
+```
+
+```sql shop
+SELECT tc.table_name, tc.constraint_name, tc.constraint_type
+FROM information_schema.table_constraints tc
+WHERE tc.table_schema = 'public'
+ORDER BY tc.table_name, tc.constraint_type;
+```
+
+Foreign keys, with the columns they connect:
+
+```sql shop
+SELECT kcu.table_name, kcu.column_name, ccu.table_name AS references_table, ccu.column_name AS references_column
+FROM information_schema.table_constraints tc
+JOIN information_schema.key_column_usage kcu ON kcu.constraint_name = tc.constraint_name
+JOIN information_schema.constraint_column_usage ccu ON ccu.constraint_name = tc.constraint_name
+WHERE tc.constraint_type = 'FOREIGN KEY'
+ORDER BY kcu.table_name, kcu.column_name;
+```
+
+## PostgreSQL's catalog
+
+`pg_catalog` answers questions the standard views can't: sizes, indexes and their definitions, statistics.
+
+```sql shop
+SELECT c.relname AS table_name,
+       c.reltuples::bigint AS estimated_rows,
+       pg_size_pretty(pg_total_relation_size(c.oid)) AS total_size
+FROM pg_class c
+JOIN pg_namespace n ON n.oid = c.relnamespace
+WHERE n.nspname = 'public' AND c.relkind = 'r'
+ORDER BY pg_total_relation_size(c.oid) DESC;
+```
+
+```sql shop
+SELECT tablename, indexname, indexdef FROM pg_indexes WHERE schemaname = 'public' ORDER BY tablename;
+```
+
+Handy functions: `pg_get_constraintdef(oid)` and `pg_get_indexdef(oid)` return definitions as SQL; `pg_typeof(x)` shows a value's type; `obj_description` and `col_description` read **comments** you attach with `COMMENT ON TABLE products IS '...'`, which is a simple way to document a schema inside the database itself.
+
+The statistics views (`pg_stat_user_tables`, `pg_stat_user_indexes`) show how often each table is scanned and each index is used: an index with zero scans after months in production is a candidate for removal.
+
+~~~check
+? Which catalog is portable across database products?
++ information_schema
+- pg_catalog
+- pg_class
+- psql's \d
+> It's defined by the SQL standard.
+~~~
+
+📚 **Go deeper:** *SQL: The Complete Reference*, chapter 16 "The System Catalog"; PostgreSQL documentation, "The Information Schema", "System Catalogs" and "The Cumulative Statistics System".
+--- goals
+- query information_schema for tables, columns and constraints
+- use pg_catalog views for sizes, indexes and definitions
+- document a schema with COMMENT ON, and spot unused indexes in the statistics views
+--- quiz
+? Which view lists the columns of every table?
++ `information_schema.columns`
+- `pg_tables`
+- `information_schema.tables`
+- `pg_indexes`
+> One row per column, with type, nullability and default.
+? How do you attach documentation to a table inside the database?
++ `COMMENT ON TABLE products IS 'Items for sale';`
+- `-- Items for sale` before CREATE TABLE
+- `ALTER TABLE products ADD COMMENT`
+- You can't
+> Comments are stored in the catalog.
+? What does `pg_indexes` show?
++ Each index with its table and its CREATE INDEX definition
+- Index usage statistics
+- Missing indexes
+- Only primary keys
+> Use pg_stat_user_indexes for usage.
+--- exercise code postgres
+::prompt
+Write a query that documents the shop schema: for every **foreign key** column in the `public` schema, return `table_name`, `column_name`, `references_table` and `has_index` (true if some index on that table has that column as its **first** column). Order by `table_name`, then `column_name`. (Use `pg_indexes` and check whether `indexdef` contains `(column_name` or `(column_name,` right after the opening parenthesis; a regular expression such as `indexdef ~ ('\(' || column_name || '[,)]')` works.)
+::dataset shop
+::starter
+SELECT kcu.table_name, kcu.column_name
+FROM information_schema.key_column_usage kcu;
+::solution
+SELECT kcu.table_name,
+       kcu.column_name,
+       ccu.table_name AS references_table,
+       EXISTS (
+         SELECT 1 FROM pg_indexes i
+         WHERE i.schemaname = 'public' AND i.tablename = kcu.table_name
+           AND i.indexdef ~ ('\(' || kcu.column_name || '[,)]')
+       ) AS has_index
+FROM information_schema.table_constraints tc
+JOIN information_schema.key_column_usage kcu ON kcu.constraint_name = tc.constraint_name AND kcu.table_schema = tc.table_schema
+JOIN information_schema.constraint_column_usage ccu ON ccu.constraint_name = tc.constraint_name AND ccu.table_schema = tc.table_schema
+WHERE tc.constraint_type = 'FOREIGN KEY' AND tc.table_schema = 'public'
+ORDER BY kcu.table_name, kcu.column_name;
+::reference
+SELECT cl.relname::text AS table_name, a.attname::text AS column_name, rc.relname::text AS references_table, EXISTS (SELECT 1 FROM pg_index ix WHERE ix.indrelid = con.conrelid AND ix.indkey[0] = a.attnum) AS has_index FROM pg_constraint con JOIN pg_class cl ON cl.oid = con.conrelid JOIN pg_class rc ON rc.oid = con.confrelid JOIN pg_attribute a ON a.attrelid = con.conrelid AND a.attnum = con.conkey[1] WHERE con.contype = 'f' ORDER BY 1, 2;
+::ordered true
+::hints
+- Join `table_constraints` (type `FOREIGN KEY`) with `key_column_usage` (the column) and `constraint_column_usage` (the referenced table).
+- `EXISTS (SELECT 1 FROM pg_indexes ...)` gives the boolean. Only `order_items.order_id` is indexed (as the first column of the primary key).
+--- cards
+System catalog :: Tables describing the database itself, queryable with SQL.
+information_schema :: Standard, portable catalog views: tables, columns, table_constraints, key_column_usage...
+pg_catalog :: PostgreSQL's detailed catalog: pg_class, pg_attribute, pg_constraint, pg_index, pg_indexes view.
+COMMENT ON :: Stores documentation for tables and columns in the catalog.
+Statistics views :: pg_stat_user_tables / pg_stat_user_indexes show scans and index usage.
+
+=== lesson sql-security | Security: roles, privileges and SQL injection | 85
+## Least privilege
+
+A database often holds a company's most valuable and sensitive data. The first rule of database security is **least privilege**: every person and program gets exactly the access it needs, and nothing more. The web application doesn't need to drop tables; the reporting tool doesn't need to see password hashes; the intern doesn't need production at all.
+
+## Roles, GRANT and REVOKE
+
+PostgreSQL manages access with **roles**. A role can log in (a user) or not (a group of privileges), and roles can be members of other roles.
+
+```sql shop
+CREATE ROLE reporting NOLOGIN;
+GRANT SELECT ON products, categories, orders, order_items TO reporting;
+GRANT SELECT (id, name, country) ON customers TO reporting;
+
+SET ROLE reporting;                       -- act as that role, to test
+SELECT name, country FROM customers LIMIT 3;
+```
+
+```sql shop
+-- error: reporting may not read the email column
+CREATE ROLE reporting NOLOGIN;
+GRANT SELECT (id, name, country) ON customers TO reporting;
+SET ROLE reporting;
+SELECT name, email FROM customers;
+```
+
+| Statement | Effect |
+|---|---|
+| `CREATE ROLE app LOGIN PASSWORD '...'` | a role that can connect |
+| `GRANT SELECT, INSERT, UPDATE ON orders TO app` | table privileges (also `DELETE`, `TRUNCATE`, `REFERENCES`, `TRIGGER`) |
+| `GRANT SELECT (col1, col2) ON t TO r` | column privileges |
+| `GRANT USAGE ON SCHEMA s TO r` | needed to see objects in a schema |
+| `GRANT reporting TO alice` | role membership: alice gets reporting's privileges |
+| `REVOKE INSERT ON orders FROM app` | take a privilege away |
+| `ALTER DEFAULT PRIVILEGES ...` | privileges for tables created in the future |
+
+A typical production setup: an **owner** role that runs migrations (and owns the tables), an **application** role with only `SELECT`, `INSERT`, `UPDATE` and `DELETE` on the tables it uses, and a **read-only** role for analysts, connected to a replica. Nobody uses the superuser for daily work.
+
+Views (Module 6) add finer control: grant access to a view that shows only some rows or columns, without granting access to the table behind it.
+
+## Row-level security
+
+**Row-level security** (RLS) filters which **rows** each role or user may see or change, enforced by the database for every query. Multi-tenant applications use it so that one customer's data can never leak to another, even if the application has a bug:
+
+```sql shop
+CREATE ROLE web_app NOLOGIN;
+GRANT SELECT ON orders TO web_app;
+
+ALTER TABLE orders ENABLE ROW LEVEL SECURITY;
+CREATE POLICY customer_sees_own_orders ON orders
+  FOR SELECT
+  USING (customer_id = current_setting('app.customer_id')::integer);
+
+SET app.customer_id = '1';                -- the application sets this per request
+SET ROLE web_app;
+SELECT id, customer_id, status FROM orders;
+```
+
+Only Ada's three orders are visible to `web_app`, whatever the query says. (Table owners and superusers bypass RLS unless it's forced.)
+
+## SQL injection
+
+The most important security rule for application developers: **never build SQL by concatenating user input into a string.** Consider a login check built like this (shown in JavaScript):
+
+```
+const sql = "SELECT * FROM users WHERE email = '" + email + "' AND password_hash = '" + hash + "'";
+```
+
+If someone types the email `' OR 1=1 --`, the query becomes:
+
+```
+SELECT * FROM users WHERE email = '' OR 1=1 --' AND password_hash = '...'
+```
+
+`OR 1=1` makes the condition true for every row, and `--` comments out the password check: the attacker logs in as the first user, often an administrator. With other inputs, attackers can read any table (`' UNION SELECT ...`), modify data, or worse. **SQL injection** has been one of the most common and damaging web vulnerabilities for over twenty years.
+
+The fix is **parameterized queries** (prepared statements): the SQL text and the values travel separately, so values are never interpreted as SQL:
+
+```
+// node-postgres
+await client.query("SELECT * FROM users WHERE email = $1 AND password_hash = $2", [email, hash]);
+```
+
+```
+# Python, psycopg
+cur.execute("SELECT * FROM users WHERE email = %s AND password_hash = %s", (email, hash))
+```
+
+You can see the same mechanism in SQL itself with `PREPARE`, where the input stays a value even when it looks like SQL:
+
+```sql shop
+PREPARE find_customer(text) AS SELECT id, name FROM customers WHERE email = $1;
+EXECUTE find_customer('ada@example.com');
+```
+
+```sql shop
+PREPARE find_customer(text) AS SELECT id, name FROM customers WHERE email = $1;
+EXECUTE find_customer(''' OR 1=1 --');
+```
+
+The attack string is simply an email address nobody has: no rows. Rules of thumb:
+
+- always use parameters for values; never format them into the SQL string yourself;
+- identifiers (table or column names) can't be parameters: if users choose them (a sort column), pick from an **allow-list** in code;
+- inside PostgreSQL functions that build SQL dynamically, use `format('... %I ... %L', identifier, literal)`, which quotes safely (next lesson);
+- ORMs and query builders parameterize for you, until you use their "raw SQL" escape hatch carelessly.
+
+~~~check
+? Which is the right defence against SQL injection?
+- Removing quotes from user input
+- Checking input with a regular expression
++ Parameterized queries, with values sent separately from the SQL
+- Hiding error messages
+> Escaping and filtering are fragile; parameters are structural.
+~~~
+
+## More protection
+
+- **Passwords** are never stored in plain text: store a slow, salted hash (bcrypt, scrypt, Argon2) computed by the application.
+- **Encryption in transit**: require TLS (`sslmode=require`) for connections over a network.
+- **Encryption at rest**: disk or cloud-provider encryption; column-level encryption (`pgcrypto`) for especially sensitive fields.
+- **Network**: the database port should never be open to the internet; only application servers connect.
+- **Auditing**: log connections and changes to sensitive tables (with triggers, next lesson, or the `pgaudit` extension).
+- **Backups** are copies of all your data: protect them as carefully as the database.
+- Privacy laws (GDPR and others) also govern what you may store, for how long, and how users can see or delete it.
+
+📚 **Go deeper:** *SQL: The Complete Reference*, chapter 15 "SQL Security"; PostgreSQL documentation, "Database Roles", "Privileges" and "Row Security Policies"; OWASP, "SQL Injection Prevention Cheat Sheet".
+--- goals
+- apply least privilege with roles, GRANT and REVOKE, including column privileges
+- restrict rows per user with row-level security policies
+- explain SQL injection and prevent it with parameterized queries and allow-lists
+- name the other layers of database security
+--- quiz
+? Which privilege lets a role read a table?
++ SELECT
+- USAGE
+- READ
+- REFERENCES
+> USAGE is for schemas, sequences and types.
+? What does row-level security do?
++ Filters the rows each role can see or change, for every query
+- Encrypts rows
+- Locks rows during transactions
+- Gives each row its own owner
+> Policies add conditions to every query.
+? Input `' OR 1=1 --` breaks a concatenated query because...
++ The quote ends the string and the rest becomes SQL
+- PostgreSQL forbids OR
+- Comments aren't allowed
+- 1=1 is an error
+> The input changes the query's structure.
+? A user picks the column to sort by. How do you handle it safely?
++ Map the choice to a fixed allow-list of column names in code
+- Pass it as a query parameter ($1)
+- Escape quotes in it
+- Put it in double quotes
+> Identifiers can't be parameters.
+--- exercise code postgres
+::prompt
+Set up access for an analytics team in the shop database:
+
+1. Create a role **`analyst`** (no login).
+2. Let it read **all** columns of `products`, `categories`, `orders` and `order_items`.
+3. Let it read only the `id`, `country` and `joined_on` columns of `customers` (no names or emails: the analysts work with anonymous data).
+4. It must not be able to change anything.
+
+The checker inspects the role's privileges.
+::dataset shop
+::starter
+CREATE ROLE analyst NOLOGIN;
+GRANT ALL ON ALL TABLES IN SCHEMA public TO analyst;
+::solution
+CREATE ROLE analyst NOLOGIN;
+GRANT SELECT ON products, categories, orders, order_items TO analyst;
+GRANT SELECT (id, country, joined_on) ON customers TO analyst;
+::reference
+CREATE ROLE analyst;
+GRANT SELECT ON TABLE products, categories, orders, order_items TO analyst;
+GRANT SELECT (id, country, joined_on) ON TABLE customers TO analyst;
+::verify
+SELECT t.table_name,
+       has_table_privilege('analyst', t.table_name, 'SELECT') AS read_table,
+       has_table_privilege('analyst', t.table_name, 'INSERT,UPDATE,DELETE,TRUNCATE') AS modify,
+       (SELECT string_agg(c.column_name, ',' ORDER BY c.ordinal_position) FROM information_schema.columns c
+        WHERE c.table_name = t.table_name AND has_column_privilege('analyst', t.table_name, c.column_name, 'SELECT')) AS readable_columns
+FROM information_schema.tables t
+WHERE t.table_schema = 'public'
+ORDER BY t.table_name;
+::ordered true
+::hints
+- `GRANT SELECT ON products, categories, orders, order_items TO analyst;`
+- Column privileges: `GRANT SELECT (id, country, joined_on) ON customers TO analyst;`
+- `GRANT ALL` would allow changes: grant only `SELECT`.
+--- exercise code postgres
+::prompt
+The shop becomes a marketplace where each **customer** may only see **their own reviews** through the app. Create a role **`shopper`** with `SELECT` on `reviews`, enable row-level security on `reviews`, and add a policy so that `shopper` sees only rows whose `customer_id` equals the setting `app.customer_id`. Then, to test it, set `app.customer_id` to `'3'`, switch to the role, and select `id`, `product_id` and `rating` from `reviews` ordered by `id` (this last query is checked).
+::dataset shop
+::starter
+CREATE ROLE shopper NOLOGIN;
+GRANT SELECT ON reviews TO shopper;
+::solution
+CREATE ROLE shopper NOLOGIN;
+GRANT SELECT ON reviews TO shopper;
+
+ALTER TABLE reviews ENABLE ROW LEVEL SECURITY;
+CREATE POLICY own_reviews ON reviews
+  FOR SELECT TO shopper
+  USING (customer_id = current_setting('app.customer_id')::integer);
+
+SET app.customer_id = '3';
+SET ROLE shopper;
+SELECT id, product_id, rating FROM reviews ORDER BY id;
+::reference
+SELECT id, product_id, rating FROM reviews WHERE customer_id = 3 ORDER BY id;
+::ordered true
+::hints
+- `ALTER TABLE reviews ENABLE ROW LEVEL SECURITY;`
+- `CREATE POLICY ... ON reviews FOR SELECT TO shopper USING (customer_id = current_setting('app.customer_id')::integer);`
+- `SET app.customer_id = '3'; SET ROLE shopper;` before the final query.
+--- cards
+Least privilege :: Each user and program gets only the access it needs.
+GRANT / REVOKE :: GRANT SELECT, INSERT ON t TO role; column privileges: GRANT SELECT (a, b) ON t; REVOKE takes away.
+Role membership :: GRANT reporting TO alice — roles as groups of privileges.
+Row-level security :: ALTER TABLE t ENABLE ROW LEVEL SECURITY; CREATE POLICY ... USING (condition).
+SQL injection :: User input concatenated into SQL changes the query: ' OR 1=1 --.
+Parameterized query :: SQL and values sent separately ($1, %s, ?); the only reliable defence. Identifiers: allow-lists.
+
+=== lesson sql-functions | Functions, procedures and triggers | 85
+## Code inside the database
+
+Databases can run code: **functions** you call from queries, **procedures** you call to perform work, and **triggers** that run automatically when data changes. The book calls this "stored procedural SQL"; every major database has it, with different languages: PostgreSQL's **PL/pgSQL**, Oracle's PL/SQL, SQL Server's T-SQL, MySQL's stored procedures.
+
+## SQL functions
+
+The simplest function is a named, parameterized query:
+
+```sql shop
+CREATE FUNCTION customer_spend(p_customer integer) RETURNS numeric
+LANGUAGE sql STABLE
+AS $$
+  SELECT COALESCE(sum(oi.quantity * oi.unit_price), 0)
+  FROM orders o JOIN order_items oi ON oi.order_id = o.id
+  WHERE o.customer_id = p_customer AND o.status <> 'cancelled'
+$$;
+
+SELECT name, customer_spend(id) AS spent FROM customers ORDER BY spent DESC LIMIT 4;
+```
+
+- `$$ ... $$` quotes the body (so it can contain single quotes);
+- `STABLE` tells the planner the function doesn't modify data and returns the same result within a query (`IMMUTABLE` for pure calculations, `VOLATILE`, the default, for anything else);
+- functions can **return tables**, and then behave like parameterized views:
+
+```sql shop
+CREATE FUNCTION products_under(max_price numeric)
+RETURNS TABLE (name text, price numeric)
+LANGUAGE sql STABLE
+AS $$
+  SELECT name, price FROM products WHERE price <= max_price ORDER BY price
+$$;
+
+SELECT * FROM products_under(40);
+```
+
+## PL/pgSQL
+
+For logic with variables, conditions and loops, use **PL/pgSQL**:
+
+```sql shop
+CREATE FUNCTION loyalty_tier(p_customer integer) RETURNS text
+LANGUAGE plpgsql STABLE
+AS $$
+DECLARE
+  spent numeric;
+BEGIN
+  SELECT COALESCE(sum(oi.quantity * oi.unit_price), 0) INTO spent
+  FROM orders o JOIN order_items oi ON oi.order_id = o.id
+  WHERE o.customer_id = p_customer AND o.status <> 'cancelled';
+
+  IF spent >= 1000 THEN
+    RETURN 'gold';
+  ELSIF spent >= 250 THEN
+    RETURN 'silver';
+  ELSE
+    RETURN 'bronze';
+  END IF;
+END;
+$$;
+
+SELECT name, loyalty_tier(id) AS tier FROM customers ORDER BY id LIMIT 6;
+```
+
+PL/pgSQL has `DECLARE`d variables, `IF`/`ELSIF`/`ELSE`, `CASE`, `LOOP`, `WHILE`, `FOR row IN SELECT ... LOOP`, `RAISE EXCEPTION 'message'` to fail with an error, and `EXCEPTION WHEN ...` blocks to catch errors.
+
+## Procedures
+
+A **procedure** (`CREATE PROCEDURE`, called with `CALL`) performs work rather than returning a value, and, unlike a function, can `COMMIT` inside its body, which suits long batch jobs:
+
+```sql shop
+CREATE PROCEDURE cancel_stale_orders(older_than interval)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  UPDATE orders SET status = 'cancelled'
+  WHERE status = 'pending' AND ordered_at < timestamp '2026-03-31' - older_than;
+  RAISE NOTICE 'cancelled % orders', (SELECT count(*) FROM orders WHERE status = 'cancelled');
+END;
+$$;
+
+CALL cancel_stale_orders(interval '30 days');
+SELECT id, status FROM orders WHERE id IN (17, 19);
+```
+
+## Dynamic SQL, safely
+
+Sometimes a function must build SQL at run time (a table name chosen by a parameter). Use `EXECUTE` with **`format`**, whose `%I` quotes identifiers and `%L` quotes literals, so a malicious name can't inject SQL (the previous lesson):
+
+```sql shop
+CREATE FUNCTION row_count(table_name text) RETURNS bigint
+LANGUAGE plpgsql
+AS $$
+DECLARE n bigint;
+BEGIN
+  EXECUTE format('SELECT count(*) FROM %I', table_name) INTO n;
+  RETURN n;
+END;
+$$;
+
+SELECT t, row_count(t) FROM unnest(ARRAY['customers', 'orders', 'reviews']) AS t;
+```
+
+## Triggers
+
+A **trigger** runs a function automatically **before** or **after** each `INSERT`, `UPDATE` or `DELETE` on a table. Classic uses: maintaining `updated_at` columns, audit logs, enforcing rules that constraints can't express, and keeping denormalized data in sync.
+
+```sql shop
+ALTER TABLE products ADD COLUMN updated_at timestamptz;
+
+CREATE FUNCTION touch_updated_at() RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  NEW.updated_at := timestamptz '2026-03-15 12:00+00';   -- in real code: now()
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER products_touch
+BEFORE UPDATE ON products
+FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
+
+UPDATE products SET price = 26.99 WHERE id = 2;
+SELECT id, name, price, updated_at FROM products WHERE id IN (1, 2);
+```
+
+In a row trigger, **`NEW`** is the row being written (a `BEFORE` trigger can change it) and **`OLD`** the row before the change. Returning `NULL` from a `BEFORE` trigger skips the change for that row.
+
+An **audit log** with an `AFTER` trigger:
+
+```sql shop
+CREATE TABLE price_history (product_id integer, old_price numeric, new_price numeric, changed_at timestamptz DEFAULT now());
+
+CREATE FUNCTION log_price_change() RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  IF NEW.price IS DISTINCT FROM OLD.price THEN
+    INSERT INTO price_history (product_id, old_price, new_price) VALUES (OLD.id, OLD.price, NEW.price);
+  END IF;
+  RETURN NULL;          -- the return value of an AFTER trigger is ignored
+END;
+$$;
+
+CREATE TRIGGER products_price_history
+AFTER UPDATE OF price ON products
+FOR EACH ROW EXECUTE FUNCTION log_price_change();
+
+UPDATE products SET price = price * 1.1 WHERE category_id = 7;
+SELECT product_id, old_price, round(new_price, 2) AS new_price FROM price_history;
+```
+
+~~~check
+? In a BEFORE UPDATE trigger, how do you change a value that will be written?
++ Assign to NEW.column and RETURN NEW
+- UPDATE the table again inside the trigger
+- Assign to OLD.column
+- Return the new value
+> NEW is the row about to be stored.
+~~~
+
+## When to put logic in the database
+
+Database code runs next to the data (no network round-trips) and applies to **every** program that uses the database. But it's harder to test, version and debug than application code, and it ties you to one database product. A balanced approach used by many teams:
+
+- **constraints** for every rule the schema can express;
+- **triggers** for small, mechanical jobs (timestamps, audit trails) that must never be forgotten;
+- **functions** for reusable queries and calculations that benefit from running in the database;
+- **business workflows** in application code, inside transactions.
+
+Keep database code in migrations, like the schema.
+
+## Cursors
+
+Programs written in the 1980s and 1990s used **embedded SQL** (SQL written inside C or COBOL and translated by a precompiler) and processed results row by row through **cursors**. Cursors still exist: inside a transaction, `DECLARE c CURSOR FOR SELECT ...` then `FETCH 100 FROM c` reads a huge result in batches without loading it all into memory, and drivers use them for streaming. PL/pgSQL's `FOR row IN SELECT ... LOOP` uses a cursor behind the scenes.
+
+📚 **Go deeper:** *SQL: The Complete Reference*, chapter 20 "Database Processing and Stored Procedural SQL" (and chapters 17 and 18 on embedded and dynamic SQL); PostgreSQL documentation, "PL/pgSQL", "CREATE FUNCTION", "CREATE PROCEDURE" and "Triggers".
+--- goals
+- write SQL and PL/pgSQL functions, including functions that return tables
+- write procedures and call them
+- build dynamic SQL safely with format and %I / %L
+- write BEFORE and AFTER row triggers using NEW and OLD
+- decide which logic belongs in the database
+--- quiz
+? What's the main difference between a function and a procedure in PostgreSQL?
++ A procedure is called with CALL and can commit transactions inside; a function returns a value and is used in queries
+- Procedures are faster
+- Functions can't contain SQL
+- There's no difference
+> Functions run inside the calling statement's transaction.
+? In a trigger, what is OLD?
++ The row as it was before the UPDATE or DELETE
+- The previous trigger's result
+- The oldest row in the table
+- A backup table
+> NEW is the row after the change.
+? Which format specifier safely quotes an identifier?
++ %I
+- %s
+- %L
+- %d
+> %L quotes literals; %s inserts text unquoted (unsafe for input).
+? Which job is a good fit for a trigger?
++ Setting updated_at on every UPDATE
+- Sending a welcome email
+- Calling a payment API
+- Rendering a web page
+> Small, mechanical, must-never-be-forgotten jobs.
+--- exercise code postgres
+::prompt
+Write a SQL function **`order_total(p_order integer) RETURNS numeric`** that returns an order's goods total (quantity × unit price) **plus its shipping**, or `NULL` for an order that doesn't exist. Then return the `id` and `order_total(id) AS total` of orders **1 to 5**, ordered by id. The checker also calls your function directly, including for an order that doesn't exist.
+::dataset shop
+::starter
+CREATE FUNCTION order_total(p_order integer) RETURNS numeric
+LANGUAGE sql STABLE
+AS $$
+  SELECT 0
+$$;
+::solution
+CREATE FUNCTION order_total(p_order integer) RETURNS numeric
+LANGUAGE sql STABLE
+AS $$
+  SELECT o.shipping + COALESCE((SELECT sum(oi.quantity * oi.unit_price) FROM order_items oi WHERE oi.order_id = o.id), 0)
+  FROM orders o
+  WHERE o.id = p_order
+$$;
+
+SELECT id, order_total(id) AS total FROM orders WHERE id BETWEEN 1 AND 5 ORDER BY id;
+::reference
+CREATE FUNCTION order_total(p_order integer) RETURNS numeric LANGUAGE sql STABLE AS $$ SELECT max(o.shipping) + sum(oi.quantity * oi.unit_price) FROM orders o JOIN order_items oi ON oi.order_id = o.id WHERE o.id = p_order $$;
+SELECT id, order_total(id) AS total FROM orders WHERE id <= 5 ORDER BY id;
+::verify
+SELECT order_total(1) AS one, order_total(10) AS ten, order_total(999) AS missing;
+::hints
+- Select from `orders` where `id = p_order`: an order that doesn't exist gives no row, so the function returns NULL.
+- Add the shipping to the sum of the items (a scalar subquery on `order_items`).
+--- exercise code postgres
+::prompt
+Protect stock levels with a trigger: when an order item is **inserted**, reduce the product's `stock` by the quantity. If there isn't enough stock, **raise an error** with the message `not enough stock for product <id>` and let nothing change. Name the trigger function `take_stock` and the trigger `order_items_take_stock`.
+::dataset shop
+::starter
+CREATE FUNCTION take_stock() RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  RETURN NEW;
+END;
+$$;
+::solution
+CREATE FUNCTION take_stock() RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  UPDATE products
+  SET stock = stock - NEW.quantity
+  WHERE id = NEW.product_id AND stock >= NEW.quantity;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'not enough stock for product %', NEW.product_id;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER order_items_take_stock
+BEFORE INSERT ON order_items
+FOR EACH ROW EXECUTE FUNCTION take_stock();
+::reference
+CREATE FUNCTION take_stock() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE available integer;
+BEGIN
+  SELECT stock INTO available FROM products WHERE id = NEW.product_id FOR UPDATE;
+  IF available < NEW.quantity THEN RAISE EXCEPTION 'not enough stock for product %', NEW.product_id; END IF;
+  UPDATE products SET stock = stock - NEW.quantity WHERE id = NEW.product_id;
+  RETURN NEW;
+END $$;
+CREATE TRIGGER order_items_take_stock AFTER INSERT ON order_items FOR EACH ROW EXECUTE FUNCTION take_stock();
+::verify
+CREATE OR REPLACE FUNCTION pg_temp.attempt(stmt text) RETURNS text LANGUAGE plpgsql AS $f$
+BEGIN
+  BEGIN
+    EXECUTE stmt;
+    RAISE EXCEPTION '__accepted__';
+  EXCEPTION WHEN others THEN
+    IF SQLERRM = '__accepted__' THEN RETURN 'accepted'; END IF;
+    RETURN SQLERRM;
+  END;
+END $f$;
+INSERT INTO orders (id, customer_id, ordered_at, status) VALUES (21, 1, '2026-03-20', 'pending');
+INSERT INTO order_items (order_id, product_id, quantity, unit_price) VALUES (21, 2, 5, 24.99);
+SELECT (SELECT stock FROM products WHERE id = 2) AS mouse_stock_after_5,
+       pg_temp.attempt($$INSERT INTO order_items (order_id, product_id, quantity, unit_price) VALUES (21, 6, 1, 59.90)$$) AS speaker_out_of_stock,
+       (SELECT count(*) FROM order_items WHERE order_id = 21) AS items_in_order_21,
+       (SELECT stock FROM products WHERE id = 6) AS speaker_stock;
+::hints
+- `UPDATE products SET stock = stock - NEW.quantity WHERE id = NEW.product_id AND stock >= NEW.quantity;` then check `FOUND`.
+- `RAISE EXCEPTION 'not enough stock for product %', NEW.product_id;` aborts the INSERT.
+- `CREATE TRIGGER order_items_take_stock BEFORE INSERT ON order_items FOR EACH ROW EXECUTE FUNCTION take_stock();`
+--- cards
+SQL function :: CREATE FUNCTION f(x int) RETURNS t LANGUAGE sql STABLE AS $$ SELECT ... $$; can RETURNS TABLE (...).
+PL/pgSQL :: Procedural language: DECLARE, IF/ELSIF, LOOP, FOR row IN SELECT, RAISE EXCEPTION, EXCEPTION blocks.
+Procedure :: CREATE PROCEDURE ... ; CALL p(...); can COMMIT inside; returns no value.
+Volatility :: IMMUTABLE (pure), STABLE (reads, no writes), VOLATILE (default; anything).
+Dynamic SQL :: EXECUTE format('SELECT ... FROM %I WHERE x = %L', name, value) — safe quoting.
+Trigger :: CREATE TRIGGER ... BEFORE/AFTER INSERT/UPDATE/DELETE ... FOR EACH ROW EXECUTE FUNCTION f(); NEW and OLD rows.
+Cursor :: DECLARE c CURSOR FOR SELECT ...; FETCH n FROM c — read big results in batches.
+
+=== lesson sql-apps | SQL in applications and production | 70
+## From code to database
+
+Applications talk to databases through a **driver** (also called a client library): `psycopg` for Python, `pg` (node-postgres) or `postgres.js` for Node.js, JDBC for Java, Npgsql for C#, `pgx` for Go. They all work the same way: open a connection, send SQL with **parameters**, receive rows.
+
+```
+# Python, psycopg 3
+import psycopg
+
+with psycopg.connect(os.environ["DATABASE_URL"]) as conn:
+    with conn.transaction():
+        conn.execute("UPDATE accounts SET balance = balance - %s WHERE id = %s", (40, 1))
+        conn.execute("UPDATE accounts SET balance = balance + %s WHERE id = %s", (40, 2))
+    rows = conn.execute("SELECT owner, balance FROM accounts ORDER BY id").fetchall()
+```
+
+```
+// TypeScript, node-postgres
+const { rows } = await pool.query<{ id: number; name: string }>(
+  "SELECT id, name FROM customers WHERE country = $1 ORDER BY name",
+  [country],
+);
+```
+
+Notice the three habits: parameters for every value, transactions for multi-step changes, and the connection URL from an environment variable.
+
+## Connection pools
+
+Opening a database connection takes time (tens of milliseconds) and each PostgreSQL connection is a server process using memory, so a server handles hundreds of connections, not tens of thousands. Applications therefore keep a **pool** of open connections and lend them to requests. Size it modestly (often 10 to 20 per application instance); for many instances or serverless functions, a pooler such as **PgBouncer** sits in between.
+
+## ORMs and query builders
+
+**ORMs** (object-relational mappers) map tables to classes: SQLAlchemy and Django ORM (Python), Prisma, Drizzle and TypeORM (TypeScript), Hibernate (Java), Entity Framework (C#), ActiveRecord (Ruby). **Query builders** (Knex, Kysely, jOOQ) build SQL from code without hiding it.
+
+They save a lot of repetitive code and handle parameters for you, but they generate SQL you should still understand, because the classic performance bug is theirs to make: the **N+1 query problem**.
+
+```
+orders = Order.objects.all()            # 1 query
+for order in orders:
+    print(order.customer.name)          # 1 query per order: N more queries
+```
+
+With 1,000 orders that's 1,001 round-trips to the database instead of one join. Every ORM has a fix (`select_related`/`prefetch_related` in Django, `include` in Prisma, `joinedload` in SQLAlchemy, `JOIN FETCH` in Hibernate), and query logs or APM tools reveal the problem. Knowing SQL is what lets you notice it.
+
+## Operating a database
+
+Running a production database involves more than queries:
+
+- **Backups**: `pg_dump` makes logical backups (SQL or a compact archive) of a database; physical backups with **point-in-time recovery** (continuous archiving of the write-ahead log, with tools like pgBackRest or a cloud provider's feature) let you restore to any moment, for example to just before a bad `DELETE`. A backup you've never restored is a hope, not a backup: test restores regularly.
+- **Replication**: **streaming replicas** receive every change from the primary, giving a hot standby for failover and read-only copies for reports and analytics. Replication is asynchronous by default (a replica can lag slightly).
+- **Scaling**: first, better queries and indexes; then bigger hardware ("vertical"), read replicas, caching (Redis), **partitioning** large tables by time or key (`PARTITION BY RANGE`), and finally **sharding** across servers (Citus, or application-level), which adds a lot of complexity. Distributed SQL databases (CockroachDB, YugabyteDB, Spanner) and two-phase commit (`PREPARE TRANSACTION`) handle transactions spanning machines.
+- **Monitoring**: connections, slow queries (`pg_stat_statements`), replication lag, disk space, table bloat, and long-running transactions (which block VACUUM).
+- **Upgrades** to new major versions with `pg_upgrade` or logical replication.
+
+Managed services (AWS RDS and Aurora, Google Cloud SQL, Azure, Neon, Supabase) do much of this for you, but you still own the schema, queries, indexes and data.
+
+## Analytics and data warehouses
+
+Production databases are optimised for many small transactions (**OLTP**). Heavy analysis runs better elsewhere: a **data warehouse** (Snowflake, BigQuery, Redshift, ClickHouse, DuckDB) stores data in **columns** rather than rows, which makes scanning and aggregating billions of rows fast. Data is copied there regularly (**ETL/ELT** pipelines, often managed with dbt, which is mostly SQL), and modelled as **star schemas**: a central **fact** table of events (sales, page views) surrounded by **dimension** tables (date, product, customer, store). The SQL you've learned, especially joins, grouping, `ROLLUP` and window functions, is exactly what analysts write there. The analytics capstone practises it.
+
+~~~check
+? An ORM page lists 50 orders and runs 51 queries. What's the problem called?
++ The N+1 query problem
+- A deadlock
+- SQL injection
+- A lost update
+> Load related rows with a join or a batched query.
+~~~
+
+📚 **Go deeper:** *SQL: The Complete Reference*, chapters 19 "SQL APIs", 21 "SQL and Data Warehousing", 22 "SQL and Application Servers" and 23 "SQL Networking and Distributed Databases"; PostgreSQL documentation, "Backup and Restore", "High Availability, Load Balancing, and Replication" and "Table Partitioning"; the documentation of your language's driver.
+--- goals
+- use a database driver with parameters and transactions from application code
+- explain connection pooling
+- recognise and fix the N+1 query problem with ORMs
+- describe backups, point-in-time recovery, replication, scaling and monitoring
+- explain OLTP versus analytics, and star schemas
+--- quiz
+? Why do applications use a connection pool?
++ Opening connections is slow, and each PostgreSQL connection costs server memory
+- Pools encrypt queries
+- Drivers require them
+- To run several queries in one transaction
+> Reuse a small set of open connections.
+? What is point-in-time recovery?
++ Restoring a database to any chosen moment, using a base backup plus archived WAL
+- Undoing the last query
+- Restarting the server at a set time
+- A kind of index
+> Ideal for undoing a bad DELETE.
+? What's a star schema?
++ A fact table of events surrounded by dimension tables, used in data warehouses
+- A schema with a * in every query
+- A replication setup
+- A normalized OLTP design
+> Facts (sales) and dimensions (date, product, customer).
+? How do you know a backup works?
++ Restore it regularly and check the data
+- Check the file size
+- Make two backups
+- Backups always work
+> Test restores.
+--- exercise code postgres
+::prompt
+Simulate what a driver does with a **prepared statement**: prepare a statement named `orders_of_customer` that takes a customer id (`integer`) and returns `id`, `status` and `ordered_at` of that customer's orders, newest first. Then execute it for customer **3** (this result is checked).
+::dataset shop
+::starter
+SELECT id, status, ordered_at FROM orders WHERE customer_id = 3;
+::solution
+PREPARE orders_of_customer(integer) AS
+SELECT id, status, ordered_at FROM orders WHERE customer_id = $1 ORDER BY ordered_at DESC;
+
+EXECUTE orders_of_customer(3);
+::reference
+PREPARE orders_of_customer(integer) AS SELECT id, status, ordered_at FROM orders WHERE customer_id = $1 ORDER BY ordered_at DESC, id;
+EXECUTE orders_of_customer(3);
+::ordered true
+::verify
+EXECUTE orders_of_customer(3);
+::hints
+- `PREPARE name(integer) AS SELECT ... WHERE customer_id = $1 ...;`
+- `EXECUTE orders_of_customer(3);`
+--- cards
+Driver :: Library connecting code to the database (psycopg, node-postgres, JDBC, Npgsql, pgx): connect, send SQL with parameters, read rows.
+Connection pool :: A set of open connections reused across requests; PgBouncer for many clients.
+N+1 problem :: One query for a list, then one per item; fix with joins or batched loading.
+Backups :: pg_dump (logical), base backup + WAL archive (point-in-time recovery). Test restores.
+Replication :: Streaming replicas for failover and read scaling; usually asynchronous.
+OLTP vs OLAP :: Many small transactions vs big analytical scans; warehouses use columnar storage and star schemas.
+
+=== lesson sql-m7-test | Module 7 test | 150 | exam
+This test covers Module 7: transactions and concurrency, indexes and query plans, the system catalog, security and SQL injection, functions, procedures and triggers, and using SQL from applications.
+
+Before you start, check that you can:
+
+- group work into transactions and prevent lost updates;
+- choose and verify indexes with `EXPLAIN ANALYZE`;
+- grant least privilege and prevent SQL injection;
+- write functions and triggers;
+- explain how applications and operations teams work with databases.
+--- goals
+- run SQL safely and fast in production
+- protect data from mistakes, races and attackers
+--- quiz
+? Which statement makes a transaction's changes permanent?
++ COMMIT
+- SAVE
+- END TRANSACTION ROLLBACK
+- CHECKPOINT
+> END is an alias of COMMIT in PostgreSQL.
+? A query filters on `lower(email)`. Which index helps?
++ An expression index on `lower(email)`
+- An index on `email`
+- A GIN index on email
+- No index can help
+> The index must match the expression.
+? Which code is safe from SQL injection?
++ `query("SELECT * FROM t WHERE name = $1", [name])`
+- `query("SELECT * FROM t WHERE name = '" + name + "'")`
+- `` query(`SELECT * FROM t WHERE name = '${name}'`) ``
+- `query("SELECT * FROM t WHERE name = '" + name.replace("'", "") + "'")`
+> Only parameters keep data and code apart.
+? Which trigger timing can modify the row being written?
++ BEFORE
+- AFTER
+- INSTEAD OF on tables
+- Both equally
+> A BEFORE row trigger returns the (possibly changed) NEW row.
+? Two analysts need read-only access to everything except customers' emails. What's the best approach?
++ A role with SELECT on the tables and column-level SELECT on customers, granted to both
+- Share the owner's password
+- Give each SUPERUSER
+- Copy the database for them
+> Least privilege through a group role.
+--- exercise code postgres
+::prompt
+**Safe order placement.** Write a PL/pgSQL **procedure** `place_order(p_order integer, p_customer integer, p_product integer, p_quantity integer)` that, in one go:
+
+1. inserts the order (status `pending`, `ordered_at` = `timestamp '2026-03-20 09:00'`, shipping `4.99`);
+2. inserts the order item with the product's **current price** as `unit_price`;
+3. decreases the product's stock with an **atomic, guarded** update; if the stock is insufficient, raises `not enough stock` so that **nothing** is saved.
+
+Then call it twice: order **21** for customer 1, product **3**, quantity **2** (works), and order **22** for customer 2, product **12** (the bookshelf, out of stock), quantity 1, inside a block that catches the error so the script continues. (Use `DO $$ BEGIN CALL ...; EXCEPTION WHEN others THEN RAISE NOTICE '%', SQLERRM; END $$;` for the second call.)
+::dataset shop
+::starter
+CREATE PROCEDURE place_order(p_order integer, p_customer integer, p_product integer, p_quantity integer)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  INSERT INTO orders (id, customer_id, ordered_at, status, shipping)
+  VALUES (p_order, p_customer, timestamp '2026-03-20 09:00', 'pending', 4.99);
+END;
+$$;
+::solution
+CREATE PROCEDURE place_order(p_order integer, p_customer integer, p_product integer, p_quantity integer)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  INSERT INTO orders (id, customer_id, ordered_at, status, shipping)
+  VALUES (p_order, p_customer, timestamp '2026-03-20 09:00', 'pending', 4.99);
+
+  INSERT INTO order_items (order_id, product_id, quantity, unit_price)
+  SELECT p_order, id, p_quantity, price FROM products WHERE id = p_product;
+
+  UPDATE products SET stock = stock - p_quantity
+  WHERE id = p_product AND stock >= p_quantity;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'not enough stock';
+  END IF;
+END;
+$$;
+
+CALL place_order(21, 1, 3, 2);
+
+DO $$
+BEGIN
+  CALL place_order(22, 2, 12, 1);
+EXCEPTION WHEN others THEN
+  RAISE NOTICE '%', SQLERRM;
+END;
+$$;
+::reference
+INSERT INTO orders (id, customer_id, ordered_at, status, shipping) VALUES (21, 1, '2026-03-20 09:00', 'pending', 4.99);
+INSERT INTO order_items VALUES (21, 3, 2, 89.50);
+UPDATE products SET stock = stock - 2 WHERE id = 3;
+CREATE PROCEDURE place_order(a integer, b integer, c integer, d integer) LANGUAGE sql AS $$ SELECT 1 $$;
+::verify
+SELECT (SELECT string_agg(id || ':' || status || ':' || shipping, ', ' ORDER BY id) FROM orders WHERE id > 20) AS new_orders,
+       (SELECT string_agg(order_id || ':' || product_id || 'x' || quantity || '@' || unit_price, ', ') FROM order_items WHERE order_id > 20) AS new_items,
+       (SELECT stock FROM products WHERE id = 3) AS keyboard_stock,
+       (SELECT stock FROM products WHERE id = 12) AS bookshelf_stock,
+       (SELECT count(*) FROM pg_proc WHERE proname = 'place_order' AND prokind = 'p') AS procedure_exists;
+::hints
+- Insert the item with `INSERT ... SELECT p_order, id, p_quantity, price FROM products WHERE id = p_product`.
+- Guarded update, then `IF NOT FOUND THEN RAISE EXCEPTION 'not enough stock'; END IF;`: the exception undoes the whole call, including the inserts.
+- The `DO` block's `EXCEPTION` clause catches the error so the script can finish.

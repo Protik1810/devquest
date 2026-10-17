@@ -311,7 +311,7 @@ SELECT c.name, sum(oi.quantity * oi.unit_price) AS goods_total FROM order_items 
 ::hints
 - Three tables: customers → orders → order_items.
 - Filter delivered orders in `WHERE`, then `GROUP BY c.id, c.name`.
---- exercise code company
+--- exercise code postgres
 ::prompt
 The company database has `employees`, `departments`, `projects` and `assignments(employee_id, project_id, role, hours)`. List who works on the **Checkout redesign** project: the employee's `name`, their `role` and `hours`, most hours first.
 ::dataset company
@@ -537,7 +537,7 @@ SELECT c.name, count(o.id) FILTER (WHERE o.status = 'delivered') AS delivered_or
 ::ordered true
 ::hints
 - The `WHERE` removes customers without delivered orders. Move the status condition into `ON`.
---- exercise code company
+--- exercise code postgres
 ::prompt
 In the company database, find employees who are paid **at least 75%** of what their manager earns (a sign that a promotion may be due, or that pay bands overlap). Return `employee`, `salary`, `manager` and `manager_salary`, ordered by `employee`.
 ::dataset company
@@ -969,7 +969,7 @@ SELECT cat.name, COALESCE(sum(s.units), 0) AS units_sold, (SELECT s2.pname FROM 
 ::hints
 - Correlated scalar subqueries per category are the simplest route: one for the total, one for the best seller (`ORDER BY sum(...) DESC, p.name LIMIT 1`).
 - `COALESCE(..., 0)` turns "no sales" into 0.
---- exercise code company
+--- exercise code postgres
 ::prompt
 For each **department** (all of them), return `department`, `employees` (head count, 0 if none), `total_salary` (0 if none) and `manager`: the name of the department's highest-paid employee (NULL if none). Order by `total_salary` descending, then department name.
 ::dataset company

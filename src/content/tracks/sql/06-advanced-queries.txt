@@ -161,7 +161,7 @@ SELECT p.name, sum(oi.quantity) AS units FROM order_items oi JOIN orders o ON o.
 ::hints
 - The prompt asks for at least **2** units; the starter's inner filter uses 3.
 - `WITH product_sales AS (...), top_products AS (SELECT ... FROM product_sales WHERE units >= 2) SELECT ...`.
---- exercise code company
+--- exercise code postgres
 ::prompt
 List **everyone in Sofia Rossi's organisation** (Sofia herself and everyone who reports to her, directly or indirectly): `name`, `title` and `level` (1 for Sofia, 2 for her direct reports, and so on), ordered by `level`, then `name`.
 ::dataset company
@@ -438,7 +438,7 @@ WITH m AS (SELECT date_trunc('month', ordered_at)::date AS month, count(*) AS or
 ::hints
 - Window functions run after grouping, so they can use aggregates: `sum(count(*)) OVER (ORDER BY ...)`.
 - Or compute the monthly counts in a CTE, then `sum(orders) OVER (ORDER BY month)`.
---- exercise code company
+--- exercise code postgres
 ::prompt
 For each employee in a department, return `name`, `department_id`, `salary`, `dept_avg` (their department's average salary, rounded to 0 decimals) and `gap` (their salary minus that average, rounded to 0 decimals). Order by `department_id`, then `salary` descending.
 ::dataset company
@@ -978,7 +978,7 @@ WITH s AS (SELECT o.customer_id, sum(oi.quantity * oi.unit_price) AS spent FROM 
 ::hints
 - Compute spending per customer in a CTE first.
 - `sum(spent) OVER ()` is the grand total; `sum(spent) OVER (ORDER BY spent DESC, name)` the running total.
---- exercise code company
+--- exercise code postgres
 ::prompt
 For each **project**, return `project` (its name), `team` (a JSON array of the names of the people assigned, most hours first) and `top_contributor` (the name of the person with the most hours on it). Include projects with nobody assigned (with `team` as an empty JSON array `[]` and `top_contributor` NULL). Order by project name.
 ::dataset company

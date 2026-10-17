@@ -17,21 +17,26 @@ export const PG_OPTIONS: PGliteOptions = {
 export async function resetDatabase(db: PGlite, firstRun: boolean) {
   if (!firstRun) {
     await db.exec('ROLLBACK').catch(() => undefined);
-    const { rows: roles } = await db.query<{ rolname: string }>("SELECT rolname FROM pg_roles WHERE rolname NOT LIKE 'pg\\_%' AND rolname <> current_user");
+    // Back to the real user first: a learner's SET ROLE would otherwise make "current_user" someone else
+    await db.exec('RESET ROLE; RESET SESSION AUTHORIZATION;');
+    const { rows: roles } = await db.query<{ rolname: string }>(
+      "SELECT rolname FROM pg_roles WHERE rolname NOT LIKE 'pg\\_%' AND rolname <> session_user AND NOT rolsuper",
+    );
     const { rows: schemas } = await db.query<{ nspname: string }>(
       "SELECT nspname FROM pg_namespace WHERE nspname NOT IN ('pg_catalog', 'information_schema') AND nspname NOT LIKE 'pg\\_%'",
     );
     const q = (name: string) => `"${name.replace(/"/g, '""')}"`;
     await db.exec(
       [
-        'RESET ROLE; RESET SESSION AUTHORIZATION;',
         ...schemas.map((s) => `DROP SCHEMA IF EXISTS ${q(s.nspname)} CASCADE;`),
         ...roles.map((r) => `DROP OWNED BY ${q(r.rolname)} CASCADE; DROP ROLE IF EXISTS ${q(r.rolname)};`),
         'CREATE SCHEMA public; GRANT ALL ON SCHEMA public TO public;',
       ].join('\n'),
     );
   }
-  await db.exec("RESET ALL; SET TIME ZONE 'UTC'; SET search_path TO public;");
+  // PGlite starts with sequential scans disabled; a normal server has them on, and query plans should look the same
+  await db.exec('DISCARD ALL'); // settings, prepared statements, temporary tables and plans from the last run
+  await db.exec("SET enable_seqscan = on; SET TIME ZONE 'UTC'; SET search_path TO public;");
 }
 
 /** A cell as text-like JSON: arrays in PostgreSQL's {a,b} form, documents as JSON. */
@@ -65,6 +70,71 @@ export function describeError(err: unknown, code: string): string {
   return text;
 }
 
+/**
+ * Splits a script into statements, as psql does, so each runs on its own (sent together, PostgreSQL would treat
+ * the whole script as one implicit transaction, and a ROLLBACK in the middle would undo earlier statements too).
+ * Understands 'strings', E'escapes', "names", $tag$ bodies $tag$, -- comments and nested block comments.
+ */
+export function splitStatements(sql: string): { text: string; start: number }[] {
+  const out: { text: string; start: number }[] = [];
+  let start = 0;
+  let i = 0;
+  const push = (end: number) => {
+    const text = sql.slice(start, end);
+    if (text.replace(/--[^\n]*|\/\*[\s\S]*?\*\//g, '').trim()) out.push({ text, start });
+  };
+  while (i < sql.length) {
+    const c = sql[i];
+    if (c === "'" || c === '"') {
+      // A quoted string or name; a doubled quote is an escaped quote (E'..\'..' strings also allow backslashes)
+      const escapes = c === "'" && /(^|[^\w])[eE]$/.test(sql.slice(Math.max(0, i - 2), i));
+      i++;
+      while (i < sql.length) {
+        if (escapes && sql[i] === '\\') i += 2;
+        else if (sql[i] === c && sql[i + 1] === c) i += 2;
+        else if (sql[i] === c) break;
+        else i++;
+      }
+      i++;
+    } else if (c === '-' && sql[i + 1] === '-') {
+      while (i < sql.length && sql[i] !== '\n') i++;
+    } else if (c === '/' && sql[i + 1] === '*') {
+      let depth = 0;
+      do {
+        if (sql.startsWith('/*', i)) (depth++, (i += 2));
+        else if (sql.startsWith('*/', i)) (depth--, (i += 2));
+        else i++;
+      } while (depth > 0 && i < sql.length);
+    } else if (c === '$' && /^\$(?:[A-Za-z_]\w*)?\$/.test(sql.slice(i)) && !/[\w$]/.test(sql[i - 1] ?? '')) {
+      const tag = sql.slice(i).match(/^\$(?:[A-Za-z_]\w*)?\$/)![0];
+      const end = sql.indexOf(tag, i + tag.length);
+      i = end === -1 ? sql.length : end + tag.length;
+    } else if (c === ';') {
+      push(i + 1);
+      start = ++i;
+    } else i++;
+  }
+  push(sql.length);
+  return out;
+}
+
+/** Runs a script statement by statement; an error reports its line in the whole script. */
+async function runStatements(db: PGlite, code: string) {
+  const results: Awaited<ReturnType<PGlite['exec']>> = [];
+  for (const { text, start } of splitStatements(code)) {
+    try {
+      results.push(...(await db.exec(text, { rowMode: 'array' })));
+    } catch (err) {
+      const e = err as { position?: string | number };
+      // Positions are relative to the statement; make them relative to the script. Errors without a position
+      // (a constraint violation, say) point at the statement's first word
+      if (e && typeof e === 'object') e.position = Number(e.position) > 0 ? Number(e.position) + start : start + text.search(/\S/) + 1;
+      throw err;
+    }
+  }
+  return results;
+}
+
 /** Setup (hidden sample data), then the learner's script, then an optional checking query. */
 export async function runScript(db: PGlite, code: string, setup?: string, verify?: string): Promise<ScriptResult> {
   if (setup) {
@@ -76,14 +146,14 @@ export async function runScript(db: PGlite, code: string, setup?: string, verify
   }
   let results;
   try {
-    results = await db.exec(code, { rowMode: 'array' });
+    results = await runStatements(db, code);
   } catch (err) {
     return { ok: false, error: describeError(err, code) };
   }
   let checked: Table | null = null;
   if (verify) {
     try {
-      checked = lastTable(await db.exec(verify, { rowMode: 'array' }));
+      checked = lastTable(await runStatements(db, verify));
     } catch (err) {
       return { ok: false, error: `Your script ran, but checking the database failed: ${describeError(err, verify)}` };
     }

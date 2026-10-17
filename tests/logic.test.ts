@@ -171,3 +171,23 @@ Text.
     expect(() => parseTrackFile(exercise('expectd'))).toThrow(/unknown field ::expectd/);
   });
 });
+
+describe('SQL script splitting', () => {
+  it('splits statements like psql, respecting quotes, comments and dollar-quoted bodies', async () => {
+    const { splitStatements } = await import('../src/engine/pgCore');
+    const script = [
+      "INSERT INTO t VALUES ('a;b', 'it''s');",
+      'SELECT "odd;name" FROM t; -- a comment; with a semicolon',
+      '/* block; /* nested; */ comment */ SELECT 1;',
+      'CREATE FUNCTION f() RETURNS int LANGUAGE sql AS $$ SELECT 1; $$;',
+      "DO $body$ BEGIN RAISE NOTICE 'x;y'; END $body$;",
+      String.raw`SELECT E'a\';b'`,
+    ].join('\n');
+    const parts = splitStatements(script).map((s) => s.text.trim());
+    expect(parts).toHaveLength(6);
+    expect(parts[0]).toBe("INSERT INTO t VALUES ('a;b', 'it''s');");
+    expect(parts[3]).toContain('$$ SELECT 1; $$');
+    expect(parts[5]).toBe(String.raw`SELECT E'a\';b'`);
+    expect(splitStatements('-- only a comment\n')).toEqual([]);
+  });
+});
