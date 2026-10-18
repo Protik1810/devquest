@@ -1,0 +1,775 @@
+=== module Module 2 · Data, operators and text
+
+=== lesson cs-types | Value types and variables | 65
+## Built-in types
+
+C# has a rich set of built-in types. The numeric ones:
+
+| Type | Size | Range / precision | Literal |
+|---|---|---|---|
+| `int` | 32 bits | about ±2.1 billion | `42` |
+| `long` | 64 bits | about ±9.2 × 10¹⁸ | `42L` |
+| `byte` / `short` | 8 / 16 bits | 0–255 / ±32,767 | |
+| `uint`, `ulong` | 32 / 64 bits | unsigned (no negatives) | `42u` |
+| `double` | 64 bits | ~15 digits, approximate | `3.14` |
+| `float` | 32 bits | ~7 digits, approximate | `3.14f` |
+| `decimal` | 128 bits | 28 digits, **exact decimal** | `19.99m` |
+
+Plus `bool` (`true`/`false`), `char` (one UTF-16 character, `'A'`) and `string` (text, `"hello"`).
+
+**`decimal`** is C#'s great gift for business code: it represents decimal fractions exactly, so it's the type for **money** (Java needs the `BigDecimal` class for this). `double` is for measurements and science, where tiny rounding errors don't matter.
+
+```csharp
+double d = 0.1 + 0.2;
+decimal m = 0.1m + 0.2m;
+Console.WriteLine($"{d == 0.3} {m == 0.3m}");
+Console.WriteLine($"{d:R} {m}");
+
+long worldPopulation = 8_100_000_000L;    // underscores for readability
+Console.WriteLine($"{int.MaxValue} {long.MaxValue} {worldPopulation}");
+```
+
+## Value types and reference types
+
+This distinction runs through all of C#:
+
+- **Value types** (`int`, `double`, `decimal`, `bool`, `char`, enums and every `struct`) hold their data directly. Assigning **copies** the value.
+- **Reference types** (`string`, arrays, every `class`) hold a reference to an object on the heap. Assigning copies the **reference**, so two variables can share one object.
+
+```csharp
+int a = 5;
+int b = a;          // copy of the value
+b = 99;
+Console.WriteLine(a);            // still 5
+
+int[] first = { 1, 2, 3 };
+int[] second = first;            // copy of the reference: same array
+second[0] = 99;
+Console.WriteLine(first[0]);     // 99
+```
+
+(`string` is a reference type but **immutable**, so it behaves like a value in practice.) Module 4 shows how to write your own value types with `struct`.
+
+## Conversions
+
+Widening conversions (no information lost) are **implicit**; narrowing ones need an explicit **cast**:
+
+```csharp
+int apples = 7;
+double asDouble = apples;               // implicit
+double average = 7.9;
+int truncated = (int)average;           // explicit: drops the fraction → 7
+int rounded = (int)Math.Round(average); // 8
+decimal price = (decimal)19.99;         // double to decimal needs a cast
+long big = 3_000_000_000L;
+int wrapped = unchecked((int)big);      // wraps silently
+Console.WriteLine($"{asDouble} {truncated} {rounded} {price} {wrapped}");
+
+try
+{
+    int safe = checked((int)big);       // checked: throws instead of wrapping
+}
+catch (OverflowException e)
+{
+    Console.WriteLine("checked: " + e.GetType().Name);
+}
+```
+
+Converting **text** to numbers uses `int.Parse("42")` or, safer, `int.TryParse` (lesson 4). `Convert.ToInt32(...)` and `ToString()` convert between many types.
+
+## Constants and var
+
+```csharp
+const double VatRate = 0.20;            // compile-time constant
+var net = 50m;                          // decimal, inferred from the literal
+Console.WriteLine($"Gross: {net * (1 + (decimal)VatRate)}");
+```
+
+`const` values are fixed at compile time; for values computed at run time that must not change, use `readonly` fields (Module 4). Naming conventions: `camelCase` for locals and parameters, `PascalCase` for methods, properties, types **and constants** (unlike Java's `UPPER_SNAKE_CASE`).
+
+~~~check
+? Which type should store a bank balance?
++ decimal
+- double
+- float
+- int with a cast
+> decimal is exact for decimal fractions.
+~~~
+
+📚 **Go deeper:** Microsoft Learn, "Built-in types", "Value types" and "Casting and type conversions"; *Programming C#*, chapter 3 (types) and chapter 7 (structs); *C# in a Nutshell*, chapter 2.
+--- goals
+- choose between int, long, double, decimal and the other built-in types
+- explain value types versus reference types, and copying
+- convert with implicit conversions, casts, checked and unchecked
+- declare constants, and follow C# naming conventions
+--- quiz
+? What's the literal suffix for decimal?
++ m
+- d
+- dc
+- f
+> 19.99m.
+? `int[] a = {1}; int[] b = a; b[0] = 5;` What's `a[0]`?
++ 5
+- 1
+- 0
+- An error
+> Arrays are reference types.
+? What does `checked((int)3_000_000_000L)` do?
++ Throws OverflowException
+- Returns 3000000000
+- Wraps to a negative number
+- Doesn't compile
+> unchecked would wrap silently.
+? How are C# constants conventionally named?
++ PascalCase, e.g. VatRate
+- UPPER_SNAKE_CASE
+- camelCase
+- kebab-case
+> Unlike Java.
+--- exercise code csharp
+::prompt
+A shop sells `3` items at `19.99` each with `20%` VAT. Compute with **`decimal`** and print exactly:
+
+```
+Net: 59.97
+VAT: 11.99
+Gross: 71.96
+As double, 0.1 + 0.2 == 0.3? False
+As decimal, 0.1 + 0.2 == 0.3? True
+```
+
+Round the VAT to 2 decimals with `Math.Round(value, 2)` (the gross is net + rounded VAT).
+::starter
+int quantity = 3;
+double price = 19.99;
+::solution
+int quantity = 3;
+decimal price = 19.99m;
+decimal net = quantity * price;
+decimal vat = Math.Round(net * 0.20m, 2);
+Console.WriteLine($"Net: {net}");
+Console.WriteLine($"VAT: {vat}");
+Console.WriteLine($"Gross: {net + vat}");
+Console.WriteLine($"As double, 0.1 + 0.2 == 0.3? {0.1 + 0.2 == 0.3}");
+Console.WriteLine($"As decimal, 0.1 + 0.2 == 0.3? {0.1m + 0.2m == 0.3m}");
+::expected
+Net: 59.97
+VAT: 11.99
+Gross: 71.96
+As double, 0.1 + 0.2 == 0.3? False
+As decimal, 0.1 + 0.2 == 0.3? True
+::variants
+19.99m => 4.50m
+::hints
+- `decimal price = 19.99m;` (note the `m`).
+- `Math.Round(net * 0.20m, 2)` rounds the VAT.
+--- cards
+decimal :: 128-bit exact decimal type for money: 19.99m. double is approximate.
+Value vs reference types :: Values (int, struct) are copied; references (class, array) share the object.
+Casts :: Implicit widening; explicit (int)x narrowing truncates; checked(...) throws on overflow.
+const :: Compile-time constant, PascalCase in C#.
+
+=== lesson cs-operators | Operators and expressions | 55
+## Arithmetic and integer division
+
+```csharp
+Console.WriteLine(17 / 5);       // 3   integer division
+Console.WriteLine(17 % 5);       // 2   remainder
+Console.WriteLine(17 / 5.0);     // 3.4
+Console.WriteLine(-17 / 5);      // -3  truncates towards zero
+Console.WriteLine(17m / 5);      // 3.4 decimal division
+Console.WriteLine(Math.Pow(2, 10) + " " + Math.Sqrt(2).ToString("F3"));
+```
+
+Integer division drops the fraction, exactly as in Java and C. When you need the fraction, make one operand `double` or `decimal`.
+
+## Assignment, increment and compound operators
+
+`+=`, `-=`, `*=`, `/=`, `%=`, `++` and `--` work as in Java and JavaScript. C# adds the **null-coalescing** operators (Module 5): `a ?? b` ("a, or b if a is null") and `a ??= b`.
+
+## Comparison, logic and the conditional operator
+
+```csharp
+int age = 20;
+bool hasTicket = true;
+bool canEnter = age >= 18 && hasTicket;        // short-circuit and
+string label = canEnter ? "welcome" : "sorry";
+string? text = null;
+bool empty = text == null || text.Length == 0; // safe thanks to short-circuiting
+Console.WriteLine($"{canEnter} {label} {empty} {string.IsNullOrEmpty(text)}");
+```
+
+Unlike Java, `==` on **strings** compares their **contents** in C# (the `string` type overloads the operator), so `"a" == "a"` is reliable. For other classes, `==` compares references unless the class overloads it (Module 4).
+
+## Pattern-based comparisons
+
+C# lets you test values against **patterns** with `is`, which reads almost like English:
+
+```csharp
+int score = 72;
+Console.WriteLine(score is >= 0 and <= 100);
+Console.WriteLine(score is < 50 or > 90);
+char c = 'k';
+Console.WriteLine(c is >= 'a' and <= 'z');
+object value = 42;
+if (value is int n && n > 40) Console.WriteLine($"an int above 40: {n}");
+```
+
+`and`, `or` and `not` combine patterns; `is int n` tests a type and gives you the converted value. Module 3 uses patterns in `switch` expressions.
+
+## Bitwise operators
+
+`&`, `|`, `^`, `~`, `<<`, `>>` (and `>>>` since C# 11) work on integer bits; `[Flags]` enums (Module 4) use them for sets of options.
+
+```csharp
+int read = 0b100, write = 0b010, execute = 0b001;
+int permissions = read | write;
+Console.WriteLine(Convert.ToString(permissions, 2));
+Console.WriteLine((permissions & write) != 0);
+Console.WriteLine(1 << 10);
+```
+
+~~~check
+? What does `"java" == "java"` give in C#?
++ true: string overloads == to compare contents
+- false: it compares references
+- A compile error
+- It depends on interning
+> Different from Java, where you must use equals.
+~~~
+
+📚 **Go deeper:** Microsoft Learn, "Arithmetic operators", "Boolean logical operators" and "Patterns"; *Programming C#*, chapter 3 (operators).
+--- goals
+- compute with arithmetic operators, including integer and decimal division
+- combine conditions with short-circuit logic and the conditional operator
+- compare strings with == and know when == compares references
+- write relational and logical patterns with is
+--- quiz
+? What is `7 / 2` with ints?
++ 3
+- 3.5
+- 4
+- 3.0
+> Use 7 / 2.0 or 7m / 2 for a fraction.
+? What does `x is >= 1 and <= 10` test?
++ Whether x is between 1 and 10 inclusive
+- Whether x equals 1 or 10
+- A compile error
+- Whether x is a range
+> Relational patterns combined with and.
+? What does `a ? b : c` return when a is false?
++ c
+- b
+- a
+- null
+> The conditional (ternary) operator.
+--- exercise code csharp
+::prompt
+Classify numbers with **patterns**. For each number in the list, print it with a label: `negative` (below 0), `zero`, `small` (1 to 9), `teen` (10 to 19), `even` (20 or more and even) or `odd` (20 or more and odd). Use `is` patterns combined with `and`/`or` in an if/else chain:
+
+```
+-5 negative
+0 zero
+7 small
+13 teen
+42 even
+99 odd
+```
+::starter
+int[] numbers = { -5, 0, 7, 13, 42, 99 };
+foreach (int n in numbers)
+{
+    Console.WriteLine(n);
+}
+::solution
+int[] numbers = { -5, 0, 7, 13, 42, 99 };
+foreach (int n in numbers)
+{
+    string label;
+    if (n is < 0) label = "negative";
+    else if (n is 0) label = "zero";
+    else if (n is >= 1 and <= 9) label = "small";
+    else if (n is >= 10 and <= 19) label = "teen";
+    else if (n % 2 is 0) label = "even";
+    else label = "odd";
+    Console.WriteLine($"{n} {label}");
+}
+::expected
+-5 negative
+0 zero
+7 small
+13 teen
+42 even
+99 odd
+::variants
+42 => 43
+::hints
+- `n is >= 10 and <= 19` tests a range.
+- `n % 2 is 0` tests evenness.
+--- cards
+Integer division :: 7 / 2 = 3; 7 / 2.0 = 3.5; 7m / 2 = 3.5 (decimal).
+String == :: Compares contents in C# (overloaded operator).
+is patterns :: x is >= 1 and <= 10, x is < 0 or > 100, obj is int n.
+Conditional operator :: cond ? a : b.
+
+=== lesson cs-strings | Strings and text | 65
+## String essentials
+
+```csharp
+string language = "CSharp";
+Console.WriteLine(language.Length);              // 6
+Console.WriteLine(language.ToUpper());           // CSHARP
+Console.WriteLine(language[0]);                  // C (a char)
+Console.WriteLine(language.IndexOf("Sh"));       // 1
+Console.WriteLine(language.Substring(1, 3));     // Sha (start, length!)
+Console.WriteLine(language[1..4]);               // Sha (range: start up to end)
+Console.WriteLine(language[^2..]);               // rp (^2 = 2 from the end)
+Console.WriteLine(language.Contains("arp"));     // True
+Console.WriteLine(language.Replace("Sharp", "#"));
+Console.WriteLine("  padded  ".Trim() + "|");
+Console.WriteLine(string.Join(", ", new[] { "a", "b", "c" }));
+Console.WriteLine("a,b,,c".Split(',').Length);   // 4
+Console.WriteLine(new string('-', 10));
+```
+
+Watch out: C#'s `Substring(start, length)` takes a **length**, unlike Java's `substring(start, end)`. **Ranges** (`s[1..4]`, `s[^2..]`) avoid the confusion: `..` is end-exclusive, `^n` counts from the end.
+
+Strings are **immutable**: methods return new strings. `==` compares contents; `string.Equals(a, b, StringComparison.OrdinalIgnoreCase)` ignores case; `string.Compare` and `CompareTo` give alphabetical order. Use `string.IsNullOrWhiteSpace(s)` to test for "nothing useful".
+
+## Building strings: StringBuilder
+
+```csharp
+using System.Text;
+
+var sb = new StringBuilder();
+for (int i = 1; i <= 5; i++)
+{
+    sb.Append(i);
+    if (i < 5) sb.Append(" -> ");
+}
+Console.WriteLine(sb.ToString());
+Console.WriteLine(string.Concat(Enumerable.Repeat("ab", 3)));
+```
+
+`+=` in a loop creates a new string each time; `StringBuilder` appends in place. (`StringBuilder` lives in `System.Text`, which isn't among the implicit usings, hence the `using` line.)
+
+## Verbatim and raw strings
+
+```csharp
+string path = @"C:\Users\ada\notes.txt";       // verbatim: backslashes are literal
+string json = """
+    {
+      "name": "Ada",
+      "tags": ["math", "poetry"]
+    }
+    """;                                          // raw string literal (C# 11): no escaping at all
+Console.WriteLine(path);
+Console.WriteLine(json);
+string name = "Grace";
+Console.WriteLine($$"""{"user": "{{name}}"}""");  // raw + interpolation: {{ }} marks the holes
+```
+
+Escape sequences in normal strings: `\n`, `\t`, `\"`, `\\`, `\u00e9`.
+
+## Characters
+
+```csharp
+int letters = 0, digits = 0;
+foreach (char c in "R2-D2 lands!")
+{
+    if (char.IsLetter(c)) letters++;
+    else if (char.IsDigit(c)) digits++;
+}
+Console.WriteLine($"{letters} letters, {digits} digits");
+Console.WriteLine((int)'A' + " " + (char)('A' + 2));
+```
+
+~~~check
+? What's `"Hello".Substring(1, 3)` in C#?
++ "ell"
+- "el"
+- "ello"
+- "Hel"
+> Start 1, length 3. With a range: "Hello"[1..4].
+~~~
+
+📚 **Go deeper:** Microsoft Learn, "Strings", "Raw string literals" and "Indices and ranges"; *Programming C#*, chapter 10 "Strings and Regular Expressions".
+--- goals
+- use the common string methods, indexes and ranges
+- compare strings correctly, including case-insensitively
+- build text with StringBuilder, verbatim and raw string literals
+- classify characters with char methods
+--- quiz
+? What's the second argument of `Substring(start, x)` in C#?
++ The length
+- The end index
+- The step
+- The separator
+> Java's substring takes an end index instead.
+? What does `"Hello"[^1]` return?
++ 'o'
+- 'H'
+- "Hello"
+- An error
+> ^1 is the last element.
+? Which literal needs no escaping of backslashes or quotes?
++ A raw string literal """..."""
+- A normal string
+- A char literal
+- An interpolated string only
+> Verbatim @"..." handles backslashes but still needs "" for quotes.
+--- exercise code csharp
+::prompt
+Write `static string Initials(string fullName)` returning the upper-case initials of each word, each followed by a dot, ignoring extra spaces. The program prints:
+
+```
+A.K.L.
+G.H.
+T.B.
+```
+::starter
+Console.WriteLine(Initials("ada king lovelace"));
+Console.WriteLine(Initials("  grace   hopper "));
+Console.WriteLine(Initials("Tim Berners-Lee"));
+
+static string Initials(string fullName)
+{
+    return "";
+}
+::solution
+using System.Text;
+
+Console.WriteLine(Initials("ada king lovelace"));
+Console.WriteLine(Initials("  grace   hopper "));
+Console.WriteLine(Initials("Tim Berners-Lee"));
+
+static string Initials(string fullName)
+{
+    var sb = new StringBuilder();
+    foreach (string word in fullName.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+    {
+        sb.Append(char.ToUpper(word[0])).Append('.');
+    }
+    return sb.ToString();
+}
+::expected
+A.K.L.
+G.H.
+T.B.
+::variants
+"ada king lovelace" => "alan mathison turing"
+::hints
+- `Split(' ', StringSplitOptions.RemoveEmptyEntries)` ignores extra spaces.
+- `char.ToUpper(word[0])` gives an upper-case first letter.
+--- exercise code csharp
+::prompt
+Write `static bool IsPalindrome(string text)` that ignores case and everything that isn't a letter or digit, and print the result for three phrases:
+
+```
+A man, a plan, a canal: Panama -> True
+CSharp -> False
+Was it a car or a cat I saw? -> True
+```
+::starter
+string[] phrases = { "A man, a plan, a canal: Panama", "CSharp", "Was it a car or a cat I saw?" };
+foreach (string p in phrases)
+{
+    Console.WriteLine($"{p} -> {IsPalindrome(p)}");
+}
+
+static bool IsPalindrome(string text) => false;
+::solution
+string[] phrases = { "A man, a plan, a canal: Panama", "CSharp", "Was it a car or a cat I saw?" };
+foreach (string p in phrases)
+{
+    Console.WriteLine($"{p} -> {IsPalindrome(p)}");
+}
+
+static bool IsPalindrome(string text)
+{
+    var chars = new List<char>();
+    foreach (char c in text)
+    {
+        if (char.IsLetterOrDigit(c)) chars.Add(char.ToLower(c));
+    }
+    for (int i = 0, j = chars.Count - 1; i < j; i++, j--)
+    {
+        if (chars[i] != chars[j]) return false;
+    }
+    return true;
+}
+::expected
+A man, a plan, a canal: Panama -> True
+CSharp -> False
+Was it a car or a cat I saw? -> True
+::variants
+"CSharp" => "Racecar"
+::hints
+- Keep `char.IsLetterOrDigit(c)` characters, lower-cased, then compare from both ends.
+- Booleans print as `True`/`False` in C#.
+--- cards
+String methods :: Length, ToUpper, IndexOf, Substring(start, LENGTH), Contains, Replace, Trim, Split, Join.
+Ranges :: s[1..4] (end-exclusive), s[^2..] (from the end), ^1 = last.
+StringBuilder :: System.Text: Append, Insert, ToString — efficient in loops.
+Verbatim / raw strings :: @"C:\path"; """ raw "text" """ (C# 11); $$"""{{x}}""" interpolates.
+String comparison :: == compares contents; string.Equals(a, b, StringComparison.OrdinalIgnoreCase).
+
+=== lesson cs-input | Reading input and parsing | 55
+## Console.ReadLine
+
+`Console.ReadLine()` reads one line of what the user types (without the line break). It returns `null` when the input has ended:
+
+```csharp
+// stdin: Ada | 36
+Console.Write("What's your name? ");
+string name = Console.ReadLine() ?? "";
+Console.Write("How old are you? ");
+int age = int.Parse(Console.ReadLine() ?? "0");
+Console.WriteLine();
+Console.WriteLine($"Hi {name}, next year you'll be {age + 1}.");
+```
+
+In DevQuest, the typed lines go in the box under the example; this one fills in `Ada` and `36` (from its `// stdin:` comment). As in a real terminal capture, what you type isn't repeated in the output.
+
+`?? ""` replaces a `null` (end of input) with an empty string: the **null-coalescing operator**, which Module 5 explains with nullable types.
+
+## Parse versus TryParse
+
+`int.Parse`, `double.Parse` and `decimal.Parse` throw a `FormatException` for invalid text. **`TryParse`** returns `true` or `false` instead, and puts the number in an **`out`** variable, which makes validation easy:
+
+```csharp
+string[] inputs = { "42", "x7", " 15 ", "3.5" };
+foreach (string input in inputs)
+{
+    if (int.TryParse(input, out int n))
+        Console.WriteLine($"{input.Trim()} -> {n * 2}");
+    else
+        Console.WriteLine($"'{input}' is not a whole number");
+}
+```
+
+(`int.TryParse` accepts surrounding spaces.) Prefer `TryParse` for anything a user typed; it's faster and clearer than catching exceptions.
+
+## Reading until the input ends
+
+```csharp
+// stdin: 7 | 2 | 9
+int sum = 0;
+string? line;
+while ((line = Console.ReadLine()) != null)
+{
+    if (int.TryParse(line, out int value)) sum += value;
+}
+Console.WriteLine($"sum = {sum}");
+```
+
+That's the standard loop of command-line tools that process piped input (`dotnet run < data.txt`).
+
+~~~check
+? What does `int.TryParse("abc", out int n)` return?
++ false (and n is 0)
+- It throws FormatException
+- true
+- null
+> Parse would throw; TryParse reports.
+~~~
+
+📚 **Go deeper:** Microsoft Learn, "Console.ReadLine" and "How to convert a string to a number"; *Programming C#*, chapter 3.
+--- goals
+- read input with Console.ReadLine and handle the end of input
+- convert text with Parse and TryParse and out variables
+- process input line by line until it ends
+--- quiz
+? What does Console.ReadLine() return at the end of input?
++ null
+- An empty string
+- It throws
+- "EOF"
+> Check for null (or use ?? "").
+? Why prefer TryParse for user input?
++ Invalid input returns false instead of throwing an exception
+- It's the only way to parse
+- It's shorter to type
+- It accepts letters
+> No exception handling needed.
+? What's `out int n` in `int.TryParse(s, out int n)`?
++ A variable the method fills in with the result
+- A return type
+- An optional parameter
+- A cast
+> out parameters (Module 3).
+--- exercise code csharp
+::prompt
+Write a **tip calculator** that reads two lines (the bill and the tip percentage) and prints, after the two prompts on one line:
+
+```
+Bill: Tip %:
+Tip: 9.45
+Total: 72.45
+Per person (3): 24.15
+```
+
+Use `decimal.Parse` for the bill and `int.Parse` for the percentage, and the `F2` format.
+::stdin
+63
+15
+::starter
+Console.Write("Bill: ");
+::solution
+Console.Write("Bill: ");
+decimal bill = decimal.Parse(Console.ReadLine() ?? "0");
+Console.Write("Tip %: ");
+int percent = int.Parse(Console.ReadLine() ?? "0");
+Console.WriteLine();
+decimal tip = bill * percent / 100;
+decimal total = bill + tip;
+Console.WriteLine($"Tip: {tip:F2}");
+Console.WriteLine($"Total: {total:F2}");
+Console.WriteLine($"Per person (3): {total / 3:F2}");
+::expected
+Bill: Tip %:
+Tip: 9.45
+Total: 72.45
+Per person (3): 24.15
+::cases
+>>> 100
+>>> 20
+Bill: Tip %:
+Tip: 20.00
+Total: 120.00
+Per person (3): 40.00
+::hints
+- `decimal bill = decimal.Parse(Console.ReadLine() ?? "0");`
+- Print the prompts with `Console.Write`, then `Console.WriteLine()` to end the line.
+--- exercise code csharp
+::prompt
+Read lines until the input ends. Lines that aren't whole numbers print `ignored: <line>`; at the end print the count, sum and maximum of the valid numbers, or `no numbers`:
+
+```
+ignored: twelve
+ignored: 4.5
+count=4 sum=38 max=21
+```
+::stdin
+7
+twelve
+21
+4.5
+-3
+13
+::starter
+string? line;
+while ((line = Console.ReadLine()) != null)
+{
+}
+::solution
+int count = 0, sum = 0, max = int.MinValue;
+string? line;
+while ((line = Console.ReadLine()) != null)
+{
+    line = line.Trim();
+    if (line.Length == 0) continue;
+    if (int.TryParse(line, out int n))
+    {
+        count++;
+        sum += n;
+        max = Math.Max(max, n);
+    }
+    else
+    {
+        Console.WriteLine($"ignored: {line}");
+    }
+}
+Console.WriteLine(count == 0 ? "no numbers" : $"count={count} sum={sum} max={max}");
+::expected
+ignored: twelve
+ignored: 4.5
+count=4 sum=38 max=21
+::cases
+>>> abc
+ignored: abc
+no numbers
+::hints
+- `int.TryParse(line, out int n)` separates numbers from other text.
+- Start `max` at `int.MinValue` and update it with `Math.Max`.
+--- cards
+Console.ReadLine :: Reads a line (without the newline); null at the end of input.
+Parse / TryParse :: int.Parse throws FormatException; int.TryParse(s, out int n) returns bool.
+?? operator :: a ?? b — b when a is null: Console.ReadLine() ?? "".
+Read to the end :: while ((line = Console.ReadLine()) != null) { ... }
+
+=== lesson cs-m2-test | Module 2 test | 120 | exam
+This test covers Module 2: built-in and value types, conversions, operators and patterns, strings, and reading input.
+
+Before you start, check that you can:
+
+- choose between int, double and decimal, and cast safely;
+- predict integer division and short-circuit logic;
+- use string methods, ranges and StringBuilder;
+- read and validate input with TryParse.
+--- goals
+- handle numbers, text and input precisely in C#
+--- quiz
+? Which type gives `0.1 + 0.2 == 0.3` as true?
++ decimal
+- double
+- float
+- int
+> decimal is exact for decimal fractions.
+? What does `"abcdef"[2..4]` return?
++ "cd"
+- "cde"
+- "bcd"
+- "bc"
+> From index 2 up to (not including) 4.
+? What is printed by `Console.WriteLine(3 > 2)`?
++ True
+- true
+- 1
+- yes
+> C# booleans print with a capital letter.
+--- exercise code csharp
+::prompt
+Read a line of text and print a word report: the number of words, the longest word (the first if tied), and each vowel's count (only those that appear, in `aeiou` order), ignoring case:
+
+```
+Words: 9
+Longest: quick
+a=1 e=3 i=1 o=4 u=2
+```
+::stdin
+The quick brown fox jumps over the lazy dog
+::starter
+string line = Console.ReadLine() ?? "";
+::solution
+string line = (Console.ReadLine() ?? "").Trim();
+string[] words = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+string longest = "";
+foreach (string w in words)
+{
+    if (w.Length > longest.Length) longest = w;
+}
+Console.WriteLine($"Words: {words.Length}");
+Console.WriteLine($"Longest: {longest}");
+string lower = line.ToLower();
+var parts = new List<string>();
+foreach (char v in "aeiou")
+{
+    int count = 0;
+    foreach (char c in lower) if (c == v) count++;
+    if (count > 0) parts.Add($"{v}={count}");
+}
+Console.WriteLine(string.Join(" ", parts));
+::expected
+Words: 9
+Longest: quick
+a=1 e=3 i=1 o=4 u=2
+::cases
+>>> Hello   world from CSharp
+Words: 4
+Longest: CSharp
+a=1 e=1 o=3
+::hints
+- Split with `StringSplitOptions.RemoveEmptyEntries`; compare lengths with a strict `>` for the first longest word.
+- Count each vowel in the lower-cased line; collect `"a=1"`-style parts in a list and join them.
