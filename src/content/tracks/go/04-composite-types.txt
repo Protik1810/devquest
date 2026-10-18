@@ -1,0 +1,1430 @@
+=== module Module 4 · Slices, maps, structs and pointers
+
+=== lesson go-collections | Arrays and slices | 70
+## Arrays: fixed size
+
+An **array** has a fixed length that is part of its type: `[3]int` and `[4]int` are different types. Arrays are **values**: assigning or passing one copies all its elements.
+
+```go
+package main
+
+import "fmt"
+
+func main() {
+	var scores [3]int // [0 0 0]
+	scores[0] = 90
+	primes := [5]int{2, 3, 5, 7, 11}
+	days := [...]string{"mon", "tue", "wed"} // length counted by the compiler
+	fmt.Println(scores, len(primes), days[2])
+
+	copyOf := primes // a full copy
+	copyOf[0] = 100
+	fmt.Println(primes[0], copyOf[0]) // 2 100
+}
+```
+
+Arrays are used for fixed things (a 3×3 board, an RGB colour, a SHA-256 hash: `[32]byte`). Most of the time you use slices.
+
+## Slices: flexible views
+
+A **slice** (`[]int`, no length in the type) is a view of a section of an underlying array. It has a **length** (`len`, the elements it shows) and a **capacity** (`cap`, how far the underlying array extends).
+
+```go
+package main
+
+import "fmt"
+
+func main() {
+	nums := []int{10, 20, 30, 40, 50} // a slice literal (creates the array for you)
+	fmt.Println(nums, len(nums), cap(nums))
+
+	middle := nums[1:4] // elements 1, 2, 3 (end excluded)
+	fmt.Println(middle, len(middle), cap(middle))
+	fmt.Println(nums[:2], nums[3:], nums[:]) // omitted bounds: start / end
+
+	middle[0] = 99 // a slice shares the array: nums changes too!
+	fmt.Println(nums)
+
+	var empty []int // nil slice: len 0, ready to append to
+	fmt.Println(empty == nil, len(empty))
+	empty = append(empty, 1, 2, 3)
+	fmt.Println(empty)
+
+	buffer := make([]int, 3, 10) // length 3 (zeroed), capacity 10
+	fmt.Println(buffer, len(buffer), cap(buffer))
+}
+```
+
+## append
+
+**`append(s, values...)`** adds elements at the end and returns the resulting slice, which you must assign back: `s = append(s, x)`. When there's no capacity left, append allocates a **bigger array** (roughly doubling), copies the elements, and the new slice points there:
+
+```go
+package main
+
+import "fmt"
+
+func main() {
+	var s []int
+	prevCap := -1
+	for i := range 20 {
+		s = append(s, i)
+		if cap(s) != prevCap {
+			fmt.Printf("len %2d cap %2d\n", len(s), cap(s))
+			prevCap = cap(s)
+		}
+	}
+	more := []int{100, 200}
+	s = append(s, more...) // append a whole slice
+	fmt.Println(len(s), s[len(s)-1])
+}
+```
+
+When you know the final size, `make([]T, 0, n)` allocates once instead of several times.
+
+## Two-dimensional slices
+
+```go
+package main
+
+import "fmt"
+
+func main() {
+	rows, cols := 3, 4
+	grid := make([][]int, rows)
+	for r := range grid {
+		grid[r] = make([]int, cols)
+		for c := range grid[r] {
+			grid[r][c] = r * c
+		}
+	}
+	for _, row := range grid {
+		fmt.Println(row)
+	}
+}
+```
+
+~~~check
+? What are `len` and `cap` of `nums[1:3]` when nums has 5 elements?
++ 2 and 4
+- 3 and 5
+- 2 and 2
+- 2 and 5
+> Capacity counts from the slice's start to the end of the array.
+~~~
+
+📚 **Go deeper:** The Go Blog, "Go Slices: usage and internals" and "Arrays, slices (and strings): The mechanics of 'append'"; *The Go Programming Language*, sections 4.1–4.2.
+--- goals
+- tell arrays (fixed, values) from slices (views of an array)
+- create slices with literals, slicing expressions and make
+- explain length, capacity and sharing of the underlying array
+- grow slices with append and preallocate with make
+- build two-dimensional slices
+--- quiz
+? Why must you write `s = append(s, x)`?
++ append may return a slice that points to a new, bigger array
+- append doesn't modify anything
+- It's only a style rule
+- append returns an error
+> Always use append's result.
+? What does `nums[2:]` contain for nums = [1 2 3 4]?
++ [3 4]
+- [1 2]
+- [2 3 4]
+- [3]
+> From index 2 to the end.
+? Two slices made from the same array: you change an element through one. What does the other see?
++ The change, if the element is in its range
+- Nothing; slices are copies
+- A panic
+- A compile error
+> Slices share their underlying array.
+? What is a nil slice?
++ A slice with no array: len 0, and append works on it
+- A slice that panics on len
+- An error value
+- A slice of nils
+> var s []int is nil.
+--- exercise code go
+::prompt
+Write two slice functions:
+
+- `func chunk(items []string, size int) [][]string` splits items into groups of `size` (the last group may be shorter). Use slicing (`items[i:end]`) and `min`.
+- `func rotate(nums []int, k int) []int` returns a **new** slice with the elements rotated left by `k` (k may be larger than the length; use `%`). It must not change `nums`: build the result with `make` and `append`.
+
+```
+[[a b c] [d e f] [g]]
+[[a b c d e f g]]
+[3 4 5 1 2]
+[2 3 4 5 1]
+original: [1 2 3 4 5]
+```
+::starter
+package main
+
+import "fmt"
+
+func chunk(items []string, size int) [][]string {
+	return nil
+}
+
+func rotate(nums []int, k int) []int {
+	return nums
+}
+
+func main() {
+	letters := []string{"a", "b", "c", "d", "e", "f", "g"}
+	fmt.Println(chunk(letters, 3))
+	fmt.Println(chunk(letters, 10))
+	nums := []int{1, 2, 3, 4, 5}
+	fmt.Println(rotate(nums, 2))
+	fmt.Println(rotate(nums, 11))
+	fmt.Println("original:", nums)
+}
+::solution
+package main
+
+import "fmt"
+
+func chunk(items []string, size int) [][]string {
+	var groups [][]string
+	for i := 0; i < len(items); i += size {
+		end := min(i+size, len(items))
+		groups = append(groups, items[i:end])
+	}
+	return groups
+}
+
+func rotate(nums []int, k int) []int {
+	if len(nums) == 0 {
+		return nil
+	}
+	k %= len(nums)
+	out := make([]int, 0, len(nums))
+	out = append(out, nums[k:]...)
+	return append(out, nums[:k]...)
+}
+
+func main() {
+	letters := []string{"a", "b", "c", "d", "e", "f", "g"}
+	fmt.Println(chunk(letters, 3))
+	fmt.Println(chunk(letters, 10))
+	nums := []int{1, 2, 3, 4, 5}
+	fmt.Println(rotate(nums, 2))
+	fmt.Println(rotate(nums, 11))
+	fmt.Println("original:", nums)
+}
+::expected
+[[a b c] [d e f] [g]]
+[[a b c d e f g]]
+[3 4 5 1 2]
+[2 3 4 5 1]
+original: [1 2 3 4 5]
+::hints
+- In `chunk`, step `i` by `size` and cut at `min(i+size, len(items))`.
+- In `rotate`, `k %= len(nums)` handles big k; then append `nums[k:]...` and `nums[:k]...`.
+--- cards
+Array :: Fixed length in its type ([3]int); a value: assignment copies it.
+Slice :: A view (pointer, len, cap) of an underlying array; slices can share it.
+s[a:b] :: Elements a to b-1; len b-a, cap from a to the array's end.
+append :: s = append(s, x...); may reallocate, so always assign the result.
+make([]T, len, cap) :: Allocates a slice; preallocate when you know the size.
+
+=== lesson go-slices-deep | Working with slices like a pro | 70
+## The sharing trap
+
+Because slices share arrays, an `append` to one slice can **overwrite** data visible through another, when there's spare capacity:
+
+```go
+package main
+
+import "fmt"
+
+func main() {
+	base := make([]int, 3, 10) // [0 0 0], room for 10
+	a := append(base, 1)       // uses base's spare capacity
+	b := append(base, 2)       // ... and so does b: same array, same position!
+	fmt.Println(a, b)          // [0 0 0 2] [0 0 0 2]
+
+	// the fix: copy when you need an independent slice
+	c := append([]int(nil), base...) // or slices.Clone(base)
+	c = append(c, 1)
+	d := cloneInts(base)
+	d = append(d, 2)
+	fmt.Println(c, d)
+}
+
+func cloneInts(s []int) []int {
+	out := make([]int, len(s))
+	copy(out, s) // copy(dst, src) copies min(len(dst), len(src)) elements
+	return out
+}
+```
+
+Rules of thumb: a function that receives a slice may change its **elements** (the caller sees it); if it appends, it must **return** the new slice; and when you keep a slice for later, copy it if the caller might reuse their array.
+
+## The slices package
+
+Since Go 1.21 the standard library has generic helpers in `slices` (and `maps`) that replace many hand-written loops:
+
+```go
+package main
+
+import (
+	"fmt"
+	"slices"
+	"strings"
+)
+
+func main() {
+	nums := []int{5, 2, 8, 2, 9, 1}
+	sorted := slices.Clone(nums)
+	slices.Sort(sorted)
+	fmt.Println(sorted, nums)
+	fmt.Println(slices.Contains(nums, 8), slices.Index(nums, 2), slices.Max(nums), slices.Min(nums))
+
+	i, found := slices.BinarySearch(sorted, 8)
+	fmt.Println(i, found)
+	fmt.Println(slices.Compact(sorted)) // removes consecutive duplicates
+	fmt.Println(slices.Equal([]int{1, 2}, []int{1, 2}))
+
+	words := []string{"pear", "Fig", "apple", "kiwi"}
+	slices.SortFunc(words, func(a, b string) int {
+		return strings.Compare(strings.ToLower(a), strings.ToLower(b))
+	})
+	fmt.Println(words)
+
+	nums = slices.Insert(nums, 1, 100)
+	nums = slices.Delete(nums, 3, 5) // removes elements 3 and 4
+	fmt.Println(nums)
+}
+```
+
+Sorting by several keys uses `cmp.Compare` and `cmp.Or`, which you'll use with structs in a moment.
+
+## Removing while iterating, and filtering in place
+
+A common idiom filters a slice **without allocating**, by reusing its array:
+
+```go
+package main
+
+import (
+	"fmt"
+	"slices"
+)
+
+func main() {
+	nums := []int{1, 2, 3, 4, 5, 6, 7, 8}
+	kept := nums[:0] // same array, length 0
+	for _, n := range nums {
+		if n%2 == 0 {
+			kept = append(kept, n)
+		}
+	}
+	fmt.Println(kept)
+
+	other := []int{3, 1, 4, 1, 5, 9, 2, 6}
+	other = slices.DeleteFunc(other, func(n int) bool { return n < 4 })
+	fmt.Println(other)
+}
+```
+
+~~~check
+? Which function makes an independent copy of a slice?
++ slices.Clone(s)
+- s[:]
+- append(s)
+- s.Copy()
+> s[:] still shares the array.
+~~~
+
+📚 **Go deeper:** the slices, maps and cmp package docs; The Go Blog, "Robust generic functions on slices"; *The Go Programming Language*, section 4.2.
+--- goals
+- predict when two slices share data, and avoid the append aliasing trap
+- copy slices with copy and slices.Clone
+- use the slices package to sort, search, insert, delete and compare
+- filter a slice in place
+--- quiz
+? What does `copy(dst, src)` copy?
++ min(len(dst), len(src)) elements
+- All of src, growing dst
+- Only the first element
+- The capacity
+> It never grows dst.
+? Which sorts a slice of ints in place?
++ slices.Sort(nums)
+- sort(nums)
+- nums.Sort()
+- slices.Sorted(nums)
+> slices.Sorted works on iterators.
+? A function appends to a slice it received. How does the caller see the new elements?
++ The function must return the new slice and the caller must use it
+- Automatically
+- Only if the slice was nil
+- Through a global variable
+> append may reallocate.
+--- exercise code go
+::prompt
+Write `func topN(scores []int, n int) []int` that returns the `n` highest scores in **descending** order, **without changing** the caller's slice: clone it, sort it with `slices.Sort` and reverse it with `slices.Reverse` (or `slices.SortFunc`), then slice the first `min(n, len)` elements.
+
+Then write `func dedupe(names []string) []string` that returns a **sorted** copy without duplicates (use `slices.Clone`, `slices.Sort` and `slices.Compact`).
+
+```
+top 3: [97 91 88]
+top 10: [97 91 88 75 75 60]
+scores unchanged: [75 91 60 97 88 75]
+unique: [ada bob cy]
+names unchanged: [cy ada bob ada cy]
+```
+::starter
+package main
+
+import (
+	"fmt"
+	"slices"
+)
+
+func topN(scores []int, n int) []int {
+	slices.Sort(scores)
+	return scores
+}
+
+func dedupe(names []string) []string {
+	return names
+}
+
+func main() {
+	scores := []int{75, 91, 60, 97, 88, 75}
+	fmt.Println("top 3:", topN(scores, 3))
+	fmt.Println("top 10:", topN(scores, 10))
+	fmt.Println("scores unchanged:", scores)
+	names := []string{"cy", "ada", "bob", "ada", "cy"}
+	fmt.Println("unique:", dedupe(names))
+	fmt.Println("names unchanged:", names)
+}
+::solution
+package main
+
+import (
+	"fmt"
+	"slices"
+)
+
+func topN(scores []int, n int) []int {
+	sorted := slices.Clone(scores)
+	slices.Sort(sorted)
+	slices.Reverse(sorted)
+	return sorted[:min(n, len(sorted))]
+}
+
+func dedupe(names []string) []string {
+	out := slices.Clone(names)
+	slices.Sort(out)
+	return slices.Compact(out)
+}
+
+func main() {
+	scores := []int{75, 91, 60, 97, 88, 75}
+	fmt.Println("top 3:", topN(scores, 3))
+	fmt.Println("top 10:", topN(scores, 10))
+	fmt.Println("scores unchanged:", scores)
+	names := []string{"cy", "ada", "bob", "ada", "cy"}
+	fmt.Println("unique:", dedupe(names))
+	fmt.Println("names unchanged:", names)
+}
+::expected
+top 3: [97 91 88]
+top 10: [97 91 88 75 75 60]
+scores unchanged: [75 91 60 97 88 75]
+unique: [ada bob cy]
+names unchanged: [cy ada bob ada cy]
+::hints
+- Work on `slices.Clone(scores)`, never on `scores` itself.
+- `sorted[:min(n, len(sorted))]` avoids slicing past the end.
+- `slices.Compact` only removes **consecutive** duplicates, so sort first.
+--- cards
+Append aliasing :: Two appends to slices sharing spare capacity overwrite each other.
+copy(dst, src) :: Copies min(len) elements; returns how many.
+slices package :: Sort, SortFunc, Contains, Index, BinarySearch, Insert, Delete, DeleteFunc, Compact, Clone, Reverse, Equal, Max, Min.
+Filter in place :: kept := s[:0]; for ... { kept = append(kept, x) }.
+
+=== lesson go-maps | Maps | 65
+## Key-value lookup
+
+A **map** associates keys with values: `map[string]int` maps strings to ints. Lookups, insertions and deletions are fast (a hash table) regardless of size.
+
+```go
+package main
+
+import (
+	"fmt"
+	"maps"
+	"slices"
+)
+
+func main() {
+	stock := map[string]int{"apple": 5, "pear": 0}
+	stock["kiwi"] = 12 // insert or update
+	stock["apple"] += 3
+	fmt.Println(stock["apple"], len(stock))
+
+	fmt.Println(stock["mango"]) // a missing key gives the zero value: 0
+
+	n, ok := stock["pear"] // "comma ok": was the key there?
+	fmt.Println(n, ok)
+	_, ok = stock["mango"]
+	fmt.Println(ok)
+
+	delete(stock, "pear") // no error if the key is missing
+	fmt.Println(stock)    // fmt prints maps sorted by key
+
+	keys := slices.Sorted(maps.Keys(stock)) // sorted keys for a stable order
+	for _, k := range keys {
+		fmt.Println(k, stock[k])
+	}
+
+	counts := make(map[string]int) // make an empty map
+	for _, w := range []string{"go", "is", "go", "fun", "go"} {
+		counts[w]++ // the zero value makes counting easy
+	}
+	fmt.Println(counts)
+}
+```
+
+- Keys must be **comparable** (`==` works): strings, numbers, booleans, arrays, and structs of those. Slices, maps and functions can't be keys.
+- A **nil map** (`var m map[string]int`) can be read, but writing to it **panics**. Create maps with a literal or `make`.
+- Iteration order is randomised; `fmt` prints maps sorted, but `range` doesn't.
+- Like slices, maps are references: passing a map to a function lets it change the map.
+
+## Sets and grouping
+
+Go has no set type: a `map[T]bool` (or `map[T]struct{}`, which uses no memory for values) does the job:
+
+```go
+package main
+
+import (
+	"fmt"
+	"maps"
+	"slices"
+	"strings"
+)
+
+func main() {
+	seen := map[string]bool{}
+	for _, tag := range []string{"go", "web", "go", "cli", "web"} {
+		seen[tag] = true
+	}
+	fmt.Println(len(seen), seen["cli"], seen["rust"])
+
+	// group words by their first letter
+	groups := map[byte][]string{}
+	for _, w := range strings.Fields("apple avocado banana blueberry cherry") {
+		groups[w[0]] = append(groups[w[0]], w)
+	}
+	for _, k := range slices.Sorted(maps.Keys(groups)) {
+		fmt.Printf("%c: %v\n", k, groups[k])
+	}
+
+	// nested maps need the inner map created first
+	scores := map[string]map[string]int{}
+	add := func(student, subject string, s int) {
+		if scores[student] == nil {
+			scores[student] = map[string]int{}
+		}
+		scores[student][subject] = s
+	}
+	add("ada", "math", 95)
+	add("ada", "art", 80)
+	fmt.Println(scores)
+}
+```
+
+~~~check
+? What does `v, ok := m["x"]` give when "x" isn't in m?
++ The zero value and false
+- A panic
+- nil and an error
+- -1 and false
+> The comma-ok idiom.
+~~~
+
+📚 **Go deeper:** The Go Blog, "Go maps in action"; the maps package docs; *The Go Programming Language*, section 4.3.
+--- goals
+- create maps with literals and make, and read, write and delete entries
+- use the comma-ok idiom to tell missing keys from zero values
+- iterate maps in a stable order by sorting the keys
+- use maps as sets, counters and groupings, and avoid writing to nil maps
+--- quiz
+? What happens when you write to a nil map?
++ It panics
+- It creates the map
+- Nothing
+- It returns an error
+> Create maps with make or a literal.
+? Which type can't be a map key?
++ []string
+- string
+- [2]int
+- struct{ X, Y int }
+> Slices aren't comparable.
+? How do you range over a map's keys in sorted order?
++ for _, k := range slices.Sorted(maps.Keys(m))
+- for k := range m (it's always sorted)
+- sort.Map(m)
+- m.SortedKeys()
+> maps.Keys returns an iterator; slices.Sorted collects and sorts it.
+--- exercise code go
+::prompt
+**Word statistics.** Write `func wordStats(text string) (map[string]int, []string)` that counts each word of the text (lower-cased, with the punctuation `.,!?` trimmed from both ends using `strings.Trim`), and returns the counts and the list of words sorted by count descending, then alphabetically. Use `slices.SortFunc` with `cmp.Compare` and `cmp.Or`. Then print the top 3 and the number of distinct words:
+
+```
+the: 4
+cat: 2
+sat: 2
+distinct: 8
+```
+::starter
+package main
+
+import (
+	"fmt"
+	"strings"
+)
+
+func wordStats(text string) (map[string]int, []string) {
+	return nil, strings.Fields(text)
+}
+
+func main() {
+	text := "The cat sat. The dog sat on the mat! Where is the cat?"
+	counts, order := wordStats(text)
+	for _, w := range order[:3] {
+		fmt.Printf("%s: %d\n", w, counts[w])
+	}
+	fmt.Println("distinct:", len(counts))
+}
+::solution
+package main
+
+import (
+	"cmp"
+	"fmt"
+	"maps"
+	"slices"
+	"strings"
+)
+
+func wordStats(text string) (map[string]int, []string) {
+	counts := map[string]int{}
+	for _, w := range strings.Fields(text) {
+		w = strings.ToLower(strings.Trim(w, ".,!?"))
+		if w != "" {
+			counts[w]++
+		}
+	}
+	order := slices.Collect(maps.Keys(counts))
+	slices.SortFunc(order, func(a, b string) int {
+		return cmp.Or(cmp.Compare(counts[b], counts[a]), cmp.Compare(a, b))
+	})
+	return counts, order
+}
+
+func main() {
+	text := "The cat sat. The dog sat on the mat! Where is the cat?"
+	counts, order := wordStats(text)
+	for _, w := range order[:3] {
+		fmt.Printf("%s: %d\n", w, counts[w])
+	}
+	fmt.Println("distinct:", len(counts))
+}
+::expected
+the: 4
+cat: 2
+sat: 2
+distinct: 8
+::hints
+- `strings.Trim(w, ".,!?")` removes those characters from both ends.
+- `slices.Collect(maps.Keys(counts))` gives the keys as a slice.
+- `cmp.Compare(counts[b], counts[a])` sorts by count descending; `cmp.Or` falls back to the word when counts are equal.
+--- cards
+map[K]V :: Hash table; create with a literal or make; nil maps panic on write.
+Comma ok :: v, ok := m[k] tells a missing key from a zero value.
+delete(m, k) :: Removes a key (no error if absent).
+Sorted iteration :: slices.Sorted(maps.Keys(m)).
+Set :: map[T]bool or map[T]struct{}.
+
+=== lesson go-structs | Structs and composition | 75
+## Grouping data
+
+A **struct** groups named fields into one type. It's how Go models things: users, orders, points.
+
+```go
+package main
+
+import "fmt"
+
+type Point struct {
+	X, Y float64
+}
+
+type User struct {
+	Name   string
+	Email  string
+	Age    int
+	Admin  bool
+	Tags   []string
+}
+
+func main() {
+	p := Point{X: 1.5, Y: -2}
+	q := Point{3, 4} // positional: fragile, avoid for structs with many fields
+	var origin Point // zero value: {0 0}
+	fmt.Println(p, q, origin, p.X)
+
+	u := User{Name: "Ada", Email: "ada@example.com"} // missing fields get zero values
+	u.Age = 36
+	fmt.Printf("%v\n%+v\n", u, u) // %+v shows field names
+
+	copied := u // structs are values: this copies every field
+	copied.Name = "Grace"
+	fmt.Println(u.Name, copied.Name)
+	fmt.Println(p == Point{1.5, -2}) // structs compare field by field
+
+	pair := struct{ Key, Value string }{"lang", "go"} // anonymous struct
+	fmt.Println(pair.Key, pair.Value)
+}
+```
+
+Fields starting with a capital letter are exported, exactly like functions. A struct with only comparable fields can be compared with `==` and used as a map key.
+
+## Constructors
+
+Go has no constructors; by convention, a function **`NewThing`** creates a valid value, and the zero value should be useful when possible:
+
+```go
+package main
+
+import (
+	"errors"
+	"fmt"
+	"time"
+)
+
+type Task struct {
+	Title   string
+	Due     time.Time
+	Done    bool
+	Created time.Time
+}
+
+func NewTask(title string, due time.Time) (Task, error) {
+	if title == "" {
+		return Task{}, errors.New("title is required")
+	}
+	return Task{Title: title, Due: due, Created: time.Date(2026, 3, 1, 9, 0, 0, 0, time.UTC)}, nil
+}
+
+func main() {
+	t, err := NewTask("write report", time.Date(2026, 3, 5, 17, 0, 0, 0, time.UTC))
+	fmt.Println(t.Title, t.Due.Format("2006-01-02"), t.Done, err)
+	_, err = NewTask("", time.Time{})
+	fmt.Println(err)
+}
+```
+
+## Embedding: composition instead of inheritance
+
+Go has no inheritance. Instead, a struct can **embed** another type: the embedded type's fields (and methods, next module) are **promoted**, so they can be used as if they belonged to the outer struct. It's composition with convenient access:
+
+```go
+package main
+
+import "fmt"
+
+type Address struct {
+	Street, City string
+}
+
+type Contact struct {
+	Email string
+	Phone string
+}
+
+type Customer struct {
+	Name    string
+	Address // embedded: no field name
+	Contact
+	Billing Address // a normal named field
+}
+
+func main() {
+	c := Customer{
+		Name:    "Ada",
+		Address: Address{"1 Main St", "London"},
+		Contact: Contact{Email: "ada@example.com"},
+		Billing: Address{City: "Cambridge"},
+	}
+	fmt.Println(c.City, c.Email)         // promoted fields
+	fmt.Println(c.Address.City)           // the long form still works
+	fmt.Println(c.Billing.City)
+}
+```
+
+A `Customer` *has* an address; it isn't a kind of address. If two embedded types have a field with the same name, you must use the long form.
+
+## Struct tags
+
+Fields can carry **tags**, strings read by libraries through reflection. The most common are JSON names, which you'll use in Module 7:
+
+```
+type Product struct {
+	ID    int     `json:"id"`
+	Name  string  `json:"name"`
+	Price float64 `json:"price,omitempty"`
+}
+```
+
+~~~check
+? What happens with `b := a` when a is a struct?
++ All fields are copied; changing b doesn't change a
+- b refers to the same struct as a
+- It doesn't compile
+- Only exported fields are copied
+> Structs are values (fields that are slices or maps still share their data).
+~~~
+
+📚 **Go deeper:** A Tour of Go, "Structs"; Effective Go, "Composite literals" and "Embedding"; *The Go Programming Language*, section 4.4.
+--- goals
+- declare struct types and create values with field names
+- explain that structs are values that are copied and compared field by field
+- write NewThing constructor functions that validate
+- compose types with embedding and promoted fields
+- recognise struct tags
+--- quiz
+? Which creates a Point with X=1 and Y=2 most safely?
++ Point{X: 1, Y: 2}
+- Point(1, 2)
+- new Point(1, 2)
+- Point{1: X, 2: Y}
+> Named fields survive new fields being added.
+? What does `%+v` print for a struct?
++ The values with their field names
+- Only the type name
+- A pointer address
+- JSON
+> {Name:Ada Age:36}.
+? How does Go reuse one struct's fields in another?
++ By embedding the struct (composition)
+- By inheritance with extends
+- By copying the code
+- With the super keyword
+> Embedded fields are promoted.
+? Can a struct with a []string field be compared with ==?
++ No: slices aren't comparable
+- Yes, always
+- Only if the slice is nil
+- Yes, by length
+> Use slices.Equal for the field.
+--- exercise code go
+::prompt
+Model a small **order** with structs:
+
+- `type Item struct { Name string; Price float64; Qty int }`;
+- `type Customer struct { Name, City string }`;
+- `type Order struct { ID int; Customer; Items []Item }` (Customer is **embedded**);
+- `func NewOrder(id int, c Customer, items ...Item) (Order, error)` returns an error `order <id>: no items` when there are none, and `order <id>: invalid quantity for <name>` for a quantity below 1;
+- `func total(o Order) float64` sums price × quantity.
+
+`main` is given; it uses the promoted fields `o.Name` and `o.City`:
+
+```
+order 1 for Ada (London): 3 items, total 34.50
+error: order 2: no items
+error: order 3: invalid quantity for pen
+```
+::starter
+package main
+
+import "fmt"
+
+type Item struct {
+	Name  string
+	Price float64
+	Qty   int
+}
+
+type Customer struct {
+	Name, City string
+}
+
+type Order struct {
+	ID int
+}
+
+func main() {
+	ada := Customer{"Ada", "London"}
+	o, err := NewOrder(1, ada, Item{"book", 12.5, 2}, Item{"pen", 9.5, 1})
+	if err == nil {
+		fmt.Printf("order %d for %s (%s): %d items, total %.2f\n", o.ID, o.Name, o.City, count(o), total(o))
+	}
+	for _, try := range []func() (Order, error){
+		func() (Order, error) { return NewOrder(2, ada) },
+		func() (Order, error) { return NewOrder(3, ada, Item{"pen", 1, 0}) },
+	} {
+		if _, err := try(); err != nil {
+			fmt.Println("error:", err)
+		}
+	}
+}
+
+func count(o Order) int {
+	n := 0
+	for _, it := range o.Items {
+		n += it.Qty
+	}
+	return n
+}
+::solution
+package main
+
+import "fmt"
+
+type Item struct {
+	Name  string
+	Price float64
+	Qty   int
+}
+
+type Customer struct {
+	Name, City string
+}
+
+type Order struct {
+	ID int
+	Customer
+	Items []Item
+}
+
+func NewOrder(id int, c Customer, items ...Item) (Order, error) {
+	if len(items) == 0 {
+		return Order{}, fmt.Errorf("order %d: no items", id)
+	}
+	for _, it := range items {
+		if it.Qty < 1 {
+			return Order{}, fmt.Errorf("order %d: invalid quantity for %s", id, it.Name)
+		}
+	}
+	return Order{ID: id, Customer: c, Items: items}, nil
+}
+
+func total(o Order) float64 {
+	sum := 0.0
+	for _, it := range o.Items {
+		sum += it.Price * float64(it.Qty)
+	}
+	return sum
+}
+
+func main() {
+	ada := Customer{"Ada", "London"}
+	o, err := NewOrder(1, ada, Item{"book", 12.5, 2}, Item{"pen", 9.5, 1})
+	if err == nil {
+		fmt.Printf("order %d for %s (%s): %d items, total %.2f\n", o.ID, o.Name, o.City, count(o), total(o))
+	}
+	for _, try := range []func() (Order, error){
+		func() (Order, error) { return NewOrder(2, ada) },
+		func() (Order, error) { return NewOrder(3, ada, Item{"pen", 1, 0}) },
+	} {
+		if _, err := try(); err != nil {
+			fmt.Println("error:", err)
+		}
+	}
+}
+
+func count(o Order) int {
+	n := 0
+	for _, it := range o.Items {
+		n += it.Qty
+	}
+	return n
+}
+::expected
+order 1 for Ada (London): 3 items, total 34.50
+error: order 2: no items
+error: order 3: invalid quantity for pen
+::hints
+- Embed with just the type name: `Customer` on its own line inside `Order`.
+- `items ...Item` arrives as a `[]Item`, which you can store directly.
+- Multiply with `float64(it.Qty)`.
+--- cards
+struct :: A type grouping named fields: type User struct { Name string }.
+Composite literal :: User{Name: "Ada"}; missing fields get zero values.
+Struct value :: Assignment copies all fields; == compares them.
+NewThing :: Convention for constructor functions that validate.
+Embedding :: A field with only a type name; its fields and methods are promoted.
+Struct tag :: `json:"name"` metadata read by libraries.
+
+=== lesson go-pointers | Pointers | 65
+## Addresses
+
+A **pointer** holds the memory address of a value. `&x` takes the address of `x`; `*p` reads or writes the value at that address. The type of a pointer to an `int` is `*int`.
+
+```go
+package main
+
+import "fmt"
+
+func main() {
+	x := 10
+	p := &x            // p points to x
+	fmt.Println(*p)    // 10: read through the pointer
+	*p = 20            // write through it
+	fmt.Println(x)     // 20
+	fmt.Println(p != nil)
+
+	var q *int         // the zero value of a pointer is nil
+	fmt.Println(q == nil)
+	// fmt.Println(*q) would panic: nil pointer dereference
+
+	n := new(int)      // allocates a zero int and returns its address
+	*n = 5
+	fmt.Println(*n)
+}
+```
+
+Go has **no pointer arithmetic** (you can't do `p + 1` like in C), and memory is garbage collected: returning the address of a local variable is perfectly safe, the value lives as long as something points to it.
+
+## Why pointers matter: sharing and changing
+
+Everything in Go is passed by value. To let a function **change** a variable, pass a pointer to it. Pointers also avoid copying large structs:
+
+```go
+package main
+
+import "fmt"
+
+type Account struct {
+	Owner   string
+	Balance int
+}
+
+func depositValue(a Account, amount int) {
+	a.Balance += amount // changes a copy: the caller sees nothing
+}
+
+func deposit(a *Account, amount int) {
+	a.Balance += amount // a.Balance is shorthand for (*a).Balance
+}
+
+func NewAccount(owner string) *Account {
+	return &Account{Owner: owner} // safe: escapes to the heap
+}
+
+func main() {
+	acc := Account{Owner: "Ada"}
+	depositValue(acc, 50)
+	fmt.Println(acc.Balance) // 0
+	deposit(&acc, 50)
+	fmt.Println(acc.Balance) // 50
+
+	b := NewAccount("Bob")
+	deposit(b, 30)
+	alias := b // copies the pointer, not the account
+	alias.Balance += 1
+	fmt.Println(b.Owner, b.Balance)
+}
+```
+
+Go automatically dereferences pointers to structs when you access fields (`a.Balance`), so the syntax stays light.
+
+## Slices and maps are already references (sort of)
+
+A slice is a small struct (pointer to the array, length, capacity) and a map is a pointer to a hash table, so passing them copies only that small header: the function sees the **same elements**. But a function that `append`s changes only its copy of the header, which is why append's result must be returned.
+
+```go
+package main
+
+import "fmt"
+
+func double(nums []int) {
+	for i := range nums {
+		nums[i] *= 2 // visible to the caller
+	}
+}
+
+func addOne(nums []int) {
+	nums = append(nums, 1) // only the local header changes
+}
+
+func main() {
+	s := []int{1, 2, 3}
+	double(s)
+	addOne(s)
+	fmt.Println(s) // [2 4 6]
+}
+```
+
+## When to use a pointer
+
+- the function must **modify** the value;
+- the struct is **large** and copied often;
+- you need "**no value**" (`nil`), for example an optional field;
+- the value must not be copied, because it contains a mutex or another value that identifies itself (Module 6).
+
+Small structs that represent values (points, colours, money) are usually passed by value.
+
+~~~check
+? What does `*p = 5` do?
++ Stores 5 in the variable p points to
+- Makes p point to the number 5
+- Multiplies p by 5
+- Declares a pointer
+> * dereferences.
+~~~
+
+📚 **Go deeper:** A Tour of Go, "Pointers"; the Go FAQ, "Should I define methods on values or pointers?"; *The Go Programming Language*, section 2.3.2.
+--- goals
+- take addresses with & and dereference with *
+- explain nil pointers and that Go has no pointer arithmetic
+- change a caller's value or struct through a pointer
+- explain what is shared when passing slices and maps
+- decide when to use a pointer and when to pass a value
+--- quiz
+? What is the type of `&x` when x is a string?
++ *string
+- &string
+- string*
+- pointer
+> *T is "pointer to T".
+? What happens when you dereference a nil pointer?
++ The program panics
+- You get the zero value
+- It returns nil
+- It doesn't compile
+> Check for nil first.
+? Is returning `&Account{}` from a function safe in Go?
++ Yes: the garbage collector keeps the value alive
+- No: the memory is freed when the function returns
+- Only for small structs
+- Only in main
+> The compiler moves it to the heap (escape analysis).
+? A function receives a slice and sets `s[0] = 9`. Does the caller see it?
++ Yes: the slice shares the caller's array
+- No: slices are copied deeply
+- Only with a pointer to the slice
+- It panics
+> Append is different: it may only change the local header.
+--- exercise code go
+::prompt
+Pointers in practice:
+
+- `func swap(a, b *int)` exchanges the two variables;
+- `func applyDiscount(items []*Product, percent int)` lowers the price of every product in the list by that percentage (integer cents: `price - price*percent/100`);
+- `func cheapest(items []*Product) *Product` returns a pointer to the cheapest product, or `nil` for an empty list.
+
+`main` is given. Products are shared: the catalogue map and the list point to the same values, so the discount is visible in both.
+
+```
+x=2 y=1
+lamp 3150 desk 13500
+catalogue lamp: 3150
+cheapest: lamp
+empty: true
+```
+::starter
+package main
+
+import "fmt"
+
+type Product struct {
+	Name  string
+	Cents int
+}
+
+func swap(a, b *int) {}
+
+func applyDiscount(items []*Product, percent int) {}
+
+func cheapest(items []*Product) *Product {
+	return items[0]
+}
+
+func main() {
+	x, y := 1, 2
+	swap(&x, &y)
+	fmt.Printf("x=%d y=%d\n", x, y)
+
+	catalogue := map[string]*Product{
+		"lamp": {"lamp", 3500},
+		"desk": {"desk", 15000},
+	}
+	list := []*Product{catalogue["lamp"], catalogue["desk"]}
+	applyDiscount(list, 10)
+	fmt.Println(list[0].Name, list[0].Cents, list[1].Name, list[1].Cents)
+	fmt.Println("catalogue lamp:", catalogue["lamp"].Cents)
+	fmt.Println("cheapest:", cheapest(list).Name)
+	fmt.Println("empty:", cheapest(nil) == nil)
+}
+::solution
+package main
+
+import "fmt"
+
+type Product struct {
+	Name  string
+	Cents int
+}
+
+func swap(a, b *int) {
+	*a, *b = *b, *a
+}
+
+func applyDiscount(items []*Product, percent int) {
+	for _, p := range items {
+		p.Cents -= p.Cents * percent / 100
+	}
+}
+
+func cheapest(items []*Product) *Product {
+	var best *Product
+	for _, p := range items {
+		if best == nil || p.Cents < best.Cents {
+			best = p
+		}
+	}
+	return best
+}
+
+func main() {
+	x, y := 1, 2
+	swap(&x, &y)
+	fmt.Printf("x=%d y=%d\n", x, y)
+
+	catalogue := map[string]*Product{
+		"lamp": {"lamp", 3500},
+		"desk": {"desk", 15000},
+	}
+	list := []*Product{catalogue["lamp"], catalogue["desk"]}
+	applyDiscount(list, 10)
+	fmt.Println(list[0].Name, list[0].Cents, list[1].Name, list[1].Cents)
+	fmt.Println("catalogue lamp:", catalogue["lamp"].Cents)
+	fmt.Println("cheapest:", cheapest(list).Name)
+	fmt.Println("empty:", cheapest(nil) == nil)
+}
+::expected
+x=2 y=1
+lamp 3150 desk 13500
+catalogue lamp: 3150
+cheapest: lamp
+empty: true
+::hints
+- `*a, *b = *b, *a` swaps in one statement.
+- The range variable `p` is a copy of the **pointer**, so `p.Cents -= ...` changes the shared product.
+- Start with `var best *Product` (nil) and handle the empty list naturally.
+--- cards
+&x / *p :: Address of x / value at the address p.
+*T :: Pointer type; zero value nil; dereferencing nil panics.
+new(T) :: Allocates a zero T and returns *T.
+Pointer receiver of change :: Pass *T to let a function modify the caller's value.
+No pointer arithmetic :: Go pointers are safe and garbage collected.
+
+=== lesson go-m4-test | Module 4 test | 150 | exam
+This test covers Module 4: arrays and slices, the slices and maps packages, maps, structs and embedding, and pointers.
+
+Before you start, check that you can:
+
+- predict how slices share data and grow;
+- count, group and sort with maps and slices;
+- model data with structs and change it through pointers.
+--- goals
+- model and process data with slices, maps, structs and pointers
+--- quiz
+? What prints after `a := []int{1, 2, 3}; b := a; b[0] = 9; fmt.Println(a[0])`?
++ 9
+- 1
+- 0
+- It panics
+> b shares a's array.
+? What prints after `a := [3]int{1, 2, 3}; b := a; b[0] = 9; fmt.Println(a[0])`?
++ 1
+- 9
+- 0
+- It doesn't compile
+> Arrays are values: b is a copy.
+? Which is the zero value of a map, and what can you do with it?
++ nil; you can read from it but writing panics
+- An empty map you can write to
+- nil; reading panics
+- It has no zero value
+> Use make or a literal.
+? Why might a function take `*Config` instead of `Config`?
++ To modify the caller's config or avoid copying a large struct
+- Pointers are faster to read in every case
+- Structs can't be passed by value
+- To make the fields exported
+> Otherwise the function works on a copy.
+--- exercise code go
+::prompt
+**A gradebook.** Complete the types and functions:
+
+- `type Student struct { Name string; Scores map[string]int }`;
+- `type Gradebook struct { students map[string]*Student }` with `func NewGradebook() *Gradebook`;
+- plain functions that take a `*Gradebook` (methods come in the next module):
+  - `addScore(gb *Gradebook, name, subject string, score int)` creates the student (and their map) on first use;
+  - `average(s *Student) float64`;
+  - `ranking(gb *Gradebook) []*Student` sorted by average descending, then by name;
+  - `subjectBest(gb *Gradebook) map[string]string` maps each subject to the name of the best student in it (ties: alphabetically first name).
+
+`main` is given:
+
+```
+1. Cy 91.0
+2. Ada 87.5
+3. Bob 74.0
+art: Ada
+math: Cy
+music: Cy
+```
+::starter
+package main
+
+import (
+	"fmt"
+	"maps"
+	"slices"
+)
+
+type Student struct {
+	Name   string
+	Scores map[string]int
+}
+
+type Gradebook struct {
+	students map[string]*Student
+}
+
+func NewGradebook() *Gradebook {
+	return &Gradebook{}
+}
+
+func addScore(gb *Gradebook, name, subject string, score int) {}
+
+func average(s *Student) float64 { return 0 }
+
+func ranking(gb *Gradebook) []*Student { return nil }
+
+func subjectBest(gb *Gradebook) map[string]string { return nil }
+
+func main() {
+	gb := NewGradebook()
+	addScore(gb, "Ada", "math", 90)
+	addScore(gb, "Ada", "art", 85)
+	addScore(gb, "Bob", "math", 70)
+	addScore(gb, "Bob", "music", 78)
+	addScore(gb, "Cy", "math", 95)
+	addScore(gb, "Cy", "art", 85)
+	addScore(gb, "Cy", "music", 93)
+	addScore(gb, "Bob", "music", 78)
+	for i, s := range ranking(gb) {
+		fmt.Printf("%d. %s %.1f\n", i+1, s.Name, average(s))
+	}
+	best := subjectBest(gb)
+	for _, subject := range slices.Sorted(maps.Keys(best)) {
+		fmt.Printf("%s: %s\n", subject, best[subject])
+	}
+}
+::solution
+package main
+
+import (
+	"cmp"
+	"fmt"
+	"maps"
+	"slices"
+)
+
+type Student struct {
+	Name   string
+	Scores map[string]int
+}
+
+type Gradebook struct {
+	students map[string]*Student
+}
+
+func NewGradebook() *Gradebook {
+	return &Gradebook{students: map[string]*Student{}}
+}
+
+func addScore(gb *Gradebook, name, subject string, score int) {
+	s, ok := gb.students[name]
+	if !ok {
+		s = &Student{Name: name, Scores: map[string]int{}}
+		gb.students[name] = s
+	}
+	s.Scores[subject] = score
+}
+
+func average(s *Student) float64 {
+	if len(s.Scores) == 0 {
+		return 0
+	}
+	total := 0
+	for _, v := range s.Scores {
+		total += v
+	}
+	return float64(total) / float64(len(s.Scores))
+}
+
+func ranking(gb *Gradebook) []*Student {
+	list := slices.Collect(maps.Values(gb.students))
+	slices.SortFunc(list, func(a, b *Student) int {
+		return cmp.Or(cmp.Compare(average(b), average(a)), cmp.Compare(a.Name, b.Name))
+	})
+	return list
+}
+
+func subjectBest(gb *Gradebook) map[string]string {
+	best := map[string]string{}
+	bestScore := map[string]int{}
+	for _, name := range slices.Sorted(maps.Keys(gb.students)) {
+		for subject, score := range gb.students[name].Scores {
+			if _, seen := best[subject]; !seen || score > bestScore[subject] {
+				best[subject], bestScore[subject] = name, score
+			}
+		}
+	}
+	return best
+}
+
+func main() {
+	gb := NewGradebook()
+	addScore(gb, "Ada", "math", 90)
+	addScore(gb, "Ada", "art", 85)
+	addScore(gb, "Bob", "math", 70)
+	addScore(gb, "Bob", "music", 78)
+	addScore(gb, "Cy", "math", 95)
+	addScore(gb, "Cy", "art", 85)
+	addScore(gb, "Cy", "music", 93)
+	addScore(gb, "Bob", "music", 78)
+	for i, s := range ranking(gb) {
+		fmt.Printf("%d. %s %.1f\n", i+1, s.Name, average(s))
+	}
+	best := subjectBest(gb)
+	for _, subject := range slices.Sorted(maps.Keys(best)) {
+		fmt.Printf("%s: %s\n", subject, best[subject])
+	}
+}
+::expected
+1. Cy 91.0
+2. Ada 87.5
+3. Bob 74.0
+art: Ada
+math: Cy
+music: Cy
+::hints
+- Create the student and its `Scores` map the first time a name appears.
+- `slices.Collect(maps.Values(gb.students))` gives the students as a slice.
+- Visit names in sorted order and replace the best only on a **strictly** higher score, so ties go to the alphabetically first name.
