@@ -1,0 +1,796 @@
+=== module Module 3 · Control flow, methods and arrays
+
+=== lesson cs-control | Decisions: if, switch and patterns | 60
+## if and else
+
+```csharp
+int score = 72;
+string grade;
+if (score >= 90)
+{
+    grade = "A";
+}
+else if (score >= 75)
+{
+    grade = "B";
+}
+else if (score >= 60)
+{
+    grade = "C";
+}
+else
+{
+    grade = "F";
+}
+Console.WriteLine($"Grade: {grade}");
+```
+
+Conditions must be `bool` (no "truthy" values), and the compiler checks that `grade` is assigned on every path before it's used (error CS0165 otherwise).
+
+## switch expressions
+
+A **switch expression** maps a value to a result, with **patterns** for each case:
+
+```csharp
+string Season(int month) => month switch
+{
+    12 or 1 or 2 => "winter",
+    >= 3 and <= 5 => "spring",
+    >= 6 and <= 8 => "summer",
+    >= 9 and <= 11 => "autumn",
+    _ => throw new ArgumentOutOfRangeException(nameof(month)),
+};
+
+decimal Shipping(string zone, decimal weightKg) => (zone, weightKg) switch
+{
+    ("domestic", <= 2) => 4.00m,
+    ("domestic", _) => 6.50m,
+    ("europe", _) => 9.50m + weightKg,
+    _ => 25m,
+};
+
+Console.WriteLine(Season(2) + " " + Season(7));
+Console.WriteLine($"{Shipping("domestic", 1.5m)} {Shipping("domestic", 3m)} {Shipping("europe", 2m)} {Shipping("mars", 1m)}");
+```
+
+- Each arm is `pattern => result`; the first matching arm wins.
+- `_` is the **discard** pattern: "anything else".
+- Patterns can be constants, relational (`>= 3`), combined (`and`, `or`, `not`), **tuples** of several values (`(zone, weight)`), types (`int n`) and properties (Module 4).
+- If no arm matches, a `SwitchExpressionException` is thrown, and the compiler warns when it can see cases are missing.
+
+## The switch statement
+
+The statement form runs code for each case. Unlike C and Java, C# **forbids fall-through**: every non-empty section must end with `break`, `return` or `throw`:
+
+```csharp
+int level = 2;
+switch (level)
+{
+    case 1:
+        Console.WriteLine("beginner");
+        break;
+    case 2:
+    case 3:
+        Console.WriteLine("intermediate or advanced");
+        break;
+    default:
+        Console.WriteLine("unknown");
+        break;
+}
+```
+
+Empty cases can be stacked (`case 2: case 3:`). Prefer switch expressions when computing a value.
+
+~~~check
+? What does `_` mean in a switch expression arm?
++ Any value (a discard pattern), used as the default
+- An error
+- An empty string
+- The previous value
+> Put it last: the first match wins.
+~~~
+
+📚 **Go deeper:** Microsoft Learn, "Selection statements" and "switch expression"; "Pattern matching overview"; *Programming C#*, chapter 3 (branching).
+--- goals
+- branch with if, else if and else
+- compute values with switch expressions, using constant, relational, logical and tuple patterns
+- use switch statements without fall-through
+--- quiz
+? What happens in a C# switch statement section without break?
++ Compile error: fall-through isn't allowed (unless the section is empty)
+- It falls through to the next case
+- It returns
+- It loops
+> CS0163.
+? Which arm matches 15 in `x switch { < 10 => "a", < 20 => "b", _ => "c" }`?
++ "b"
+- "a"
+- "c"
+- None
+> The first matching arm wins.
+? How do you switch on two values at once?
++ Switch on a tuple: `(a, b) switch { (1, 2) => ... }`
+- Nested switch only
+- It's impossible
+- `switch (a, b)` without parentheses
+> Tuple patterns.
+--- exercise code csharp
+::prompt
+Write `static string Classify(int temperatureC, bool raining)` with a **switch expression on the tuple** `(temperatureC, raining)`:
+
+- below 0 → `freezing` (whatever the rain);
+- raining and below 15 → `cold and wet`;
+- raining otherwise → `warm rain`;
+- 25 or more → `hot`;
+- anything else → `pleasant`.
+
+The program prints:
+
+```
+-3 False: freezing
+8 True: cold and wet
+20 True: warm rain
+30 False: hot
+18 False: pleasant
+```
+::starter
+var cases = new[] { (-3, false), (8, true), (20, true), (30, false), (18, false) };
+foreach (var (t, rain) in cases)
+{
+    Console.WriteLine($"{t} {rain}: {Classify(t, rain)}");
+}
+
+static string Classify(int temperatureC, bool raining) => "";
+::solution
+var cases = new[] { (-3, false), (8, true), (20, true), (30, false), (18, false) };
+foreach (var (t, rain) in cases)
+{
+    Console.WriteLine($"{t} {rain}: {Classify(t, rain)}");
+}
+
+static string Classify(int temperatureC, bool raining) => (temperatureC, raining) switch
+{
+    (< 0, _) => "freezing",
+    (< 15, true) => "cold and wet",
+    (_, true) => "warm rain",
+    (>= 25, _) => "hot",
+    _ => "pleasant",
+};
+::expected
+-3 False: freezing
+8 True: cold and wet
+20 True: warm rain
+30 False: hot
+18 False: pleasant
+::variants
+(30, false) => (12, false)
+::hints
+- Order the arms from most specific to least: `(< 0, _)` first.
+- `(_, true)` matches any temperature when it's raining.
+--- cards
+switch expression :: value switch { pattern => result, ..., _ => default } — first match wins.
+Patterns :: Constant (2), relational (>= 10), logical (and/or/not), tuple ((a, _)), type (int n), discard (_).
+switch statement :: case X: ... break; — no fall-through; empty cases can be stacked.
+
+=== lesson cs-loops | Loops | 55
+## while, do-while, for and foreach
+
+```csharp
+int balance = 1000, years = 0;
+while (balance < 2000)
+{
+    balance += balance * 7 / 100;
+    years++;
+}
+Console.WriteLine($"Doubled after {years} years: {balance}");
+
+int n = 0;
+do
+{
+    Console.Write(n + " ");
+    n += 3;
+} while (n < 10);
+Console.WriteLine();
+
+for (int i = 1; i <= 5; i++) Console.Write(i * i + " ");
+Console.WriteLine();
+
+string[] planets = { "Mercury", "Venus", "Earth" };
+foreach (string planet in planets) Console.WriteLine($"{planet} has {planet.Length} letters");
+```
+
+- `while` checks before each round; `do ... while` after (at least one round).
+- `for (init; condition; update)` for counting loops.
+- **`foreach`** iterates over any collection (arrays, lists, strings, dictionaries, LINQ queries); the loop variable is read-only.
+
+## break, continue and nested loops
+
+```csharp
+for (int i = 1; i <= 20; i++)
+{
+    if (i % 2 == 0) continue;
+    if (i > 9) break;
+    Console.Write(i + " ");
+}
+Console.WriteLine();
+
+bool found = false;
+for (int row = 1; row <= 3 && !found; row++)
+{
+    for (int col = 1; col <= 3; col++)
+    {
+        if (row * col == 4) { found = true; break; }
+        Console.Write($"{row}x{col} ");
+    }
+}
+Console.WriteLine();
+```
+
+C# has no labelled `break`; leave nested loops with a flag (as above), by moving them into a method and using `return`, or (rarely) with `goto`.
+
+## Ranges of numbers
+
+`Enumerable.Range(start, count)` generates numbers, which pairs nicely with `foreach` and LINQ (Module 5):
+
+```csharp
+foreach (int i in Enumerable.Range(1, 5)) Console.Write($"{i * 10} ");
+Console.WriteLine();
+Console.WriteLine(Enumerable.Range(1, 100).Sum());
+```
+
+~~~check
+? How do you leave two nested loops at once in C#?
++ With a flag checked by the outer loop, or by returning from a method
+- break 2
+- break outer
+- continue outer
+> C# has no labelled break.
+~~~
+
+📚 **Go deeper:** Microsoft Learn, "Iteration statements" and "Jump statements"; *Programming C#*, chapter 3 (loops).
+--- goals
+- repeat code with while, do-while, for and foreach
+- control loops with break and continue, and leave nested loops
+- generate number sequences with Enumerable.Range
+--- quiz
+? Which loop works over any collection without an index?
++ foreach
+- for
+- do-while
+- while
+> foreach (var x in collection).
+? How many times does `for (int i = 10; i > 0; i -= 3)` run?
++ 4 (10, 7, 4, 1)
+- 3
+- 10
+- 5
+> Stops when i becomes -2.
+? What's `Enumerable.Range(5, 3)`?
++ 5, 6, 7
+- 5, 6, 7, 8
+- 3, 4, 5
+- 5 to 3
+> Start and count.
+--- exercise code csharp
+::prompt
+**FizzBuzz with a count.** For 1 to `15`, print `Fizz`, `Buzz`, `FizzBuzz` or the number on one line separated by spaces, then the number of words:
+
+```
+1 2 Fizz 4 Buzz Fizz 7 8 Fizz Buzz 11 Fizz 13 14 FizzBuzz
+Words: 7
+```
+::starter
+int limit = 15;
+::solution
+int limit = 15;
+var items = new List<string>();
+int words = 0;
+for (int i = 1; i <= limit; i++)
+{
+    string item = (i % 3, i % 5) switch
+    {
+        (0, 0) => "FizzBuzz",
+        (0, _) => "Fizz",
+        (_, 0) => "Buzz",
+        _ => i.ToString(),
+    };
+    if (item != i.ToString()) words++;
+    items.Add(item);
+}
+Console.WriteLine(string.Join(" ", items));
+Console.WriteLine($"Words: {words}");
+::expected
+1 2 Fizz 4 Buzz Fizz 7 8 Fizz Buzz 11 Fizz 13 14 FizzBuzz
+Words: 7
+::variants
+limit = 15 => limit = 20
+::hints
+- A tuple switch on `(i % 3, i % 5)` is a neat way to pick the word.
+- Collect the items in a `List<string>` and `string.Join(" ", items)`.
+--- exercise code csharp
+::prompt
+Print a diamond of stars with half-height `n = 4`, with leading spaces and no trailing spaces:
+
+```
+   *
+  ***
+ *****
+*******
+ *****
+  ***
+   *
+```
+::starter
+int n = 4;
+::solution
+int n = 4;
+for (int i = 1; i <= n; i++) Row(i);
+for (int i = n - 1; i >= 1; i--) Row(i);
+
+void Row(int i) => Console.WriteLine(new string(' ', n - i) + new string('*', 2 * i - 1));
+::expected
+   *
+  ***
+ *****
+*******
+ *****
+  ***
+   *
+::variants
+n = 4 => n = 3
+::hints
+- Row `i` has `n - i` spaces and `2 * i - 1` stars; `new string('*', k)` repeats a character.
+- A local function `Row(i)` can use `n` from the surrounding code.
+--- cards
+while / do-while :: Check before / after the body.
+for / foreach :: Counting loop / iterate any collection (read-only loop variable).
+break / continue :: Leave / skip; no labelled break: use a flag or return.
+Enumerable.Range :: Enumerable.Range(start, count) generates integers.
+
+=== lesson cs-methods | Methods, parameters and local functions | 70
+## Defining methods
+
+```csharp
+Console.WriteLine(CircleArea(2).ToString("F2"));
+Console.WriteLine(Describe("Ada"));
+Console.WriteLine(Describe("Grace", 45));
+Console.WriteLine(Describe(age: 30, name: "Linus"));      // named arguments, any order
+Console.WriteLine(Sum(1, 2, 3, 4));
+
+static double CircleArea(double radius) => Math.PI * radius * radius;
+
+static string Describe(string name, int age = -1)          // optional parameter with a default
+    => age < 0 ? name : $"{name} ({age})";
+
+static int Sum(params int[] numbers)                       // any number of arguments
+{
+    int total = 0;
+    foreach (int n in numbers) total += n;
+    return total;
+}
+```
+
+- **Optional parameters** have defaults; **named arguments** make calls readable (`Describe(age: 30, name: "Linus")`).
+- **`params`** accepts any number of arguments as an array (like Java's varargs).
+- **Overloading**: several methods may share a name if their parameters differ.
+- In a file with top-level statements, methods declared at the top level are **local functions** of the generated `Main`; `static` ones can't accidentally capture local variables.
+
+## ref, out and in
+
+By default arguments are passed **by value** (for reference types, the reference is copied, as in Java). C# also lets a method work on the **caller's variable** itself:
+
+```csharp
+int a = 1, b = 2;
+Swap(ref a, ref b);
+Console.WriteLine($"{a} {b}");
+
+if (TryDivide(10, 4, out double result)) Console.WriteLine(result);
+if (!TryDivide(1, 0, out _)) Console.WriteLine("cannot divide by zero");
+
+static void Swap(ref int x, ref int y) => (x, y) = (y, x);
+
+static bool TryDivide(double x, double y, out double quotient)
+{
+    if (y == 0) { quotient = 0; return false; }
+    quotient = x / y;
+    return true;
+}
+```
+
+- **`ref`**: the method reads and can change the caller's variable;
+- **`out`**: the method **must** assign it (the "Try" pattern: `int.TryParse(s, out int n)`); `out _` discards a value you don't need;
+- **`in`**: passed by reference but read-only (an optimisation for large structs).
+
+`(x, y) = (y, x)` swaps with **tuples**, which also let a method return several values: `static (int min, int max) Range(int[] xs)`.
+
+## Tuples for multiple results
+
+```csharp
+var (min, max) = MinMax(new[] { 4, 9, 1, 7 });
+Console.WriteLine($"{min} {max}");
+var stats = MinMax(new[] { 3, 3 });
+Console.WriteLine($"{stats.Min}..{stats.Max}");
+
+static (int Min, int Max) MinMax(int[] values)
+{
+    int min = int.MaxValue, max = int.MinValue;
+    foreach (int v in values) { min = Math.Min(min, v); max = Math.Max(max, v); }
+    return (min, max);
+}
+```
+
+## Recursion
+
+```csharp
+Console.WriteLine($"{Factorial(20)} {Fibonacci(20)}");
+
+static long Factorial(int n) => n <= 1 ? 1 : n * Factorial(n - 1);
+static int Fibonacci(int n) => n < 2 ? n : Fibonacci(n - 1) + Fibonacci(n - 2);
+```
+
+Every recursive method needs a base case; very deep recursion throws `StackOverflowException`, which (unlike other exceptions) can't be caught and ends the process.
+
+~~~check
+? What must a method do with an `out` parameter?
++ Assign it before returning
+- Read it first
+- Nothing
+- Return it
+> That's why TryParse can give you the number.
+~~~
+
+📚 **Go deeper:** Microsoft Learn, "Methods", "Method parameters" (ref, out, in, params), "Local functions" and "Tuple types"; *Programming C#*, chapter 4 (methods).
+--- goals
+- define methods with optional parameters, named arguments, params and overloads
+- pass arguments by value, ref, out and in, and use the Try pattern
+- return several values with tuples, and deconstruct them
+- write recursive methods with a base case
+--- quiz
+? What's the effect of `ref` on a parameter?
++ The method works on the caller's variable itself
+- The parameter is read-only
+- The method must assign it
+- It makes the argument optional
+> out must be assigned; in is read-only.
+? Which call is valid for `void F(int a, int b = 2, int c = 3)`?
++ `F(1, c: 5)`
+- `F(c: 5)`
+- `F()`
+- `F(1, , 5)`
+> Named arguments skip optional ones.
+? What does `var (a, b) = (1, 2);` do?
++ Deconstructs a tuple into two variables
+- Creates an array
+- Compile error
+- Assigns 1 to both
+> Tuples and deconstruction.
+--- exercise code csharp
+::prompt
+Write these methods so the program prints:
+
+```
+gcd(84, 36) = 12
+lcm(4, 6) = 12
+97 is prime: True
+primes up to 30: 2 3 5 7 11 13 17 19 23 29
+min/max of [4, 9, 1, 7]: 1/9
+```
+
+- `Gcd(a, b)` recursively (Euclid);
+- `Lcm(a, b)` using `Gcd`;
+- `IsPrime(n)` testing divisors up to the square root;
+- `PrimesUpTo(limit)` returning a space-separated string;
+- `MinMax(params int[] values)` returning a tuple `(int Min, int Max)`.
+::starter
+Console.WriteLine($"gcd(84, 36) = {Gcd(84, 36)}");
+Console.WriteLine($"lcm(4, 6) = {Lcm(4, 6)}");
+Console.WriteLine($"97 is prime: {IsPrime(97)}");
+Console.WriteLine($"primes up to 30: {PrimesUpTo(30)}");
+var (min, max) = MinMax(4, 9, 1, 7);
+Console.WriteLine($"min/max of [4, 9, 1, 7]: {min}/{max}");
+::solution
+Console.WriteLine($"gcd(84, 36) = {Gcd(84, 36)}");
+Console.WriteLine($"lcm(4, 6) = {Lcm(4, 6)}");
+Console.WriteLine($"97 is prime: {IsPrime(97)}");
+Console.WriteLine($"primes up to 30: {PrimesUpTo(30)}");
+var (min, max) = MinMax(4, 9, 1, 7);
+Console.WriteLine($"min/max of [4, 9, 1, 7]: {min}/{max}");
+
+static int Gcd(int a, int b) => b == 0 ? a : Gcd(b, a % b);
+
+static int Lcm(int a, int b) => a / Gcd(a, b) * b;
+
+static bool IsPrime(int n)
+{
+    if (n < 2) return false;
+    for (int d = 2; (long)d * d <= n; d++)
+    {
+        if (n % d == 0) return false;
+    }
+    return true;
+}
+
+static string PrimesUpTo(int limit)
+{
+    var primes = new List<int>();
+    for (int n = 2; n <= limit; n++)
+    {
+        if (IsPrime(n)) primes.Add(n);
+    }
+    return string.Join(" ", primes);
+}
+
+static (int Min, int Max) MinMax(params int[] values)
+{
+    int min = int.MaxValue, max = int.MinValue;
+    foreach (int v in values)
+    {
+        min = Math.Min(min, v);
+        max = Math.Max(max, v);
+    }
+    return (min, max);
+}
+::expected
+gcd(84, 36) = 12
+lcm(4, 6) = 12
+97 is prime: True
+primes up to 30: 2 3 5 7 11 13 17 19 23 29
+min/max of [4, 9, 1, 7]: 1/9
+::variants
+IsPrime(97) => IsPrime(91)
+::hints
+- `static int Gcd(int a, int b) => b == 0 ? a : Gcd(b, a % b);`
+- `static (int Min, int Max) MinMax(params int[] values)` returns `(min, max)`.
+--- cards
+Optional / named arguments :: void F(int a, int b = 2); F(b: 5, a: 1).
+params :: static int Sum(params int[] xs) — any number of arguments.
+ref / out / in :: Caller's variable (read-write) / must be assigned (Try pattern) / read-only by reference.
+Tuples :: static (int Min, int Max) F(); var (min, max) = F(); swap: (a, b) = (b, a).
+Local function :: A method declared inside another method or among top-level statements.
+
+=== lesson cs-arrays | Arrays, indexes and ranges | 60
+## Arrays
+
+```csharp
+int[] scores = new int[4];             // four ints, all 0
+scores[0] = 90;
+scores[^1] = 75;                       // ^1 = the last element
+string[] names = { "Ada", "Grace", "Linus" };
+int[] primes = [2, 3, 5, 7];           // collection expression (C# 12)
+
+Console.WriteLine($"{scores.Length} {names[1]} {scores[^1]}");
+Console.WriteLine(string.Join(", ", scores));
+Console.WriteLine(string.Join(", ", primes[1..3]));    // a range: elements 1 and 2
+```
+
+- Indexes run from `0` to `Length - 1`; `^1` is the last element, `^2` the one before.
+- **Ranges** `a[start..end]` copy a slice (end-exclusive); `a[..2]` and `a[2..]` leave out one side.
+- Arrays are reference types: `int[] b = a;` shares the array; `(int[])a.Clone()` or `a[..]` copies it.
+- New arrays are filled with defaults (`0`, `false`, `null`).
+
+## The Array class
+
+```csharp
+int[] numbers = { 42, 7, 19, 3, 25 };
+int[] sorted = (int[])numbers.Clone();
+Array.Sort(sorted);
+Console.WriteLine(string.Join(" ", sorted));
+Console.WriteLine(Array.IndexOf(numbers, 19) + " " + Array.BinarySearch(sorted, 19));
+Array.Reverse(sorted);
+Console.WriteLine(string.Join(" ", sorted));
+Console.WriteLine($"{numbers.Max()} {numbers.Sum()} {numbers.Average()}");   // LINQ, Module 5
+Console.WriteLine(Array.Exists(numbers, n => n > 40));
+```
+
+## Multi-dimensional and jagged arrays
+
+C# has **rectangular** arrays (`int[,]`, one block of rows × columns) and **jagged** arrays (`int[][]`, arrays of arrays whose rows can differ in length):
+
+```csharp
+int[,] grid = { { 1, 2, 3 }, { 4, 5, 6 } };
+Console.WriteLine($"{grid.GetLength(0)} rows, {grid.GetLength(1)} columns, middle {grid[1, 1]}");
+
+int[][] triangle = new int[4][];
+for (int r = 0; r < triangle.Length; r++)
+{
+    triangle[r] = new int[r + 1];
+    triangle[r][0] = triangle[r][r] = 1;
+    for (int c = 1; c < r; c++) triangle[r][c] = triangle[r - 1][c - 1] + triangle[r - 1][c];
+}
+foreach (int[] row in triangle) Console.WriteLine(string.Join(" ", row));
+```
+
+## Span: views without copying
+
+`Span<T>` (and the read-only `ReadOnlySpan<T>`) is a **view** over part of an array or string, without copying it. It's how high-performance .NET code (parsers, servers) avoids allocations:
+
+```csharp
+int[] data = { 1, 2, 3, 4, 5, 6 };
+Span<int> middle = data.AsSpan(2, 3);   // a window over elements 2, 3, 4
+middle[0] = 99;                         // writes into data
+Console.WriteLine(string.Join(" ", data));
+```
+
+You'll mostly use spans indirectly (many library methods accept them); it's useful to know they exist.
+
+Arrays have a fixed size; for collections that grow, use `List<T>` (Module 5).
+
+~~~check
+? What's `new[] { 10, 20, 30, 40 }[^2]`?
++ 30
+- 20
+- 40
+- An error
+> ^1 is 40, ^2 is 30.
+~~~
+
+📚 **Go deeper:** Microsoft Learn, "Arrays", "Indices and ranges", "Collection expressions" and "Memory and spans"; *Programming C#*, chapter 9 "Arrays, Indexers, and Collections".
+--- goals
+- create and index arrays, including ^ indexes, ranges and collection expressions
+- sort, search and copy arrays with the Array class
+- use rectangular and jagged arrays
+- recognise Span<T> as a copy-free view
+--- quiz
+? What does `a[1..3]` contain for `a = {10, 20, 30, 40}`?
++ 20, 30
+- 20, 30, 40
+- 10, 20, 30
+- 30
+> End-exclusive range.
+? What's the difference between `int[,]` and `int[][]`?
++ Rectangular array vs jagged array (rows can differ in length)
+- None
+- int[,] is a list
+- int[][] is two-dimensional only
+> grid[1, 2] vs jagged[1][2].
+? Does `int[] b = a;` copy the array?
++ No, both refer to the same array
+- Yes
+- Only the first element
+- Only for int
+> Clone() or a[..] copies.
+--- exercise code csharp
+::prompt
+Daily temperatures for a week are given. Print the average (one decimal), the hottest day number (1-based; the first if tied), the temperatures sorted (without changing the original), the original, and the last three days (using a range):
+
+```
+Average: 18.4
+Hottest day: 5
+Sorted: 12 15 17 19 21 21 24
+Original: 17 12 19 15 24 21 21
+Last three: 24 21 21
+```
+::starter
+int[] temps = { 17, 12, 19, 15, 24, 21, 21 };
+::solution
+int[] temps = { 17, 12, 19, 15, 24, 21, 21 };
+int sum = 0, hottest = 0;
+for (int i = 0; i < temps.Length; i++)
+{
+    sum += temps[i];
+    if (temps[i] > temps[hottest]) hottest = i;
+}
+Console.WriteLine($"Average: {(double)sum / temps.Length:F1}");
+Console.WriteLine($"Hottest day: {hottest + 1}");
+int[] sorted = temps[..];
+Array.Sort(sorted);
+Console.WriteLine($"Sorted: {string.Join(" ", sorted)}");
+Console.WriteLine($"Original: {string.Join(" ", temps)}");
+Console.WriteLine($"Last three: {string.Join(" ", temps[^3..])}");
+::expected
+Average: 18.4
+Hottest day: 5
+Sorted: 12 15 17 19 21 21 24
+Original: 17 12 19 15 24 21 21
+Last three: 24 21 21
+::variants
+{ 17, 12, 19, 15, 24, 21, 21 } => { 9, 30, 19, 15, 24, 21, 11 }
+::hints
+- `temps[..]` copies the whole array; sort the copy.
+- `temps[^3..]` takes the last three elements.
+--- cards
+Array :: int[] a = new int[5]; int[] b = {1, 2}; int[] c = [1, 2]; a.Length.
+^ index :: a[^1] is the last element.
+Range :: a[1..3], a[..2], a[^3..] — end-exclusive slices (copies).
+Array class :: Array.Sort, Reverse, IndexOf, BinarySearch, Exists; Clone() copies.
+Rectangular vs jagged :: int[,] grid (grid[r, c]) vs int[][] rows of different lengths.
+Span<T> :: A copy-free view over part of an array or string, for high-performance code.
+
+=== lesson cs-m3-test | Module 3 test | 120 | exam
+This test covers Module 3: if, switch statements and expressions with patterns, loops, methods (optional and named arguments, params, ref/out, tuples, recursion) and arrays with indexes and ranges.
+
+Before you start, check that you can:
+
+- write switch expressions with relational and tuple patterns;
+- choose the right loop;
+- design methods with clear parameters, out values and tuples;
+- slice and search arrays.
+--- goals
+- structure C# programs with control flow and methods
+- solve problems with loops and arrays
+--- quiz
+? Which is the C# "Try" pattern?
++ `bool TryX(input, out result)`
+- `result TryX(input) throws`
+- `try { X(); } catch {}`
+- `X(input) ?? default`
+> int.TryParse, Dictionary.TryGetValue...
+? What does `x switch { 1 => "a", _ => "b" }` return for 5?
++ "b"
+- "a"
+- null
+- It throws
+> _ matches anything.
+? What's printed by `foreach (var c in "hi") Console.Write(c + ".");`?
++ h.i.
+- hi.
+- h.i
+- 104.105.
+> char + string gives a string.
+--- exercise code csharp
+::prompt
+**Run-length encoding.** Write `Encode` (`"aaabccdddd"` → `"3a1b2c4d"`) and `Decode` (which supports multi-digit counts: `"12x1y"` → twelve `x` then `y`). The program prints:
+
+```
+3a1b2c4d
+aaabccdddd
+12x1y
+True
+```
+::starter
+Console.WriteLine(Encode("aaabccdddd"));
+Console.WriteLine(Decode("3a1b2c4d"));
+string text = "xxxxxxxxxxxxy";
+Console.WriteLine(Encode(text));
+Console.WriteLine(Decode(Encode(text)) == text);
+
+static string Encode(string s) => "";
+static string Decode(string s) => "";
+::solution
+using System.Text;
+
+Console.WriteLine(Encode("aaabccdddd"));
+Console.WriteLine(Decode("3a1b2c4d"));
+string text = "xxxxxxxxxxxxy";
+Console.WriteLine(Encode(text));
+Console.WriteLine(Decode(Encode(text)) == text);
+
+static string Encode(string s)
+{
+    var sb = new StringBuilder();
+    int i = 0;
+    while (i < s.Length)
+    {
+        char c = s[i];
+        int run = 0;
+        while (i < s.Length && s[i] == c) { run++; i++; }
+        sb.Append(run).Append(c);
+    }
+    return sb.ToString();
+}
+
+static string Decode(string s)
+{
+    var sb = new StringBuilder();
+    int count = 0;
+    foreach (char c in s)
+    {
+        if (char.IsDigit(c)) count = count * 10 + (c - '0');
+        else
+        {
+            sb.Append(c, count);
+            count = 0;
+        }
+    }
+    return sb.ToString();
+}
+::expected
+3a1b2c4d
+aaabccdddd
+12x1y
+True
+::variants
+"xxxxxxxxxxxxy" => "zzzzzzzzzzww"
+::hints
+- Encode: for each character, count its run, then append count and character.
+- Decode: build the count digit by digit; `sb.Append(c, count)` appends a character `count` times.
