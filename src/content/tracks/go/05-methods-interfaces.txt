@@ -1,0 +1,1631 @@
+=== module Module 5 · Methods, interfaces and generics
+
+=== lesson go-methods | Methods | 70
+## Functions attached to types
+
+A **method** is a function with a **receiver**: the value it's called on, written before the name. Go has no classes; any named type you define can have methods, structs most often:
+
+```go
+package main
+
+import (
+	"fmt"
+	"math"
+)
+
+type Point struct{ X, Y float64 }
+
+// value receiver: p is a copy of the point
+func (p Point) Distance(q Point) float64 {
+	return math.Hypot(q.X-p.X, q.Y-p.Y)
+}
+
+// pointer receiver: changes the caller's point
+func (p *Point) Move(dx, dy float64) {
+	p.X += dx
+	p.Y += dy
+}
+
+func (p Point) String() string {
+	return fmt.Sprintf("(%g, %g)", p.X, p.Y)
+}
+
+type Celsius float64 // methods work on any named type, not only structs
+
+func (c Celsius) Fahrenheit() float64 { return float64(c)*9/5 + 32 }
+
+func main() {
+	a := Point{0, 0}
+	b := Point{3, 4}
+	fmt.Println(a.Distance(b))
+	a.Move(1, 1) // Go takes &a automatically because a is a variable
+	fmt.Println(a, b) // fmt calls the String method
+	fmt.Println(Celsius(100).Fahrenheit())
+
+	move := a.Move // a method value: bound to a
+	move(10, 0)
+	fmt.Println(a)
+}
+```
+
+## Value or pointer receiver?
+
+| Use a pointer receiver `(p *T)` when | Use a value receiver `(p T)` when |
+|---|---|
+| the method **changes** the receiver | the type is a small value (a point, a money amount, a colour) |
+| the struct is large (avoid copying) | the method only reads |
+| the type contains a mutex or must not be copied | the type is a map, func or channel (already a reference) |
+
+**Be consistent**: if some methods of a type need pointer receivers, give all its methods pointer receivers. Go calls methods conveniently in both directions: `v.Move()` on an addressable variable takes its address, and `p.Distance(q)` on a pointer dereferences it.
+
+## Encapsulation with packages
+
+Go's unit of encapsulation is the **package**, not the type: unexported (lower-case) fields and methods are invisible outside the package. A type keeps its invariants by hiding its fields and offering methods:
+
+```go
+package main
+
+import (
+	"errors"
+	"fmt"
+)
+
+type Account struct {
+	owner   string
+	balance int // in cents, unexported: other packages can't touch it
+	history []string
+}
+
+var ErrInsufficient = errors.New("insufficient funds")
+
+func NewAccount(owner string) *Account { return &Account{owner: owner} }
+
+func (a *Account) Deposit(cents int) {
+	a.balance += cents
+	a.history = append(a.history, fmt.Sprintf("+%d", cents))
+}
+
+func (a *Account) Withdraw(cents int) error {
+	if cents > a.balance {
+		return fmt.Errorf("withdraw %d from %s: %w", cents, a.owner, ErrInsufficient)
+	}
+	a.balance -= cents
+	a.history = append(a.history, fmt.Sprintf("-%d", cents))
+	return nil
+}
+
+func (a *Account) Balance() int { return a.balance } // a getter is named Balance, not GetBalance
+
+func main() {
+	acc := NewAccount("ada")
+	acc.Deposit(5000)
+	fmt.Println(acc.Withdraw(2000), acc.Withdraw(9000))
+	fmt.Println(acc.Balance(), acc.history)
+}
+```
+
+(Inside one file everything is in the same package, so `main` can still read `acc.history`; another package couldn't.)
+
+## Methods of embedded types are promoted
+
+```go
+package main
+
+import "fmt"
+
+type Logger struct{ prefix string }
+
+func (l Logger) Log(msg string) { fmt.Println(l.prefix + msg) }
+
+type Service struct {
+	Logger // embedded: Service gets the Log method
+	name   string
+}
+
+func (s Service) Start() { s.Log("starting " + s.name) }
+
+func main() {
+	svc := Service{Logger{"[svc] "}, "billing"}
+	svc.Start()
+	svc.Log("direct call")
+}
+```
+
+This is how Go reuses behaviour: by **composition**. The outer type can define its own `Log` to replace the promoted one, but there's no `super` and no virtual dispatch through the embedded type.
+
+~~~check
+? Why does `func (c Counter) Inc() { c.n++ }` not change the caller's counter?
++ A value receiver works on a copy
+- Methods can't change fields
+- n must be exported
+- ++ doesn't work on fields
+> Use func (c *Counter) Inc().
+~~~
+
+📚 **Go deeper:** A Tour of Go, "Methods"; Effective Go, "Methods" and "Getters"; *The Go Programming Language*, chapter 6 (Methods).
+--- goals
+- declare methods with value and pointer receivers
+- choose the right receiver type and stay consistent
+- add methods to any named type, and use method values
+- encapsulate state with unexported fields, constructors and methods
+- reuse behaviour through embedded types
+--- quiz
+? Which receiver lets a method modify the struct?
++ func (s *Stack) Push(v int)
+- func (s Stack) Push(v int)
+- func Push(s Stack, v int)
+- func (Stack) Push(v int)
+> A pointer receiver.
+? Can you define a method on `type Miles float64`?
++ Yes: any named type you define can have methods
+- No: only structs have methods
+- Only with a pointer receiver
+- Only in the standard library
+> But not on types from other packages.
+? What's the Go name for a getter of the field `balance`?
++ Balance()
+- GetBalance()
+- balance()
+- get_balance()
+> Effective Go's convention.
+? What is Go's unit of encapsulation?
++ The package
+- The struct
+- The file
+- The function
+> Lower-case names are private to the package.
+--- exercise code go
+::prompt
+Implement a **stack of ints** with methods:
+
+- `type Stack struct { items []int }` (the zero value is an empty, usable stack);
+- `Push(v int)`, `Pop() (int, bool)` (false when empty), `Peek() (int, bool)`, `Len() int`;
+- `String()` returning e.g. `[1 2 3>` (bottom first, `>` marks the top) or `[>` when empty.
+
+Choose the receivers carefully. `main` is given:
+
+```
+[1 2 3>
+pop: 3 true
+peek: 2 true
+len: 2
+[1 2>
+pop: 2 true
+pop: 1 true
+pop: 0 false
+[>
+```
+::starter
+package main
+
+import "fmt"
+
+type Stack struct {
+	items []int
+}
+
+func (s Stack) Push(v int) {
+	s.items = append(s.items, v)
+}
+
+func main() {
+	var s Stack
+	s.Push(1)
+	s.Push(2)
+	s.Push(3)
+	fmt.Println(s.items)
+}
+::solution
+package main
+
+import (
+	"fmt"
+	"strings"
+)
+
+type Stack struct {
+	items []int
+}
+
+func (s *Stack) Push(v int) {
+	s.items = append(s.items, v)
+}
+
+func (s *Stack) Pop() (int, bool) {
+	if len(s.items) == 0 {
+		return 0, false
+	}
+	v := s.items[len(s.items)-1]
+	s.items = s.items[:len(s.items)-1]
+	return v, true
+}
+
+func (s *Stack) Peek() (int, bool) {
+	if len(s.items) == 0 {
+		return 0, false
+	}
+	return s.items[len(s.items)-1], true
+}
+
+func (s *Stack) Len() int { return len(s.items) }
+
+func (s *Stack) String() string {
+	parts := make([]string, len(s.items))
+	for i, v := range s.items {
+		parts[i] = fmt.Sprint(v)
+	}
+	return "[" + strings.Join(parts, " ") + ">"
+}
+
+func main() {
+	var s Stack
+	s.Push(1)
+	s.Push(2)
+	s.Push(3)
+	fmt.Println(s.String())
+	v, ok := s.Pop()
+	fmt.Println("pop:", v, ok)
+	v, ok = s.Peek()
+	fmt.Println("peek:", v, ok)
+	fmt.Println("len:", s.Len())
+	fmt.Println(s.String())
+	for range 3 {
+		v, ok = s.Pop()
+		fmt.Println("pop:", v, ok)
+	}
+	fmt.Println(s.String())
+}
+::expected
+[1 2 3>
+pop: 3 true
+peek: 2 true
+len: 2
+[1 2>
+pop: 2 true
+pop: 1 true
+pop: 0 false
+[>
+::hints
+- Push and Pop change the stack, so they need `*Stack` receivers; give the other methods pointer receivers too, for consistency.
+- `s.items[:len(s.items)-1]` drops the last element.
+- Convert the ints with `fmt.Sprint(v)` and join them with spaces.
+--- cards
+Method :: func (r T) Name(...) — a function with a receiver.
+Pointer receiver :: func (r *T) — can modify the receiver; avoids copies.
+Consistency :: If one method needs *T, give them all *T.
+Method value :: f := v.Method binds the receiver.
+Encapsulation :: Unexported fields + constructor + methods; the package is the boundary.
+Promoted methods :: Embedded types' methods are callable on the outer type.
+
+=== lesson go-interfaces | Interfaces | 80
+## Behaviour as a type
+
+An **interface** lists methods. Any type that has those methods **satisfies** it automatically: there's no `implements` keyword. This is Go's main tool for polymorphism:
+
+```go
+package main
+
+import (
+	"fmt"
+	"math"
+)
+
+type Shape interface {
+	Area() float64
+	Perimeter() float64
+}
+
+type Rect struct{ W, H float64 }
+type Circle struct{ R float64 }
+
+func (r Rect) Area() float64       { return r.W * r.H }
+func (r Rect) Perimeter() float64  { return 2 * (r.W + r.H) }
+func (c Circle) Area() float64     { return math.Pi * c.R * c.R }
+func (c Circle) Perimeter() float64 { return 2 * math.Pi * c.R }
+
+func describe(s Shape) string {
+	return fmt.Sprintf("%T area %.2f perimeter %.2f", s, s.Area(), s.Perimeter())
+}
+
+func main() {
+	shapes := []Shape{Rect{3, 4}, Circle{1}, Rect{1, 1}}
+	total := 0.0
+	for _, s := range shapes {
+		fmt.Println(describe(s))
+		total += s.Area()
+	}
+	fmt.Printf("total area %.2f\n", total)
+}
+```
+
+Because satisfaction is implicit, you can define an interface **where it's used**, for types written long before by someone else. Go interfaces are usually **small**: one or two methods.
+
+## Interfaces you'll meet everywhere
+
+| Interface | Method | Used for |
+|---|---|---|
+| `fmt.Stringer` | `String() string` | how fmt prints a value |
+| `error` | `Error() string` | every error |
+| `io.Reader` | `Read(p []byte) (n int, err error)` | anything you can read bytes from: files, network, strings |
+| `io.Writer` | `Write(p []byte) (n int, err error)` | anything you can write to: files, buffers, HTTP responses |
+| `sort.Interface` | `Len`, `Less`, `Swap` | the older sorting API |
+
+## Custom error types
+
+Since `error` is an interface, any type with an `Error() string` method is an error. A custom error type carries extra information, which callers extract with **`errors.As`**:
+
+```go
+package main
+
+import (
+	"errors"
+	"fmt"
+)
+
+type ValidationError struct {
+	Field  string
+	Reason string
+}
+
+func (e *ValidationError) Error() string {
+	return fmt.Sprintf("invalid %s: %s", e.Field, e.Reason)
+}
+
+func register(email string, age int) error {
+	if age < 16 {
+		return &ValidationError{"age", "must be at least 16"}
+	}
+	if email == "" {
+		return &ValidationError{"email", "is required"}
+	}
+	return nil
+}
+
+func main() {
+	err := fmt.Errorf("sign-up failed: %w", register("ada@example.com", 12))
+	fmt.Println(err)
+	var ve *ValidationError
+	if errors.As(err, &ve) {
+		fmt.Println("highlight the field:", ve.Field)
+	}
+}
+```
+
+## Type assertions and type switches
+
+An interface value holds a **concrete type and a value**. You can ask what's inside:
+
+```go
+package main
+
+import "fmt"
+
+func describe(v any) string { // any = interface{}: every type satisfies it
+	switch x := v.(type) {
+	case nil:
+		return "nothing"
+	case int:
+		return fmt.Sprintf("int %d, doubled %d", x, x*2)
+	case string:
+		return fmt.Sprintf("string of %d bytes", len(x))
+	case fmt.Stringer:
+		return "a Stringer: " + x.String()
+	case []int:
+		return fmt.Sprintf("slice of %d ints", len(x))
+	default:
+		return fmt.Sprintf("something else: %T", x)
+	}
+}
+
+type Color struct{ R, G, B uint8 }
+
+func (c Color) String() string { return fmt.Sprintf("#%02x%02x%02x", c.R, c.G, c.B) }
+
+func main() {
+	for _, v := range []any{42, "héllo", Color{255, 128, 0}, []int{1, 2}, 3.5, nil} {
+		fmt.Println(describe(v))
+	}
+	var s fmt.Stringer = Color{1, 2, 3}
+	c, ok := s.(Color) // a type assertion with comma ok
+	fmt.Println(c.R, ok)
+	_, ok = s.(interface{ Area() float64 })
+	fmt.Println(ok)
+}
+```
+
+`v.(T)` without `ok` **panics** if `v` doesn't hold a `T`; prefer the comma-ok form or a type switch. Use `any` sparingly: it throws away type checking, so it's for truly heterogeneous data (JSON, printing).
+
+## The nil interface trap
+
+An interface is `nil` only when it holds **no type and no value**. An interface holding a nil *pointer* is **not** nil:
+
+```go
+package main
+
+import "fmt"
+
+type MyErr struct{}
+
+func (*MyErr) Error() string { return "boom" }
+
+func mayFail(fail bool) error {
+	var e *MyErr // nil pointer
+	if fail {
+		e = &MyErr{}
+	}
+	return e // WRONG: returns a non-nil interface holding a nil *MyErr
+}
+
+func mayFailFixed(fail bool) error {
+	if fail {
+		return &MyErr{}
+	}
+	return nil // return a literal nil
+}
+
+func main() {
+	fmt.Println(mayFail(false) == nil, mayFailFixed(false) == nil)
+}
+```
+
+Always `return nil` directly for "no error", never a typed nil pointer.
+
+~~~check
+? How does a type declare that it implements an interface in Go?
++ It doesn't: having the methods is enough
+- With the implements keyword
+- With an annotation
+- By embedding the interface
+> Satisfaction is implicit.
+~~~
+
+📚 **Go deeper:** A Tour of Go, "Interfaces"; Effective Go, "Interfaces and other types"; the Go FAQ, "Why is my nil error value not equal to nil?"; *The Go Programming Language*, chapter 7 (Interfaces).
+--- goals
+- define interfaces and satisfy them implicitly
+- write polymorphic code over a slice of interface values
+- implement Stringer and custom error types, and extract them with errors.As
+- inspect interface values with type assertions and type switches
+- avoid the typed-nil interface trap
+--- quiz
+? What does `var s Shape = Rect{2, 3}` require?
++ Rect has every method listed in Shape
+- Rect embeds Shape
+- Rect is declared with implements Shape
+- Shape is a struct
+> Implicit satisfaction.
+? What does `v.(string)` do when v holds an int?
++ It panics (use v.(string) with ok to avoid it)
+- It returns ""
+- It converts the int to a string
+- It doesn't compile
+> The comma-ok form returns false instead.
+? Which makes a type printable in a custom way by fmt?
++ A String() string method
+- A Print() method
+- A ToString() method
+- A format tag
+> That's fmt.Stringer.
+? A function returns a nil *MyErr as an error. Is `err == nil` true?
++ No: the interface holds a type, so it isn't nil
+- Yes
+- It panics
+- It doesn't compile
+> Return a literal nil.
+--- exercise code go
+::prompt
+**Notifications.** Define `type Notifier interface { Send(to, msg string) error; Name() string }` and two implementations:
+
+- `EmailNotifier{From string}`: an address without `@` returns `&SendError{Channel: "email", To: to}`; otherwise prints `email from <From> to <to>: <msg>`;
+- `SMSNotifier{}`: a number that doesn't start with `+` returns `&SendError{Channel: "sms", To: to}`; a message over 20 bytes is cut to 20 and gets `…` appended; prints `sms to <to>: <msg>`.
+
+`SendError` is a custom error type whose `Error()` returns `<channel>: cannot send to "<to>"`. `broadcast` (given) sends through every notifier and counts failures with `errors.As`:
+
+```
+email from shop@example.com to ada@example.com: Your order shipped
+email: cannot send to "bob"
+sms to +4412345: Your order shipped
+sms: cannot send to "0798"
+sms to +4412345: A very long message …
+failures: email=1 sms=1
+```
+::starter
+package main
+
+import (
+	"errors"
+	"fmt"
+)
+
+type Notifier interface {
+	Send(to, msg string) error
+	Name() string
+}
+
+type SendError struct {
+	Channel, To string
+}
+
+func broadcast(notifiers []Notifier, recipients map[string][]string, msg string) map[string]int {
+	failures := map[string]int{}
+	for _, n := range notifiers {
+		for _, to := range recipients[n.Name()] {
+			if err := n.Send(to, msg); err != nil {
+				fmt.Println(err)
+				var se *SendError
+				if errors.As(err, &se) {
+					failures[se.Channel]++
+				}
+			}
+		}
+	}
+	return failures
+}
+
+func main() {
+	notifiers := []Notifier{}
+	recipients := map[string][]string{
+		"email": {"ada@example.com", "bob"},
+		"sms":   {"+4412345", "0798"},
+	}
+	f := broadcast(notifiers, recipients, "Your order shipped")
+	notifiers[0].Send("x", "y")
+	fmt.Printf("failures: email=%d sms=%d\n", f["email"], f["sms"])
+}
+::solution
+package main
+
+import (
+	"errors"
+	"fmt"
+	"strings"
+)
+
+type Notifier interface {
+	Send(to, msg string) error
+	Name() string
+}
+
+type SendError struct {
+	Channel, To string
+}
+
+func (e *SendError) Error() string {
+	return fmt.Sprintf("%s: cannot send to %q", e.Channel, e.To)
+}
+
+type EmailNotifier struct{ From string }
+
+func (e EmailNotifier) Name() string { return "email" }
+
+func (e EmailNotifier) Send(to, msg string) error {
+	if !strings.Contains(to, "@") {
+		return &SendError{Channel: "email", To: to}
+	}
+	fmt.Printf("email from %s to %s: %s\n", e.From, to, msg)
+	return nil
+}
+
+type SMSNotifier struct{}
+
+func (SMSNotifier) Name() string { return "sms" }
+
+func (SMSNotifier) Send(to, msg string) error {
+	if !strings.HasPrefix(to, "+") {
+		return &SendError{Channel: "sms", To: to}
+	}
+	if len(msg) > 20 {
+		msg = msg[:20] + "…"
+	}
+	fmt.Printf("sms to %s: %s\n", to, msg)
+	return nil
+}
+
+func broadcast(notifiers []Notifier, recipients map[string][]string, msg string) map[string]int {
+	failures := map[string]int{}
+	for _, n := range notifiers {
+		for _, to := range recipients[n.Name()] {
+			if err := n.Send(to, msg); err != nil {
+				fmt.Println(err)
+				var se *SendError
+				if errors.As(err, &se) {
+					failures[se.Channel]++
+				}
+			}
+		}
+	}
+	return failures
+}
+
+func main() {
+	notifiers := []Notifier{EmailNotifier{From: "shop@example.com"}, SMSNotifier{}}
+	recipients := map[string][]string{
+		"email": {"ada@example.com", "bob"},
+		"sms":   {"+4412345", "0798"},
+	}
+	f := broadcast(notifiers, recipients, "Your order shipped")
+	notifiers[1].Send("+4412345", "A very long message that gets cut")
+	fmt.Printf("failures: email=%d sms=%d\n", f["email"], f["sms"])
+}
+::expected
+email from shop@example.com to ada@example.com: Your order shipped
+email: cannot send to "bob"
+sms to +4412345: Your order shipped
+sms: cannot send to "0798"
+sms to +4412345: A very long message …
+failures: email=1 sms=1
+::hints
+- Give `SendError` a pointer-receiver `Error()` method and return `&SendError{...}`.
+- `msg[:20] + "…"` cuts by bytes; that's fine for this ASCII message.
+- In `main`, the notifiers slice is `[]Notifier{EmailNotifier{From: "shop@example.com"}, SMSNotifier{}}`, and the extra long message is sent through `notifiers[1]`.
+--- cards
+Interface :: A set of methods; any type with them satisfies it implicitly.
+Small interfaces :: io.Reader, io.Writer, fmt.Stringer, error: one method each.
+Custom error type :: A type with Error() string; extract with errors.As.
+Type switch :: switch x := v.(type) { case int: ... }.
+Type assertion :: t, ok := v.(T); without ok it panics on mismatch.
+Typed nil trap :: An interface holding a nil pointer is not nil: return nil directly.
+
+=== lesson go-io | Readers, writers and composition | 70
+## Two tiny interfaces, a whole ecosystem
+
+`io.Reader` and `io.Writer` have one method each, and nearly everything that moves bytes implements them: files, network connections, HTTP bodies, compressors, hashes, buffers, `os.Stdout`. Code written against these interfaces works with all of them:
+
+```go
+package main
+
+import (
+	"bufio"
+	"bytes"
+	"fmt"
+	"io"
+	"os"
+	"strings"
+)
+
+// countLines works with ANY reader: a file, a network stream, a string...
+func countLines(r io.Reader) (int, error) {
+	sc := bufio.NewScanner(r)
+	n := 0
+	for sc.Scan() {
+		n++
+	}
+	return n, sc.Err()
+}
+
+func main() {
+	n, err := countLines(strings.NewReader("one\ntwo\nthree\n"))
+	fmt.Println(n, err)
+
+	var buf bytes.Buffer                 // a Writer (and Reader) in memory
+	fmt.Fprintf(&buf, "total: %d\n", 42) // Fprintf writes to any io.Writer
+	buf.WriteString("done\n")
+	io.Copy(os.Stdout, &buf) // copy from a reader to a writer
+
+	w := io.MultiWriter(os.Stdout, &buf) // write to two places at once
+	fmt.Fprintln(w, "logged twice")
+	fmt.Print("buffer now holds: ", buf.String())
+}
+```
+
+## Building your own reader or writer
+
+Implementing the interface is enough to plug into everything else. A writer that counts the bytes passing through, and a reader that upper-cases another reader:
+
+```go
+package main
+
+import (
+	"bytes"
+	"fmt"
+	"io"
+	"os"
+	"strings"
+)
+
+type CountingWriter struct {
+	W     io.Writer
+	Count int
+}
+
+func (c *CountingWriter) Write(p []byte) (int, error) {
+	n, err := c.W.Write(p)
+	c.Count += n
+	return n, err
+}
+
+type upperReader struct{ r io.Reader }
+
+func (u upperReader) Read(p []byte) (int, error) {
+	n, err := u.r.Read(p)
+	copy(p, bytes.ToUpper(p[:n]))
+	return n, err
+}
+
+func main() {
+	cw := &CountingWriter{W: os.Stdout}
+	io.Copy(cw, upperReader{strings.NewReader("readers wrap readers\n")})
+	fmt.Println("bytes written:", cw.Count)
+}
+```
+
+Wrapping one reader or writer in another (buffering with `bufio`, compression with `gzip`, hashing with `io.TeeReader`) is the **decorator** pattern, and in Go it falls out of small interfaces.
+
+## Composing interfaces
+
+Interfaces can embed other interfaces. The standard library defines `io.ReadWriter`, `io.ReadCloser` and others this way:
+
+```
+type ReadWriter interface {
+	Reader
+	Writer
+}
+```
+
+**Accept interfaces, return structs**: functions take the smallest interface they need (an `io.Reader`, not an `*os.File`), which makes them reusable and easy to test with a `strings.Reader`; constructors return concrete types so callers get every method.
+
+~~~check
+? Why should `countLines` take an io.Reader instead of an *os.File?
++ It then works with files, strings, network data and tests alike
+- Files can't be read directly
+- io.Reader is faster
+- *os.File doesn't have a Read method
+> Accept the smallest interface you need.
+~~~
+
+📚 **Go deeper:** the io, bufio and bytes package docs; Rob Pike, "Go Proverbs" ("The bigger the interface, the weaker the abstraction"); *The Go Programming Language*, sections 7.2–7.3.
+--- goals
+- write functions that accept io.Reader and io.Writer
+- use strings.Reader, bytes.Buffer, io.Copy and io.MultiWriter
+- implement Read and Write to create decorators
+- compose interfaces by embedding, and follow "accept interfaces, return structs"
+--- quiz
+? What does `fmt.Fprintf(w, ...)` need from w?
++ That it implements io.Writer
+- That it's a file
+- That it's os.Stdout
+- That it's a bytes.Buffer
+> Any Writer works.
+? Which type lets you read from a string as an io.Reader?
++ strings.Reader (strings.NewReader)
+- string itself
+- strings.Builder
+- bufio.Writer
+> strings.Builder is a Writer.
+? What does "accept interfaces, return structs" mean?
++ Take the smallest interface as a parameter, return concrete types
+- Never return structs
+- Always use any
+- Interfaces must be returned from constructors
+> It keeps functions flexible and APIs complete.
+--- exercise code go
+::prompt
+Write a **line-numbering writer**: `type LineNumberer struct` wraps an `io.Writer` and writes everything it receives with each line prefixed by its number, `%3d | ` (numbers continue across calls; a line may arrive in several Write calls, so only add a prefix at the **start** of a line). Provide `func NewLineNumberer(w io.Writer) *LineNumberer` and `Write(p []byte) (int, error)`, which must return `len(p)` on success.
+
+`main` is given; it writes through `fmt.Fprint`, `fmt.Fprintf` and `io.Copy`:
+
+```
+  1 | first line
+  2 | second line, written in two parts
+  3 | copied from a reader
+  4 | and another
+lines: 4
+```
+::starter
+package main
+
+import (
+	"fmt"
+	"io"
+	"os"
+	"strings"
+)
+
+type LineNumberer struct {
+	w io.Writer
+}
+
+func NewLineNumberer(w io.Writer) *LineNumberer {
+	return &LineNumberer{w: w}
+}
+
+func (l *LineNumberer) Write(p []byte) (int, error) {
+	return l.w.Write(p)
+}
+
+func main() {
+	ln := NewLineNumberer(os.Stdout)
+	fmt.Fprint(ln, "first line\n")
+	fmt.Fprintf(ln, "second line, ")
+	fmt.Fprintf(ln, "written in %s\n", "two parts")
+	io.Copy(ln, strings.NewReader("copied from a reader\nand another\n"))
+	fmt.Println("lines:", ln.line)
+}
+::solution
+package main
+
+import (
+	"fmt"
+	"io"
+	"os"
+	"strings"
+)
+
+type LineNumberer struct {
+	w           io.Writer
+	line        int
+	atLineStart bool
+}
+
+func NewLineNumberer(w io.Writer) *LineNumberer {
+	return &LineNumberer{w: w, atLineStart: true}
+}
+
+func (l *LineNumberer) Write(p []byte) (int, error) {
+	var sb strings.Builder
+	for _, b := range p {
+		if l.atLineStart {
+			l.line++
+			fmt.Fprintf(&sb, "%3d | ", l.line)
+			l.atLineStart = false
+		}
+		sb.WriteByte(b)
+		if b == '\n' {
+			l.atLineStart = true
+		}
+	}
+	if _, err := io.WriteString(l.w, sb.String()); err != nil {
+		return 0, err
+	}
+	return len(p), nil
+}
+
+func main() {
+	ln := NewLineNumberer(os.Stdout)
+	fmt.Fprint(ln, "first line\n")
+	fmt.Fprintf(ln, "second line, ")
+	fmt.Fprintf(ln, "written in %s\n", "two parts")
+	io.Copy(ln, strings.NewReader("copied from a reader\nand another\n"))
+	fmt.Println("lines:", ln.line)
+}
+::expected
+  1 | first line
+  2 | second line, written in two parts
+  3 | copied from a reader
+  4 | and another
+lines: 4
+::hints
+- Keep two fields: the current line number and whether the next byte starts a line.
+- Walk through `p` byte by byte; after a `'\n'`, the next byte starts a new line.
+- Return `len(p)`, the number of bytes you **received**, not the number you wrote with prefixes.
+--- cards
+io.Reader / io.Writer :: Read(p []byte) / Write(p []byte), both returning (n int, err error).
+strings.NewReader / bytes.Buffer :: In-memory Reader / Reader+Writer.
+io.Copy(dst, src) :: Streams a Reader into a Writer.
+Decorator :: A Reader/Writer wrapping another one (bufio, gzip, counting).
+Accept interfaces, return structs :: Small interface parameters, concrete results.
+
+=== lesson go-generics | Generics | 75
+## Type parameters
+
+Since Go 1.18, functions and types can take **type parameters** in square brackets. A **constraint** says which types are allowed:
+
+```go
+package main
+
+import (
+	"cmp"
+	"fmt"
+	"strings"
+)
+
+// Map works for any element type T and result type U
+func Map[T, U any](items []T, f func(T) U) []U {
+	out := make([]U, 0, len(items))
+	for _, it := range items {
+		out = append(out, f(it))
+	}
+	return out
+}
+
+// MaxOf needs ordered types: numbers and strings (cmp.Ordered)
+func MaxOf[T cmp.Ordered](items ...T) T {
+	best := items[0]
+	for _, it := range items[1:] {
+		if it > best {
+			best = it
+		}
+	}
+	return best
+}
+
+// Index needs ==, so the constraint is comparable
+func Index[T comparable](items []T, target T) int {
+	for i, it := range items {
+		if it == target {
+			return i
+		}
+	}
+	return -1
+}
+
+func main() {
+	fmt.Println(Map([]int{1, 2, 3}, func(n int) string { return strings.Repeat("*", n) }))
+	fmt.Println(MaxOf(3, 9, 4), MaxOf("pear", "apple"), MaxOf(2.5, -1))
+	fmt.Println(Index([]string{"a", "b", "c"}, "c"), Index([]int{1, 2}, 5))
+	fmt.Println(Map[float64, int]([]float64{1.9, 2.1}, func(f float64) int { return int(f) })) // explicit types
+}
+```
+
+Usually the compiler **infers** the type arguments from the arguments, as in `MaxOf(3, 9, 4)`.
+
+## Constraints are interfaces
+
+A constraint is an interface, which may list **types** with `|`. `~int` means "int or any type whose underlying type is int":
+
+```go
+package main
+
+import "fmt"
+
+type Number interface {
+	~int | ~int64 | ~float64
+}
+
+func Sum[T Number](nums []T) T {
+	var total T // the zero value of T
+	for _, n := range nums {
+		total += n
+	}
+	return total
+}
+
+type Cents int64 // underlying type int64: allowed by ~int64
+
+func main() {
+	fmt.Println(Sum([]int{1, 2, 3}), Sum([]float64{0.5, 0.25}), Sum([]Cents{199, 250}))
+}
+```
+
+## Generic types
+
+Types can be generic too. A typed **set** and a **cache** are typical examples:
+
+```go
+package main
+
+import (
+	"cmp"
+	"fmt"
+	"maps"
+	"slices"
+)
+
+type Set[T cmp.Ordered] struct {
+	items map[T]struct{}
+}
+
+func NewSet[T cmp.Ordered](values ...T) *Set[T] {
+	s := &Set[T]{items: map[T]struct{}{}}
+	for _, v := range values {
+		s.Add(v)
+	}
+	return s
+}
+
+func (s *Set[T]) Add(v T)           { s.items[v] = struct{}{} }
+func (s *Set[T]) Has(v T) bool      { _, ok := s.items[v]; return ok }
+func (s *Set[T]) Len() int          { return len(s.items) }
+func (s *Set[T]) Sorted() []T       { return slices.Sorted(maps.Keys(s.items)) }
+
+func Intersect[T cmp.Ordered](a, b *Set[T]) *Set[T] {
+	out := NewSet[T]()
+	for v := range a.items {
+		if b.Has(v) {
+			out.Add(v)
+		}
+	}
+	return out
+}
+
+func main() {
+	langs := NewSet("go", "rust", "python")
+	fast := NewSet("go", "rust", "c")
+	fmt.Println(langs.Len(), langs.Has("go"), Intersect(langs, fast).Sorted())
+	nums := NewSet(3, 1, 3, 2)
+	fmt.Println(nums.Sorted())
+}
+```
+
+## When to use generics
+
+Use them for **containers** (sets, queues, caches, trees) and **algorithms over collections** (map, filter, max, binary search) that would otherwise be duplicated per type or use `any`. Don't use them when an ordinary interface works: if a function only needs to call `String()`, take a `fmt.Stringer`. The standard `slices`, `maps` and `cmp` packages show the style.
+
+~~~check
+? Which constraint allows the `<` operator?
++ cmp.Ordered
+- any
+- comparable
+- error
+> comparable only allows == and !=.
+~~~
+
+📚 **Go deeper:** go.dev/doc/tutorial/generics; The Go Blog, "An Introduction To Generics" and "When To Use Generics"; the cmp package docs.
+--- goals
+- write generic functions with type parameters and constraints
+- use any, comparable and cmp.Ordered, and write union constraints with ~
+- define generic types with methods
+- decide when generics help and when an interface is better
+--- quiz
+? What does `[T comparable]` allow you to do with values of type T?
++ Compare them with == and !=
+- Sort them
+- Add them
+- Nothing
+> Map keys must be comparable too.
+? What does `~int` in a constraint mean?
++ int or any type whose underlying type is int
+- Not int
+- Approximately an int
+- A pointer to int
+> So type Cents int is allowed.
+? Which call infers T as string?
++ MaxOf("a", "b")
+- MaxOf[int]("a", "b")
+- MaxOf()
+- MaxOf(1, "b")
+> Inferred from the arguments.
+? When is a plain interface better than generics?
++ When the code only needs to call methods on the values
+- Never
+- When working with slices
+- When performance matters
+> Generics shine for containers and algorithms.
+--- exercise code go
+::prompt
+Write three generic helpers and a generic type:
+
+- `func Filter[T any](items []T, keep func(T) bool) []T`;
+- `func GroupBy[T any, K comparable](items []T, key func(T) K) map[K][]T`;
+- `func SumBy[T any, N int | float64](items []T, value func(T) N) N`;
+- `type Pair[K comparable, V any] struct { Key K; Value V }` with a method `String()` returning `Key=Value`, and `func SortedPairs[K cmp.Ordered, V any](m map[K]V) []Pair[K, V]` sorted by key.
+
+`main` is given:
+
+```
+expensive: [laptop monitor]
+total: 1724.50
+items: 5
+by category: [books=[novel atlas] tech=[laptop monitor mouse]]
+tech count 3
+```
+::starter
+package main
+
+import (
+	"cmp"
+	"fmt"
+)
+
+type Product struct {
+	Name     string
+	Category string
+	Price    float64
+}
+
+func main() {
+	products := []Product{
+		{"laptop", "tech", 1199}, {"novel", "books", 15.5}, {"monitor", "tech", 389},
+		{"atlas", "books", 45}, {"mouse", "tech", 76},
+	}
+	_ = cmp.Compare(1, 2)
+	fmt.Println(products)
+}
+::solution
+package main
+
+import (
+	"cmp"
+	"fmt"
+	"maps"
+	"slices"
+)
+
+type Product struct {
+	Name     string
+	Category string
+	Price    float64
+}
+
+func Filter[T any](items []T, keep func(T) bool) []T {
+	var out []T
+	for _, it := range items {
+		if keep(it) {
+			out = append(out, it)
+		}
+	}
+	return out
+}
+
+func GroupBy[T any, K comparable](items []T, key func(T) K) map[K][]T {
+	groups := map[K][]T{}
+	for _, it := range items {
+		k := key(it)
+		groups[k] = append(groups[k], it)
+	}
+	return groups
+}
+
+func SumBy[T any, N int | float64](items []T, value func(T) N) N {
+	var total N
+	for _, it := range items {
+		total += value(it)
+	}
+	return total
+}
+
+type Pair[K comparable, V any] struct {
+	Key   K
+	Value V
+}
+
+func (p Pair[K, V]) String() string { return fmt.Sprintf("%v=%v", p.Key, p.Value) }
+
+func SortedPairs[K cmp.Ordered, V any](m map[K]V) []Pair[K, V] {
+	var out []Pair[K, V]
+	for _, k := range slices.Sorted(maps.Keys(m)) {
+		out = append(out, Pair[K, V]{k, m[k]})
+	}
+	return out
+}
+
+func main() {
+	products := []Product{
+		{"laptop", "tech", 1199}, {"novel", "books", 15.5}, {"monitor", "tech", 389},
+		{"atlas", "books", 45}, {"mouse", "tech", 76},
+	}
+	names := func(ps []Product) []string {
+		var out []string
+		for _, p := range ps {
+			out = append(out, p.Name)
+		}
+		return out
+	}
+	expensive := Filter(products, func(p Product) bool { return p.Price > 100 })
+	fmt.Println("expensive:", names(expensive))
+	fmt.Printf("total: %.2f\n", SumBy(products, func(p Product) float64 { return p.Price }))
+	fmt.Println("items:", SumBy(products, func(Product) int { return 1 }))
+	groups := GroupBy(products, func(p Product) string { return p.Category })
+	byName := map[string][]string{}
+	for k, v := range groups {
+		byName[k] = names(v)
+	}
+	fmt.Println("by category:", SortedPairs(byName))
+	fmt.Println("tech count", len(groups["tech"]))
+}
+::expected
+expensive: [laptop monitor]
+total: 1724.50
+items: 5
+by category: [books=[novel atlas] tech=[laptop monitor mouse]]
+tech count 3
+::hints
+- `var total N` starts at zero for any number type.
+- `groups[k] = append(groups[k], it)` works even when `groups[k]` doesn't exist yet (nil slice).
+- Methods on a generic type repeat its parameters: `func (p Pair[K, V]) String() string`.
+- `main` prints the products by name: write a small `names` helper (or copy the one shown in the solution).
+--- cards
+Type parameter :: func F[T any](x T) / type Box[T any] struct.
+Constraints :: any, comparable (==), cmp.Ordered (<), unions like ~int | ~float64.
+Inference :: F(3) infers T = int; write F[int](...) when it can't.
+Generic method :: func (s *Set[T]) Add(v T) — methods can't add new type parameters.
+When :: Containers and collection algorithms; otherwise prefer interfaces.
+
+=== lesson go-iterators | Iterators and range over functions | 60
+## Range over functions
+
+Go 1.23 lets `for ... range` loop over **functions**. An iterator is a function that receives a `yield` callback and calls it for each value; when `yield` returns `false` (the loop did `break`), the iterator stops. The `iter` package names the two shapes: **`iter.Seq[V]`** (one value per step) and **`iter.Seq2[K, V]`** (two):
+
+```go
+package main
+
+import (
+	"fmt"
+	"iter"
+)
+
+// Countdown yields n, n-1, ..., 1
+func Countdown(n int) iter.Seq[int] {
+	return func(yield func(int) bool) {
+		for i := n; i > 0; i-- {
+			if !yield(i) {
+				return // the caller broke out of the loop
+			}
+		}
+	}
+}
+
+// Fibonacci is infinite: the caller decides when to stop
+func Fibonacci() iter.Seq2[int, int] {
+	return func(yield func(int, int) bool) {
+		a, b := 0, 1
+		for i := 0; ; i++ {
+			if !yield(i, a) {
+				return
+			}
+			a, b = b, a+b
+		}
+	}
+}
+
+func main() {
+	for n := range Countdown(3) {
+		fmt.Print(n, " ")
+	}
+	fmt.Println("liftoff")
+
+	for i, f := range Fibonacci() {
+		if f > 100 {
+			break
+		}
+		fmt.Printf("F%d=%d ", i, f)
+	}
+	fmt.Println()
+}
+```
+
+## The standard library speaks iterators
+
+`maps.Keys`, `maps.Values` and `maps.All` return iterators, `slices.All`, `slices.Values` and `slices.Backward` produce them, and `slices.Collect` and `slices.Sorted` consume them. Your own iterators work with all of these:
+
+```go
+package main
+
+import (
+	"fmt"
+	"iter"
+	"slices"
+	"strings"
+)
+
+func Filter[V any](seq iter.Seq[V], keep func(V) bool) iter.Seq[V] {
+	return func(yield func(V) bool) {
+		for v := range seq {
+			if keep(v) && !yield(v) {
+				return
+			}
+		}
+	}
+}
+
+func main() {
+	words := strings.Fields("go is simple and go is fast")
+	long := Filter(slices.Values(words), func(w string) bool { return len(w) > 2 })
+	fmt.Println(slices.Collect(long))
+	for i, w := range slices.Backward(words) {
+		fmt.Print(i, ":", w, " ")
+	}
+	fmt.Println()
+	fmt.Println(slices.Sorted(Filter(slices.Values(words), func(w string) bool { return w != "is" })))
+}
+```
+
+Iterators are **lazy**: nothing runs until a loop asks for values, so a chain of filters over a huge (or infinite) sequence uses no extra memory.
+
+~~~check
+? What should an iterator do when yield returns false?
++ Stop and return: the loop has ended
+- Call yield again
+- Panic
+- Restart from the beginning
+> Ignoring it panics at run time.
+~~~
+
+📚 **Go deeper:** The Go Blog, "Range Over Function Types"; the iter package docs; go.dev/ref/spec ("For statements with range clause").
+--- goals
+- write iterators as functions with a yield callback
+- use iter.Seq and iter.Seq2 and stop when yield returns false
+- combine iterators with slices and maps helpers
+- explain that iterators are lazy
+--- quiz
+? What is the type of an iterator yielding strings?
++ iter.Seq[string], i.e. func(yield func(string) bool)
+- []string
+- chan string
+- func() string
+> Range over function types, Go 1.23.
+? What does `slices.Collect(seq)` do?
++ Runs the iterator and gathers its values into a slice
+- Sorts the slice
+- Creates an iterator from a slice
+- Deletes duplicates
+> slices.Values does the opposite.
+? Why can an iterator be infinite?
++ It produces values only when the loop asks for them, and stops when the loop breaks
+- Go has infinite memory
+- It can't
+- Iterators run in a goroutine
+> Lazy evaluation.
+--- exercise code go
+::prompt
+Write two iterators:
+
+- `func Lines(text string) iter.Seq2[int, string]` yields the line number (from 1) and each **non-empty** line of the text (split on `\n`, trimmed);
+- `func Take[V any](seq iter.Seq[V], n int) iter.Seq[V]` yields at most n values from seq.
+
+Both must stop as soon as `yield` returns false. `main` is given; it also uses the given `Primes` iterator, which is infinite:
+
+```
+1: alpha
+3: beta
+4: gamma
+first 5 primes: [2 3 5 7 11]
+```
+::starter
+package main
+
+import (
+	"fmt"
+	"iter"
+	"slices"
+)
+
+func Primes() iter.Seq[int] {
+	return func(yield func(int) bool) {
+		for n := 2; ; n++ {
+			prime := true
+			for d := 2; d*d <= n; d++ {
+				if n%d == 0 {
+					prime = false
+					break
+				}
+			}
+			if prime && !yield(n) {
+				return
+			}
+		}
+	}
+}
+
+func Lines(text string) iter.Seq2[int, string] {
+	return func(yield func(int, string) bool) {}
+}
+
+func Take[V any](seq iter.Seq[V], n int) iter.Seq[V] {
+	return func(yield func(V) bool) {}
+}
+
+func main() {
+	text := "alpha\n\n  beta \ngamma\ndelta"
+	for i, line := range Lines(text) {
+		if line == "delta" {
+			break
+		}
+		fmt.Printf("%d: %s\n", i, line)
+	}
+	fmt.Println("first 5 primes:", slices.Collect(Take(Primes(), 5)))
+}
+::solution
+package main
+
+import (
+	"fmt"
+	"iter"
+	"slices"
+	"strings"
+)
+
+func Primes() iter.Seq[int] {
+	return func(yield func(int) bool) {
+		for n := 2; ; n++ {
+			prime := true
+			for d := 2; d*d <= n; d++ {
+				if n%d == 0 {
+					prime = false
+					break
+				}
+			}
+			if prime && !yield(n) {
+				return
+			}
+		}
+	}
+}
+
+func Lines(text string) iter.Seq2[int, string] {
+	return func(yield func(int, string) bool) {
+		for i, line := range strings.Split(text, "\n") {
+			line = strings.TrimSpace(line)
+			if line == "" {
+				continue
+			}
+			if !yield(i+1, line) {
+				return
+			}
+		}
+	}
+}
+
+func Take[V any](seq iter.Seq[V], n int) iter.Seq[V] {
+	return func(yield func(V) bool) {
+		if n <= 0 {
+			return
+		}
+		count := 0
+		for v := range seq {
+			if !yield(v) {
+				return
+			}
+			count++
+			if count == n {
+				return
+			}
+		}
+	}
+}
+
+func main() {
+	text := "alpha\n\n  beta \ngamma\ndelta"
+	for i, line := range Lines(text) {
+		if line == "delta" {
+			break
+		}
+		fmt.Printf("%d: %s\n", i, line)
+	}
+	fmt.Println("first 5 primes:", slices.Collect(Take(Primes(), 5)))
+}
+::expected
+1: alpha
+3: beta
+4: gamma
+first 5 primes: [2 3 5 7 11]
+::hints
+- In `Lines`, range over `strings.Split(text, "\n")` and skip empty lines with `continue`.
+- In `Take`, return right after yielding the n-th value: breaking out of the inner `for v := range seq` stops the infinite `Primes` too.
+--- cards
+Iterator :: func(yield func(V) bool); range calls it; return when yield is false.
+iter.Seq / iter.Seq2 :: One value / two values per step.
+slices.Values / Collect / Sorted :: Slice → iterator, iterator → slice, iterator → sorted slice.
+maps.Keys / Values / All :: Iterators over a map.
+Lazy :: Values are produced only as the loop asks.
+
+=== lesson go-m5-test | Module 5 test | 150 | exam
+This test covers Module 5: methods and receivers, interfaces, custom errors, readers and writers, generics and iterators.
+
+Before you start, check that you can:
+
+- choose between value and pointer receivers;
+- design small interfaces and satisfy them;
+- write generic code with constraints;
+- write and consume iterators.
+--- goals
+- design a small system around interfaces, methods and generics
+--- quiz
+? Which types satisfy `interface{ Area() float64 }` if Area has a pointer receiver on *Square?
++ *Square only
+- Square and *Square
+- Square only
+- Neither
+> The method set of Square doesn't include pointer-receiver methods.
+? What does `switch v := x.(type)` give you in `case string:`?
++ v as a string
+- v as any
+- The type name
+- A bool
+> Each case gets v with that case's type.
+? What's wrong with `func Max[T any](a, b T) T { if a > b ... }`?
++ any doesn't allow >; use cmp.Ordered
+- Nothing
+- Generic functions can't return T
+- T must be named V
+> Constraints decide the allowed operations.
+? Which is the idiomatic parameter type for "something I can read text from"?
++ io.Reader
+- *os.File
+- string
+- []byte
+> Accept interfaces.
+--- exercise code go
+::prompt
+**A pluggable discount engine.** Define `type Rule interface { Apply(total Cents) (Cents, string) }` where `type Cents int` has a `String()` method printing euros (`12.50`). Write three rules:
+
+- `PercentOff{Percent int, MinTotal Cents}`: when the total is at least `MinTotal`, takes `Percent`% off (integer cents, rounded down) and returns the reason `<p>% off`;
+- `FixedOff{Amount Cents}`: takes the amount off (never below 0) and returns `-<amount>`;
+- `FreeShipping{Threshold, Fee Cents}`: when the total is below the threshold, **adds** the fee and returns `shipping <fee>`; otherwise returns `free shipping`.
+
+A rule returns an empty reason when it does nothing. `Checkout(total Cents, rules ...Rule) (Cents, []string)` applies the rules in order and collects the non-empty reasons. `main` is given:
+
+```
+cart 120.00 -> 104.00 [10% off -4.00 free shipping]
+cart 30.00 -> 30.95 [-4.00 shipping 4.95]
+cart 3.00 -> 4.95 [-3.00 shipping 4.95]
+```
+::starter
+package main
+
+import "fmt"
+
+type Cents int
+
+type Rule interface {
+	Apply(total Cents) (Cents, string)
+}
+
+func Checkout(total Cents, rules ...Rule) (Cents, []string) {
+	return total, nil
+}
+
+func main() {
+	rules := []Rule{}
+	for _, cart := range []Cents{12000, 3000, 300} {
+		total, reasons := Checkout(cart, rules...)
+		fmt.Println("cart", cart, "->", total, reasons)
+	}
+}
+::solution
+package main
+
+import "fmt"
+
+type Cents int
+
+func (c Cents) String() string { return fmt.Sprintf("%d.%02d", c/100, c%100) }
+
+type Rule interface {
+	Apply(total Cents) (Cents, string)
+}
+
+type PercentOff struct {
+	Percent  int
+	MinTotal Cents
+}
+
+func (r PercentOff) Apply(total Cents) (Cents, string) {
+	if total < r.MinTotal {
+		return total, ""
+	}
+	return total - total*Cents(r.Percent)/100, fmt.Sprintf("%d%% off", r.Percent)
+}
+
+type FixedOff struct{ Amount Cents }
+
+func (r FixedOff) Apply(total Cents) (Cents, string) {
+	off := min(r.Amount, total)
+	return total - off, "-" + off.String()
+}
+
+type FreeShipping struct{ Threshold, Fee Cents }
+
+func (r FreeShipping) Apply(total Cents) (Cents, string) {
+	if total < r.Threshold {
+		return total + r.Fee, "shipping " + r.Fee.String()
+	}
+	return total, "free shipping"
+}
+
+func Checkout(total Cents, rules ...Rule) (Cents, []string) {
+	var reasons []string
+	for _, r := range rules {
+		var why string
+		total, why = r.Apply(total)
+		if why != "" {
+			reasons = append(reasons, why)
+		}
+	}
+	return total, reasons
+}
+
+func main() {
+	rules := []Rule{PercentOff{10, 5000}, FixedOff{400}, FreeShipping{Threshold: 5000, Fee: 495}}
+	for _, cart := range []Cents{12000, 3000, 300} {
+		total, reasons := Checkout(cart, rules...)
+		fmt.Println("cart", cart, "->", total, reasons)
+	}
+}
+::expected
+cart 120.00 -> 104.00 [10% off -4.00 free shipping]
+cart 30.00 -> 30.95 [-4.00 shipping 4.95]
+cart 3.00 -> 4.95 [-3.00 shipping 4.95]
+::hints
+- `%%` prints a literal percent sign in Printf.
+- `min(r.Amount, total)` keeps the total from going negative; report the amount actually taken off.
+- In `main`: `[]Rule{PercentOff{10, 5000}, FixedOff{400}, FreeShipping{Threshold: 5000, Fee: 495}}`.
