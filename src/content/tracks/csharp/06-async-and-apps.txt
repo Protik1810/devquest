@@ -1,0 +1,2133 @@
+=== module Module 6 · Async, files and real applications
+
+=== lesson cs-async | async and await | 85
+## Waiting without blocking
+
+Most of a real program's time is spent **waiting**: for a web server, a database, a file. If a thread just sits there blocked, a desktop app freezes and a web server runs out of threads. C#'s answer, copied since by JavaScript, Python, Rust and Kotlin, is **async/await**:
+
+- an `async` method returns a **`Task`** (no result) or a **`Task<T>`** (a result of type `T`): a promise of work that finishes later;
+- **`await`** pauses the method *without blocking the thread* until the task completes, then continues with its result;
+- while it's paused, the thread is free to do other work.
+
+```csharp
+using System.Diagnostics;
+
+var watch = Stopwatch.StartNew();
+string a = await DownloadAsync("page-a", 300);
+string b = await DownloadAsync("page-b", 200);
+Console.WriteLine($"one after another: {a}, {b} in about {watch.ElapsedMilliseconds / 100 * 100} ms");
+
+watch.Restart();
+Task<string> first = DownloadAsync("page-a", 300);     // both start now
+Task<string> second = DownloadAsync("page-b", 200);
+string[] both = await Task.WhenAll(first, second);
+Console.WriteLine($"at the same time: {string.Join(", ", both)} in about {watch.ElapsedMilliseconds / 100 * 100} ms");
+
+static async Task<string> DownloadAsync(string name, int ms)
+{
+    await Task.Delay(ms);          // stands in for a network call
+    return $"{name} ({ms} ms)";
+}
+```
+
+Calling an async method **starts** it and hands you the task; `await` is where you wait for it. Start independent work first, then await it together with **`Task.WhenAll`**, which returns the results in the order of the tasks. **`Task.WhenAny`** completes when the first task does, which is useful for timeouts and for taking the fastest answer.
+
+In a program with top-level statements you can `await` directly; otherwise `Main` can be declared `static async Task Main()`.
+
+## Exceptions and cancellation
+
+An exception thrown inside an async method is stored in its task and **rethrown at the `await`**, so ordinary `try`/`catch` works. Long operations should accept a **`CancellationToken`**, so the caller can stop them:
+
+```csharp
+using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(350));
+try
+{
+    await SlowWorkAsync(cts.Token);
+}
+catch (OperationCanceledException)
+{
+    Console.WriteLine("cancelled: took too long");
+}
+
+try
+{
+    await FailingAsync();
+}
+catch (InvalidOperationException e)
+{
+    Console.WriteLine($"caught at the await: {e.Message}");
+}
+
+static async Task SlowWorkAsync(CancellationToken token)
+{
+    for (int step = 1; step <= 10; step++)
+    {
+        await Task.Delay(100, token);       // throws when the token is cancelled
+        Console.WriteLine($"step {step}");
+    }
+}
+
+static async Task FailingAsync()
+{
+    await Task.Delay(10);
+    throw new InvalidOperationException("the server said no");
+}
+```
+
+Pass the token down to every async call you make (`HttpClient`, `File`, `Task.Delay` and Entity Framework all accept one), and call `token.ThrowIfCancellationRequested()` inside long loops.
+
+## Async streams
+
+When results arrive one by one (pages of an API, lines of a file, messages from a queue), an **async iterator** returns `IAsyncEnumerable<T>`, and the caller consumes it with **`await foreach`**:
+
+```csharp
+await foreach (string page in FetchPagesAsync(3))
+{
+    Console.WriteLine($"got {page}");
+}
+
+static async IAsyncEnumerable<string> FetchPagesAsync(int count)
+{
+    for (int i = 1; i <= count; i++)
+    {
+        await Task.Delay(50);
+        yield return $"page {i}";
+    }
+}
+```
+
+## The rules professionals follow
+
+- **Async all the way:** if a method awaits, its callers should be async too. Never block on a task with `.Result` or `.Wait()`: in UI and older ASP.NET apps it can **deadlock**, and everywhere it wastes a thread.
+- **Never write `async void`**, except for event handlers: nobody can await it, and its exceptions crash the process. Return `Task` instead.
+- Name async methods with the `Async` suffix and accept a `CancellationToken` as the last parameter.
+- async is for **waiting** (I/O). For heavy **computation**, the next lesson's `Task.Run` and `Parallel` are the tools.
+- In libraries, `await task.ConfigureAwait(false)` avoids returning to the caller's UI thread; application code usually doesn't need it.
+
+~~~check
+? What does `Task.WhenAll(t1, t2)` do?
++ Completes when both tasks have completed, with their results in order
+- Runs the tasks one after the other
+- Completes when the first task does
+- Cancels both tasks
+> WhenAny is the "first one" version.
+~~~
+
+📚 **Go deeper:** Microsoft Learn, "Asynchronous programming with async and await", "Task asynchronous programming model" and "Cancellation in managed threads"; Stephen Cleary, "Async/Await: Best Practices in Asynchronous Programming".
+--- goals
+- explain what Task, async and await do and why they don't block threads
+- run independent operations concurrently with Task.WhenAll and Task.WhenAny
+- handle exceptions and cancellation in async code
+- produce and consume async streams with IAsyncEnumerable and await foreach
+- avoid async void, .Result and .Wait()
+--- quiz
+? What does `await` do?
++ Pauses the method until the task completes, without blocking the thread
+- Blocks the thread until the task completes
+- Starts a new thread
+- Runs the task synchronously
+> The thread is free while the method is paused.
+? Where is an exception thrown in an async method observed?
++ At the await of its task
+- Never
+- Immediately, on the caller's thread when the method is called
+- Only in the debugger
+> It's stored in the task and rethrown at the await.
+? Why avoid `async void`?
++ It can't be awaited and its exceptions crash the process
+- It's slower
+- It doesn't compile
+- It always runs synchronously
+> Return Task; async void is only for event handlers.
+? What's wrong with `var data = GetDataAsync().Result;` in a UI app?
++ It blocks the thread and can deadlock
+- Nothing
+- It returns a Task instead of the data
+- It doesn't compile
+> Await it instead.
+--- exercise code csharp
+::prompt
+Write two async helpers used by real network code:
+
+- `static async Task<string[]> FetchAllAsync(string[] names)`: fetches every name **at the same time** with the provided `FakeFetchAsync` and returns the results in the input order (use `Task.WhenAll`);
+- `static async Task<T> RetryAsync<T>(Func<int, Task<T>> operation, int maxAttempts)`: calls `operation(attempt)` with attempt 1, 2, 3, …; when it throws and attempts are left, prints `attempt <n> failed: <message>`, waits `10 * attempt` milliseconds and tries again; the final failure is **rethrown** (not printed). Tip: an exception filter `catch (Exception e) when (attempt < maxAttempts)` does exactly this.
+
+Expected output:
+
+```
+users:5, orders:6, stock:5
+attempt 1 failed: timeout #1
+attempt 2 failed: timeout #2
+value: 42
+attempt 1 failed: server down
+gave up: server down
+```
+::starter
+string[] results = await FetchAllAsync(["users", "orders", "stock"]);
+Console.WriteLine(string.Join(", ", results));
+
+int value = await RetryAsync(async attempt =>
+{
+    await Task.Delay(5);
+    if (attempt < 3) throw new TimeoutException($"timeout #{attempt}");
+    return 42;
+}, 5);
+Console.WriteLine($"value: {value}");
+
+try
+{
+    await RetryAsync<int>(async attempt =>
+    {
+        await Task.Delay(5);
+        throw new InvalidOperationException("server down");
+    }, 2);
+}
+catch (InvalidOperationException e)
+{
+    Console.WriteLine($"gave up: {e.Message}");
+}
+
+static async Task<string> FakeFetchAsync(string name)
+{
+    await Task.Delay(name.Length * 10);
+    return $"{name}:{name.Length}";
+}
+
+static Task<string[]> FetchAllAsync(string[] names) => Task.FromResult(Array.Empty<string>());
+
+static Task<T> RetryAsync<T>(Func<int, Task<T>> operation, int maxAttempts) => operation(1);
+::solution
+string[] results = await FetchAllAsync(["users", "orders", "stock"]);
+Console.WriteLine(string.Join(", ", results));
+
+int value = await RetryAsync(async attempt =>
+{
+    await Task.Delay(5);
+    if (attempt < 3) throw new TimeoutException($"timeout #{attempt}");
+    return 42;
+}, 5);
+Console.WriteLine($"value: {value}");
+
+try
+{
+    await RetryAsync<int>(async attempt =>
+    {
+        await Task.Delay(5);
+        throw new InvalidOperationException("server down");
+    }, 2);
+}
+catch (InvalidOperationException e)
+{
+    Console.WriteLine($"gave up: {e.Message}");
+}
+
+static async Task<string> FakeFetchAsync(string name)
+{
+    await Task.Delay(name.Length * 10);
+    return $"{name}:{name.Length}";
+}
+
+static async Task<string[]> FetchAllAsync(string[] names)
+{
+    return await Task.WhenAll(names.Select(FakeFetchAsync));
+}
+
+static async Task<T> RetryAsync<T>(Func<int, Task<T>> operation, int maxAttempts)
+{
+    for (int attempt = 1; ; attempt++)
+    {
+        try
+        {
+            return await operation(attempt);
+        }
+        catch (Exception e) when (attempt < maxAttempts)
+        {
+            Console.WriteLine($"attempt {attempt} failed: {e.Message}");
+            await Task.Delay(10 * attempt);
+        }
+    }
+}
+::expected
+users:5, orders:6, stock:5
+attempt 1 failed: timeout #1
+attempt 2 failed: timeout #2
+value: 42
+attempt 1 failed: server down
+gave up: server down
+::hints
+- `names.Select(FakeFetchAsync)` gives you a sequence of tasks; `await Task.WhenAll(...)` turns it into a `string[]`.
+- An endless `for (int attempt = 1; ; attempt++)` loop with `return await operation(attempt);` inside `try` ends on success.
+- When the filter is false (no attempts left), the exception isn't caught and travels to the caller.
+--- cards
+Task / Task<T> :: Work that completes later, with no result / a result of type T.
+await :: Waits for a task without blocking the thread; rethrows its exception.
+Task.WhenAll / WhenAny :: Wait for all tasks (results in order) / for the first one.
+CancellationToken :: Passed down to async calls so the caller can cancel; throws OperationCanceledException.
+IAsyncEnumerable<T> :: An async stream: produced with yield return in an async method, consumed with await foreach.
+async void :: Avoid (only for event handlers): can't be awaited, exceptions crash the app.
+
+=== lesson cs-concurrency | Parallelism and thread safety | 80
+## Using every core
+
+async is about *waiting* efficiently. **Parallelism** is about *computing* faster by using several CPU cores at once. .NET runs work on a **thread pool**, and gives you high-level tools so you rarely create a `Thread` yourself:
+
+| Tool | Use it for |
+|---|---|
+| `Task.Run(() => ...)` | move one piece of CPU-heavy work off the current thread (keeps a UI responsive) |
+| `Parallel.For` / `Parallel.ForEach` | split a loop over many items across cores |
+| PLINQ: `.AsParallel()` | run a LINQ query in parallel |
+| `Parallel.ForEachAsync` | process many items with async work, with a limit on how many run at once |
+
+```csharp
+long[] numbers = Enumerable.Range(1, 300_000).Select(i => (long)i).ToArray();
+
+long sequential = numbers.Where(IsPrime).LongCount();
+long parallel = numbers.AsParallel().Where(IsPrime).LongCount();
+Console.WriteLine($"primes: {sequential} (sequential), {parallel} (PLINQ)");
+
+long heavy = await Task.Run(() => numbers.Sum(n => n % 7));
+Console.WriteLine($"computed on the thread pool: {heavy}");
+Console.WriteLine($"this PC has {Environment.ProcessorCount} logical cores");
+
+static bool IsPrime(long n)
+{
+    if (n < 2) return false;
+    for (long d = 2; d * d <= n; d++)
+        if (n % d == 0) return false;
+    return true;
+}
+```
+
+Parallelism only pays off when each item takes real work; for tiny loops the coordination costs more than it saves. Measure before and after.
+
+## Race conditions
+
+When several threads change the same data, their steps interleave in unpredictable ways. `count++` is really *read, add, write*: two threads can read the same value and one update gets lost.
+
+```csharp
+int unsafeCount = 0;
+int atomicCount = 0;
+int lockedCount = 0;
+var gate = new Lock();
+
+Parallel.For(0, 100_000, _ =>
+{
+    unsafeCount++;                          // race: updates get lost
+    Interlocked.Increment(ref atomicCount); // atomic hardware instruction
+    lock (gate) lockedCount++;              // one thread at a time
+});
+Console.WriteLine($"unsafe: {unsafeCount} (often less than 100000)");
+Console.WriteLine($"Interlocked: {atomicCount}, lock: {lockedCount}");
+```
+
+- **`lock (obj) { ... }`** lets only one thread at a time run the block. Lock on a private object (`Lock` since C# 13, `object` before), never on `this` or a string; keep the block short; never `await` inside it.
+- **`Interlocked`** (`Increment`, `Add`, `Exchange`, `CompareExchange`) does single updates atomically without a lock.
+- **Deadlock:** thread A holds lock 1 and waits for lock 2 while B holds 2 and waits for 1. Avoid it by always taking locks in the same order, or by not holding two at once.
+- The safest shared data is data that **doesn't change**: immutable records and collections need no locks.
+
+## Thread-safe collections and channels
+
+`List<T>` and `Dictionary` are **not** safe for concurrent writes. `System.Collections.Concurrent` has `ConcurrentDictionary`, `ConcurrentQueue`, `ConcurrentBag` and `BlockingCollection`. For **producer/consumer** pipelines, `System.Threading.Channels` is the modern, async-friendly choice:
+
+```csharp
+using System.Threading.Channels;
+
+var channel = Channel.CreateBounded<int>(capacity: 2);   // the producer waits when it's full
+
+Task producer = Task.Run(async () =>
+{
+    for (int job = 1; job <= 5; job++)
+    {
+        await channel.Writer.WriteAsync(job);
+        Console.WriteLine($"queued job {job}");
+    }
+    channel.Writer.Complete();
+});
+
+int done = 0;
+await foreach (int job in channel.Reader.ReadAllAsync())
+{
+    await Task.Delay(30);              // the consumer is slower than the producer
+    done++;
+}
+await producer;
+Console.WriteLine($"processed {done} jobs");
+```
+
+To limit how many async operations run at once (say, at most 3 downloads), use **`SemaphoreSlim`** (`await gate.WaitAsync()` … `gate.Release()` in a `finally`) or `Parallel.ForEachAsync` with `MaxDegreeOfParallelism`.
+
+~~~check
+? Why can `count++` from several threads lose updates?
++ It's a read, an add and a write, and threads can interleave between them
+- Integers can't be shared between threads
+- The compiler removes it
+- It throws an exception
+> Use Interlocked.Increment or a lock.
+~~~
+
+📚 **Go deeper:** Microsoft Learn, "Parallel programming in .NET", "Managed threading best practices", "System.Threading.Channels"; *Programming C#*, chapter 20 "Threads and Synchronization".
+--- goals
+- choose between async (waiting) and parallelism (computing)
+- parallelise work with Task.Run, Parallel.For/ForEach and PLINQ
+- explain race conditions and deadlocks
+- protect shared state with lock, Interlocked and concurrent collections
+- build producer/consumer pipelines with channels and limit concurrency with SemaphoreSlim
+--- quiz
+? Which is the best tool to sum a huge array of expensive calculations on all cores?
++ PLINQ (AsParallel) or Parallel.For
+- async/await with Task.Delay
+- A single Thread
+- lock
+> Parallelism is for CPU-bound work.
+? What does `lock (gate) { ... }` guarantee?
++ Only one thread at a time runs the block (for the same gate object)
+- The block runs faster
+- The block never throws
+- The block runs on a new thread
+> It's mutual exclusion.
+? Is `Dictionary<K,V>` safe to modify from several threads at once?
++ No: use ConcurrentDictionary or a lock
+- Yes, always
+- Only with string keys
+- Only in Release builds
+> Concurrent writes can corrupt it.
+? How do you avoid deadlocks between two locks?
++ Always acquire them in the same order (or don't hold two at once)
+- Use more locks
+- Lock on this
+- Await inside the lock
+> Consistent ordering removes the cycle.
+--- exercise code csharp
+::prompt
+Two concurrency classics:
+
+1. Complete `Inventory`: `Add(item, quantity)`, `TryReserve(item, quantity)` (returns `false` when there isn't enough stock, otherwise removes it and returns `true`) and `Count(item)`. 100 parallel customers each try to reserve one of 60 tickets, so the class must be **thread-safe**: protect the dictionary with a `lock` (check and update inside the same lock).
+2. Complete `CountWords`: count the words of all lines **in parallel** (`Parallel.ForEach`) into a `ConcurrentDictionary<string, int>`, using `AddOrUpdate`.
+
+Expected output:
+
+```
+reserved 60, rejected 40, left 0
+quick: 5
+dog: 3
+the: 3
+fox: 2
+```
+::starter
+using System.Collections.Concurrent;
+
+var stock = new Inventory();
+stock.Add("ticket", 60);
+int reserved = 0, rejected = 0;
+Parallel.For(0, 100, _ =>
+{
+    if (stock.TryReserve("ticket", 1)) Interlocked.Increment(ref reserved);
+    else Interlocked.Increment(ref rejected);
+});
+Console.WriteLine($"reserved {reserved}, rejected {rejected}, left {stock.Count("ticket")}");
+
+string[] lines =
+{
+    "the quick brown fox", "the lazy dog", "a quick dog", "the end",
+    "fox and dog", "quick quick quick",
+};
+var counts = CountWords(lines);
+foreach (var (word, n) in counts.OrderByDescending(p => p.Value).ThenBy(p => p.Key).Take(4))
+    Console.WriteLine($"{word}: {n}");
+
+static ConcurrentDictionary<string, int> CountWords(string[] lines)
+{
+    var counts = new ConcurrentDictionary<string, int>();
+    return counts;
+}
+
+class Inventory
+{
+    private readonly Dictionary<string, int> _items = new();
+    private readonly Lock _lock = new();
+
+    public void Add(string item, int quantity) { }
+
+    public bool TryReserve(string item, int quantity) => false;
+
+    public int Count(string item) => 0;
+}
+::solution
+using System.Collections.Concurrent;
+
+var stock = new Inventory();
+stock.Add("ticket", 60);
+int reserved = 0, rejected = 0;
+Parallel.For(0, 100, _ =>
+{
+    if (stock.TryReserve("ticket", 1)) Interlocked.Increment(ref reserved);
+    else Interlocked.Increment(ref rejected);
+});
+Console.WriteLine($"reserved {reserved}, rejected {rejected}, left {stock.Count("ticket")}");
+
+string[] lines =
+{
+    "the quick brown fox", "the lazy dog", "a quick dog", "the end",
+    "fox and dog", "quick quick quick",
+};
+var counts = CountWords(lines);
+foreach (var (word, n) in counts.OrderByDescending(p => p.Value).ThenBy(p => p.Key).Take(4))
+    Console.WriteLine($"{word}: {n}");
+
+static ConcurrentDictionary<string, int> CountWords(string[] lines)
+{
+    var counts = new ConcurrentDictionary<string, int>();
+    Parallel.ForEach(lines, line =>
+    {
+        foreach (string word in line.Split(' '))
+            counts.AddOrUpdate(word, 1, (_, old) => old + 1);
+    });
+    return counts;
+}
+
+class Inventory
+{
+    private readonly Dictionary<string, int> _items = new();
+    private readonly Lock _lock = new();
+
+    public void Add(string item, int quantity)
+    {
+        lock (_lock) _items[item] = _items.GetValueOrDefault(item) + quantity;
+    }
+
+    public bool TryReserve(string item, int quantity)
+    {
+        lock (_lock)
+        {
+            int available = _items.GetValueOrDefault(item);
+            if (available < quantity) return false;
+            _items[item] = available - quantity;
+            return true;
+        }
+    }
+
+    public int Count(string item)
+    {
+        lock (_lock) return _items.GetValueOrDefault(item);
+    }
+}
+::expected
+reserved 60, rejected 40, left 0
+quick: 5
+dog: 3
+the: 3
+fox: 2
+::hints
+- `_items.GetValueOrDefault(item)` returns 0 for an unknown item.
+- In `TryReserve`, the check and the update must be in the **same** lock, or two threads can both see "1 left".
+- `counts.AddOrUpdate(word, 1, (_, old) => old + 1)` adds 1 for a new word or increments an existing one atomically.
+--- cards
+Task.Run :: Runs CPU-bound work on the thread pool.
+Parallel.For / ForEach / PLINQ :: Split loops and queries across cores.
+Race condition :: Threads interleave read-modify-write steps and lose updates.
+lock :: Only one thread at a time in the block; lock on a private object; no await inside.
+Interlocked :: Atomic single operations: Increment, Add, CompareExchange.
+Channel<T> :: Async producer/consumer queue; bounded channels apply back-pressure.
+SemaphoreSlim :: Limits how many operations run at once (WaitAsync / Release).
+
+=== lesson cs-files | Files, streams and JSON | 75
+## Paths and quick file access
+
+`System.IO` has static helpers for the common cases. Build paths with **`Path.Combine`** (it uses the right separator on Windows, macOS and Linux) and never with string concatenation:
+
+```csharp
+string dir = Path.Combine(Path.GetTempPath(), $"devquest-{Guid.NewGuid():N}");
+Directory.CreateDirectory(dir);
+try
+{
+    string file = Path.Combine(dir, "todo.txt");
+    File.WriteAllText(file, "buy milk\n");
+    File.AppendAllLines(file, ["write report", "call Ada"]);
+
+    string[] lines = File.ReadAllLines(file);
+    Console.WriteLine($"{lines.Length} lines, first: {lines[0]}");
+    Console.WriteLine($"name {Path.GetFileName(file)}, extension {Path.GetExtension(file)}, exists {File.Exists(file)}");
+
+    foreach (string path in Directory.EnumerateFiles(dir, "*.txt"))
+        Console.WriteLine($"found {Path.GetFileName(path)} ({new FileInfo(path).Length} bytes)");
+}
+finally
+{
+    Directory.Delete(dir, recursive: true);   // clean up, even after an error
+}
+```
+
+`ReadAllText`/`ReadAllLines` load the whole file into memory; **`File.ReadLines`** reads lazily, one line at a time, which is the right choice for large files. All of them have **async** versions (`ReadAllTextAsync`, `WriteAllLinesAsync`, …) for servers and UIs. Text is read and written as **UTF-8** by default.
+
+## Streams
+
+Under the helpers are **streams**: sequences of bytes you read or write in pieces. `FileStream` reads a file, and so do network streams, memory streams and compression streams, all through the same `Stream` API. For text you wrap them in a **`StreamReader`** or **`StreamWriter`**, always with `using` so the file is flushed and closed:
+
+```csharp
+using System.IO.Compression;
+
+string path = Path.Combine(Path.GetTempPath(), $"log-{Guid.NewGuid():N}.txt.gz");
+using (var file = File.Create(path))
+using (var zip = new GZipStream(file, CompressionLevel.Optimal))
+using (var writer = new StreamWriter(zip))
+{
+    for (int i = 1; i <= 1000; i++) writer.WriteLine($"event {i}: all good");
+}
+Console.WriteLine($"compressed size: {new FileInfo(path).Length} bytes");
+
+using (var reader = new StreamReader(new GZipStream(File.OpenRead(path), CompressionMode.Decompress)))
+{
+    int count = 0;
+    string? line;
+    while ((line = reader.ReadLine()) != null) count++;
+    Console.WriteLine($"read back {count} lines");
+}
+File.Delete(path);
+```
+
+Streams are **decorators**: each wraps another and adds behaviour (compression, buffering, encryption, text encoding). The same pattern appears in Java's I/O classes.
+
+## JSON with System.Text.Json
+
+JSON is how programs exchange data. **`System.Text.Json`** (built in) turns objects into JSON and back:
+
+```csharp
+using System.Text.Json;
+using System.Text.Json.Serialization;
+
+var options = new JsonSerializerOptions { WriteIndented = true, PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+var user = new User("Ada", 36, ["admin", "dev"], null);
+
+string json = JsonSerializer.Serialize(user, options);
+Console.WriteLine(json);
+
+User back = JsonSerializer.Deserialize<User>(json, options)!;
+Console.WriteLine($"{back.Name}, roles {string.Join("/", back.Roles)}, same values: {back with { Roles = user.Roles } == user}");
+
+using JsonDocument doc = JsonDocument.Parse("""{"city":"Oslo","temp":{"now":-3.5}}""");
+Console.WriteLine($"Oslo now: {doc.RootElement.GetProperty("temp").GetProperty("now").GetDouble()}");
+
+record User(string Name, int Age, List<string> Roles, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Nickname);
+```
+
+- `Serialize` / `Deserialize<T>` map public properties; records work well. Bad input throws **`JsonException`**.
+- Options control naming (`CamelCase`), indentation, case-insensitive reading, enums as strings (`JsonStringEnumConverter`).
+- Attributes customise single properties: `[JsonPropertyName("user_name")]`, `[JsonIgnore]`.
+- **`JsonDocument`** / `JsonNode` read JSON whose shape you don't have a class for.
+- Reuse one `JsonSerializerOptions` instance: creating it each time is slow.
+
+~~~check
+? Why build paths with `Path.Combine(dir, "a.txt")`?
++ It uses the correct separator for the operating system
+- It's faster
+- It creates the file
+- It checks the file exists
+> Windows uses \, Linux and macOS use /.
+~~~
+
+📚 **Go deeper:** Microsoft Learn, "File and stream I/O", "How to serialize and deserialize JSON in .NET"; *Programming C#*, chapter 21 "Streams".
+--- goals
+- read and write files with File, Path and Directory, and clean up safely
+- choose between ReadAllLines and lazy ReadLines, and use async file APIs
+- explain streams as decorators and use StreamReader/StreamWriter
+- serialize and deserialize JSON with System.Text.Json options and attributes
+--- quiz
+? Which reads a huge log file without loading it all into memory?
++ File.ReadLines(path)
+- File.ReadAllText(path)
+- File.ReadAllLines(path)
+- File.ReadAllBytes(path)
+> ReadLines is lazy.
+? Why wrap a StreamWriter in `using`?
++ So it's flushed and closed even if an error happens
+- To make it faster
+- To make it read-only
+- It's not needed
+> Unflushed data may never reach the file.
+? What does `JsonSerializer.Deserialize<Order>(text)` throw for malformed JSON?
++ JsonException
+- FormatException
+- Nothing; it returns an empty Order
+- IOException
+> Catch JsonException when input may be invalid.
+--- exercise code csharp
+::prompt
+Build a `NoteStore` that keeps notes in a JSON file:
+
+- `Save(List<Note> notes)` writes them as **camelCase** JSON (one line, not indented);
+- `Load()` returns the saved notes, or an **empty list** when the file doesn't exist yet;
+- `ExportCsv(string csvPath)` writes a header `id,title,tags,done` and one line per note: tags joined with `;`, done as `yes`/`no`. Use a `StreamWriter` inside `using`.
+
+Keep one static `JsonSerializerOptions`. Expected output:
+
+```
+loaded before saving: 0
+[{"id":1,"title":"Buy milk","tags":["home"],"done":false},{"id":2,"title":"Write report","tags":["work","urgent"],"done":true},{"id":3,"title":"Call Ada","tags":["home","people"],"done":false}]
+loaded 3, first: Buy milk, tags of 2: work+urgent
+id,title,tags,done
+1,Buy milk,home,no
+2,Write report,work;urgent,yes
+3,Call Ada,home;people,no
+```
+::starter
+using System.Text.Json;
+
+string dir = Path.Combine(Path.GetTempPath(), $"devquest-notes-{Guid.NewGuid():N}");
+Directory.CreateDirectory(dir);
+try
+{
+    var store = new NoteStore(Path.Combine(dir, "notes.json"));
+    Console.WriteLine($"loaded before saving: {store.Load().Count}");
+
+    store.Save(new List<Note>
+    {
+        new(1, "Buy milk", ["home"], false),
+        new(2, "Write report", ["work", "urgent"], true),
+        new(3, "Call Ada", ["home", "people"], false),
+    });
+    Console.WriteLine(File.ReadAllText(Path.Combine(dir, "notes.json")));
+
+    List<Note> notes = store.Load();
+    Console.WriteLine($"loaded {notes.Count}, first: {notes[0].Title}, tags of 2: {string.Join("+", notes[1].Tags)}");
+
+    string csv = Path.Combine(dir, "notes.csv");
+    store.ExportCsv(csv);
+    foreach (string line in File.ReadLines(csv)) Console.WriteLine(line);
+}
+finally
+{
+    Directory.Delete(dir, recursive: true);
+}
+
+record Note(int Id, string Title, List<string> Tags, bool Done);
+
+class NoteStore(string path)
+{
+    public void Save(List<Note> notes) => File.WriteAllText(path, "[]");
+
+    public List<Note> Load() => new List<Note>();
+
+    public void ExportCsv(string csvPath) => File.WriteAllText(csvPath, "");
+}
+::solution
+using System.Text.Json;
+
+string dir = Path.Combine(Path.GetTempPath(), $"devquest-notes-{Guid.NewGuid():N}");
+Directory.CreateDirectory(dir);
+try
+{
+    var store = new NoteStore(Path.Combine(dir, "notes.json"));
+    Console.WriteLine($"loaded before saving: {store.Load().Count}");
+
+    store.Save(new List<Note>
+    {
+        new(1, "Buy milk", ["home"], false),
+        new(2, "Write report", ["work", "urgent"], true),
+        new(3, "Call Ada", ["home", "people"], false),
+    });
+    Console.WriteLine(File.ReadAllText(Path.Combine(dir, "notes.json")));
+
+    List<Note> notes = store.Load();
+    Console.WriteLine($"loaded {notes.Count}, first: {notes[0].Title}, tags of 2: {string.Join("+", notes[1].Tags)}");
+
+    string csv = Path.Combine(dir, "notes.csv");
+    store.ExportCsv(csv);
+    foreach (string line in File.ReadLines(csv)) Console.WriteLine(line);
+}
+finally
+{
+    Directory.Delete(dir, recursive: true);
+}
+
+record Note(int Id, string Title, List<string> Tags, bool Done);
+
+class NoteStore(string path)
+{
+    private static readonly JsonSerializerOptions Options = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+
+    public void Save(List<Note> notes) => File.WriteAllText(path, JsonSerializer.Serialize(notes, Options));
+
+    public List<Note> Load()
+    {
+        if (!File.Exists(path)) return new List<Note>();
+        return JsonSerializer.Deserialize<List<Note>>(File.ReadAllText(path), Options) ?? new List<Note>();
+    }
+
+    public void ExportCsv(string csvPath)
+    {
+        using var writer = new StreamWriter(csvPath);
+        writer.WriteLine("id,title,tags,done");
+        foreach (Note n in Load())
+            writer.WriteLine($"{n.Id},{n.Title},{string.Join(";", n.Tags)},{(n.Done ? "yes" : "no")}");
+    }
+}
+::expected
+loaded before saving: 0
+[{"id":1,"title":"Buy milk","tags":["home"],"done":false},{"id":2,"title":"Write report","tags":["work","urgent"],"done":true},{"id":3,"title":"Call Ada","tags":["home","people"],"done":false}]
+loaded 3, first: Buy milk, tags of 2: work+urgent
+id,title,tags,done
+1,Buy milk,home,no
+2,Write report,work;urgent,yes
+3,Call Ada,home;people,no
+::hints
+- `new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }`, stored in a `private static readonly` field.
+- `File.Exists(path)` tells you whether to return an empty list.
+- `using var writer = new StreamWriter(csvPath);` closes the file at the end of the method.
+--- cards
+Path.Combine :: Builds paths with the OS's separator.
+File.ReadLines :: Lazy, line by line; ReadAllLines loads everything.
+Stream :: Bytes read/written in pieces; readers, writers and compression wrap streams (decorators).
+using + StreamWriter :: Guarantees flush and close.
+JsonSerializer :: Serialize(obj, options) / Deserialize<T>(json, options); throws JsonException.
+JsonDocument :: Reads JSON without a matching class.
+
+=== lesson cs-projects | Projects, namespaces and packages | 60
+## From one file to a solution
+
+Real programs aren't one file. .NET organises code like this:
+
+- a **project** (`.csproj`) builds one **assembly**: an `.exe` (application) or a `.dll` (library);
+- a **solution** (`.sln` or the newer `.slnx`) groups projects that belong together: for example `Shop.Api` (web API), `Shop.Core` (business logic, a class library) and `Shop.Tests`;
+- projects reference each other (`dotnet add reference`) and **NuGet packages** (`dotnet add package`).
+
+A modern SDK-style project file is short:
+
+```
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Spectre.Console" Version="0.50.0" />
+    <ProjectReference Include="..\Shop.Core\Shop.Core.csproj" />
+  </ItemGroup>
+</Project>
+```
+
+The commands you'll use every day:
+
+```
+dotnet new sln -n Shop
+dotnet new classlib -n Shop.Core
+dotnet new console -n Shop.App
+dotnet sln add Shop.Core Shop.App
+dotnet add Shop.App reference Shop.Core
+dotnet add Shop.App package Spectre.Console
+dotnet build
+dotnet run --project Shop.App
+dotnet publish -c Release
+```
+
+**NuGet** (nuget.org) is .NET's package registry, like npm or Maven Central. Before adding a package, check that it's maintained, widely used and licensed for your use; every dependency is code you trust.
+
+## Namespaces
+
+**Namespaces** group types and prevent name clashes: `System.IO.File` and a `File` class of your own can coexist. In normal files, use a **file-scoped namespace** that matches the folder: `namespace Shop.Core.Orders;` on the first line. In a file with top-level statements (like the examples here) the statements come first, followed by block namespaces:
+
+```csharp
+using Billing;
+using ShippingLabel = Shipping.Invoice;      // an alias resolves a clash
+
+var bill = new Invoice("INV-1", 99.90m);
+var label = new ShippingLabel("SHP-7", "12 Harbour St");
+Console.WriteLine($"{bill} / {label}");
+Console.WriteLine(typeof(ShippingLabel).FullName);
+
+namespace Billing
+{
+    public record Invoice(string Number, decimal Total);
+}
+
+namespace Shipping
+{
+    public record Invoice(string Number, string Address);
+}
+```
+
+- `using X;` imports a namespace; **global usings** (`global using X;`) apply to the whole project, and **implicit usings** add the common ones (`System`, `System.Linq`, `System.Collections.Generic`, …) for you.
+- **`internal`** (the default for top-level types) means visible within the same assembly only. A library exposes a small `public` API and keeps the rest `internal`.
+
+## Extension methods
+
+An **extension method** adds a method to an existing type without changing it. It's a static method in a static class, whose first parameter has `this`; it's available wherever its namespace is imported. All of LINQ (`Where`, `Select`, …) is extension methods on `IEnumerable<T>`.
+
+```csharp
+using TextTools;
+
+Console.WriteLine("Hello, wonderful world".Truncate(10));
+Console.WriteLine("  Hello World  ".IsBlank());
+Console.WriteLine(new[] { 3, 8, 1 }.SecondLargest());
+
+namespace TextTools
+{
+    public static class StringExtensions
+    {
+        public static string Truncate(this string text, int max) =>
+            text.Length <= max ? text : text[..(max - 1)] + "…";
+
+        public static bool IsBlank(this string text) => string.IsNullOrWhiteSpace(text);
+
+        public static int SecondLargest(this IEnumerable<int> numbers) =>
+            numbers.OrderDescending().Skip(1).First();
+    }
+}
+```
+
+Use them for small, obviously related helpers; they can't access private members, and too many make code hard to follow.
+
+📚 **Go deeper:** Microsoft Learn, ".NET project SDKs", "dotnet CLI overview", "Namespaces", "Extension methods" and "An introduction to NuGet"; *Programming C#*, chapter 17 "Assemblies and Versioning".
+--- goals
+- describe projects, assemblies and solutions, and use the dotnet CLI
+- add project references and NuGet packages responsibly
+- organise code in namespaces and resolve clashes with aliases
+- choose public or internal visibility for a library's API
+- write extension methods
+--- quiz
+? What does a .csproj build?
++ One assembly (an .exe or a .dll)
+- A whole solution
+- Only tests
+- A NuGet server
+> A solution groups several projects.
+? What does `internal` mean?
++ Visible only inside the same assembly
+- Visible only inside the same class
+- Visible everywhere
+- Visible to derived classes only
+> It's the default for top-level types.
+? What makes `static string Shout(this string s)` an extension method?
++ The this before the first parameter (in a static class)
+- The static keyword alone
+- Its name
+- It must be in System
+> Then "hi".Shout() works.
+? Where do you find and publish .NET libraries?
++ NuGet (nuget.org)
+- npm
+- PyPI
+- Maven Central
+> dotnet add package Name.
+--- exercise code csharp
+::prompt
+Two finance teams named a type `Invoice`: one in namespace `Billing` (number and total) and one in `Shipping` (number and address). Make the program compile and print the expected output:
+
+- import `Billing` normally and give `Shipping.Invoice` the alias `Label`;
+- in namespace `Formatting`, write a static class `MoneyExtensions` with two extension methods: `ToEuro(this decimal amount)` returning e.g. `€1,234.50` (use the format `"€#,##0.00"`), and `Sum(this IEnumerable<Billing.Invoice> invoices)` returning the total of all invoices.
+
+```
+INV-1: €1,234.50
+INV-2: €99.90
+total: €1,334.40
+label SHP-7 to 12 Harbour St
+```
+::starter
+var invoices = new List<Invoice> { new("INV-1", 1234.5m), new("INV-2", 99.9m) };
+foreach (var invoice in invoices) Console.WriteLine($"{invoice.Number}: {invoice.Total.ToEuro()}");
+Console.WriteLine($"total: {invoices.Sum().ToEuro()}");
+var label = new Label("SHP-7", "12 Harbour St");
+Console.WriteLine($"label {label.Number} to {label.Address}");
+
+namespace Billing
+{
+    public record Invoice(string Number, decimal Total);
+}
+
+namespace Shipping
+{
+    public record Invoice(string Number, string Address);
+}
+::solution
+using Billing;
+using Formatting;
+using Label = Shipping.Invoice;
+
+var invoices = new List<Invoice> { new("INV-1", 1234.5m), new("INV-2", 99.9m) };
+foreach (var invoice in invoices) Console.WriteLine($"{invoice.Number}: {invoice.Total.ToEuro()}");
+Console.WriteLine($"total: {invoices.Sum().ToEuro()}");
+var label = new Label("SHP-7", "12 Harbour St");
+Console.WriteLine($"label {label.Number} to {label.Address}");
+
+namespace Billing
+{
+    public record Invoice(string Number, decimal Total);
+}
+
+namespace Shipping
+{
+    public record Invoice(string Number, string Address);
+}
+
+namespace Formatting
+{
+    public static class MoneyExtensions
+    {
+        public static string ToEuro(this decimal amount) => amount.ToString("€#,##0.00");
+
+        public static decimal Sum(this IEnumerable<Billing.Invoice> invoices)
+        {
+            decimal total = 0;
+            foreach (var invoice in invoices) total += invoice.Total;
+            return total;
+        }
+    }
+}
+::expected
+INV-1: €1,234.50
+INV-2: €99.90
+total: €1,334.40
+label SHP-7 to 12 Harbour St
+::hints
+- `using` directives go at the very top of the file, before the statements.
+- An alias: `using Label = Shipping.Invoice;`.
+- Extension methods: `public static` methods in a `public static class`, first parameter marked `this`.
+--- cards
+Project / assembly :: A .csproj builds one .exe or .dll.
+Solution :: Groups related projects (.sln / .slnx).
+NuGet :: .NET's package registry: dotnet add package Name.
+Namespace :: Groups types; file-scoped: namespace Shop.Core;
+using alias :: using Label = Shipping.Invoice; resolves name clashes.
+internal :: Visible inside the same assembly only.
+Extension method :: static method in a static class with this on the first parameter: "x".Truncate(3).
+
+=== lesson cs-reflection | Attributes and reflection | 70
+## Code that looks at code
+
+Every .NET assembly carries **metadata**: a full description of its types, their properties, methods and attributes. **Reflection** reads that metadata at run time. It's how serializers know your properties, how test frameworks find tests, how ASP.NET finds controllers and how dependency injection builds objects.
+
+```csharp
+using System.Reflection;
+
+Type type = typeof(Account);       // or obj.GetType() at run time
+Console.WriteLine($"{type.Name} in {type.Namespace ?? "(global)"}, is class: {type.IsClass}");
+
+foreach (PropertyInfo p in type.GetProperties())
+    Console.WriteLine($"  property {p.PropertyType.Name} {p.Name} (writable: {p.CanWrite})");
+
+foreach (MethodInfo m in type.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly).Where(m => !m.IsSpecialName))
+    Console.WriteLine($"  method {m.Name}({string.Join(", ", m.GetParameters().Select(x => x.ParameterType.Name))})");
+
+object account = Activator.CreateInstance(type, "Ada")!;         // create an object from a Type
+type.GetProperty("Balance")!.SetValue(account, 100m);
+type.GetMethod("Deposit")!.Invoke(account, [25m]);
+Console.WriteLine(account);
+
+class Account(string owner)
+{
+    public string Owner { get; } = owner;
+    public decimal Balance { get; set; }
+    public void Deposit(decimal amount) => Balance += amount;
+    public override string ToString() => $"{Owner}: {Balance}";
+}
+```
+
+Reflection is powerful but **slow** compared with normal calls, loses compile-time checking (a typo in `"Balance"` fails only at run time) and doesn't mix well with trimming and native AOT. Application code rarely needs it directly; libraries and frameworks use it for you. Modern libraries increasingly use **source generators**, which generate the code at compile time instead.
+
+## Attributes
+
+**Attributes** attach extra information to code, in square brackets. Some are understood by the compiler or runtime:
+
+| Attribute | Effect |
+|---|---|
+| `[Obsolete("Use NewApi")]` | warning (or error) where it's used |
+| `[Flags]` | an enum whose values combine as bits |
+| `[JsonPropertyName("...")]` | used by System.Text.Json |
+| `[Fact]`, `[Theory]` | test methods for xUnit |
+| `[HttpGet]`, `[Route]`, `[Required]` | used by ASP.NET Core |
+
+You can write your own by deriving from `Attribute`, and read them with reflection:
+
+```csharp
+using System.Reflection;
+
+foreach (MethodInfo m in typeof(Commands).GetMethods())
+{
+    if (m.GetCustomAttribute<CommandAttribute>() is { } cmd)
+        Console.WriteLine($"/{cmd.Name,-6} -> {m.Name}: {cmd.Help}");
+}
+
+var permissions = Permission.Read | Permission.Write;
+Console.WriteLine($"{permissions}, can delete: {permissions.HasFlag(Permission.Delete)}");
+
+[AttributeUsage(AttributeTargets.Method)]
+class CommandAttribute(string name) : Attribute
+{
+    public string Name { get; } = name;
+    public string Help { get; init; } = "";
+}
+
+class Commands
+{
+    [Command("help", Help = "show all commands")] public void ShowHelp() { }
+    [Command("quit", Help = "leave the program")] public void Quit() { }
+    public void NotACommand() { }
+}
+
+[Flags]
+enum Permission { None = 0, Read = 1, Write = 2, Delete = 4 }
+```
+
+Attribute classes end in `Attribute`, but you may leave that off when using them (`[Command]`). `AttributeUsage` says where an attribute may appear.
+
+## Caller information and nameof
+
+Two compile-time cousins of reflection, cheap and safe: **`nameof(x)`** gives the name of a variable, member or type as a string (it's renamed with the code), and **caller-info attributes** let a method learn who called it:
+
+```csharp
+using System.Runtime.CompilerServices;
+
+Log("starting");
+int quantity = -1;
+Check(quantity > 0);
+
+static void Log(string message, [CallerMemberName] string caller = "", [CallerLineNumber] int line = 0) =>
+    Console.WriteLine($"[{caller}:{line}] {message}");
+
+static void Check(bool condition, [CallerArgumentExpression(nameof(condition))] string expression = "")
+{
+    if (!condition) Console.WriteLine($"check failed: {expression}");
+}
+```
+
+Top-level statements are compiled into a hidden method named `<Main>$`, which is the caller name you see here; inside a class method you'd see its name. Logging libraries use these attributes to record where each message came from.
+
+📚 **Go deeper:** Microsoft Learn, "Attributes", "Reflection in .NET" and "Source generators"; *Programming C#*, chapter 18 "Attributes and Reflection".
+--- goals
+- inspect types, properties and methods with reflection, and create objects from a Type
+- explain the costs of reflection and when frameworks use it
+- use built-in attributes and write and read custom ones
+- use nameof and caller-info attributes
+--- quiz
+? What is reflection?
++ Reading type metadata (properties, methods, attributes) at run time
+- Copying objects
+- Compiling code at run time only
+- A design pattern for mirrors
+> Serializers and test frameworks rely on it.
+? How do you read a custom attribute from a property?
++ property.GetCustomAttribute<MyAttribute>()
+- property.Attributes["My"]
+- typeof(MyAttribute).Read(property)
+- You can't
+> It returns null when the attribute is absent.
+? What's a downside of reflection?
++ Slower calls and errors found only at run time
+- It can't read private members
+- It only works in Debug builds
+- It changes the class
+> Prefer normal code; use it in frameworks and tools.
+? What does `nameof(customer.Email)` give you?
++ The string "Email", checked by the compiler
+- The email address
+- The full type name
+- A reflection object
+> Renaming the property updates it.
+--- exercise code csharp
+::prompt
+Write a tiny validation library like the one ASP.NET uses: three attributes and a `Validator` that reads them with reflection.
+
+- `[Required]`: the property's value is null or an empty string → `<Name> is required`;
+- `[Range(min, max)]` (doubles, stored in `Min` and `Max` properties): the number is outside the range → `<Name> must be between <min> and <max>` (convert the value with `Convert.ToDouble`);
+- `[Contains(text)]`: a non-empty string that doesn't contain the text → `<Name> must contain '<text>'`.
+
+`Validator.Validate(object obj)` checks every public property, in declaration order, rule by rule in the order above, and returns the list of error messages.
+
+```
+SignUp: valid
+SignUp: Name is required; Email must contain '@'; Age must be between 16 and 120
+Product: Price must be between 0.01 and 10000
+```
+::starter
+using System.Reflection;
+
+object[] inputs =
+{
+    new SignUp { Name = "Ada", Email = "ada@example.com", Age = 36 },
+    new SignUp { Name = "", Email = "bob", Age = 12 },
+    new Product { Title = "Lamp", Price = 0 },
+};
+foreach (object input in inputs)
+{
+    List<string> errors = Validator.Validate(input);
+    Console.WriteLine($"{input.GetType().Name}: {(errors.Count == 0 ? "valid" : string.Join("; ", errors))}");
+}
+
+[AttributeUsage(AttributeTargets.Property)]
+class RequiredAttribute : Attribute { }
+
+[AttributeUsage(AttributeTargets.Property)]
+class RangeAttribute(double min, double max) : Attribute
+{
+}
+
+[AttributeUsage(AttributeTargets.Property)]
+class ContainsAttribute(string text) : Attribute
+{
+}
+
+static class Validator
+{
+    public static List<string> Validate(object obj) => new List<string>();
+}
+
+class SignUp
+{
+    [Required] public string Name { get; set; } = "";
+    [Required, Contains("@")] public string Email { get; set; } = "";
+    [Range(16, 120)] public int Age { get; set; }
+}
+
+class Product
+{
+    [Required] public string Title { get; set; } = "";
+    [Range(0.01, 10000)] public decimal Price { get; set; }
+}
+::solution
+using System.Reflection;
+
+object[] inputs =
+{
+    new SignUp { Name = "Ada", Email = "ada@example.com", Age = 36 },
+    new SignUp { Name = "", Email = "bob", Age = 12 },
+    new Product { Title = "Lamp", Price = 0 },
+};
+foreach (object input in inputs)
+{
+    List<string> errors = Validator.Validate(input);
+    Console.WriteLine($"{input.GetType().Name}: {(errors.Count == 0 ? "valid" : string.Join("; ", errors))}");
+}
+
+[AttributeUsage(AttributeTargets.Property)]
+class RequiredAttribute : Attribute { }
+
+[AttributeUsage(AttributeTargets.Property)]
+class RangeAttribute(double min, double max) : Attribute
+{
+    public double Min { get; } = min;
+    public double Max { get; } = max;
+}
+
+[AttributeUsage(AttributeTargets.Property)]
+class ContainsAttribute(string text) : Attribute
+{
+    public string Text { get; } = text;
+}
+
+static class Validator
+{
+    public static List<string> Validate(object obj)
+    {
+        var errors = new List<string>();
+        foreach (PropertyInfo p in obj.GetType().GetProperties())
+        {
+            object? value = p.GetValue(obj);
+            if (p.GetCustomAttribute<RequiredAttribute>() != null && string.IsNullOrEmpty(value?.ToString()))
+                errors.Add($"{p.Name} is required");
+            if (p.GetCustomAttribute<RangeAttribute>() is { } range)
+            {
+                double number = Convert.ToDouble(value);
+                if (number < range.Min || number > range.Max)
+                    errors.Add($"{p.Name} must be between {range.Min} and {range.Max}");
+            }
+            if (p.GetCustomAttribute<ContainsAttribute>() is { } contains && value is string s && s.Length > 0 && !s.Contains(contains.Text))
+                errors.Add($"{p.Name} must contain '{contains.Text}'");
+        }
+        return errors;
+    }
+}
+
+class SignUp
+{
+    [Required] public string Name { get; set; } = "";
+    [Required, Contains("@")] public string Email { get; set; } = "";
+    [Range(16, 120)] public int Age { get; set; }
+}
+
+class Product
+{
+    [Required] public string Title { get; set; } = "";
+    [Range(0.01, 10000)] public decimal Price { get; set; }
+}
+::expected
+SignUp: valid
+SignUp: Name is required; Email must contain '@'; Age must be between 16 and 120
+Product: Price must be between 0.01 and 10000
+::hints
+- Store constructor arguments in get-only properties: `public double Min { get; } = min;`.
+- `obj.GetType().GetProperties()` lists the public properties; `p.GetValue(obj)` reads one.
+- `p.GetCustomAttribute<RangeAttribute>() is { } range` both checks for the attribute and names it.
+--- cards
+Reflection :: Reads metadata at run time: typeof(T), obj.GetType(), GetProperties(), GetMethods().
+Activator.CreateInstance :: Creates an object from a Type.
+Attribute :: [Name(args)] metadata on code; custom ones derive from Attribute.
+GetCustomAttribute<T>() :: Reads an attribute (null if absent).
+[Flags] :: Enum values combine as bits: Read | Write; HasFlag.
+nameof / [CallerMemberName] :: Compile-time names and caller information.
+
+=== lesson cs-testing | Testing your code | 70
+## Why professionals write tests
+
+A **unit test** is a small program that calls your code with known inputs and checks the result. Tests catch mistakes when you write code, and much more importantly, **every time you change it later**: they let you refactor without fear. Professional teams run thousands of tests on every commit (continuous integration).
+
+In .NET the popular frameworks are **xUnit**, NUnit and MSTest. A test project sits next to the code it tests:
+
+```
+dotnet new xunit -n Shop.Tests
+dotnet add Shop.Tests reference Shop.Core
+dotnet test
+```
+
+```
+using Xunit;
+
+public class CartTests
+{
+    [Fact]
+    public void Adding_an_item_increases_the_total()
+    {
+        var cart = new Cart();                 // Arrange
+        cart.Add("pen", 1.50m, quantity: 2);   // Act
+        Assert.Equal(3.00m, cart.Total);       // Assert
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-3)]
+    public void Quantity_must_be_positive(int quantity)
+    {
+        var cart = new Cart();
+        Assert.Throws<ArgumentOutOfRangeException>(() => cart.Add("pen", 1m, quantity));
+    }
+}
+```
+
+- **`[Fact]`** is a test; **`[Theory]`** with `[InlineData]` runs one test with several inputs.
+- **Arrange, Act, Assert:** set up, do one thing, check the outcome.
+- Name tests after the behaviour they check, so a failure explains itself.
+- Each test is independent: xUnit creates a **new instance** of the test class for every test, so tests don't share state.
+
+## A test framework in 60 lines
+
+There's no magic inside xUnit: it's attributes, reflection and exceptions, all from the last lessons. This runnable version finds `[Fact]` methods and reports failures:
+
+```csharp
+using System.Reflection;
+
+int passed = 0, failed = 0;
+foreach (MethodInfo test in typeof(MathTests).GetMethods().Where(m => m.GetCustomAttribute<FactAttribute>() != null))
+{
+    try
+    {
+        test.Invoke(new MathTests(), null);
+        passed++;
+        Console.WriteLine($"✓ {test.Name}");
+    }
+    catch (TargetInvocationException e)
+    {
+        failed++;
+        Console.WriteLine($"✗ {test.Name}: {e.InnerException!.Message}");
+    }
+}
+Console.WriteLine($"{passed} passed, {failed} failed");
+
+class FactAttribute : Attribute { }
+
+class MathTests
+{
+    [Fact]
+    public void AddsNumbers()
+    {
+        if (Calculator.Add(2, 3) != 5) throw new Exception("2 + 3 should be 5");
+    }
+
+    [Fact]
+    public void DividesNumbers()
+    {
+        if (Calculator.Divide(7, 2) != 3.5) throw new Exception($"7 / 2 should be 3.5 but was {Calculator.Divide(7, 2)}");
+    }
+}
+
+static class Calculator
+{
+    public static int Add(int a, int b) => a + b;
+    public static double Divide(int a, int b) => a / b;     // bug: integer division
+}
+```
+
+The failing test found a real bug: `a / b` divides integers before converting.
+
+## Testing code with dependencies
+
+Code that reads the clock, the network or a database is hard to test. Make the dependency an **interface**, pass it in (that's **dependency injection**) and give the test a **fake**:
+
+```csharp
+var clock = new FakeClock { Now = new DateTime(2026, 3, 15, 9, 0, 0) };
+var shop = new Shop(clock);
+Console.WriteLine($"9:00 open: {shop.IsOpen()}");
+clock.Now = clock.Now.AddHours(10);
+Console.WriteLine($"19:00 open: {shop.IsOpen()}");
+
+interface IClock { DateTime Now { get; } }
+
+class SystemClock : IClock { public DateTime Now => DateTime.Now; }   // used in production
+
+class FakeClock : IClock { public DateTime Now { get; set; } }        // used in tests
+
+class Shop(IClock clock)
+{
+    public bool IsOpen() => clock.Now.Hour is >= 8 and < 18;
+}
+```
+
+.NET 8 added a built-in `TimeProvider` for exactly this, and libraries like **Moq** and **NSubstitute** generate fakes for you.
+
+## What to test
+
+- the normal case, the **edge cases** (empty, zero, one, maximum, boundaries) and the **error cases**;
+- business rules, not the language (no need to test that a property returns what you set);
+- write a failing test **before** fixing a bug, so it can never come back. Writing tests first in general is **test-driven development** (red, green, refactor).
+
+~~~check
+? Why does xUnit create a new instance of the test class for each test?
++ So tests don't share state and can run in any order
+- To use more memory
+- It doesn't
+- To run them slower
+> Independent tests are reliable tests.
+~~~
+
+📚 **Go deeper:** Microsoft Learn, "Unit testing C# with xUnit", "Unit testing best practices" and "TimeProvider"; the xUnit documentation.
+--- goals
+- explain what unit tests are for and how a .NET test project is organised
+- write tests with Arrange-Act-Assert, Fact and Theory
+- explain how a test framework finds and runs tests
+- make code testable with interfaces, dependency injection and fakes
+- choose normal, edge and error cases to test
+--- quiz
+? What's `[Theory]` with `[InlineData]` for?
++ Running one test method with several sets of inputs
+- Marking a test as unfinished
+- Skipping a test
+- Testing private methods
+> Each InlineData is a separate test case.
+? How do you test code that depends on the current time?
++ Inject an IClock (or TimeProvider) and use a fake in the test
+- Run the test at the right time of day
+- Change the PC's clock
+- You can't
+> Dependency injection makes it testable.
+? When fixing a bug, what's good practice?
++ First write a test that reproduces it, then fix the code
+- Fix it and delete related tests
+- Only test manually
+- Add a comment
+> The test keeps the bug from coming back.
+--- exercise code csharp
+::prompt
+Build your own mini xUnit. `CartTests` and `Cart` are given; write:
+
+- `Assert.Equal<T>(T expected, T actual)`: throws `AssertionException("expected <expected>, got <actual>")` when they differ (use `EqualityComparer<T>.Default`);
+- `Assert.Throws<T>(Action action)`: returns the exception when the action throws a `T`; throws `AssertionException("expected <T name>, got <other type name>")` for another exception and `AssertionException("expected <T name>, nothing was thrown")` when nothing is thrown;
+- `TestRunner.Run(Type testClass)`: runs every public method marked `[Fact]` **in alphabetical order**, each on a **new instance** (`Activator.CreateInstance`), prints `PASS <name>`, or `FAIL <name>: <message>` for an `AssertionException`, or `ERROR <name>: <exception type>` for anything else, and returns the counts. `MethodInfo.Invoke` wraps exceptions in `TargetInvocationException`; look at `InnerException`.
+
+The tests found a bug in `Cart` on purpose; don't fix it. Expected output:
+
+```
+PASS AddingSameItemTwiceIncreasesQuantity
+FAIL DeliberatelyWrongExpectation: expected 12.00, got 12.50
+PASS EmptyCartHasZeroTotal
+FAIL NegativePriceIsRejected: expected ArgumentException, nothing was thrown
+PASS ZeroQuantityIsRejected
+3 passed, 2 failed
+```
+::starter
+using System.Reflection;
+
+var (passed, failed) = TestRunner.Run(typeof(CartTests));
+Console.WriteLine($"{passed} passed, {failed} failed");
+
+[AttributeUsage(AttributeTargets.Method)]
+class FactAttribute : Attribute { }
+
+class AssertionException(string message) : Exception(message) { }
+
+static class Assert
+{
+    public static void Equal<T>(T expected, T actual) { }
+
+    public static T Throws<T>(Action action) where T : Exception => null!;
+}
+
+static class TestRunner
+{
+    public static (int Passed, int Failed) Run(Type testClass) => (0, 0);
+}
+
+class Cart
+{
+    private readonly Dictionary<string, (decimal Price, int Qty)> _lines = new();
+
+    public void Add(string item, decimal price, int qty = 1)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(qty);
+        _lines[item] = _lines.TryGetValue(item, out var line) ? (price, line.Qty + qty) : (price, qty);
+    }
+
+    public decimal Total => _lines.Values.Sum(l => l.Price * l.Qty);
+    public int Count => _lines.Values.Sum(l => l.Qty);
+}
+
+class CartTests
+{
+    private readonly Cart _cart = new();
+
+    [Fact] public void EmptyCartHasZeroTotal() => Assert.Equal(0m, _cart.Total);
+
+    [Fact]
+    public void AddingSameItemTwiceIncreasesQuantity()
+    {
+        _cart.Add("pen", 1.50m);
+        _cart.Add("pen", 1.50m, 2);
+        Assert.Equal(3, _cart.Count);
+        Assert.Equal(4.50m, _cart.Total);
+    }
+
+    [Fact] public void ZeroQuantityIsRejected() => Assert.Throws<ArgumentOutOfRangeException>(() => _cart.Add("pen", 1m, 0));
+
+    [Fact]
+    public void DeliberatelyWrongExpectation()
+    {
+        _cart.Add("book", 12.50m);
+        Assert.Equal(12.00m, _cart.Total);
+    }
+
+    [Fact] public void NegativePriceIsRejected() => Assert.Throws<ArgumentException>(() => _cart.Add("pen", -1m));
+
+    public void NotATest() => throw new Exception("never runs");
+}
+::solution
+using System.Reflection;
+
+var (passed, failed) = TestRunner.Run(typeof(CartTests));
+Console.WriteLine($"{passed} passed, {failed} failed");
+
+[AttributeUsage(AttributeTargets.Method)]
+class FactAttribute : Attribute { }
+
+class AssertionException(string message) : Exception(message) { }
+
+static class Assert
+{
+    public static void Equal<T>(T expected, T actual)
+    {
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new AssertionException($"expected {expected}, got {actual}");
+    }
+
+    public static T Throws<T>(Action action) where T : Exception
+    {
+        try
+        {
+            action();
+        }
+        catch (T e)
+        {
+            return e;
+        }
+        catch (Exception e)
+        {
+            throw new AssertionException($"expected {typeof(T).Name}, got {e.GetType().Name}");
+        }
+        throw new AssertionException($"expected {typeof(T).Name}, nothing was thrown");
+    }
+}
+
+static class TestRunner
+{
+    public static (int Passed, int Failed) Run(Type testClass)
+    {
+        int passed = 0, failed = 0;
+        foreach (MethodInfo m in testClass.GetMethods().Where(m => m.GetCustomAttribute<FactAttribute>() != null).OrderBy(m => m.Name))
+        {
+            object instance = Activator.CreateInstance(testClass)!;
+            try
+            {
+                m.Invoke(instance, null);
+                Console.WriteLine($"PASS {m.Name}");
+                passed++;
+            }
+            catch (TargetInvocationException e) when (e.InnerException is AssertionException a)
+            {
+                Console.WriteLine($"FAIL {m.Name}: {a.Message}");
+                failed++;
+            }
+            catch (TargetInvocationException e)
+            {
+                Console.WriteLine($"ERROR {m.Name}: {e.InnerException!.GetType().Name}");
+                failed++;
+            }
+        }
+        return (passed, failed);
+    }
+}
+
+class Cart
+{
+    private readonly Dictionary<string, (decimal Price, int Qty)> _lines = new();
+
+    public void Add(string item, decimal price, int qty = 1)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(qty);
+        _lines[item] = _lines.TryGetValue(item, out var line) ? (price, line.Qty + qty) : (price, qty);
+    }
+
+    public decimal Total => _lines.Values.Sum(l => l.Price * l.Qty);
+    public int Count => _lines.Values.Sum(l => l.Qty);
+}
+
+class CartTests
+{
+    private readonly Cart _cart = new();
+
+    [Fact] public void EmptyCartHasZeroTotal() => Assert.Equal(0m, _cart.Total);
+
+    [Fact]
+    public void AddingSameItemTwiceIncreasesQuantity()
+    {
+        _cart.Add("pen", 1.50m);
+        _cart.Add("pen", 1.50m, 2);
+        Assert.Equal(3, _cart.Count);
+        Assert.Equal(4.50m, _cart.Total);
+    }
+
+    [Fact] public void ZeroQuantityIsRejected() => Assert.Throws<ArgumentOutOfRangeException>(() => _cart.Add("pen", 1m, 0));
+
+    [Fact]
+    public void DeliberatelyWrongExpectation()
+    {
+        _cart.Add("book", 12.50m);
+        Assert.Equal(12.00m, _cart.Total);
+    }
+
+    [Fact] public void NegativePriceIsRejected() => Assert.Throws<ArgumentException>(() => _cart.Add("pen", -1m));
+
+    public void NotATest() => throw new Exception("never runs");
+}
+::expected
+PASS AddingSameItemTwiceIncreasesQuantity
+FAIL DeliberatelyWrongExpectation: expected 12.00, got 12.50
+PASS EmptyCartHasZeroTotal
+FAIL NegativePriceIsRejected: expected ArgumentException, nothing was thrown
+PASS ZeroQuantityIsRejected
+3 passed, 2 failed
+::hints
+- In `Throws<T>`, put `catch (T e)` before `catch (Exception e)`, and throw the "nothing was thrown" error after the `try`.
+- Filter methods with `m.GetCustomAttribute<FactAttribute>() != null` and sort with `OrderBy(m => m.Name)`.
+- `catch (TargetInvocationException e) when (e.InnerException is AssertionException a)` separates failures from errors.
+--- cards
+Unit test :: Small automated check of one behaviour; run on every change.
+[Fact] / [Theory] + [InlineData] :: An xUnit test / one test with several inputs.
+Arrange-Act-Assert :: Set up, do one thing, check the result.
+Fake :: A simple implementation of an interface used in tests (e.g. FakeClock).
+Dependency injection :: Pass dependencies in (usually as interfaces) instead of creating them inside.
+TDD :: Write a failing test, make it pass, refactor.
+
+=== lesson cs-aspnet | Web APIs with ASP.NET Core | 80
+## The web in one example
+
+Most C# code in industry runs on servers. A web API receives an **HTTP request** (a method like `GET` or `POST`, a path like `/todos/2`, headers and maybe a JSON body) and sends back a **response** (a status code like `200 OK` or `404 Not Found`, headers and a body). This runnable example is a complete, if primitive, web server and client in one program, built on `HttpListener` and `HttpClient`:
+
+```csharp
+using System.Net;
+using System.Text;
+
+int port = Random.Shared.Next(20000, 40000);
+using var listener = new HttpListener();
+listener.Prefixes.Add($"http://localhost:{port}/");
+listener.Start();
+
+Task server = Task.Run(async () =>
+{
+    for (int i = 0; i < 2; i++)
+    {
+        HttpListenerContext ctx = await listener.GetContextAsync();
+        string path = ctx.Request.Url!.AbsolutePath;
+        (int status, string body) = path == "/hello" ? (200, """{"message":"hello"}""") : (404, """{"error":"not found"}""");
+        byte[] bytes = Encoding.UTF8.GetBytes(body);
+        ctx.Response.StatusCode = status;
+        ctx.Response.ContentType = "application/json";
+        await ctx.Response.OutputStream.WriteAsync(bytes);
+        ctx.Response.Close();
+    }
+});
+
+using var http = new HttpClient { BaseAddress = new Uri($"http://localhost:{port}/") };
+foreach (string path in new[] { "hello", "missing" })
+{
+    HttpResponseMessage response = await http.GetAsync(path);
+    Console.WriteLine($"GET /{path} -> {(int)response.StatusCode} {response.StatusCode}: {await response.Content.ReadAsStringAsync()}");
+}
+await server;
+```
+
+**`HttpClient`** is how C# code calls other services. Create one and reuse it (or use `IHttpClientFactory` in ASP.NET), because creating one per request exhausts network sockets.
+
+## ASP.NET Core minimal APIs
+
+Nobody writes servers on raw listeners. **ASP.NET Core** is .NET's web framework: fast, cross-platform and used for APIs, websites (Razor Pages, MVC, Blazor) and real-time apps (SignalR). A complete JSON API with **minimal APIs** (create it with `dotnet new web`):
+
+```
+var builder = WebApplication.CreateBuilder(args);
+builder.Services.AddSingleton<ITodoStore, InMemoryTodoStore>();   // dependency injection
+var app = builder.Build();
+
+app.MapGet("/todos", (ITodoStore store) => store.All());
+app.MapGet("/todos/{id:int}", (int id, ITodoStore store) =>
+    store.Find(id) is { } todo ? Results.Ok(todo) : Results.NotFound());
+app.MapPost("/todos", (NewTodo input, ITodoStore store) =>
+{
+    if (string.IsNullOrWhiteSpace(input.Title)) return Results.BadRequest("title is required");
+    Todo todo = store.Add(input.Title);
+    return Results.Created($"/todos/{todo.Id}", todo);
+});
+app.MapDelete("/todos/{id:int}", (int id, ITodoStore store) =>
+    store.Remove(id) ? Results.NoContent() : Results.NotFound());
+
+app.Run();
+
+record Todo(int Id, string Title, bool Done);
+record NewTodo(string Title);
+```
+
+What the framework does for you:
+
+- **routing:** matches the method and path pattern (`{id:int}` is a route parameter with a constraint) and calls your handler;
+- **model binding:** fills handler parameters from the route, query string, headers or JSON body;
+- **serialization:** return values become JSON with System.Text.Json;
+- **dependency injection:** services registered in `builder.Services` are passed to handlers (`AddSingleton`, `AddScoped` per request, `AddTransient` every time);
+- **middleware:** a pipeline every request flows through, for logging, errors, authentication, CORS and static files (`app.UseAuthentication()` …);
+- **configuration** from `appsettings.json` and environment variables, and **logging** through `ILogger<T>`.
+
+Larger APIs often use **controllers** (classes with `[ApiController]`, `[HttpGet]` …) instead; the concepts are the same.
+
+## Data with Entity Framework Core
+
+**EF Core** is .NET's ORM: you write classes and LINQ, it writes the SQL (you learned SQL in the SQL course; EF translates to it):
+
+```
+public class ShopDb(DbContextOptions<ShopDb> options) : DbContext(options)
+{
+    public DbSet<Product> Products => Set<Product>();
+}
+
+// in Program.cs: builder.Services.AddDbContext<ShopDb>(o => o.UseSqlite("Data Source=shop.db"));
+
+app.MapGet("/products/cheap", async (ShopDb db) =>
+    await db.Products.Where(p => p.Price < 10).OrderBy(p => p.Name).ToListAsync());
+```
+
+**Migrations** (`dotnet ef migrations add Initial`, `dotnet ef database update`) create and evolve the database schema from your classes. EF Core works with SQL Server, PostgreSQL, SQLite and MySQL.
+
+## Professional habits for APIs
+
+- Return the **right status codes**: 200 OK, 201 Created (with a Location), 204 No Content, 400 Bad Request (invalid input), 401/403 (not logged in / not allowed), 404 Not Found, 500 for bugs.
+- **Validate** all input; never trust the client.
+- Keep handlers thin: business logic belongs in services you can unit test.
+- Never put secrets (connection strings, API keys) in source code: use configuration, environment variables or a secret store.
+- Document the API with **OpenAPI** (`builder.Services.AddOpenApi()`).
+
+~~~check
+? Which status code fits "created a new todo"?
++ 201 Created
+- 200 OK
+- 204 No Content
+- 302 Found
+> Usually with a Location header pointing at the new resource.
+~~~
+
+📚 **Go deeper:** Microsoft Learn, "Minimal APIs quick reference", "Dependency injection in ASP.NET Core", "ASP.NET Core middleware" and "Entity Framework Core: getting started"; *Programming C#*, chapter 15 (Web Services) shows the 2002 approach that ASP.NET Core replaced.
+--- goals
+- describe HTTP requests and responses, and call services with HttpClient
+- explain what ASP.NET Core minimal APIs do: routing, binding, JSON, DI and middleware
+- outline how EF Core maps classes and LINQ to a database
+- choose the right HTTP status codes and keep secrets out of code
+--- quiz
+? Why reuse one HttpClient instead of creating one per request?
++ Creating many exhausts network sockets
+- HttpClient can only be created once
+- It's required by HTTP
+- To share cookies only
+> Or use IHttpClientFactory.
+? In `app.MapGet("/todos/{id:int}", (int id) => ...)`, where does `id` come from?
++ The route: the path segment, which must be an integer
+- The query string only
+- The request body
+- A database
+> Model binding fills parameters.
+? What does a middleware do?
++ Handles every request on its way through a pipeline (logging, auth, errors…)
+- Stores data in a database
+- Compiles the app
+- Serializes JSON only
+> Each one can act before and after the next.
+? Where should a database password go?
++ In configuration, environment variables or a secret store
+- In the source code
+- In a comment
+- In the URL
+> Never commit secrets.
+--- exercise code csharp
+::prompt
+Build the heart of a web framework: a **router**. `Router.Map(method, pattern, handler)` registers a route; patterns may contain parameters like `/todos/{id}`. `Router.Handle(method, path)`:
+
+- splits the path and each pattern on `/` (ignoring leading and trailing slashes); a pattern matches when it has the same number of segments and every non-parameter segment is equal; parameter segments go into a `Dictionary<string, string>` passed to the handler;
+- returns the handler's `Response` for the first route that matches path **and** method;
+- returns `405 method not allowed` when some route matched the path but not the method, and `404 not found` when none matched the path.
+
+The todo API on top is given. Expected output:
+
+```
+GET /todos/2 -> 200 {"id":2,"title":"Build an API","done":false}
+GET /todos/9 -> 404 not found
+POST /todos/Write tests -> 201 {"id":3,"title":"Write tests","done":false}
+DELETE /todos/1 -> 204
+GET /todos -> 200 [{"id":2,"title":"Build an API","done":false},{"id":3,"title":"Write tests","done":false}]
+PUT /todos/2 -> 405 method not allowed
+GET /users -> 404 not found
+```
+::starter
+using System.Text.Json;
+
+var todos = new Dictionary<int, Todo> { [1] = new(1, "Learn C#", true), [2] = new(2, "Build an API", false) };
+int nextId = 3;
+var app = new Router();
+app.Map("GET", "/todos", _ => Response.Json(todos.Values.OrderBy(t => t.Id)));
+app.Map("GET", "/todos/{id}", r => int.TryParse(r["id"], out int id) && todos.TryGetValue(id, out var t) ? Response.Json(t) : Response.NotFound());
+app.Map("POST", "/todos/{title}", r =>
+{
+    var todo = new Todo(nextId++, r["title"], false);
+    todos[todo.Id] = todo;
+    return new Response(201, JsonSerializer.Serialize(todo, Response.Options));
+});
+app.Map("DELETE", "/todos/{id}", r => int.TryParse(r["id"], out int id) && todos.Remove(id) ? new Response(204, "") : Response.NotFound());
+
+string[] requests = { "GET /todos/2", "GET /todos/9", "POST /todos/Write tests", "DELETE /todos/1", "GET /todos", "PUT /todos/2", "GET /users" };
+foreach (string request in requests)
+{
+    string[] parts = request.Split(' ', 2);
+    Response res = app.Handle(parts[0], parts[1]);
+    Console.WriteLine($"{request} -> {res.Status} {res.Body}");
+}
+
+record Todo(int Id, string Title, bool Done);
+
+record Response(int Status, string Body)
+{
+    public static readonly JsonSerializerOptions Options = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+    public static Response Json(object value) => new(200, JsonSerializer.Serialize(value, Options));
+    public static Response NotFound() => new(404, "not found");
+}
+
+class Router
+{
+    public void Map(string method, string pattern, Func<Dictionary<string, string>, Response> handler) { }
+
+    public Response Handle(string method, string path) => Response.NotFound();
+}
+::solution
+using System.Text.Json;
+
+var todos = new Dictionary<int, Todo> { [1] = new(1, "Learn C#", true), [2] = new(2, "Build an API", false) };
+int nextId = 3;
+var app = new Router();
+app.Map("GET", "/todos", _ => Response.Json(todos.Values.OrderBy(t => t.Id)));
+app.Map("GET", "/todos/{id}", r => int.TryParse(r["id"], out int id) && todos.TryGetValue(id, out var t) ? Response.Json(t) : Response.NotFound());
+app.Map("POST", "/todos/{title}", r =>
+{
+    var todo = new Todo(nextId++, r["title"], false);
+    todos[todo.Id] = todo;
+    return new Response(201, JsonSerializer.Serialize(todo, Response.Options));
+});
+app.Map("DELETE", "/todos/{id}", r => int.TryParse(r["id"], out int id) && todos.Remove(id) ? new Response(204, "") : Response.NotFound());
+
+string[] requests = { "GET /todos/2", "GET /todos/9", "POST /todos/Write tests", "DELETE /todos/1", "GET /todos", "PUT /todos/2", "GET /users" };
+foreach (string request in requests)
+{
+    string[] parts = request.Split(' ', 2);
+    Response res = app.Handle(parts[0], parts[1]);
+    Console.WriteLine($"{request} -> {res.Status} {res.Body}");
+}
+
+record Todo(int Id, string Title, bool Done);
+
+record Response(int Status, string Body)
+{
+    public static readonly JsonSerializerOptions Options = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+    public static Response Json(object value) => new(200, JsonSerializer.Serialize(value, Options));
+    public static Response NotFound() => new(404, "not found");
+}
+
+class Router
+{
+    private readonly List<(string Method, string[] Segments, Func<Dictionary<string, string>, Response> Handler)> _routes = new();
+
+    public void Map(string method, string pattern, Func<Dictionary<string, string>, Response> handler) =>
+        _routes.Add((method, pattern.Trim('/').Split('/'), handler));
+
+    public Response Handle(string method, string path)
+    {
+        string[] segments = path.Trim('/').Split('/');
+        bool pathMatched = false;
+        foreach (var route in _routes)
+        {
+            Dictionary<string, string>? values = Match(route.Segments, segments);
+            if (values == null) continue;
+            pathMatched = true;
+            if (route.Method == method) return route.Handler(values);
+        }
+        return pathMatched ? new Response(405, "method not allowed") : Response.NotFound();
+    }
+
+    private static Dictionary<string, string>? Match(string[] pattern, string[] segments)
+    {
+        if (pattern.Length != segments.Length) return null;
+        var values = new Dictionary<string, string>();
+        for (int i = 0; i < pattern.Length; i++)
+        {
+            if (pattern[i].StartsWith('{') && pattern[i].EndsWith('}')) values[pattern[i][1..^1]] = segments[i];
+            else if (pattern[i] != segments[i]) return null;
+        }
+        return values;
+    }
+}
+::expected
+GET /todos/2 -> 200 {"id":2,"title":"Build an API","done":false}
+GET /todos/9 -> 404 not found
+POST /todos/Write tests -> 201 {"id":3,"title":"Write tests","done":false}
+DELETE /todos/1 -> 204
+GET /todos -> 200 [{"id":2,"title":"Build an API","done":false},{"id":3,"title":"Write tests","done":false}]
+PUT /todos/2 -> 405 method not allowed
+GET /users -> 404 not found
+::hints
+- Store routes as a list of tuples: `(string Method, string[] Segments, Func<...> Handler)`.
+- `pattern.Trim('/').Split('/')` turns `/todos/{id}` into `["todos", "{id}"]`; `"{id}"[1..^1]` is `id`.
+- Remember whether any route matched the path, so you can choose between 405 and 404.
+--- cards
+HTTP request / response :: Method + path + headers + body / status code + headers + body.
+HttpClient :: Calls web services; create once and reuse.
+Minimal API :: app.MapGet("/path/{id}", handler) in ASP.NET Core.
+Model binding :: Fills handler parameters from route, query, headers or JSON body.
+Middleware :: Pipeline every request passes through (logging, auth, errors).
+EF Core :: ORM: DbContext + DbSet<T>, LINQ translated to SQL, migrations.
+Status codes :: 200 OK, 201 Created, 204 No Content, 400, 401/403, 404, 500.
+
+=== lesson cs-m6-test | Module 6 test | 150 | exam
+This test covers Module 6: async and await, parallelism and thread safety, files and JSON, projects and namespaces, reflection and attributes, testing, and web APIs.
+
+Before you start, check that you can:
+
+- run independent async operations together and handle their errors;
+- protect shared data from races;
+- read and write files and JSON safely;
+- explain how frameworks use attributes, reflection and dependency injection.
+--- goals
+- combine async I/O, JSON, LINQ and dependency injection in one program
+--- quiz
+? Which runs two independent downloads at the same time?
++ var a = DownloadAsync(x); var b = DownloadAsync(y); await Task.WhenAll(a, b);
+- await DownloadAsync(x); await DownloadAsync(y);
+- DownloadAsync(x).Wait(); DownloadAsync(y).Wait();
+- async void Download()
+> Start both, then await both.
+? Two threads run `balance -= amount` on the same account. What's needed?
++ A lock (or another synchronisation) around the check and the update
+- Nothing; C# makes it atomic
+- async/await
+- A static field
+> Read-modify-write is a race.
+? What does `File.ReadLines` return?
++ A lazy IEnumerable<string> that reads as you iterate
+- A string with the whole file
+- A string[] loaded at once
+- A Task
+> Good for large files.
+? How do test frameworks find `[Fact]` methods?
++ With reflection, reading attributes from the compiled types
+- From a list in a config file
+- From the method names
+- The compiler calls them
+> Attributes are metadata.
+--- exercise code csharp
+::prompt
+**Order import pipeline.** A JSON Lines file (one JSON object per line) holds orders. Complete `OrderImporter.ImportAsync(path)`:
+
+1. read all lines **asynchronously**;
+2. parse each line into an `Order` (case-insensitive property names); a line that isn't valid JSON is rejected as `line <n>: invalid JSON`; an order with a blank customer as `line <n>: customer is required`; one with an amount ≤ 0 as `line <n>: amount must be positive` (lines count from 1);
+3. look up the EUR rate of each **distinct** currency of the valid orders through the injected `IRateService`, **all at the same time** (`Task.WhenAll`);
+4. return an `ImportReport` with the valid orders, the errors, each customer's total in EUR sorted by total (highest first, then by name), and the number of rate lookups made.
+
+Expected output:
+
+```
+imported 4, rejected 3
+  line 3: invalid JSON
+  line 5: customer is required
+  line 7: amount must be positive
+cy: 180.00 EUR
+ada: 138.30 EUR
+bob: 72.45 EUR
+rate lookups: 3
+```
+::starter
+using System.Text.Json;
+
+string path = Path.Combine(Path.GetTempPath(), $"devquest-orders-{Guid.NewGuid():N}.jsonl");
+await File.WriteAllLinesAsync(path, new[]
+{
+    """{"id":1,"customer":"ada","amount":120.00,"currency":"EUR"}""",
+    """{"id":2,"customer":"bob","amount":80.50,"currency":"USD"}""",
+    """not json at all""",
+    """{"id":3,"customer":"ada","amount":15.25,"currency":"GBP"}""",
+    """{"id":4,"customer":"","amount":10,"currency":"USD"}""",
+    """{"id":5,"customer":"cy","amount":200,"currency":"USD"}""",
+    """{"id":6,"customer":"bob","amount":-5,"currency":"EUR"}""",
+});
+try
+{
+    var importer = new OrderImporter(new FakeRates());
+    ImportReport report = await importer.ImportAsync(path);
+    Console.WriteLine($"imported {report.Orders.Count}, rejected {report.Errors.Count}");
+    foreach (string error in report.Errors) Console.WriteLine($"  {error}");
+    foreach (var (customer, total) in report.TotalsInEur) Console.WriteLine($"{customer}: {total:0.00} EUR");
+    Console.WriteLine($"rate lookups: {report.RateLookups}");
+}
+finally
+{
+    File.Delete(path);
+}
+
+record Order(int Id, string Customer, decimal Amount, string Currency);
+
+record ImportReport(List<Order> Orders, List<string> Errors, List<(string Customer, decimal Total)> TotalsInEur, int RateLookups);
+
+interface IRateService
+{
+    Task<decimal> ToEurAsync(string currency);
+}
+
+class FakeRates : IRateService
+{
+    private static readonly Dictionary<string, decimal> Rates = new() { ["EUR"] = 1m, ["USD"] = 0.9m, ["GBP"] = 1.2m };
+
+    public async Task<decimal> ToEurAsync(string currency)
+    {
+        await Task.Delay(20);
+        return Rates[currency];
+    }
+}
+
+class OrderImporter(IRateService rates)
+{
+    public Task<ImportReport> ImportAsync(string path) =>
+        Task.FromResult(new ImportReport(new List<Order>(), new List<string>(), new List<(string, decimal)>(), 0));
+}
+::solution
+using System.Text.Json;
+
+string path = Path.Combine(Path.GetTempPath(), $"devquest-orders-{Guid.NewGuid():N}.jsonl");
+await File.WriteAllLinesAsync(path, new[]
+{
+    """{"id":1,"customer":"ada","amount":120.00,"currency":"EUR"}""",
+    """{"id":2,"customer":"bob","amount":80.50,"currency":"USD"}""",
+    """not json at all""",
+    """{"id":3,"customer":"ada","amount":15.25,"currency":"GBP"}""",
+    """{"id":4,"customer":"","amount":10,"currency":"USD"}""",
+    """{"id":5,"customer":"cy","amount":200,"currency":"USD"}""",
+    """{"id":6,"customer":"bob","amount":-5,"currency":"EUR"}""",
+});
+try
+{
+    var importer = new OrderImporter(new FakeRates());
+    ImportReport report = await importer.ImportAsync(path);
+    Console.WriteLine($"imported {report.Orders.Count}, rejected {report.Errors.Count}");
+    foreach (string error in report.Errors) Console.WriteLine($"  {error}");
+    foreach (var (customer, total) in report.TotalsInEur) Console.WriteLine($"{customer}: {total:0.00} EUR");
+    Console.WriteLine($"rate lookups: {report.RateLookups}");
+}
+finally
+{
+    File.Delete(path);
+}
+
+record Order(int Id, string Customer, decimal Amount, string Currency);
+
+record ImportReport(List<Order> Orders, List<string> Errors, List<(string Customer, decimal Total)> TotalsInEur, int RateLookups);
+
+interface IRateService
+{
+    Task<decimal> ToEurAsync(string currency);
+}
+
+class FakeRates : IRateService
+{
+    private static readonly Dictionary<string, decimal> Rates = new() { ["EUR"] = 1m, ["USD"] = 0.9m, ["GBP"] = 1.2m };
+
+    public async Task<decimal> ToEurAsync(string currency)
+    {
+        await Task.Delay(20);
+        return Rates[currency];
+    }
+}
+
+class OrderImporter(IRateService rates)
+{
+    private static readonly JsonSerializerOptions Options = new() { PropertyNameCaseInsensitive = true };
+
+    public async Task<ImportReport> ImportAsync(string path)
+    {
+        var orders = new List<Order>();
+        var errors = new List<string>();
+        string[] lines = await File.ReadAllLinesAsync(path);
+        for (int i = 0; i < lines.Length; i++)
+        {
+            try
+            {
+                Order order = JsonSerializer.Deserialize<Order>(lines[i], Options)!;
+                if (string.IsNullOrWhiteSpace(order.Customer)) errors.Add($"line {i + 1}: customer is required");
+                else if (order.Amount <= 0) errors.Add($"line {i + 1}: amount must be positive");
+                else orders.Add(order);
+            }
+            catch (JsonException)
+            {
+                errors.Add($"line {i + 1}: invalid JSON");
+            }
+        }
+
+        string[] currencies = orders.Select(o => o.Currency).Distinct().ToArray();
+        decimal[] found = await Task.WhenAll(currencies.Select(rates.ToEurAsync));
+        Dictionary<string, decimal> rate = currencies.Zip(found).ToDictionary(p => p.First, p => p.Second);
+
+        var totals = orders
+            .GroupBy(o => o.Customer)
+            .Select(g => (Customer: g.Key, Total: g.Sum(o => o.Amount * rate[o.Currency])))
+            .OrderByDescending(t => t.Total)
+            .ThenBy(t => t.Customer)
+            .ToList();
+        return new ImportReport(orders, errors, totals, currencies.Length);
+    }
+}
+::expected
+imported 4, rejected 3
+  line 3: invalid JSON
+  line 5: customer is required
+  line 7: amount must be positive
+cy: 180.00 EUR
+ada: 138.30 EUR
+bob: 72.45 EUR
+rate lookups: 3
+::hints
+- `await File.ReadAllLinesAsync(path)` gives you the lines; catch `JsonException` around `Deserialize`.
+- `currencies.Select(rates.ToEurAsync)` starts every lookup; `Task.WhenAll` returns the rates in the same order, so `Zip` pairs them with the currencies.
+- `GroupBy(o => o.Customer)` then `Sum(o => o.Amount * rate[o.Currency])`.
