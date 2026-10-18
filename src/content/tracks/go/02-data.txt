@@ -1,0 +1,930 @@
+=== module Module 2 · Data, operators and text
+
+=== lesson go-types | Basic types and conversions | 65
+## Numbers
+
+Go's numeric types say exactly how much memory they use:
+
+| Type | Holds |
+|---|---|
+| `int` | whole numbers; 64 bits on modern computers (about ±9.2 × 10¹⁸). **Use it by default.** |
+| `int8`, `int16`, `int32`, `int64` | signed integers of a fixed size |
+| `uint`, `uint8` … `uint64` | unsigned (0 and up); `byte` is another name for `uint8` |
+| `float64` | decimal numbers with about 15–16 significant digits. **The default for decimals.** |
+| `float32` | less precise; used for graphics and big arrays |
+| `complex128` | complex numbers (`3 + 4i`), for science and signal processing |
+
+```go
+package main
+
+import (
+	"fmt"
+	"math"
+)
+
+func main() {
+	var small int8 = 127
+	small++ // integers wrap around silently when they overflow
+	fmt.Println("int8 after 127:", small)
+	fmt.Println("largest int64:", math.MaxInt64)
+
+	population := 8_100_000_000 // underscores make big numbers readable
+	hex, binary := 0xFF, 0b1010
+	fmt.Println(population, hex, binary)
+
+	x, y := 0.1, 0.2
+	fmt.Println(x + y, 0.1+0.2)              // float64 is a binary approximation; constants are exact
+	fmt.Println(math.Sqrt(2), math.Pi)       // the math package
+	fmt.Println(math.Inf(1), -math.Inf(1), math.NaN())
+
+	c := complex(3, 4)
+	fmt.Println(c, real(c), imag(c))
+}
+```
+
+Floating-point numbers can't represent most decimals exactly: with variables, `x + y` prints `0.30000000000000004`. The constant expression `0.1+0.2` prints `0.3` because the compiler computes constants exactly before converting them. For **money**, store whole cents in an `int64` (or use a decimal library such as `shopspring/decimal`).
+
+## Booleans and strings
+
+`bool` is `true` or `false`; Go never treats numbers as booleans (`if 1 {}` doesn't compile). `string` holds immutable text; the next lesson but one covers it in depth.
+
+## Conversions
+
+Go has **no automatic conversions** between types, not even from `int` to `float64`. You convert with the type's name, `T(value)`:
+
+```go
+package main
+
+import (
+	"fmt"
+	"strconv"
+)
+
+func main() {
+	items := 7
+	people := 2
+	fmt.Println(items / people)                   // 3: integer division
+	fmt.Println(float64(items) / float64(people)) // 3.5
+	price := 9.99
+	fmt.Println(int(price), int(-price)) // 9 -9: truncates toward zero
+	// int(9.99) with a constant doesn't compile: constants must convert exactly
+
+	// numbers <-> text: the strconv package
+	s := strconv.Itoa(42) + "!"
+	n, err := strconv.Atoi("123")
+	fmt.Println(s, n+1, err)
+	_, err = strconv.Atoi("12a")
+	fmt.Println(err)
+	f, _ := strconv.ParseFloat("2.75", 64)
+	fmt.Println(f * 2)
+	fmt.Println(strconv.FormatFloat(1.0/3, 'f', 3, 64))
+}
+```
+
+- `string(65)` does **not** give `"65"`: it's the character with code 65, `"A"` (and `go vet` warns). Use `strconv.Itoa`.
+- Parsing can fail, so `strconv.Atoi` returns **two values**: the number and an `error` (`nil` when it worked). You'll see this pattern everywhere in Go.
+
+## Type inference and untyped constants
+
+`x := 10` makes an `int`, `y := 2.5` a `float64`. Constants without a type (`const big = 1 << 40`) are exact and take a type only when used, so `float64(items) * 0.5` and `time.Second * 2` work without conversions.
+
+~~~check
+? With `x := 7.9`, what does `int(x)` evaluate to?
++ 7
+- 8
+- 7.9
+- It doesn't compile
+> Converting a float variable to int truncates toward zero (with a constant, int(7.9) is a compile error).
+~~~
+
+📚 **Go deeper:** A Tour of Go, "Basic types" and "Type conversions"; the strconv and math package docs; *The Go Programming Language*, chapter 3 (Basic Data Types).
+--- goals
+- choose between int, sized integers, float64 and the other numeric types
+- explain integer overflow and floating-point approximation
+- convert between numeric types explicitly with T(v)
+- convert between numbers and strings with strconv, checking the error
+--- quiz
+? Which type should you use for whole numbers unless you have a reason not to?
++ int
+- int32
+- uint8
+- float64
+> int matches the machine's word size.
+? What does `fmt.Println(7 / 2)` print?
++ 3
+- 3.5
+- 4
+- 3.0
+> Both operands are integers.
+? How do you turn the int 42 into the string "42"?
++ strconv.Itoa(42)
+- string(42)
+- 42.String()
+- str(42)
+> string(42) gives the character "*".
+? What does `strconv.Atoi("12a")` return?
++ 0 and a non-nil error
+- 12 and nil
+- It panics
+- nil and 0
+> Always check the error.
+--- exercise code go
+::prompt
+A recipe for 4 people must be scaled to a different number of guests. Complete the program:
+
+- `guests := 6`;
+- for each ingredient, the scaled amount is `grams * guests / 4`, computed as a **float64** and printed with one decimal;
+- the number of whole eggs is `eggs * guests / 4` in **integer** arithmetic (it rounds down);
+- finally print the total weight converted to an `int` (truncated).
+
+```
+flour: 375.0 g
+sugar: 112.5 g
+butter: 187.5 g
+eggs: 4
+total: 675 g
+```
+
+Recipe for 4: flour 250 g, sugar 75 g, butter 125 g, 3 eggs.
+::starter
+package main
+
+import "fmt"
+
+func main() {
+	guests := 6
+	flour, sugar, butter := 250, 75, 125
+	eggs := 3
+	fmt.Println(guests, flour, sugar, butter, eggs)
+}
+::solution
+package main
+
+import "fmt"
+
+func main() {
+	guests := 6
+	flour, sugar, butter := 250, 75, 125
+	eggs := 3
+	factor := float64(guests) / 4
+	f := float64(flour) * factor
+	s := float64(sugar) * factor
+	b := float64(butter) * factor
+	fmt.Printf("flour: %.1f g\n", f)
+	fmt.Printf("sugar: %.1f g\n", s)
+	fmt.Printf("butter: %.1f g\n", b)
+	fmt.Println("eggs:", eggs*guests/4)
+	fmt.Println("total:", int(f+s+b), "g")
+}
+::expected
+flour: 375.0 g
+sugar: 112.5 g
+butter: 187.5 g
+eggs: 4
+total: 675 g
+::variants
+guests := 6 => guests := 10
+::hints
+- `factor := float64(guests) / 4` avoids integer division.
+- `eggs*guests/4` stays an int: 18 / 4 = 4.
+- `int(f+s+b)` truncates the total.
+--- cards
+int / float64 :: The default types for whole and decimal numbers.
+Overflow :: Integers wrap around silently (int8 127 + 1 = -128).
+T(v) :: Explicit conversion: float64(n), int(x) truncates.
+strconv :: Itoa, Atoi (returns value, error), ParseFloat, FormatFloat.
+Money :: Store cents in int64, not float64.
+
+=== lesson go-operators | Operators and expressions | 55
+## Arithmetic and assignment
+
+```go
+package main
+
+import (
+	"fmt"
+	"math"
+)
+
+func main() {
+	a, b := 17, 5
+	fmt.Println(a+b, a-b, a*b, a/b, a%b) // 22 12 85 3 2
+	fmt.Println(-17/5, -17%5)            // -3 -2: division truncates toward zero
+	fmt.Println(17.0 / 5)                // 3.4
+
+	total := 10
+	total += 5 // also -=, *=, /=, %=
+	total *= 2
+	total++ // a statement, not an expression: x = y++ doesn't compile
+	fmt.Println(total)
+
+	fmt.Println(math.Pow(2, 10), math.Floor(2.7), math.Round(2.5), math.Abs(-3.2))
+	fmt.Println(max(3, 9, 4), min(2.5, 1.5)) // built in since Go 1.21
+}
+```
+
+`++` and `--` exist only as statements (`i++`), never inside expressions, and there's no prefix form. That removes a whole category of confusing C code.
+
+## Comparison and logic
+
+`==`, `!=`, `<`, `<=`, `>`, `>=` compare values of the **same type**, and give a `bool`. `&&` (and), `||` (or) and `!` (not) combine booleans and **short-circuit**: the right side is only evaluated when needed.
+
+```go
+package main
+
+import "fmt"
+
+func main() {
+	age, member := 17, true
+	hasTicket := age >= 18 || member
+	fmt.Println("can enter:", hasTicket)
+
+	names := []string{}
+	// safe: names[0] is never evaluated when the list is empty
+	if len(names) > 0 && names[0] == "Ada" {
+		fmt.Println("first is Ada")
+	}
+	fmt.Println("strings compare by content:", "go" == "g"+"o", "apple" < "banana")
+}
+```
+
+## Bitwise operators
+
+Integers can also be manipulated bit by bit, which is common in networking, file formats, permissions and flags:
+
+| Operator | Meaning |
+|---|---|
+| `&` | AND |
+| `\|` | OR |
+| `^` | XOR (as a prefix: NOT) |
+| `&^` | AND NOT (bit clear) |
+| `<<`, `>>` | shift left / right |
+
+```go
+package main
+
+import "fmt"
+
+const (
+	Read  = 1 << iota // 1
+	Write             // 2
+	Exec              // 4
+)
+
+func main() {
+	perms := Read | Write
+	fmt.Printf("%03b can write: %t, can exec: %t\n", perms, perms&Write != 0, perms&Exec != 0)
+	perms &^= Write // remove Write
+	fmt.Printf("%03b\n", perms)
+	fmt.Println(1<<10, 1024>>3)
+}
+```
+
+## Precedence
+
+Go has only five levels of binary precedence: `* / % << >> & &^`, then `+ - | ^`, then comparisons, then `&&`, then `||`. When in doubt, add parentheses; `gofmt` shows precedence by removing spaces around tighter operators (`a*b + c`).
+
+~~~check
+? What does `-7 % 3` evaluate to in Go?
++ -1
+- 2
+- 1
+- -2
+> The remainder takes the sign of the dividend.
+~~~
+
+📚 **Go deeper:** go.dev/ref/spec ("Operators"); *The Go Programming Language*, sections 3.1 and 3.4.
+--- goals
+- use arithmetic, assignment, increment and decrement operators
+- predict integer division and remainder, including negative numbers
+- combine conditions with short-circuiting && and ||
+- set, test and clear flags with bitwise operators
+--- quiz
+? Which is valid Go?
++ i++
+- x := i++
+- ++i
+- i +++ 1
+> ++ is a statement only.
+? What does `max(3, 9, 4)` return?
++ 9
+- 3
+- It doesn't compile
+- 16
+> min and max are built in since Go 1.21.
+? Why doesn't `len(s) > 0 && s[0] == 'a'` panic on an empty string?
++ && stops after the first false operand
+- Strings can't be empty
+- Indexing an empty string returns 0
+- It does panic
+> Short-circuit evaluation.
+? What is `6 &^ 2`?
++ 4
+- 8
+- 2
+- 6
+> 110 with bit 010 cleared is 100.
+--- exercise code go
+::prompt
+Write a **change calculator**. A price of 7.35 was paid with 20.00. Working in **cents** (integers), print the change, then how many coins of 2.00, 1.00, 0.50, 0.20, 0.10 and 0.05 make it up, taking as many of the largest coin as possible each time (use `/` and `%`):
+
+```
+change: 12.65
+200: 6
+100: 0
+50: 1
+20: 0
+10: 1
+5: 1
+```
+
+Print the change with `fmt.Printf("change: %d.%02d\n", ...)`: `%02d` pads to two digits with zeros.
+::starter
+package main
+
+import "fmt"
+
+func main() {
+	priceCents := 735
+	paidCents := 2000
+	fmt.Println(paidCents - priceCents)
+}
+::solution
+package main
+
+import "fmt"
+
+func main() {
+	priceCents := 735
+	paidCents := 2000
+	change := paidCents - priceCents
+	fmt.Printf("change: %d.%02d\n", change/100, change%100)
+	rest := change
+	for _, coin := range []int{200, 100, 50, 20, 10, 5} {
+		fmt.Printf("%d: %d\n", coin, rest/coin)
+		rest %= coin
+	}
+}
+::expected
+change: 12.65
+200: 6
+100: 0
+50: 1
+20: 0
+10: 1
+5: 1
+::variants
+priceCents := 735 => priceCents := 1260
+::hints
+- `change/100` is the euros, `change%100` the cents.
+- For each coin, `rest/coin` coins fit, and `rest %= coin` keeps what's left.
+- A loop over `[]int{200, 100, 50, 20, 10, 5}` avoids repeating yourself (or write six pairs of lines).
+--- cards
+/ and % on ints :: Truncating division and remainder: -17/5 = -3, -17%5 = -2.
+i++ :: A statement only; no prefix form, not usable in expressions.
+&& / || :: Short-circuit: the right side runs only if needed.
+Bit flags :: Read = 1 << iota; set with |, test with &, clear with &^.
+min / max :: Built-in functions since Go 1.21.
+
+=== lesson go-strings | Strings, bytes and runes | 70
+## What a string really is
+
+A Go `string` is an **immutable sequence of bytes**, almost always UTF-8 text. ASCII characters take 1 byte, but `é` takes 2 and many emoji 4. So:
+
+- `len(s)` is the number of **bytes**, not characters;
+- `s[i]` is a **byte** (`uint8`);
+- a Unicode character is a **rune** (an alias of `int32`), written in single quotes: `'é'`;
+- `for i, r := range s` walks the string **rune by rune**, with `i` the byte position.
+
+```go
+package main
+
+import (
+	"fmt"
+	"unicode/utf8"
+)
+
+func main() {
+	word := "café"
+	fmt.Println(len(word), utf8.RuneCountInString(word)) // 5 bytes, 4 runes
+	fmt.Println(word[0], string(word[0]))                // 99 c
+	for i, r := range word {
+		fmt.Printf("%d:%c(%d) ", i, r, r)
+	}
+	fmt.Println()
+	runes := []rune(word)                   // convert to runes to index by character
+	fmt.Println(string(runes[3]), len(runes))
+	fmt.Println(word[1:3])                  // slicing is by byte: "af"
+}
+```
+
+Strings can't be changed in place: `s[0] = 'C'` doesn't compile. Build a new string instead.
+
+## The strings package
+
+```go
+package main
+
+import (
+	"fmt"
+	"strings"
+)
+
+func main() {
+	s := "  Go is fun, Go is fast  "
+	t := strings.TrimSpace(s)
+	fmt.Println(strings.ToUpper(t))
+	fmt.Println(strings.Contains(t, "fast"), strings.HasPrefix(t, "Go"), strings.Index(t, "fun"))
+	fmt.Println(strings.Count(t, "Go"), strings.ReplaceAll(t, "Go", "Gopher"))
+	parts := strings.Split("red,green,blue", ",")
+	fmt.Println(len(parts), parts[1], strings.Join(parts, " | "))
+	fmt.Println(strings.Fields("  many   spaces here "))
+	fmt.Println(strings.Repeat("ab", 3), strings.EqualFold("GO", "go"))
+	before, after, found := strings.Cut("key=value", "=")
+	fmt.Println(before, after, found)
+}
+```
+
+## Building strings efficiently
+
+Because strings are immutable, `s += x` in a loop copies the whole string each time. For many pieces, use a **`strings.Builder`**:
+
+```go
+package main
+
+import (
+	"fmt"
+	"strings"
+)
+
+func main() {
+	var sb strings.Builder
+	for i := 1; i <= 5; i++ {
+		fmt.Fprintf(&sb, "%d squared is %d; ", i, i*i)
+	}
+	sb.WriteString("done")
+	fmt.Println(sb.String())
+	fmt.Println(sb.Len(), "bytes")
+}
+```
+
+`fmt.Fprintf` writes formatted text to anything that accepts writes; you'll meet that idea (the `io.Writer` interface) again in Module 5.
+
+## Raw strings and escapes
+
+Interpreted strings use double quotes and escapes (`\n`, `\t`, `\"`, `\\`, `\u00e9`). **Raw strings** use backticks: no escapes, and they can span lines, perfect for regular expressions, paths and templates:
+
+```go
+package main
+
+import "fmt"
+
+func main() {
+	path := `C:\Users\ada\notes.txt`
+	poem := `roses are red,
+violets are blue`
+	fmt.Println(path)
+	fmt.Println(poem)
+	fmt.Printf("%q\n", "tab\there")
+}
+```
+
+~~~check
+? What does `len("héllo")` return?
++ 6
+- 5
+- 4
+- 10
+> é is 2 bytes in UTF-8; len counts bytes.
+~~~
+
+📚 **Go deeper:** The Go Blog, "Strings, bytes, runes and characters in Go"; the strings, strconv and unicode/utf8 package docs; *The Go Programming Language*, section 3.5.
+--- goals
+- explain strings as immutable UTF-8 bytes, and the difference between bytes and runes
+- iterate over runes with range and convert to []rune when indexing characters
+- use the strings package: search, split, join, trim, replace, cut
+- build strings efficiently with strings.Builder
+- write raw strings with backticks
+--- quiz
+? What type is `s[0]` for a string s?
++ byte (uint8)
+- rune
+- string
+- char
+> Go has no char type; runes are int32.
+? How do you count the characters (not bytes) of a string?
++ utf8.RuneCountInString(s) or len([]rune(s))
+- len(s)
+- s.Length()
+- cap(s)
+> len counts bytes.
+? Why use strings.Builder in a loop?
++ Strings are immutable, so += copies the whole string every time
+- += doesn't work on strings
+- Builder sorts the text
+- It's required by fmt
+> Builder grows a buffer instead.
+? What does `strings.Cut("a=b", "=")` return?
++ "a", "b", true
+- ["a", "b"]
+- "a=b", "", false
+- "b", "a", true
+> before, after, found.
+--- exercise code go
+::prompt
+Write a **username generator**. For each full name: trim spaces, split into words with `strings.Fields`, and build the username from the first letter of every word except the last, plus the whole last word, all lower-case. Also count the runes of the original trimmed name. Print:
+
+```
+Ada King Lovelace -> aklovelace (17 characters)
+Grace Hopper -> ghopper (12 characters)
+José Ángel Núñez -> jánúñez (16 characters)
+```
+
+Careful: `José` starts with an ASCII letter, but `Ángel` doesn't: take the first **rune**, not the first byte.
+::starter
+package main
+
+import (
+	"fmt"
+	"strings"
+)
+
+func main() {
+	names := []string{"  Ada King Lovelace ", "Grace Hopper", " José Ángel Núñez"}
+	for _, name := range names {
+		fmt.Println(strings.TrimSpace(name))
+	}
+}
+::solution
+package main
+
+import (
+	"fmt"
+	"strings"
+	"unicode/utf8"
+)
+
+func main() {
+	names := []string{"  Ada King Lovelace ", "Grace Hopper", " José Ángel Núñez"}
+	for _, name := range names {
+		full := strings.TrimSpace(name)
+		fmt.Printf("%s -> %s (%d characters)\n", full, username(full), utf8.RuneCountInString(full))
+	}
+}
+
+func username(full string) string {
+	words := strings.Fields(full)
+	var sb strings.Builder
+	for _, w := range words[:len(words)-1] {
+		sb.WriteRune([]rune(w)[0])
+	}
+	sb.WriteString(words[len(words)-1])
+	return strings.ToLower(sb.String())
+}
+::expected
+Ada King Lovelace -> aklovelace (17 characters)
+Grace Hopper -> ghopper (12 characters)
+José Ángel Núñez -> jánúñez (16 characters)
+::hints
+- `words[:len(words)-1]` is every word except the last.
+- `[]rune(w)[0]` is the first character; `sb.WriteRune` appends it.
+- `strings.ToLower` handles accented letters too.
+--- cards
+string :: Immutable UTF-8 bytes; len counts bytes.
+byte / rune :: uint8 / int32 (a Unicode code point, 'é').
+range over a string :: Yields byte index and rune.
+strings package :: Contains, Index, Split, Join, Fields, TrimSpace, ReplaceAll, Cut, EqualFold.
+strings.Builder :: Efficient string building: WriteString, WriteRune, Fprintf(&sb, ...).
+Raw string :: `backticks`: no escapes, multi-line.
+
+=== lesson go-input | Reading input | 55
+## Reading lines with bufio.Scanner
+
+Programs read **standard input** (what the user types, or a file piped in with `prog < data.txt`) through `os.Stdin`. The robust way is a **`bufio.Scanner`**, which reads one line at a time:
+
+```go
+// stdin: Ada | 36
+package main
+
+import (
+	"bufio"
+	"fmt"
+	"os"
+	"strconv"
+	"strings"
+)
+
+func main() {
+	in := bufio.NewScanner(os.Stdin)
+
+	fmt.Print("Name: ")
+	in.Scan()
+	name := strings.TrimSpace(in.Text())
+
+	fmt.Print("Age: ")
+	in.Scan()
+	age, err := strconv.Atoi(strings.TrimSpace(in.Text()))
+	if err != nil {
+		fmt.Println("\nthat's not a number:", err)
+		return
+	}
+	fmt.Printf("\nHello %s, next year you'll be %d.\n", name, age+1)
+}
+```
+
+- `in.Scan()` reads the next line and returns `false` at the end of the input; `in.Text()` returns the line without its line break.
+- Everything typed is text: convert it with `strconv`, and **check the error**.
+- In DevQuest the input you type in the box isn't echoed, which is why the example prints a line break before its answer.
+
+## Reading until the end
+
+A loop `for in.Scan() { ... }` processes every line, which is how command-line filters work:
+
+```go
+// stdin: 12 | 7 | oops | 30
+package main
+
+import (
+	"bufio"
+	"fmt"
+	"os"
+	"strconv"
+)
+
+func main() {
+	in := bufio.NewScanner(os.Stdin)
+	sum, count := 0, 0
+	for in.Scan() {
+		n, err := strconv.Atoi(in.Text())
+		if err != nil {
+			fmt.Printf("skipping %q\n", in.Text())
+			continue
+		}
+		sum += n
+		count++
+	}
+	fmt.Println("count:", count, "sum:", sum)
+}
+```
+
+## fmt.Scan
+
+`fmt.Scan(&a, &b)` reads space-separated values straight into variables (the `&` passes their addresses, see pointers in Module 4). It's handy for quick programs and contest problems, but its error handling is clumsy for real input, so prefer `bufio.Scanner`.
+
+~~~check
+? What does `in.Scan()` return when there is no more input?
++ false
+- an empty string
+- an error value
+- it panics
+> Then the for loop ends.
+~~~
+
+📚 **Go deeper:** the bufio and os package docs (Scanner, Stdin); *The Go Programming Language*, section 1.3 (Finding Duplicate Lines).
+--- goals
+- read lines from standard input with bufio.Scanner
+- convert input with strconv and handle invalid input
+- process all input lines with a for in.Scan() loop
+- know when fmt.Scan is good enough
+--- quiz
+? Which value represents the keyboard (standard input)?
++ os.Stdin
+- fmt.In
+- bufio.Keyboard
+- os.Args
+> os.Args holds command-line arguments.
+? What does `in.Text()` return?
++ The last line read, without the line break
+- All remaining input
+- The next word only
+- A number
+> Call it after Scan.
+? Why pass `&n` to `fmt.Scan`?
++ So Scan can store the value in the variable n
+- To print n
+- To make n constant
+- It's a typo
+> & takes the variable's address.
+--- exercise code go
+::prompt
+Write a **tip splitter**. Read three lines: the bill, the tip percentage and the number of people (use `strconv.ParseFloat` for the bill and `strconv.Atoi` for the others). Print the prompts with `fmt.Print` (no line break), then a line break, then:
+
+```
+Bill: Tip %: People:
+Tip: 9.00
+Total: 69.00
+Per person: 23.00
+```
+
+That's for the input 60, 15 and 3. If the number of people isn't a positive integer, print `invalid number of people` instead of the three result lines.
+::stdin
+60
+15
+3
+::starter
+package main
+
+import (
+	"bufio"
+	"fmt"
+	"os"
+)
+
+func main() {
+	in := bufio.NewScanner(os.Stdin)
+	fmt.Print("Bill: ")
+	in.Scan()
+	fmt.Println(in.Text())
+}
+::solution
+package main
+
+import (
+	"bufio"
+	"fmt"
+	"os"
+	"strconv"
+	"strings"
+)
+
+func main() {
+	in := bufio.NewScanner(os.Stdin)
+	read := func(prompt string) string {
+		fmt.Print(prompt)
+		in.Scan()
+		return strings.TrimSpace(in.Text())
+	}
+	bill, _ := strconv.ParseFloat(read("Bill: "), 64)
+	tipPercent, _ := strconv.Atoi(read("Tip %: "))
+	people, err := strconv.Atoi(read("People: "))
+	fmt.Println()
+	if err != nil || people <= 0 {
+		fmt.Println("invalid number of people")
+		return
+	}
+	tip := bill * float64(tipPercent) / 100
+	fmt.Printf("Tip: %.2f\n", tip)
+	fmt.Printf("Total: %.2f\n", bill+tip)
+	fmt.Printf("Per person: %.2f\n", (bill+tip)/float64(people))
+}
+::expected
+Bill: Tip %: People:
+Tip: 9.00
+Total: 69.00
+Per person: 23.00
+::cases
+>>> 100
+>>> 20
+>>> 4
+Bill: Tip %: People:
+Tip: 20.00
+Total: 120.00
+Per person: 30.00
+>>> 50
+>>> 10
+>>> zero
+Bill: Tip %: People:
+invalid number of people
+::hints
+- A small helper `read := func(prompt string) string { ... }` avoids repeating Print, Scan and Text.
+- `strconv.Atoi` returns an error for "zero": check `err != nil || people <= 0`.
+- `fmt.Println()` prints just the line break after the prompts.
+--- cards
+bufio.Scanner :: in := bufio.NewScanner(os.Stdin); in.Scan(); in.Text().
+for in.Scan() :: Reads every line until the end of input.
+strconv.Atoi / ParseFloat :: Convert text to numbers; check the error.
+fmt.Scan(&x) :: Quick space-separated input into variables.
+
+=== lesson go-m2-test | Module 2 test | 130 | exam
+This test covers Module 2: numeric types and conversions, operators, strings, bytes and runes, and reading input.
+
+Before you start, check that you can:
+
+- convert between ints, floats and strings safely;
+- predict integer division, remainders and short-circuit logic;
+- work with UTF-8 text rune by rune;
+- read and validate typed input.
+--- goals
+- process text and numbers from input correctly
+--- quiz
+? What does `fmt.Println(float64(7) / 2)` print?
++ 3.5
+- 3
+- 3.50
+- 4
+> One operand is a float64.
+? What does `len([]rune("añb"))` return?
++ 3
+- 4
+- 2
+- 6
+> ñ is one rune (two bytes).
+? Which is the idiomatic check after `n, err := strconv.Atoi(s)`?
++ if err != nil { ... }
+- if n == -1 { ... }
+- try { ... } catch { ... }
+- if err == 0 { ... }
+> nil means success.
+? What does `strings.Fields(" a  b ")` return?
++ ["a" "b"]
+- ["" "a" "" "b" ""]
+- "a b"
+- ["a  b"]
+> It splits on runs of whitespace.
+--- exercise code go
+::prompt
+**Grade statistics.** Read lines of the form `name score` until the end of the input. Skip blank lines; for a line whose score isn't an integer from 0 to 100, print `invalid line: "<line>"` (with `%q`). Then print the number of valid scores, the average with one decimal, and the best student (the first one wins a tie):
+
+```
+invalid line: "Bob abc"
+invalid line: "Cy 120"
+students: 3
+average: 79.0
+best: Dana (91)
+```
+
+That's for the input below. Use `strings.Fields` to split each line (a line must have exactly two fields).
+::stdin
+Ada 85
+Bob abc
+
+Cy 120
+Dana 91
+Eve 61
+::starter
+package main
+
+import (
+	"bufio"
+	"fmt"
+	"os"
+)
+
+func main() {
+	in := bufio.NewScanner(os.Stdin)
+	for in.Scan() {
+		fmt.Println(in.Text())
+	}
+}
+::solution
+package main
+
+import (
+	"bufio"
+	"fmt"
+	"os"
+	"strconv"
+	"strings"
+)
+
+func main() {
+	in := bufio.NewScanner(os.Stdin)
+	count, sum := 0, 0
+	bestName, bestScore := "", -1
+	for in.Scan() {
+		line := strings.TrimSpace(in.Text())
+		if line == "" {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) != 2 {
+			fmt.Printf("invalid line: %q\n", line)
+			continue
+		}
+		score, err := strconv.Atoi(fields[1])
+		if err != nil || score < 0 || score > 100 {
+			fmt.Printf("invalid line: %q\n", line)
+			continue
+		}
+		count++
+		sum += score
+		if score > bestScore {
+			bestName, bestScore = fields[0], score
+		}
+	}
+	fmt.Println("students:", count)
+	if count == 0 {
+		return
+	}
+	fmt.Printf("average: %.1f\n", float64(sum)/float64(count))
+	fmt.Printf("best: %s (%d)\n", bestName, bestScore)
+}
+::expected
+invalid line: "Bob abc"
+invalid line: "Cy 120"
+students: 3
+average: 79.0
+best: Dana (91)
+::cases
+>>> Zed 100
+>>> Amy 100
+>>> Kim 50 extra
+>>> Bob 7
+invalid line: "Kim 50 extra"
+students: 3
+average: 69.0
+best: Zed (100)
+::hints
+- `continue` skips to the next line.
+- Validate in one place: `err != nil || score < 0 || score > 100`.
+- Use `>` (not `>=`) when comparing with the best score, so the first student keeps a tie.
