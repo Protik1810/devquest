@@ -1,0 +1,1174 @@
+=== module Module 3 · Control flow, functions and errors
+
+=== lesson go-control | Decisions: if and switch | 60
+## if
+
+```go
+package main
+
+import (
+	"fmt"
+	"strconv"
+)
+
+func main() {
+	temperature := 31
+	if temperature > 30 {
+		fmt.Println("hot")
+	} else if temperature > 15 {
+		fmt.Println("mild")
+	} else {
+		fmt.Println("cold")
+	}
+
+	// an if can start with a short statement; n and err exist only inside the if/else
+	if n, err := strconv.Atoi("42"); err != nil {
+		fmt.Println("not a number")
+	} else {
+		fmt.Println("double:", n*2)
+	}
+}
+```
+
+- No parentheses around the condition, and the **braces are required**, even for one line.
+- The condition must be a `bool`: `if count {}` doesn't compile; write `if count != 0 {}`.
+- The **`if init; condition`** form keeps short-lived variables (typically `err`) out of the rest of the function.
+
+## The early-return style
+
+Go code avoids deep nesting: handle the special or error case first and **return**, so the normal path stays at the left margin ("the happy path is not indented"):
+
+```go
+package main
+
+import "fmt"
+
+func shippingCost(weightKg float64, express bool) float64 {
+	if weightKg <= 0 {
+		return 0
+	}
+	cost := 4.90
+	if weightKg > 2 {
+		cost += (weightKg - 2) * 1.50
+	}
+	if express {
+		cost *= 2
+	}
+	return cost
+}
+
+func main() {
+	fmt.Printf("%.2f %.2f %.2f\n", shippingCost(1, false), shippingCost(5, false), shippingCost(5, true))
+}
+```
+
+## switch
+
+```go
+package main
+
+import (
+	"fmt"
+	"time"
+)
+
+func main() {
+	day := "sat"
+	switch day {
+	case "sat", "sun": // several values in one case
+		fmt.Println("weekend")
+	case "fri":
+		fmt.Println("almost weekend")
+	default:
+		fmt.Println("weekday")
+	}
+
+	score := 83
+	switch { // no value: each case is a condition, like an if/else chain
+	case score >= 90:
+		fmt.Println("A")
+	case score >= 80:
+		fmt.Println("B")
+	default:
+		fmt.Println("C or below")
+	}
+
+	switch hour := time.Date(2026, 1, 1, 14, 0, 0, 0, time.UTC).Hour(); {
+	case hour < 12:
+		fmt.Println("morning")
+	case hour < 18:
+		fmt.Println("afternoon")
+	}
+}
+```
+
+Unlike C and Java, Go's `switch` **doesn't fall through**: only the matching case runs, so no `break` is needed. If you really want to continue into the next case, write `fallthrough` (rarely used). Cases are tested top to bottom, and case values can be any expression, not just constants.
+
+~~~check
+? In Go, what happens after a matching `case` finishes?
++ The switch ends; the next case doesn't run
+- The next case runs too, unless there's a break
+- The default case runs
+- The switch starts again
+> Use fallthrough to continue explicitly.
+~~~
+
+📚 **Go deeper:** A Tour of Go, "Flow control statements"; Effective Go, "Control structures"; *The Go Programming Language*, section 1.8.
+--- goals
+- write if, else if and else with a bool condition and required braces
+- use the if init; condition form to scope variables
+- prefer early returns over deep nesting
+- use switch with values, several values per case, and condition-only switch
+- explain why Go's switch doesn't fall through
+--- quiz
+? Which is valid Go?
++ if x > 0 { fmt.Println(x) }
+- if (x > 0) fmt.Println(x)
+- if x > 0: fmt.Println(x)
+- if x { fmt.Println(x) } where x is an int
+> Braces are required and conditions must be bool.
+? Where can `err` be used in `if v, err := f(); err != nil { ... } else { ... }`?
++ Only inside the if and else blocks
+- Everywhere in the function
+- Only in the else block
+- Nowhere
+> The init statement's variables are scoped to the if.
+? What does a `switch` with no value do?
++ Runs the first case whose condition is true
+- Never runs any case
+- Compares with 0
+- It doesn't compile
+> A clean replacement for long if/else chains.
+--- exercise code go
+::prompt
+Write `func classify(year int) string` that returns:
+
+- `"invalid"` for years before 1 (check this first and return early);
+- `"leap"` when the year is divisible by 4, except century years (divisible by 100), which are leap years only when divisible by 400;
+- `"common"` otherwise.
+
+Use a condition-only `switch`. Then `main` prints, for each year, `<year>: <kind>`:
+
+```
+2024: leap
+1900: common
+2000: leap
+2026: common
+0: invalid
+```
+::starter
+package main
+
+import "fmt"
+
+func classify(year int) string {
+	return "common"
+}
+
+func main() {
+	for _, y := range []int{2024, 1900, 2000, 2026, 0} {
+		fmt.Printf("%d: %s\n", y, classify(y))
+	}
+}
+::solution
+package main
+
+import "fmt"
+
+func classify(year int) string {
+	if year < 1 {
+		return "invalid"
+	}
+	switch {
+	case year%400 == 0:
+		return "leap"
+	case year%100 == 0:
+		return "common"
+	case year%4 == 0:
+		return "leap"
+	default:
+		return "common"
+	}
+}
+
+func main() {
+	for _, y := range []int{2024, 1900, 2000, 2026, 0} {
+		fmt.Printf("%d: %s\n", y, classify(y))
+	}
+}
+::expected
+2024: leap
+1900: common
+2000: leap
+2026: common
+0: invalid
+::hints
+- Order matters: test `% 400` before `% 100`, and `% 100` before `% 4`.
+- Each case can simply `return`.
+--- cards
+if init; cond :: if v, err := f(); err != nil { } — variables scoped to the if.
+Early return :: Handle special cases first and return; keep the happy path unindented.
+switch :: No fallthrough by default; case a, b: matches several values.
+switch { } :: Condition-only switch: a clean if/else chain.
+
+=== lesson go-loops | Loops: for and range | 60
+## One loop keyword
+
+Go has only **`for`**, in three shapes:
+
+```go
+package main
+
+import "fmt"
+
+func main() {
+	// 1. classic: init; condition; post
+	for i := 0; i < 3; i++ {
+		fmt.Print(i, " ")
+	}
+	fmt.Println()
+
+	// 2. condition only: Go's "while"
+	n := 1
+	for n < 100 {
+		n *= 3
+	}
+	fmt.Println("first power of 3 over 100:", n)
+
+	// 3. no condition: loop forever, until break or return
+	attempts := 0
+	for {
+		attempts++
+		if attempts == 4 {
+			break
+		}
+	}
+	fmt.Println("attempts:", attempts)
+
+	// range over an integer (Go 1.22+): 0, 1, 2, 3, 4
+	for i := range 5 {
+		fmt.Print(i*i, " ")
+	}
+	fmt.Println()
+}
+```
+
+## range
+
+`for ... range` walks through a collection, giving an index (or key) and a value:
+
+```go
+package main
+
+import "fmt"
+
+func main() {
+	fruits := []string{"apple", "kiwi", "plum"}
+	for i, f := range fruits {
+		fmt.Println(i, f)
+	}
+	for _, f := range fruits { // _ ignores the index
+		fmt.Print(len(f), " ")
+	}
+	fmt.Println()
+
+	ages := map[string]int{"ada": 36}
+	for name, age := range ages {
+		fmt.Println(name, age)
+	}
+
+	for i, r := range "añb" { // strings: byte position and rune
+		fmt.Printf("%d:%c ", i, r)
+	}
+	fmt.Println()
+}
+```
+
+The value in a `range` loop is a **copy** of the element: changing it doesn't change the slice. To modify elements, assign through the index: `fruits[i] = ...`. Maps are iterated in a **random order** on purpose, so programs don't depend on it (sort the keys when order matters).
+
+## break, continue and labels
+
+`continue` skips to the next iteration; `break` leaves the loop. In nested loops, a **label** says which loop you mean:
+
+```go
+package main
+
+import "fmt"
+
+func main() {
+	grid := [][]int{{1, 2, 3}, {4, -1, 6}, {7, 8, 9}}
+	sum := 0
+search:
+	for r, row := range grid {
+		for c, v := range row {
+			if v < 0 {
+				fmt.Printf("negative value at row %d, column %d\n", r, c)
+				break search // leaves both loops
+			}
+			sum += v
+		}
+	}
+	fmt.Println("sum before it:", sum)
+
+	for i := range 10 {
+		if i%3 != 0 {
+			continue
+		}
+		fmt.Print(i, " ")
+	}
+	fmt.Println()
+}
+```
+
+~~~check
+? How do you write a "while" loop in Go?
++ for condition { ... }
+- while condition { ... }
+- loop condition { ... }
+- do { ... } while condition
+> for with only a condition.
+~~~
+
+📚 **Go deeper:** A Tour of Go, "For" and "Range"; go.dev/ref/spec ("For statements"); *The Go Programming Language*, section 1.2.
+--- goals
+- write the three forms of for, and range over an integer
+- iterate over slices, maps and strings with range
+- explain that range values are copies and map order is random
+- use break, continue and labeled break in nested loops
+--- quiz
+? What does `for i := range 3` iterate over?
++ 0, 1, 2
+- 1, 2, 3
+- 0, 1, 2, 3
+- It doesn't compile
+> Range over int is Go 1.22+.
+? Changing `v` in `for _, v := range nums { v *= 2 }` does what to nums?
++ Nothing: v is a copy
+- Doubles every element
+- Doesn't compile
+- Doubles only the first element
+> Use nums[i] *= 2.
+? In what order does range visit a map's keys?
++ An unspecified, randomised order
+- Sorted order
+- Insertion order
+- Reverse order
+> Sort the keys yourself when you need an order.
+? What does `break outer` do?
++ Leaves the loop labeled outer
+- Jumps to the start of outer
+- Exits the program
+- Skips one iteration of outer
+> Labels name loops.
+--- exercise code go
+::prompt
+**FizzBuzz with a twist.** Go through the numbers 1 to 30: for multiples of 3 collect `Fizz`, for multiples of 5 `Buzz`, for both `FizzBuzz`, and the number itself otherwise. But **stop** (with `break`) at the first number above 15 that is a multiple of 7, without collecting it. Print the collected words on one line separated by spaces, then `stopped at <n>`:
+
+```
+1 2 Fizz 4 Buzz Fizz 7 8 Fizz Buzz 11 Fizz 13 14 FizzBuzz 16 17 Fizz 19 Buzz
+stopped at 21
+```
+::starter
+package main
+
+import "fmt"
+
+func main() {
+	for i := 1; i <= 30; i++ {
+		fmt.Print(i, " ")
+	}
+	fmt.Println()
+}
+::solution
+package main
+
+import (
+	"fmt"
+	"strings"
+)
+
+func main() {
+	var words []string
+	stop := 0
+	for i := 1; i <= 30; i++ {
+		if i > 15 && i%7 == 0 {
+			stop = i
+			break
+		}
+		switch {
+		case i%15 == 0:
+			words = append(words, "FizzBuzz")
+		case i%3 == 0:
+			words = append(words, "Fizz")
+		case i%5 == 0:
+			words = append(words, "Buzz")
+		default:
+			words = append(words, fmt.Sprint(i))
+		}
+	}
+	fmt.Println(strings.Join(words, " "))
+	fmt.Println("stopped at", stop)
+}
+::expected
+1 2 Fizz 4 Buzz Fizz 7 8 Fizz Buzz 11 Fizz 13 14 FizzBuzz 16 17 Fizz 19 Buzz
+stopped at 21
+::hints
+- Check the stop condition first: `if i > 15 && i%7 == 0 { ...; break }`.
+- Test 15 before 3 and 5.
+- Collect the words and join them with `strings.Join`, so there's no trailing space.
+--- cards
+for :: Go's only loop: for i := 0; i < n; i++ / for cond / for { }.
+range :: Index and value (slices), key and value (maps), position and rune (strings), 0..n-1 (ints).
+Range value :: A copy; modify via the index.
+Labeled break :: break outer leaves an outer loop.
+
+=== lesson go-functions | Functions, closures and defer | 75
+## Declaring functions
+
+```go
+package main
+
+import "fmt"
+
+// parameters of the same type can share it: (a, b int)
+func add(a, b int) int {
+	return a + b
+}
+
+// several results: very common in Go
+func divmod(a, b int) (int, int) {
+	return a / b, a % b
+}
+
+// named results act as variables; a bare return returns them
+func stats(nums []float64) (minimum, maximum float64) {
+	minimum, maximum = nums[0], nums[0]
+	for _, n := range nums[1:] {
+		minimum = min(minimum, n)
+		maximum = max(maximum, n)
+	}
+	return
+}
+
+// variadic: any number of ints, received as a slice
+func sum(nums ...int) int {
+	total := 0
+	for _, n := range nums {
+		total += n
+	}
+	return total
+}
+
+func main() {
+	fmt.Println(add(2, 3))
+	q, r := divmod(17, 5)
+	fmt.Println(q, r)
+	lo, hi := stats([]float64{3.5, -1, 8})
+	fmt.Println(lo, hi)
+	fmt.Println(sum(), sum(1, 2, 3))
+	values := []int{4, 5, 6}
+	fmt.Println(sum(values...)) // spread a slice into a variadic call
+}
+```
+
+Arguments are always **passed by value** (copied). Slices and maps contain references to their data, so a function can change their *elements*; Module 4 explains exactly why. There are no default parameter values and no overloading: one name, one function.
+
+## Functions are values
+
+Functions can be stored in variables, passed to other functions and returned from them. A **function literal** (anonymous function) that uses variables from its surroundings is a **closure**: it keeps those variables alive.
+
+```go
+package main
+
+import (
+	"fmt"
+	"strings"
+)
+
+func apply(words []string, f func(string) string) []string {
+	out := make([]string, 0, len(words))
+	for _, w := range words {
+		out = append(out, f(w))
+	}
+	return out
+}
+
+func counter() func() int {
+	count := 0
+	return func() int {
+		count++ // the closure keeps its own count
+		return count
+	}
+}
+
+func main() {
+	fmt.Println(apply([]string{"go", "is", "fun"}, strings.ToUpper))
+	fmt.Println(apply([]string{"go", "is"}, func(s string) string { return s + "!" }))
+
+	next := counter()
+	other := counter()
+	fmt.Println(next(), next(), next(), other())
+}
+```
+
+## Recursion
+
+A function may call itself. Each call gets its own variables; a **base case** stops the recursion:
+
+```go
+package main
+
+import "fmt"
+
+func factorial(n int) int {
+	if n <= 1 {
+		return 1
+	}
+	return n * factorial(n-1)
+}
+
+func fib(n int, memo map[int]int) int {
+	if n < 2 {
+		return n
+	}
+	if v, ok := memo[n]; ok {
+		return v
+	}
+	memo[n] = fib(n-1, memo) + fib(n-2, memo)
+	return memo[n]
+}
+
+func main() {
+	fmt.Println(factorial(10), fib(80, map[int]int{}))
+}
+```
+
+## defer
+
+**`defer`** schedules a call to run when the surrounding function returns, however it returns (normally, early, or by panicking). It's Go's way to guarantee clean-up: closing files, unlocking mutexes, printing a summary. Deferred calls run in **reverse order** (last in, first out), and their arguments are evaluated immediately:
+
+```go
+package main
+
+import "fmt"
+
+func process(name string) {
+	fmt.Println("open", name)
+	defer fmt.Println("close", name) // runs when process returns
+	for i := 1; i <= 3; i++ {
+		defer fmt.Println("deferred", i)
+	}
+	fmt.Println("working on", name)
+}
+
+func main() {
+	process("report.txt")
+}
+```
+
+~~~check
+? In what order do deferred calls run?
++ Last deferred, first run (reverse order)
+- In the order they were deferred
+- In random order
+- Only the last one runs
+> Like a stack.
+~~~
+
+📚 **Go deeper:** A Tour of Go, "Functions" and "Function closures"; Effective Go, "Functions" and "Defer"; *The Go Programming Language*, chapter 5 (Functions).
+--- goals
+- declare functions with several parameters and results, named results and variadic parameters
+- pass functions as values and write closures
+- write recursive functions with a base case and memoization
+- guarantee clean-up with defer and predict the order of deferred calls
+--- quiz
+? How does a Go function return two values?
++ func f() (int, error) { return 1, nil }
+- func f() int, error { return [1, nil] }
+- func f() -> (int, error)
+- It can't; use a struct
+> Multiple results are idiomatic.
+? What does `sum(values...)` do?
++ Passes the elements of the slice as the variadic arguments
+- Passes the slice as one argument
+- Copies the slice three times
+- It doesn't compile
+> ... spreads a slice.
+? What does a closure capture?
++ The variables it uses from its surrounding scope, which it keeps alive
+- Copies of all global variables
+- Nothing
+- Only constants
+> Each counter() call gets its own count.
+? When does a deferred call run?
++ When the surrounding function returns, even by panicking
+- Immediately
+- At the end of the program
+- At the end of the current loop iteration
+> Perfect for clean-up.
+--- exercise code go
+::prompt
+Write a small **function toolkit**:
+
+- `func filter(nums []int, keep func(int) bool) []int` returns the numbers for which `keep` returns true;
+- `func multiplier(factor int) func(int) int` returns a closure that multiplies by `factor`;
+- `func average(nums ...int) (float64, bool)` returns the average and `true`, or `0, false` when there are no numbers.
+
+`main` is given. Expected output:
+
+```
+evens: [4 8 2 10]
+big: [7 8 10]
+tripled: 21 30
+average: 6.20 true
+empty: 0.00 false
+```
+::starter
+package main
+
+import "fmt"
+
+func filter(nums []int, keep func(int) bool) []int {
+	return nums
+}
+
+func multiplier(factor int) func(int) int {
+	return func(n int) int { return n }
+}
+
+func average(nums ...int) (float64, bool) {
+	return 0, false
+}
+
+func main() {
+	nums := []int{4, 7, 8, 2, 10, 1}
+	fmt.Println("evens:", filter(nums, func(n int) bool { return n%2 == 0 }))
+	fmt.Println("big:", filter(nums, func(n int) bool { return n > 5 }))
+	triple := multiplier(3)
+	fmt.Println("tripled:", triple(7), triple(10))
+	avg, ok := average(nums[:5]...)
+	fmt.Printf("average: %.2f %t\n", avg, ok)
+	avg, ok = average()
+	fmt.Printf("empty: %.2f %t\n", avg, ok)
+}
+::solution
+package main
+
+import "fmt"
+
+func filter(nums []int, keep func(int) bool) []int {
+	var out []int
+	for _, n := range nums {
+		if keep(n) {
+			out = append(out, n)
+		}
+	}
+	return out
+}
+
+func multiplier(factor int) func(int) int {
+	return func(n int) int { return n * factor }
+}
+
+func average(nums ...int) (float64, bool) {
+	if len(nums) == 0 {
+		return 0, false
+	}
+	total := 0
+	for _, n := range nums {
+		total += n
+	}
+	return float64(total) / float64(len(nums)), true
+}
+
+func main() {
+	nums := []int{4, 7, 8, 2, 10, 1}
+	fmt.Println("evens:", filter(nums, func(n int) bool { return n%2 == 0 }))
+	fmt.Println("big:", filter(nums, func(n int) bool { return n > 5 }))
+	triple := multiplier(3)
+	fmt.Println("tripled:", triple(7), triple(10))
+	avg, ok := average(nums[:5]...)
+	fmt.Printf("average: %.2f %t\n", avg, ok)
+	avg, ok = average()
+	fmt.Printf("empty: %.2f %t\n", avg, ok)
+}
+::expected
+evens: [4 8 2 10]
+big: [7 8 10]
+tripled: 21 30
+average: 6.20 true
+empty: 0.00 false
+::hints
+- `out = append(out, n)` grows a slice (more in Module 4).
+- The closure uses `factor` from `multiplier`'s parameters.
+- Return early with `0, false` for an empty input.
+--- cards
+Multiple results :: func f() (int, error); q, r := divmod(a, b).
+Variadic :: func sum(nums ...int); call sum(s...) to spread a slice.
+Function value :: func(int) bool can be stored and passed like any value.
+Closure :: A function literal that captures surrounding variables and keeps them alive.
+defer :: Runs a call when the function returns; LIFO; arguments evaluated at once.
+
+=== lesson go-error-handling | Errors are values | 80
+## The error type
+
+In Go, a function that can fail returns an **`error`** as its last result. `nil` means success; anything else describes what went wrong. The caller checks it immediately:
+
+```go
+package main
+
+import (
+	"errors"
+	"fmt"
+	"strconv"
+)
+
+func parseAge(text string) (int, error) {
+	age, err := strconv.Atoi(text)
+	if err != nil {
+		return 0, fmt.Errorf("parse age %q: %w", text, err) // add context, wrap the cause
+	}
+	if age < 0 || age > 150 {
+		return 0, errors.New("age out of range")
+	}
+	return age, nil
+}
+
+func main() {
+	for _, input := range []string{"36", "abc", "200"} {
+		age, err := parseAge(input)
+		if err != nil {
+			fmt.Println("error:", err)
+			continue
+		}
+		fmt.Println("age:", age)
+	}
+}
+```
+
+- **`errors.New("message")`** makes a simple error; **`fmt.Errorf`** formats one.
+- The verb **`%w`** **wraps** another error: the message includes it, and the original can still be found later.
+- Error messages are lower-case without a final period, because they're often joined: `parse age "abc": strconv.Atoi: parsing "abc": invalid syntax`.
+- `if err != nil { return ..., err }` appears constantly in Go code. It's verbose, but every failure point is visible, and each layer can add context.
+
+## Checking which error happened
+
+**Sentinel errors** are package-level error values that callers compare against with **`errors.Is`**, which also looks inside wrapped errors. **`errors.As`** finds an error of a specific *type* in the chain (custom error types arrive with structs and methods in Modules 4 and 5):
+
+```go
+package main
+
+import (
+	"errors"
+	"fmt"
+	"io/fs"
+	"os"
+)
+
+var ErrNotFound = errors.New("not found")
+var ErrNoStock = errors.New("out of stock")
+
+var stock = map[string]int{"pen": 3, "lamp": 0}
+
+func reserve(item string) error {
+	n, ok := stock[item]
+	if !ok {
+		return fmt.Errorf("reserve %s: %w", item, ErrNotFound)
+	}
+	if n == 0 {
+		return fmt.Errorf("reserve %s: %w", item, ErrNoStock)
+	}
+	stock[item] = n - 1
+	return nil
+}
+
+func main() {
+	for _, item := range []string{"pen", "lamp", "desk"} {
+		err := reserve(item)
+		switch {
+		case err == nil:
+			fmt.Println("reserved", item)
+		case errors.Is(err, ErrNoStock):
+			fmt.Println("try again later:", err)
+		case errors.Is(err, ErrNotFound):
+			fmt.Println("unknown item:", err)
+		}
+	}
+
+	_, err := os.Open("missing-file.txt")
+	var pathErr *fs.PathError
+	if errors.As(err, &pathErr) {
+		fmt.Println("operation:", pathErr.Op, "| path:", pathErr.Path, "| is not-exist:", errors.Is(err, fs.ErrNotExist))
+	}
+}
+```
+
+Never compare error **messages** as strings: they change. Compare with `errors.Is` and `errors.As`.
+
+## panic and recover
+
+**`panic`** stops normal execution: deferred calls run, then the program crashes with a stack trace. Use it only for **bugs and impossible situations** (an index that can't be out of range, a broken invariant), never for expected failures like bad input or missing files.
+
+**`recover`**, called inside a deferred function, stops a panic and returns its value. Servers use it so that one bad request doesn't bring down the whole process; ordinary code almost never needs it:
+
+```go
+package main
+
+import "fmt"
+
+func safeDivide(a, b int) (result int, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("recovered: %v", r)
+		}
+	}()
+	return a / b, nil
+}
+
+func main() {
+	fmt.Println(safeDivide(10, 2))
+	fmt.Println(safeDivide(1, 0))
+}
+```
+
+Here the deferred closure sets the **named result** `err`, which is how a recovered panic becomes an ordinary error.
+
+~~~check
+? What does `%w` do in `fmt.Errorf("load: %w", err)`?
++ Includes err in the message and wraps it so errors.Is/As can find it
+- Prints a warning
+- Ignores err
+- Panics with err
+> %v would only copy the message.
+~~~
+
+📚 **Go deeper:** The Go Blog, "Error handling and Go" and "Working with Errors in Go 1.13"; Effective Go, "Errors" and "Panic"; *The Go Programming Language*, sections 5.4 and 5.9–5.10.
+--- goals
+- return and check errors with the (value, error) pattern
+- create errors with errors.New and fmt.Errorf, and wrap them with %w
+- recognise errors with sentinel values, errors.Is and errors.As
+- reserve panic for bugs, and convert a panic into an error with recover
+--- quiz
+? What does a nil error mean?
++ The operation succeeded
+- The operation failed
+- The error is unknown
+- The program will panic
+> Check err != nil.
+? How should you check whether err (possibly wrapped) is ErrNotFound?
++ errors.Is(err, ErrNotFound)
+- err.Error() == "not found"
+- err == "not found"
+- errors.As(err, ErrNotFound)
+> errors.Is looks through the wrapping chain.
+? When is panic appropriate?
++ For bugs and impossible situations, not expected failures
+- For invalid user input
+- For a missing file
+- Whenever a function fails
+> Return errors for expected failures.
+? Where must recover be called to stop a panic?
++ Inside a deferred function
+- At the start of main
+- Right after the panic line
+- In any function
+> Only deferred calls run during a panic.
+--- exercise code go
+::prompt
+Write a **config value parser**. `func parseSetting(line string) (string, int, error)` parses lines like `timeout=30`:
+
+- without `=`, return the error `missing "=" in "<line>"`;
+- with an empty key, return the sentinel `ErrEmptyKey` wrapped as `line "<line>": empty key` (use `%w`);
+- when the value isn't an integer, return `setting <key>: <strconv error>` with the strconv error wrapped (`%w`);
+- otherwise the key, the value and `nil`.
+
+`main` is given: it uses `errors.Is` to count empty keys and `errors.As` with `*strconv.NumError` to print the bad value. Expected output:
+
+```
+timeout = 30
+error: missing "=" in "verbose"
+error: line "=5": empty key
+error: setting retries: strconv.Atoi: parsing "three": invalid syntax
+  bad number: "three"
+port = 8080
+empty keys: 1
+```
+::starter
+package main
+
+import (
+	"errors"
+	"fmt"
+	"strconv"
+)
+
+var ErrEmptyKey = errors.New("empty key")
+
+func parseSetting(line string) (string, int, error) {
+	return "", 0, nil
+}
+
+func main() {
+	empty := 0
+	for _, line := range []string{"timeout=30", "verbose", "=5", "retries=three", "port=8080"} {
+		key, value, err := parseSetting(line)
+		if err != nil {
+			fmt.Println("error:", err)
+			if errors.Is(err, ErrEmptyKey) {
+				empty++
+			}
+			var numErr *strconv.NumError
+			if errors.As(err, &numErr) {
+				fmt.Printf("  bad number: %q\n", numErr.Num)
+			}
+			continue
+		}
+		fmt.Println(key, "=", value)
+	}
+	fmt.Println("empty keys:", empty)
+}
+::solution
+package main
+
+import (
+	"errors"
+	"fmt"
+	"strconv"
+	"strings"
+)
+
+var ErrEmptyKey = errors.New("empty key")
+
+func parseSetting(line string) (string, int, error) {
+	key, value, found := strings.Cut(line, "=")
+	if !found {
+		return "", 0, fmt.Errorf("missing \"=\" in %q", line)
+	}
+	if key == "" {
+		return "", 0, fmt.Errorf("line %q: %w", line, ErrEmptyKey)
+	}
+	n, err := strconv.Atoi(value)
+	if err != nil {
+		return "", 0, fmt.Errorf("setting %s: %w", key, err)
+	}
+	return key, n, nil
+}
+
+func main() {
+	empty := 0
+	for _, line := range []string{"timeout=30", "verbose", "=5", "retries=three", "port=8080"} {
+		key, value, err := parseSetting(line)
+		if err != nil {
+			fmt.Println("error:", err)
+			if errors.Is(err, ErrEmptyKey) {
+				empty++
+			}
+			var numErr *strconv.NumError
+			if errors.As(err, &numErr) {
+				fmt.Printf("  bad number: %q\n", numErr.Num)
+			}
+			continue
+		}
+		fmt.Println(key, "=", value)
+	}
+	fmt.Println("empty keys:", empty)
+}
+::expected
+timeout = 30
+error: missing "=" in "verbose"
+error: line "=5": empty key
+error: setting retries: strconv.Atoi: parsing "three": invalid syntax
+  bad number: "three"
+port = 8080
+empty keys: 1
+::hints
+- `strings.Cut(line, "=")` returns the key, the value and whether `=` was found.
+- `%q` adds the quotes around the line for you.
+- Wrapping with `%w` is what lets `errors.Is` and `errors.As` in `main` find the original errors.
+--- cards
+error :: The last result of a function that can fail; nil means success.
+errors.New / fmt.Errorf :: Create errors; %w wraps a cause.
+Sentinel error :: var ErrNotFound = errors.New("not found"); check with errors.Is.
+errors.As :: Finds an error of a given type in the chain: var pe *fs.PathError; errors.As(err, &pe).
+panic / recover :: For bugs; recover in a deferred function turns a panic into a normal flow.
+
+=== lesson go-m3-test | Module 3 test | 140 | exam
+This test covers Module 3: if and switch, loops and range, functions and closures, defer, and error handling.
+
+Before you start, check that you can:
+
+- write decisions and loops without deep nesting;
+- write functions with several results, closures and defer;
+- return, wrap and check errors.
+--- goals
+- combine control flow, functions and errors in one program
+--- quiz
+? What prints `3 2 1`?
++ for i := 1; i <= 3; i++ { defer fmt.Print(i, " ") }
+- for i := 3; i > 0; i++ { fmt.Print(i, " ") }
+- defer for i := range 3 { fmt.Print(i) }
+- for i := range 3 { fmt.Print(i, " ") }
+> Deferred calls run in reverse order when the function returns.
+? What's the idiomatic way to stop at the first error?
++ if err != nil { return err }
+- try { ... } catch (e) { ... }
+- panic(err) every time
+- ignore it with _
+> Return it, usually with context.
+? What's wrong with `if strings.Contains(err.Error(), "not found")`?
++ It depends on the message text; use errors.Is with a sentinel
+- Nothing
+- Error() doesn't exist
+- Contains can't search errors
+> Messages change; values don't.
+--- exercise code go
+::prompt
+**A tiny calculator.** Write `func eval(expr string) (float64, error)` for expressions of the form `<number> <op> <number>` (three fields separated by spaces), with `+ - * /`:
+
+- not exactly three fields → `want "a op b", got "<expr>"`;
+- an operand that isn't a number → `bad operand "<text>": <strconv error>` (wrapped with `%w`);
+- an unknown operator → `unknown operator "<op>"`;
+- division by zero → the sentinel `ErrDivByZero` (`division by zero`).
+
+`main` is given; it reads one expression per line from the input and prints the result with `%g` or `error: <err>`, and finally how many divisions by zero there were (checked with `errors.Is`):
+
+```
+2 + 3 = 5
+10 / 4 = 2.5
+error: division by zero
+error: unknown operator "^"
+error: bad operand "x": strconv.ParseFloat: parsing "x": invalid syntax
+error: want "a op b", got "7 *"
+1.5 * -2 = -3
+divisions by zero: 1
+```
+::stdin
+2 + 3
+10 / 4
+1 / 0
+2 ^ 8
+x - 1
+7 *
+1.5 * -2
+::starter
+package main
+
+import (
+	"bufio"
+	"errors"
+	"fmt"
+	"os"
+)
+
+var ErrDivByZero = errors.New("division by zero")
+
+func eval(expr string) (float64, error) {
+	return 0, nil
+}
+
+func main() {
+	in := bufio.NewScanner(os.Stdin)
+	zeros := 0
+	for in.Scan() {
+		expr := in.Text()
+		v, err := eval(expr)
+		if err != nil {
+			fmt.Println("error:", err)
+			if errors.Is(err, ErrDivByZero) {
+				zeros++
+			}
+			continue
+		}
+		fmt.Printf("%s = %g\n", expr, v)
+	}
+	fmt.Println("divisions by zero:", zeros)
+}
+::solution
+package main
+
+import (
+	"bufio"
+	"errors"
+	"fmt"
+	"os"
+	"strconv"
+	"strings"
+)
+
+var ErrDivByZero = errors.New("division by zero")
+
+func eval(expr string) (float64, error) {
+	f := strings.Fields(expr)
+	if len(f) != 3 {
+		return 0, fmt.Errorf("want \"a op b\", got %q", expr)
+	}
+	a, err := number(f[0])
+	if err != nil {
+		return 0, err
+	}
+	b, err := number(f[2])
+	if err != nil {
+		return 0, err
+	}
+	switch f[1] {
+	case "+":
+		return a + b, nil
+	case "-":
+		return a - b, nil
+	case "*":
+		return a * b, nil
+	case "/":
+		if b == 0 {
+			return 0, ErrDivByZero
+		}
+		return a / b, nil
+	}
+	return 0, fmt.Errorf("unknown operator %q", f[1])
+}
+
+func number(text string) (float64, error) {
+	v, err := strconv.ParseFloat(text, 64)
+	if err != nil {
+		return 0, fmt.Errorf("bad operand %q: %w", text, err)
+	}
+	return v, nil
+}
+
+func main() {
+	in := bufio.NewScanner(os.Stdin)
+	zeros := 0
+	for in.Scan() {
+		expr := in.Text()
+		v, err := eval(expr)
+		if err != nil {
+			fmt.Println("error:", err)
+			if errors.Is(err, ErrDivByZero) {
+				zeros++
+			}
+			continue
+		}
+		fmt.Printf("%s = %g\n", expr, v)
+	}
+	fmt.Println("divisions by zero:", zeros)
+}
+::expected
+2 + 3 = 5
+10 / 4 = 2.5
+error: division by zero
+error: unknown operator "^"
+error: bad operand "x": strconv.ParseFloat: parsing "x": invalid syntax
+error: want "a op b", got "7 *"
+1.5 * -2 = -3
+divisions by zero: 1
+::cases
+>>> 8 / 0
+>>> 0 / 8
+>>> 9 % 2
+error: division by zero
+0 / 8 = 0
+error: unknown operator "%"
+divisions by zero: 1
+::hints
+- `strings.Fields` splits on spaces; check `len(f) != 3` first.
+- A helper `number(text)` that wraps the strconv error avoids writing the same check twice.
+- Return `ErrDivByZero` itself (or wrapped) so `errors.Is` matches it.
