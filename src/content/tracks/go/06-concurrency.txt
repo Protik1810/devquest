@@ -1,0 +1,1700 @@
+=== module Module 6 · Concurrency
+
+=== lesson go-concurrency | Goroutines and WaitGroups | 75
+## Doing several things at once
+
+A **goroutine** is a function running concurrently with the rest of the program. You start one by putting **`go`** before a call. Goroutines are extremely cheap (a few kilobytes of stack that grows as needed), so a program can run hundreds of thousands of them; the Go runtime schedules them onto the CPU's cores.
+
+```go
+package main
+
+import (
+	"fmt"
+	"time"
+)
+
+func say(word string, times int) {
+	for i := 1; i <= times; i++ {
+		fmt.Println(word, i)
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func main() {
+	go say("goroutine", 3) // runs concurrently
+	say("main", 3)         // runs in the main goroutine
+	// when main returns, the program ends, even if other goroutines are still running
+}
+```
+
+The lines interleave differently from run to run: the order of concurrent work is **not deterministic**. And the program ends when `main` returns, killing any goroutines still running, so we need a way to **wait**.
+
+## sync.WaitGroup
+
+A `WaitGroup` counts running goroutines: `Add` before starting, `Done` when one finishes, `Wait` blocks until the count is back to zero. Since Go 1.25, **`wg.Go(f)`** does the `Add` and `Done` for you:
+
+```go
+package main
+
+import (
+	"fmt"
+	"sync"
+	"time"
+)
+
+func fetch(url string) string {
+	time.Sleep(50 * time.Millisecond) // pretend to download
+	return "content of " + url
+}
+
+func main() {
+	urls := []string{"a.example", "b.example", "c.example", "d.example"}
+	results := make([]string, len(urls)) // one slot per goroutine: no sharing
+
+	start := time.Now()
+	var wg sync.WaitGroup
+	for i, url := range urls {
+		wg.Go(func() { // Go 1.22+: i and url are fresh variables in each iteration
+			results[i] = fetch(url)
+		})
+	}
+	wg.Wait()
+
+	for _, r := range results {
+		fmt.Println(r)
+	}
+	fmt.Println("all done in about", time.Since(start).Round(50*time.Millisecond))
+}
+```
+
+Four 50 ms downloads finish in about 50 ms instead of 200, because they wait **at the same time**. Each goroutine writes only its own slot of `results`, so they never touch the same memory.
+
+The classic form, which you'll see in most existing code:
+
+```
+var wg sync.WaitGroup
+for _, job := range jobs {
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		process(job)
+	}()
+}
+wg.Wait()
+```
+
+## Concurrency is not parallelism
+
+**Concurrency** is about *structure*: several tasks in progress at once (waiting for the network while handling another request). **Parallelism** is about *execution*: tasks literally running at the same instant on different cores. Go's runtime runs goroutines in parallel on all cores (`runtime.GOMAXPROCS`), but goroutines help even on one core, because most programs spend their time waiting.
+
+## The golden rule
+
+When two goroutines access the same variable and at least one writes, you have a **data race**: the result is unpredictable and can be silently wrong. Either give each goroutine its own data (as above), **communicate through channels** (next lesson), or protect shared data with a **mutex** (lesson 4). Go's motto: *"Don't communicate by sharing memory; share memory by communicating."*
+
+~~~check
+? What happens to running goroutines when main returns?
++ They're stopped: the program exits
+- main waits for them automatically
+- They keep running in the background
+- They panic
+> Use a WaitGroup (or channels) to wait.
+~~~
+
+📚 **Go deeper:** A Tour of Go, "Goroutines"; Rob Pike's talk "Concurrency is not Parallelism"; the sync package docs; *The Go Programming Language*, chapter 8 (Goroutines and Channels).
+--- goals
+- start goroutines with go and explain why their order isn't deterministic
+- wait for goroutines with sync.WaitGroup (Add/Done/Wait and wg.Go)
+- give each goroutine its own data to avoid sharing
+- explain the difference between concurrency and parallelism, and what a data race is
+--- quiz
+? How do you start a function as a goroutine?
++ go process(x)
+- async process(x)
+- thread(process, x)
+- process(x).start()
+> One keyword.
+? Why give each goroutine its own slot in a results slice?
++ So no two goroutines write the same memory (no data race)
+- Slices can't be shared
+- It's faster to allocate
+- WaitGroup requires it
+> Distinct elements are distinct variables.
+? Since Go 1.22, what does each iteration of `for i, v := range xs` create?
++ New variables i and v, so closures capture the right values
+- One shared pair of variables
+- Copies of xs
+- A goroutine
+> Before 1.22, closures in goroutines often captured the last value.
+? What's a data race?
++ Two goroutines accessing the same variable at once, at least one writing
+- Two goroutines finishing at the same time
+- A slow goroutine
+- A deadlock
+> Results become unpredictable.
+--- exercise code go
+::prompt
+Check several "websites" **concurrently**. `check(url)` (given) takes some milliseconds and returns a status. Write `func checkAll(urls []string) []Result` that checks every URL in its own goroutine, waits with a `sync.WaitGroup`, and returns the results **in the same order as the URLs** (store each result at its index). `main` prints them and checks that the total time was well below the sum of the delays:
+
+```
+https://go.dev -> 200 (40ms)
+https://example.com -> 200 (90ms)
+https://broken.example -> 503 (60ms)
+https://slow.example -> 200 (40ms)
+concurrent: true
+```
+::starter
+package main
+
+import (
+	"fmt"
+	"strings"
+	"sync"
+	"time"
+)
+
+type Result struct {
+	URL    string
+	Status int
+	Took   time.Duration
+}
+
+func check(url string) Result {
+	ms := 40 + 10*len(strings.TrimPrefix(url, "https://"))%60
+	time.Sleep(time.Duration(ms) * time.Millisecond)
+	status := 200
+	if strings.Contains(url, "broken") {
+		status = 503
+	}
+	return Result{url, status, time.Duration(ms) * time.Millisecond}
+}
+
+func checkAll(urls []string) []Result {
+	var wg sync.WaitGroup
+	wg.Wait()
+	return nil
+}
+
+func main() {
+	urls := []string{"https://go.dev", "https://example.com", "https://broken.example", "https://slow.example"}
+	start := time.Now()
+	results := checkAll(urls)
+	elapsed := time.Since(start)
+	sum := time.Duration(0)
+	for _, r := range results {
+		fmt.Printf("%s -> %d (%v)\n", r.URL, r.Status, r.Took)
+		sum += r.Took
+	}
+	fmt.Println("concurrent:", elapsed < sum*3/4)
+}
+::solution
+package main
+
+import (
+	"fmt"
+	"strings"
+	"sync"
+	"time"
+)
+
+type Result struct {
+	URL    string
+	Status int
+	Took   time.Duration
+}
+
+func check(url string) Result {
+	ms := 40 + 10*len(strings.TrimPrefix(url, "https://"))%60
+	time.Sleep(time.Duration(ms) * time.Millisecond)
+	status := 200
+	if strings.Contains(url, "broken") {
+		status = 503
+	}
+	return Result{url, status, time.Duration(ms) * time.Millisecond}
+}
+
+func checkAll(urls []string) []Result {
+	results := make([]Result, len(urls))
+	var wg sync.WaitGroup
+	for i, url := range urls {
+		wg.Go(func() {
+			results[i] = check(url)
+		})
+	}
+	wg.Wait()
+	return results
+}
+
+func main() {
+	urls := []string{"https://go.dev", "https://example.com", "https://broken.example", "https://slow.example"}
+	start := time.Now()
+	results := checkAll(urls)
+	elapsed := time.Since(start)
+	sum := time.Duration(0)
+	for _, r := range results {
+		fmt.Printf("%s -> %d (%v)\n", r.URL, r.Status, r.Took)
+		sum += r.Took
+	}
+	fmt.Println("concurrent:", elapsed < sum*3/4)
+}
+::expected
+https://go.dev -> 200 (40ms)
+https://example.com -> 200 (90ms)
+https://broken.example -> 503 (60ms)
+https://slow.example -> 200 (40ms)
+concurrent: true
+::hints
+- Allocate `results := make([]Result, len(urls))` first.
+- `wg.Go(func() { results[i] = check(url) })` inside the loop, then `wg.Wait()`.
+- With the classic API: `wg.Add(1)` before `go func() { defer wg.Done(); ... }()`.
+--- cards
+go f() :: Starts f in a new goroutine.
+Goroutine :: A cheap, runtime-scheduled concurrent function.
+sync.WaitGroup :: Add / Done / Wait, or wg.Go(func) (Go 1.25+).
+Concurrency vs parallelism :: Structure (many tasks in progress) vs execution (simultaneous on cores).
+Data race :: Unsynchronised concurrent access with at least one write.
+
+=== lesson go-channels | Channels | 80
+## Typed pipes between goroutines
+
+A **channel** sends values from one goroutine to another, safely. `make(chan int)` creates one; `ch <- v` sends, `v := <-ch` receives. On an **unbuffered** channel a send waits until another goroutine receives, so the two meet: the channel both passes the data and **synchronises** them.
+
+```go
+package main
+
+import "fmt"
+
+func sum(nums []int, out chan<- int) { // chan<- : this function may only send
+	total := 0
+	for _, n := range nums {
+		total += n
+	}
+	out <- total
+}
+
+func main() {
+	nums := []int{7, 2, 8, -9, 4, 0}
+	results := make(chan int)
+	go sum(nums[:len(nums)/2], results)
+	go sum(nums[len(nums)/2:], results)
+	a, b := <-results, <-results // wait for both
+	fmt.Println(a, b, a+b)
+}
+```
+
+Direction types document intent and are checked by the compiler: `chan<- int` can only send, `<-chan int` can only receive.
+
+## Buffered channels, close and range
+
+A **buffered** channel (`make(chan T, n)`) holds up to `n` values: sends block only when it's full, receives only when it's empty. The sender **closes** the channel when there's nothing more to send; the receiver's `for v := range ch` loop then ends:
+
+```go
+package main
+
+import "fmt"
+
+func generate(n int) <-chan int {
+	out := make(chan int, 3)
+	go func() {
+		defer close(out) // tell receivers there's nothing more
+		for i := 1; i <= n; i++ {
+			out <- i
+		}
+	}()
+	return out
+}
+
+func main() {
+	for v := range generate(5) {
+		fmt.Print(v, " ")
+	}
+	fmt.Println()
+
+	ch := make(chan string, 2)
+	ch <- "a"
+	ch <- "b"
+	close(ch)
+	fmt.Println(len(ch), cap(ch))
+	v, ok := <-ch
+	fmt.Println(v, ok)
+	<-ch
+	v, ok = <-ch // closed and empty: zero value and false
+	fmt.Printf("%q %v\n", v, ok)
+}
+```
+
+Rules worth memorising: only the **sender** closes; sending on a closed channel **panics**; receiving from a closed channel returns the zero value immediately (with `ok == false`); a `nil` channel blocks forever.
+
+## Pipelines
+
+Channels connect stages, each in its own goroutine, like an assembly line. Each stage receives from the previous one and sends to the next:
+
+```go
+package main
+
+import (
+	"fmt"
+	"strings"
+)
+
+func words(text string) <-chan string {
+	out := make(chan string)
+	go func() {
+		defer close(out)
+		for _, w := range strings.Fields(text) {
+			out <- w
+		}
+	}()
+	return out
+}
+
+func upper(in <-chan string) <-chan string {
+	out := make(chan string)
+	go func() {
+		defer close(out)
+		for w := range in {
+			out <- strings.ToUpper(w)
+		}
+	}()
+	return out
+}
+
+func main() {
+	for w := range upper(words("share memory by communicating")) {
+		fmt.Println(w)
+	}
+}
+```
+
+## Worker pools: fan-out, fan-in
+
+To process many jobs with a fixed number of goroutines, start **N workers** that all receive from one jobs channel (*fan-out*), and send their results to one results channel (*fan-in*). Closing the results channel after all workers finish (WaitGroup) ends the final loop:
+
+```go
+package main
+
+import (
+	"fmt"
+	"slices"
+	"sync"
+)
+
+type result struct{ n, square int }
+
+func main() {
+	jobs := make(chan int)
+	results := make(chan result)
+
+	var wg sync.WaitGroup
+	for range 3 { // 3 workers
+		wg.Go(func() {
+			for n := range jobs {
+				results <- result{n, n * n}
+			}
+		})
+	}
+
+	go func() { // feed the jobs, then close
+		for n := 1; n <= 6; n++ {
+			jobs <- n
+		}
+		close(jobs)
+	}()
+
+	go func() { // close results once every worker is done
+		wg.Wait()
+		close(results)
+	}()
+
+	var got []result
+	for r := range results {
+		got = append(got, r)
+	}
+	slices.SortFunc(got, func(a, b result) int { return a.n - b.n }) // workers finish in any order
+	fmt.Println(got)
+}
+```
+
+~~~check
+? Who should close a channel?
++ The sender, when it has nothing more to send
+- The receiver, when it has read enough
+- Nobody: channels close themselves
+- Any goroutine, at any time
+> Sending on a closed channel panics.
+~~~
+
+📚 **Go deeper:** A Tour of Go, "Channels", "Buffered Channels", "Range and Close"; The Go Blog, "Go Concurrency Patterns: Pipelines and cancellation"; *The Go Programming Language*, sections 8.4–8.6.
+--- goals
+- send and receive on unbuffered and buffered channels
+- use channel direction types
+- close channels from the sender and receive with range and comma-ok
+- build pipelines and worker pools with fan-out and fan-in
+--- quiz
+? What does a send on an unbuffered channel wait for?
++ A receiver to take the value
+- Nothing
+- The channel to be closed
+- The buffer to empty
+> Unbuffered channels synchronise sender and receiver.
+? What does `v, ok := <-ch` give on a closed, empty channel?
++ The zero value and false
+- A panic
+- It blocks forever
+- The last value and true
+> ok tells you whether the value came from a send.
+? What happens if you send on a closed channel?
++ A panic
+- The value is dropped
+- It blocks
+- The channel reopens
+> Only the sender closes, once.
+? In a worker pool, when can the results channel be closed?
++ After every worker has finished (WaitGroup.Wait)
+- After the jobs channel is closed
+- Immediately
+- Never
+> Closing earlier would make a worker panic.
+--- exercise code go
+::prompt
+Build a three-stage **pipeline** of goroutines connected by channels:
+
+- `gen(nums ...int) <-chan int` sends the numbers, then closes;
+- `filterEven(in <-chan int) <-chan int` passes on only even numbers;
+- `square(in <-chan int) <-chan int` sends each number squared.
+
+Every stage starts its own goroutine and closes its output with `defer close(out)`. Then write `func sumChan(in <-chan int) int`. `main` is given:
+
+```
+4 16 36 64 100
+sum of even squares 1..10: 220
+sum of even squares 1..100: 171700
+```
+::starter
+package main
+
+import "fmt"
+
+func gen(nums ...int) <-chan int {
+	out := make(chan int)
+	return out
+}
+
+func filterEven(in <-chan int) <-chan int { return in }
+
+func square(in <-chan int) <-chan int { return in }
+
+func sumChan(in <-chan int) int { return 0 }
+
+func upTo(n int) []int {
+	nums := make([]int, n)
+	for i := range nums {
+		nums[i] = i + 1
+	}
+	return nums
+}
+
+func main() {
+	for v := range square(filterEven(gen(upTo(10)...))) {
+		fmt.Print(v, " ")
+	}
+	fmt.Println()
+	fmt.Println("sum of even squares 1..10:", sumChan(square(filterEven(gen(upTo(10)...)))))
+	fmt.Println("sum of even squares 1..100:", sumChan(square(filterEven(gen(upTo(100)...)))))
+}
+::solution
+package main
+
+import "fmt"
+
+func gen(nums ...int) <-chan int {
+	out := make(chan int)
+	go func() {
+		defer close(out)
+		for _, n := range nums {
+			out <- n
+		}
+	}()
+	return out
+}
+
+func filterEven(in <-chan int) <-chan int {
+	out := make(chan int)
+	go func() {
+		defer close(out)
+		for n := range in {
+			if n%2 == 0 {
+				out <- n
+			}
+		}
+	}()
+	return out
+}
+
+func square(in <-chan int) <-chan int {
+	out := make(chan int)
+	go func() {
+		defer close(out)
+		for n := range in {
+			out <- n * n
+		}
+	}()
+	return out
+}
+
+func sumChan(in <-chan int) int {
+	total := 0
+	for n := range in {
+		total += n
+	}
+	return total
+}
+
+func upTo(n int) []int {
+	nums := make([]int, n)
+	for i := range nums {
+		nums[i] = i + 1
+	}
+	return nums
+}
+
+func main() {
+	for v := range square(filterEven(gen(upTo(10)...))) {
+		fmt.Print(v, " ")
+	}
+	fmt.Println()
+	fmt.Println("sum of even squares 1..10:", sumChan(square(filterEven(gen(upTo(10)...)))))
+	fmt.Println("sum of even squares 1..100:", sumChan(square(filterEven(gen(upTo(100)...)))))
+}
+::expected
+4 16 36 64 100
+sum of even squares 1..10: 220
+sum of even squares 1..100: 171700
+::hints
+- Each stage: `out := make(chan int)`, then `go func() { defer close(out); for n := range in { ... } }()`, then `return out`.
+- The stages run concurrently but in order, because each one receives from the one before.
+--- cards
+make(chan T) / make(chan T, n) :: Unbuffered (synchronising) / buffered channel.
+ch <- v / v := <-ch :: Send / receive.
+close(ch) + range :: The sender closes; for v := range ch ends after the last value.
+chan<- T / <-chan T :: Send-only / receive-only channel types.
+Worker pool :: N goroutines reading one jobs channel; results fan in; close after wg.Wait.
+
+=== lesson go-select | select, timeouts and tickers | 70
+## Waiting on several channels
+
+**`select`** waits until one of several channel operations can proceed, then runs that case (if several are ready, it picks one at random). It's how Go programs handle timeouts, cancellation and multiple event sources:
+
+```go
+package main
+
+import (
+	"fmt"
+	"time"
+)
+
+func fetch(name string, delay time.Duration) <-chan string {
+	ch := make(chan string, 1) // buffered: the goroutine can finish even if nobody receives
+	go func() {
+		time.Sleep(delay)
+		ch <- name + " answered"
+	}()
+	return ch
+}
+
+func main() {
+	// take the fastest of two replicas
+	select {
+	case r := <-fetch("server A", 80*time.Millisecond):
+		fmt.Println(r)
+	case r := <-fetch("server B", 30*time.Millisecond):
+		fmt.Println(r)
+	}
+
+	// a timeout
+	select {
+	case r := <-fetch("slow server", 300*time.Millisecond):
+		fmt.Println(r)
+	case <-time.After(100 * time.Millisecond):
+		fmt.Println("timed out after 100ms")
+	}
+}
+```
+
+Note the **buffer of 1** in `fetch`: when the timeout wins, nobody ever receives from that channel. With an unbuffered channel the goroutine would block forever on its send: a **goroutine leak**, a slow memory leak in long-running servers.
+
+## Non-blocking operations with default
+
+A `select` with a **`default`** case never waits: if no channel is ready, `default` runs. It's useful to try a send or receive, or to drop events when a buffer is full:
+
+```go
+package main
+
+import "fmt"
+
+func main() {
+	events := make(chan string, 2)
+	for _, e := range []string{"click", "scroll", "resize", "key"} {
+		select {
+		case events <- e:
+			fmt.Println("queued", e)
+		default:
+			fmt.Println("dropped", e, "(queue full)")
+		}
+	}
+	close(events)
+	for e := range events {
+		fmt.Println("handled", e)
+	}
+}
+```
+
+## Tickers and loops with select
+
+A **`time.Ticker`** sends the time at regular intervals. A `for`-`select` loop that handles ticks, work and a quit signal is the skeleton of many background services:
+
+```go
+package main
+
+import (
+	"fmt"
+	"time"
+)
+
+func main() {
+	ticker := time.NewTicker(40 * time.Millisecond)
+	defer ticker.Stop()
+	done := make(chan struct{}) // struct{} carries no data: a pure signal
+	go func() {
+		time.Sleep(150 * time.Millisecond)
+		close(done) // closing wakes every receiver at once
+	}()
+
+	ticks := 0
+	for {
+		select {
+		case <-ticker.C:
+			ticks++
+			fmt.Println("tick", ticks)
+		case <-done:
+			fmt.Println("stopping after", ticks, "ticks")
+			return
+		}
+	}
+}
+```
+
+Closing a channel is a **broadcast**: every goroutine waiting on `<-done` wakes up. That's why `done` channels (and contexts, next-but-one lesson) are closed rather than sent to.
+
+~~~check
+? What does select do when no case is ready and there's no default?
++ It blocks until one case can proceed
+- It runs the first case
+- It panics
+- It returns immediately
+> With default, it never blocks.
+~~~
+
+📚 **Go deeper:** A Tour of Go, "Select" and "Default Selection"; The Go Blog, "Go Concurrency Patterns: Timing out, moving on"; the time package docs (After, NewTicker, NewTimer).
+--- goals
+- wait on several channels with select
+- implement timeouts with time.After and take the fastest result
+- use default for non-blocking sends and receives
+- write for-select loops with tickers and done channels
+- avoid goroutine leaks with buffered result channels
+--- quiz
+? Which select case implements a 2-second timeout?
++ case <-time.After(2 * time.Second):
+- case time.Sleep(2 * time.Second):
+- case timeout(2):
+- default: time.Sleep(2 * time.Second)
+> time.After returns a channel that receives once.
+? Why is closing a done channel a good stop signal?
++ Every goroutine receiving from it wakes up at once
+- It sends a value to one goroutine
+- It's the only way to stop a goroutine
+- It panics the goroutines
+> A close is a broadcast.
+? What's a goroutine leak?
++ A goroutine blocked forever (for example on a send nobody receives)
+- A goroutine that runs too fast
+- A goroutine that panics
+- A goroutine started in main
+> Buffered result channels or cancellation prevent it.
+--- exercise code go
+::prompt
+Write `func firstResponse(servers []Server, timeout time.Duration) (string, error)` that queries all servers **at the same time** and returns the first answer, or the error `no answer within <timeout>` when none answers in time. Each server's `Query()` (given) sleeps for its delay and returns its name. Use a **buffered** channel (capacity = number of servers) so the losing goroutines never leak, and `select` with `time.After`.
+
+Also count how many queries eventually completed: `main` waits a little and prints `completed` (an atomic counter incremented in `Query`, given):
+
+```
+fastest: eu-west
+fastest: us-east
+error: no answer within 100ms
+completed: 7
+```
+::starter
+package main
+
+import (
+	"errors"
+	"fmt"
+	"sync/atomic"
+	"time"
+)
+
+var completed atomic.Int32
+
+type Server struct {
+	Name  string
+	Delay time.Duration
+}
+
+func (s Server) Query() string {
+	time.Sleep(s.Delay)
+	completed.Add(1)
+	return s.Name
+}
+
+func firstResponse(servers []Server, timeout time.Duration) (string, error) {
+	return "", errors.New("not implemented")
+}
+
+func main() {
+	ms := func(n int) time.Duration { return time.Duration(n) * time.Millisecond }
+	tries := [][]Server{
+		{{"us-east", ms(120)}, {"eu-west", ms(30)}, {"ap-south", ms(90)}},
+		{{"us-east", ms(20)}, {"eu-west", ms(150)}},
+		{{"mars-1", ms(200)}, {"mars-2", ms(250)}},
+	}
+	for _, servers := range tries {
+		name, err := firstResponse(servers, ms(100))
+		if err != nil {
+			fmt.Println("error:", err)
+			continue
+		}
+		fmt.Println("fastest:", name)
+	}
+	time.Sleep(ms(300))
+	fmt.Println("completed:", completed.Load())
+}
+::solution
+package main
+
+import (
+	"fmt"
+	"sync/atomic"
+	"time"
+)
+
+var completed atomic.Int32
+
+type Server struct {
+	Name  string
+	Delay time.Duration
+}
+
+func (s Server) Query() string {
+	time.Sleep(s.Delay)
+	completed.Add(1)
+	return s.Name
+}
+
+func firstResponse(servers []Server, timeout time.Duration) (string, error) {
+	answers := make(chan string, len(servers))
+	for _, s := range servers {
+		go func() { answers <- s.Query() }()
+	}
+	select {
+	case name := <-answers:
+		return name, nil
+	case <-time.After(timeout):
+		return "", fmt.Errorf("no answer within %v", timeout)
+	}
+}
+
+func main() {
+	ms := func(n int) time.Duration { return time.Duration(n) * time.Millisecond }
+	tries := [][]Server{
+		{{"us-east", ms(120)}, {"eu-west", ms(30)}, {"ap-south", ms(90)}},
+		{{"us-east", ms(20)}, {"eu-west", ms(150)}},
+		{{"mars-1", ms(200)}, {"mars-2", ms(250)}},
+	}
+	for _, servers := range tries {
+		name, err := firstResponse(servers, ms(100))
+		if err != nil {
+			fmt.Println("error:", err)
+			continue
+		}
+		fmt.Println("fastest:", name)
+	}
+	time.Sleep(ms(300))
+	fmt.Println("completed:", completed.Load())
+}
+::expected
+fastest: eu-west
+fastest: us-east
+error: no answer within 100ms
+completed: 7
+::hints
+- `answers := make(chan string, len(servers))`, then one goroutine per server: `go func() { answers <- s.Query() }()`.
+- `select` between `<-answers` and `<-time.After(timeout)`.
+- `%v` prints a `time.Duration` as `100ms`.
+--- cards
+select :: Waits for the first ready channel operation; random choice if several.
+time.After(d) :: A channel that receives once after d: timeouts in select.
+default in select :: Makes the select non-blocking.
+time.NewTicker :: Sends on ticker.C at intervals; Stop it with defer.
+done channel :: chan struct{} closed to broadcast "stop" to every receiver.
+Goroutine leak :: A goroutine blocked forever; use buffered channels or cancellation.
+
+=== lesson go-sync | Mutexes, atomics and the race detector | 75
+## Protecting shared state
+
+Channels are great for passing data along, but sometimes goroutines must share one piece of state: a cache, a counter, a bank balance. A **`sync.Mutex`** (mutual exclusion lock) lets only one goroutine at a time run the code between `Lock` and `Unlock`:
+
+```go
+package main
+
+import (
+	"fmt"
+	"sync"
+)
+
+type Counter struct {
+	mu     sync.Mutex
+	counts map[string]int
+}
+
+func (c *Counter) Inc(key string) {
+	c.mu.Lock()
+	defer c.mu.Unlock() // unlocks even if the code below panics
+	c.counts[key]++
+}
+
+func (c *Counter) Get(key string) int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.counts[key]
+}
+
+func main() {
+	c := Counter{counts: map[string]int{}}
+	var wg sync.WaitGroup
+	for i := range 1000 {
+		wg.Go(func() {
+			if i%2 == 0 {
+				c.Inc("even")
+			} else {
+				c.Inc("odd")
+			}
+		})
+	}
+	wg.Wait()
+	fmt.Println(c.Get("even"), c.Get("odd"))
+}
+```
+
+Without the mutex, this program would crash with **`fatal error: concurrent map writes`**, or silently lose updates for plain variables. Conventions: put the mutex next to the fields it protects, use **pointer receivers** (a copied mutex protects nothing; `go vet` reports copies), keep critical sections short, and never call slow or blocking code while holding a lock.
+
+## RWMutex and Once
+
+- **`sync.RWMutex`** allows many readers at once (`RLock`/`RUnlock`) or one writer (`Lock`): good for caches that are read far more often than written.
+- **`sync.Once`** runs a function exactly once, however many goroutines call it: lazy initialisation of a configuration or connection. `sync.OnceValue(f)` returns a function that computes and caches the value.
+
+```go
+package main
+
+import (
+	"fmt"
+	"sync"
+)
+
+type Cache struct {
+	mu   sync.RWMutex
+	data map[string]string
+}
+
+func (c *Cache) Get(k string) (string, bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	v, ok := c.data[k]
+	return v, ok
+}
+
+func (c *Cache) Set(k, v string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.data[k] = v
+}
+
+var loadConfig = sync.OnceValue(func() map[string]string {
+	fmt.Println("loading config (once)")
+	return map[string]string{"env": "prod"}
+})
+
+func main() {
+	c := &Cache{data: map[string]string{}}
+	c.Set("lang", "go")
+	var wg sync.WaitGroup
+	for range 5 {
+		wg.Go(func() {
+			if v, ok := c.Get("lang"); ok && loadConfig()["env"] == "prod" {
+				_ = v
+			}
+		})
+	}
+	wg.Wait()
+	fmt.Println(loadConfig()["env"])
+}
+```
+
+## Atomics
+
+For a single number or pointer, **`sync/atomic`** types (`atomic.Int64`, `atomic.Bool`, `atomic.Pointer[T]`) update it without a lock, using special CPU instructions:
+
+```go
+package main
+
+import (
+	"fmt"
+	"sync"
+	"sync/atomic"
+)
+
+func main() {
+	var requests atomic.Int64
+	var plain int64
+	var wg sync.WaitGroup
+	for range 100 {
+		wg.Go(func() {
+			for range 1000 {
+				requests.Add(1)
+				plain++ // a data race: updates get lost
+			}
+		})
+	}
+	wg.Wait()
+	fmt.Println("atomic:", requests.Load())
+	fmt.Println("plain (usually less than 100000):", plain)
+}
+```
+
+## The race detector
+
+Go ships a **race detector**: run or test with **`-race`** (`go test -race ./...`, `go run -race .`) and it reports every data race it observes, with the stack traces of both accesses. It needs cgo (on Windows, a C compiler such as MinGW), slows the program down, and only finds races that actually happen during the run, so run your tests with it regularly in CI. The plain counter above would be reported immediately.
+
+## Choosing a tool
+
+| Situation | Tool |
+|---|---|
+| passing data or ownership between goroutines, pipelines | channels |
+| several goroutines updating one structure (map, cache, account) | `sync.Mutex` / `RWMutex` |
+| a counter or flag | `sync/atomic` |
+| one-time initialisation | `sync.Once`, `sync.OnceValue` |
+| waiting for a group of goroutines | `sync.WaitGroup` |
+
+~~~check
+? Why must a type containing a sync.Mutex use pointer receivers?
++ A value receiver copies the mutex, and a copy protects nothing
+- Mutexes can't be in structs
+- It's faster
+- Value receivers can't call Lock
+> go vet's copylocks check catches it.
+~~~
+
+📚 **Go deeper:** the sync and sync/atomic package docs; The Go Blog, "Introducing the Go Race Detector"; *The Go Programming Language*, chapter 9 (Concurrency with Shared Variables).
+--- goals
+- protect shared state with sync.Mutex and defer Unlock
+- use RWMutex for read-heavy data and Once/OnceValue for one-time initialisation
+- update counters with sync/atomic
+- find data races with the -race flag
+- choose between channels, mutexes and atomics
+--- quiz
+? What does `defer mu.Unlock()` right after `mu.Lock()` guarantee?
++ The lock is released however the function returns
+- The lock is never taken
+- Only one goroutine runs the whole program
+- Faster locking
+> Even when the code panics.
+? What happens when goroutines write to a plain map concurrently?
++ The runtime may crash with "concurrent map writes"
+- Nothing
+- Writes are queued safely
+- The map becomes a sync.Map
+> Protect it with a mutex.
+? Which tool counts requests from many goroutines most simply?
++ atomic.Int64 with Add
+- A buffered channel
+- RWMutex.RLock
+- sync.Once
+> One number: atomics.
+? How do you run tests with the race detector?
++ go test -race ./...
+- go vet -race
+- go race test
+- GORACE=1 go build
+> It reports races it observes at run time.
+--- exercise code go
+::prompt
+Make a **bank** safe for concurrent use. `Bank` holds balances in a map. Add a `sync.Mutex` and write:
+
+- `Deposit(account string, cents int)`;
+- `Transfer(from, to string, cents int) error` that returns `insufficient funds in <from>` (and changes nothing) when the balance is too low; the check and both updates must happen under **one** lock;
+- `Balance(account string) int` and `Total() int`.
+
+`main` (given) runs 1,000 transfers in both directions concurrently plus 200 deposits, counts failures with an `atomic.Int64`, and checks that money was neither created nor destroyed:
+
+```
+ada: 5000, bob: 5000
+total before: 10000
+total after: 12000
+balances add up: true
+```
+::starter
+package main
+
+import (
+	"fmt"
+	"sync"
+	"sync/atomic"
+)
+
+type Bank struct {
+	balances map[string]int
+}
+
+func NewBank() *Bank { return &Bank{balances: map[string]int{}} }
+
+func (b *Bank) Deposit(account string, cents int) { b.balances[account] += cents }
+
+func (b *Bank) Transfer(from, to string, cents int) error {
+	b.balances[from] -= cents
+	b.balances[to] += cents
+	return nil
+}
+
+func (b *Bank) Balance(account string) int { return b.balances[account] }
+
+func (b *Bank) Total() int { return 0 }
+
+func main() {
+	bank := NewBank()
+	bank.Deposit("ada", 5000)
+	bank.Deposit("bob", 5000)
+	fmt.Printf("ada: %d, bob: %d\n", bank.Balance("ada"), bank.Balance("bob"))
+	fmt.Println("total before:", bank.Total())
+
+	var failed atomic.Int64
+	var wg sync.WaitGroup
+	for i := range 1000 {
+		wg.Go(func() {
+			from, to := "ada", "bob"
+			if i%2 == 1 {
+				from, to = to, from
+			}
+			if err := bank.Transfer(from, to, 7+i%50); err != nil {
+				failed.Add(1)
+			}
+		})
+	}
+	for range 200 {
+		wg.Go(func() { bank.Deposit("cy", 10) })
+	}
+	wg.Wait()
+	fmt.Println("total after:", bank.Total())
+	sum := bank.Balance("ada") + bank.Balance("bob") + bank.Balance("cy")
+	fmt.Println("balances add up:", sum == bank.Total() && bank.Balance("ada") >= 0 && bank.Balance("bob") >= 0)
+}
+::solution
+package main
+
+import (
+	"fmt"
+	"sync"
+	"sync/atomic"
+)
+
+type Bank struct {
+	mu       sync.Mutex
+	balances map[string]int
+}
+
+func NewBank() *Bank { return &Bank{balances: map[string]int{}} }
+
+func (b *Bank) Deposit(account string, cents int) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.balances[account] += cents
+}
+
+func (b *Bank) Transfer(from, to string, cents int) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.balances[from] < cents {
+		return fmt.Errorf("insufficient funds in %s", from)
+	}
+	b.balances[from] -= cents
+	b.balances[to] += cents
+	return nil
+}
+
+func (b *Bank) Balance(account string) int {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.balances[account]
+}
+
+func (b *Bank) Total() int {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	total := 0
+	for _, v := range b.balances {
+		total += v
+	}
+	return total
+}
+
+func main() {
+	bank := NewBank()
+	bank.Deposit("ada", 5000)
+	bank.Deposit("bob", 5000)
+	fmt.Printf("ada: %d, bob: %d\n", bank.Balance("ada"), bank.Balance("bob"))
+	fmt.Println("total before:", bank.Total())
+
+	var failed atomic.Int64
+	var wg sync.WaitGroup
+	for i := range 1000 {
+		wg.Go(func() {
+			from, to := "ada", "bob"
+			if i%2 == 1 {
+				from, to = to, from
+			}
+			if err := bank.Transfer(from, to, 7+i%50); err != nil {
+				failed.Add(1)
+			}
+		})
+	}
+	for range 200 {
+		wg.Go(func() { bank.Deposit("cy", 10) })
+	}
+	wg.Wait()
+	fmt.Println("total after:", bank.Total())
+	sum := bank.Balance("ada") + bank.Balance("bob") + bank.Balance("cy")
+	fmt.Println("balances add up:", sum == bank.Total() && bank.Balance("ada") >= 0 && bank.Balance("bob") >= 0)
+}
+::expected
+ada: 5000, bob: 5000
+total before: 10000
+total after: 12000
+balances add up: true
+::hints
+- Add `mu sync.Mutex` to `Bank`; every method starts with `b.mu.Lock(); defer b.mu.Unlock()`.
+- `Transfer` checks the balance and updates both accounts inside the same lock, so no other transfer can slip in between.
+- Don't call `Balance` from inside `Transfer`: Go's mutexes aren't reentrant, so locking twice deadlocks.
+--- cards
+sync.Mutex :: Lock / defer Unlock: one goroutine at a time in the critical section.
+sync.RWMutex :: Many readers (RLock) or one writer (Lock).
+sync.Once / OnceValue :: Run initialisation exactly once.
+sync/atomic :: atomic.Int64.Add / Load: lock-free single values.
+-race :: The race detector: go test -race ./...
+Not reentrant :: Locking a mutex you already hold deadlocks.
+
+=== lesson go-context | Cancellation with context | 75
+## Stopping work nobody needs any more
+
+A web request is cancelled when the user closes the page; a job must stop when its deadline passes; a server shutting down must stop all its goroutines. Go's standard way to carry **cancellation signals, deadlines and request-scoped values** across function calls and goroutines is **`context.Context`**:
+
+```go
+package main
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"time"
+)
+
+// slowSum checks ctx between steps and stops early when it's cancelled
+func slowSum(ctx context.Context, n int) (int, error) {
+	total := 0
+	for i := 1; i <= n; i++ {
+		select {
+		case <-ctx.Done(): // closed when the context is cancelled or times out
+			return total, ctx.Err()
+		case <-time.After(20 * time.Millisecond): // one step of work
+			total += i
+		}
+	}
+	return total, nil
+}
+
+func main() {
+	ctx, cancel := context.WithTimeout(context.Background(), 110*time.Millisecond)
+	defer cancel() // always release the context's resources
+
+	total, err := slowSum(ctx, 10)
+	fmt.Println(total, err, errors.Is(err, context.DeadlineExceeded))
+
+	total, err = slowSum(context.Background(), 3) // a context that's never cancelled
+	fmt.Println(total, err)
+}
+```
+
+## The rules
+
+- A function that does I/O or may run for long takes **`ctx context.Context` as its first parameter**, and passes it on to everything it calls (`http.NewRequestWithContext`, database queries, other services).
+- Contexts form a **tree**: `WithCancel`, `WithTimeout`, `WithDeadline` and `WithValue` derive a child from a parent. Cancelling a parent cancels all its children.
+- Every `With...` returns a **`cancel` function**: call it (usually `defer cancel()`) when the work is done, or resources leak.
+- **`ctx.Done()`** is a channel that's closed on cancellation; **`ctx.Err()`** then says why: `context.Canceled` or `context.DeadlineExceeded`.
+- Use `context.Background()` at the top (in `main`, in tests); `context.TODO()` marks a place where a real context should be passed later.
+- **`WithValue`** carries request-scoped data such as a request ID or the authenticated user, never optional function parameters.
+
+## Cancelling a group of goroutines
+
+When one worker fails, the others should stop. A shared context makes that easy:
+
+```go
+package main
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"sync"
+	"time"
+)
+
+func worker(ctx context.Context, id int, results chan<- string) error {
+	for step := 1; ; step++ {
+		select {
+		case <-ctx.Done():
+			results <- fmt.Sprintf("worker %d stopped at step %d", id, step)
+			return ctx.Err()
+		case <-time.After(30 * time.Millisecond):
+			if id == 2 && step == 3 {
+				return errors.New("worker 2: disk full")
+			}
+		}
+	}
+}
+
+func main() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	results := make(chan string, 3)
+	var once sync.Once
+	var firstErr error
+	var wg sync.WaitGroup
+	for id := 1; id <= 3; id++ {
+		wg.Go(func() {
+			if err := worker(ctx, id, results); err != nil && !errors.Is(err, context.Canceled) {
+				once.Do(func() { firstErr = err })
+				cancel() // stop everyone else
+			}
+		})
+	}
+	wg.Wait()
+	close(results)
+	fmt.Println("first error:", firstErr)
+	stopped := 0
+	for range results { // workers 1 and 3 report where they stopped
+		stopped++
+	}
+	fmt.Println("workers stopped early:", stopped)
+}
+```
+
+This "run a group, stop at the first error" pattern is so common that the `golang.org/x/sync/errgroup` package implements it: `g, ctx := errgroup.WithContext(ctx)`, `g.Go(func() error {...})`, `err := g.Wait()`.
+
+~~~check
+? What does cancelling a parent context do to its children?
++ Cancels them too
+- Nothing
+- Restarts them
+- Panics
+> Contexts form a tree.
+~~~
+
+📚 **Go deeper:** The Go Blog, "Go Concurrency Patterns: Context" and "Contexts and structs"; the context package docs; the errgroup package docs (pkg.go.dev/golang.org/x/sync/errgroup).
+--- goals
+- create contexts with WithCancel and WithTimeout, and always call cancel
+- pass ctx as the first parameter and check ctx.Done() in long work
+- tell context.Canceled from context.DeadlineExceeded
+- cancel a group of goroutines at the first error
+- use WithValue only for request-scoped data
+--- quiz
+? Where does a context go in a function's parameters?
++ First: func Fetch(ctx context.Context, url string)
+- Last
+- In a struct field
+- In a global variable
+> A strong convention.
+? Why `defer cancel()` after `context.WithTimeout`?
++ To release the context's resources even if the work finishes early
+- To start the timer
+- It's optional decoration
+- To cancel the parent
+> go vet warns when cancel isn't called.
+? Which error does ctx.Err() return after a timeout?
++ context.DeadlineExceeded
+- context.Canceled
+- nil
+- io.EOF
+> Canceled is for an explicit cancel.
+? What should WithValue carry?
++ Request-scoped data like a request ID
+- Optional function parameters
+- Database connections
+- Configuration for the whole app
+> Pass ordinary parameters explicitly.
+--- exercise code go
+::prompt
+Write `func download(ctx context.Context, files []string) ([]string, error)`. It downloads the files **one after another** with the given `fetch(ctx, name)` (each takes 40 ms and respects cancellation), collecting the names of the completed files. It must **stop as soon as the context is cancelled**, returning what was completed so far and an error `download stopped after <n> files: <ctx error>` that wraps the context error (`%w`).
+
+`main` (given) runs it three times: without a deadline, with a 100 ms timeout, and cancelled by hand after 50 ms:
+
+```
+done: [a.txt b.txt c.txt d.txt] <nil>
+done: [a.txt b.txt] download stopped after 2 files: context deadline exceeded
+deadline: true
+done: [a.txt] download stopped after 1 files: context canceled
+canceled: true
+```
+::starter
+package main
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"time"
+)
+
+func fetch(ctx context.Context, name string) error {
+	select {
+	case <-time.After(40 * time.Millisecond):
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func download(ctx context.Context, files []string) ([]string, error) {
+	return files, nil
+}
+
+func main() {
+	files := []string{"a.txt", "b.txt", "c.txt", "d.txt"}
+	done, err := download(context.Background(), files)
+	fmt.Println("done:", done, err)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	done, err = download(ctx, files)
+	fmt.Println("done:", done, err)
+	fmt.Println("deadline:", errors.Is(err, context.DeadlineExceeded))
+
+	ctx2, cancel2 := context.WithCancel(context.Background())
+	time.AfterFunc(50*time.Millisecond, cancel2)
+	done, err = download(ctx2, files)
+	fmt.Println("done:", done, err)
+	fmt.Println("canceled:", errors.Is(err, context.Canceled))
+}
+::solution
+package main
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"time"
+)
+
+func fetch(ctx context.Context, name string) error {
+	select {
+	case <-time.After(40 * time.Millisecond):
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func download(ctx context.Context, files []string) ([]string, error) {
+	var done []string
+	for _, f := range files {
+		if err := fetch(ctx, f); err != nil {
+			return done, fmt.Errorf("download stopped after %d files: %w", len(done), err)
+		}
+		done = append(done, f)
+	}
+	return done, nil
+}
+
+func main() {
+	files := []string{"a.txt", "b.txt", "c.txt", "d.txt"}
+	done, err := download(context.Background(), files)
+	fmt.Println("done:", done, err)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	done, err = download(ctx, files)
+	fmt.Println("done:", done, err)
+	fmt.Println("deadline:", errors.Is(err, context.DeadlineExceeded))
+
+	ctx2, cancel2 := context.WithCancel(context.Background())
+	time.AfterFunc(50*time.Millisecond, cancel2)
+	done, err = download(ctx2, files)
+	fmt.Println("done:", done, err)
+	fmt.Println("canceled:", errors.Is(err, context.Canceled))
+}
+::expected
+done: [a.txt b.txt c.txt d.txt] <nil>
+done: [a.txt b.txt] download stopped after 2 files: context deadline exceeded
+deadline: true
+done: [a.txt] download stopped after 1 files: context canceled
+canceled: true
+::hints
+- `fetch` already returns `ctx.Err()` when cancelled: check its error after each file.
+- Wrap with `%w` so `errors.Is(err, context.DeadlineExceeded)` still works.
+- Return the files completed so far together with the error.
+--- cards
+context.Context :: Carries cancellation, deadlines and request values; first parameter.
+WithCancel / WithTimeout / WithDeadline :: Derive a child context; always defer cancel().
+ctx.Done() / ctx.Err() :: Channel closed on cancellation / why (Canceled, DeadlineExceeded).
+Context tree :: Cancelling a parent cancels its children.
+errgroup :: Run goroutines, stop all at the first error (golang.org/x/sync/errgroup).
+
+=== lesson go-m6-test | Module 6 test | 160 | exam
+This test covers Module 6: goroutines and WaitGroups, channels and pipelines, select and timeouts, mutexes and atomics, and context.
+
+Before you start, check that you can:
+
+- run work concurrently and wait for it;
+- connect goroutines with channels without leaks or deadlocks;
+- protect shared state;
+- cancel work with a context.
+--- goals
+- build a concurrent, cancellable worker pool with deterministic results
+--- quiz
+? What's wrong with this? `ch := make(chan int); ch <- 1; fmt.Println(<-ch)`
++ The send blocks forever: no other goroutine receives (deadlock)
+- Nothing
+- Channels can't hold ints
+- It prints 0
+> Go reports "all goroutines are asleep - deadlock!".
+? Which tool fits "count page views from many goroutines"?
++ atomic.Int64
+- An unbuffered channel per request
+- sync.Once
+- context.WithValue
+> A single number.
+? What does closing a jobs channel tell the workers ranging over it?
++ No more jobs: their range loops end after the remaining jobs
+- Stop immediately, dropping queued jobs
+- Panic
+- Nothing
+> Close is "end of stream".
+? How does a long-running function notice a timeout?
++ By selecting on ctx.Done() (or passing ctx to calls that do)
+- With time.Sleep
+- By checking a global flag without a lock
+- It can't
+> Context carries the deadline.
+--- exercise code go
+::prompt
+**A cancellable image-resizing pool.** Write `func process(ctx context.Context, jobs []Job, workers int) ([]Output, error)`:
+
+- start `workers` goroutines that receive jobs from a channel and call the given `resize(ctx, job)`;
+- a feeder goroutine sends the jobs and closes the channel; it must stop sending when the context is done (use `select`);
+- collect the outputs in a slice **at each job's index** (protect it with a mutex, or give each job its own slot);
+- if `resize` returns an error (a corrupt file), cancel all the work (derive a context with `WithCancel`) and return the **first** error;
+- return the outputs (in job order) of the jobs that completed.
+
+`main` (given) runs a clean batch and one with a corrupt file:
+
+```
+batch 1: 6 resized, err: <nil>
+  1.jpg -> 1_small.jpg (320x213)
+  2.jpg -> 2_small.jpg (320x180)
+  3.png -> 3_small.png (320x320)
+  4.jpg -> 4_small.jpg (320x240)
+  5.png -> 5_small.png (320x426)
+  6.jpg -> 6_small.jpg (320x200)
+batch 2 error: resize bad.jpg: corrupt file
+batch 2 stopped early: true
+```
+::starter
+package main
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"strings"
+	"time"
+)
+
+type Job struct {
+	Name          string
+	Width, Height int
+}
+
+type Output struct {
+	Name          string
+	Width, Height int
+}
+
+func resize(ctx context.Context, j Job) (Output, error) {
+	select {
+	case <-time.After(30 * time.Millisecond):
+	case <-ctx.Done():
+		return Output{}, ctx.Err()
+	}
+	if strings.HasPrefix(j.Name, "bad") {
+		return Output{}, fmt.Errorf("resize %s: %w", j.Name, errors.New("corrupt file"))
+	}
+	base, ext, _ := strings.Cut(j.Name, ".")
+	return Output{base + "_small." + ext, 320, j.Height * 320 / j.Width}, nil
+}
+
+func process(ctx context.Context, jobs []Job, workers int) ([]Output, error) {
+	return nil, nil
+}
+
+func main() {
+	batch := []Job{{"1.jpg", 1920, 1280}, {"2.jpg", 1920, 1080}, {"3.png", 800, 800}, {"4.jpg", 1600, 1200}, {"5.png", 900, 1200}, {"6.jpg", 1280, 800}}
+	out, err := process(context.Background(), batch, 3)
+	fmt.Printf("batch 1: %d resized, err: %v\n", len(out), err)
+	for i, o := range out {
+		fmt.Printf("  %s -> %s (%dx%d)\n", batch[i].Name, o.Name, o.Width, o.Height)
+	}
+
+	var bad []Job
+	for i := range 30 {
+		bad = append(bad, Job{fmt.Sprintf("%d.jpg", i), 100, 100})
+	}
+	bad[2] = Job{"bad.jpg", 100, 100}
+	out, err = process(context.Background(), bad, 2)
+	fmt.Println("batch 2 error:", err)
+	fmt.Println("batch 2 stopped early:", len(out) < 10)
+}
+::solution
+package main
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"strings"
+	"sync"
+	"time"
+)
+
+type Job struct {
+	Name          string
+	Width, Height int
+}
+
+type Output struct {
+	Name          string
+	Width, Height int
+}
+
+func resize(ctx context.Context, j Job) (Output, error) {
+	select {
+	case <-time.After(30 * time.Millisecond):
+	case <-ctx.Done():
+		return Output{}, ctx.Err()
+	}
+	if strings.HasPrefix(j.Name, "bad") {
+		return Output{}, fmt.Errorf("resize %s: %w", j.Name, errors.New("corrupt file"))
+	}
+	base, ext, _ := strings.Cut(j.Name, ".")
+	return Output{base + "_small." + ext, 320, j.Height * 320 / j.Width}, nil
+}
+
+func process(ctx context.Context, jobs []Job, workers int) ([]Output, error) {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	type indexed struct {
+		i   int
+		job Job
+	}
+	queue := make(chan indexed)
+	go func() {
+		defer close(queue)
+		for i, j := range jobs {
+			select {
+			case queue <- indexed{i, j}:
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+
+	outputs := make([]Output, len(jobs))
+	completed := make([]bool, len(jobs))
+	var mu sync.Mutex
+	var firstErr error
+	var wg sync.WaitGroup
+	for range workers {
+		wg.Go(func() {
+			for item := range queue {
+				out, err := resize(ctx, item.job)
+				mu.Lock()
+				if err != nil {
+					if firstErr == nil && !errors.Is(err, context.Canceled) {
+						firstErr = err
+						cancel()
+					}
+				} else {
+					outputs[item.i] = out
+					completed[item.i] = true
+				}
+				mu.Unlock()
+			}
+		})
+	}
+	wg.Wait()
+
+	var done []Output
+	for i, ok := range completed {
+		if ok {
+			done = append(done, outputs[i])
+		}
+	}
+	return done, firstErr
+}
+
+func main() {
+	batch := []Job{{"1.jpg", 1920, 1280}, {"2.jpg", 1920, 1080}, {"3.png", 800, 800}, {"4.jpg", 1600, 1200}, {"5.png", 900, 1200}, {"6.jpg", 1280, 800}}
+	out, err := process(context.Background(), batch, 3)
+	fmt.Printf("batch 1: %d resized, err: %v\n", len(out), err)
+	for i, o := range out {
+		fmt.Printf("  %s -> %s (%dx%d)\n", batch[i].Name, o.Name, o.Width, o.Height)
+	}
+
+	var bad []Job
+	for i := range 30 {
+		bad = append(bad, Job{fmt.Sprintf("%d.jpg", i), 100, 100})
+	}
+	bad[2] = Job{"bad.jpg", 100, 100}
+	out, err = process(context.Background(), bad, 2)
+	fmt.Println("batch 2 error:", err)
+	fmt.Println("batch 2 stopped early:", len(out) < 10)
+}
+::expected
+batch 1: 6 resized, err: <nil>
+  1.jpg -> 1_small.jpg (320x213)
+  2.jpg -> 2_small.jpg (320x180)
+  3.png -> 3_small.png (320x320)
+  4.jpg -> 4_small.jpg (320x240)
+  5.png -> 5_small.png (320x426)
+  6.jpg -> 6_small.jpg (320x200)
+batch 2 error: resize bad.jpg: corrupt file
+batch 2 stopped early: true
+::hints
+- Send `(index, job)` pairs through the channel so each worker knows where its output goes.
+- The feeder's `select` between `queue <- item` and `<-ctx.Done()` lets it stop when work is cancelled.
+- Record the first non-cancellation error under the mutex, then call `cancel()`: the other `resize` calls return `context.Canceled`, which you ignore.
