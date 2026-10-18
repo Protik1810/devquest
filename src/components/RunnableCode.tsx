@@ -23,7 +23,8 @@ export function RunnableCode({ lang, code, earlier, dataset }: { lang: CodeLang;
   const [trace, setTrace] = useState<TraceResult | null>(null);
   const [running, setRunning] = useState(false);
   const [withEarlier, setWithEarlier] = useState(false);
-  const [stdin, setStdin] = useState('');
+  // An example can suggest its typed input with a "// stdin: Ada | 36" (or "# stdin: ...") comment
+  const [stdin, setStdin] = useState(() => code.match(/^\s*(?:\/\/|#) stdin: (.*)$/m)?.[1].split('|').map((s) => s.trim()).join('\n') ?? '');
   const [page, setPage] = useState<string | null>(null);
   const bump = useGame((s) => s.bump);
   const python = lang === 'python';

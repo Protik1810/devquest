@@ -1,0 +1,1009 @@
+=== module Module 2 · Data, operators and text
+
+=== lesson java-types | Primitive types and variables | 65
+## Eight primitive types
+
+Java has eight **primitive types**, the building blocks of every value. They're stored directly (not as objects) and have fixed sizes on every platform:
+
+| Type | Size | Range / values | Example |
+|---|---|---|---|
+| `byte` | 8 bits | -128 to 127 | `byte b = 100;` |
+| `short` | 16 bits | -32,768 to 32,767 | `short s = 2000;` |
+| `int` | 32 bits | about ±2.1 billion | `int count = 42;` |
+| `long` | 64 bits | about ±9.2 × 10¹⁸ | `long views = 8_000_000_000L;` |
+| `float` | 32 bits | ~7 significant digits | `float f = 1.5f;` |
+| `double` | 64 bits | ~15 significant digits | `double pi = 3.14159;` |
+| `char` | 16 bits | one UTF-16 character | `char grade = 'A';` |
+| `boolean` | (1 bit of information) | `true`, `false` | `boolean done = false;` |
+
+In practice you'll use `int`, `long`, `double`, `boolean` and `char` almost all the time. Everything else (`String`, arrays, your own classes) is a **reference type**: the variable holds a reference to an object (Module 4).
+
+```java
+public class Main {
+    public static void main(String[] args) {
+        int population = 8_100_000;          // underscores make big numbers readable
+        long worldPopulation = 8_100_000_000L; // too big for int: needs long and an L suffix
+        double temperature = -3.5;
+        char initial = 'J';                   // single quotes for one char
+        boolean isWinter = temperature < 5;
+
+        System.out.println(population + " " + worldPopulation);
+        System.out.println(temperature + " " + initial + " " + isWinter);
+        System.out.println("int max: " + Integer.MAX_VALUE + ", long max: " + Long.MAX_VALUE);
+    }
+}
+```
+
+## Literals
+
+- Integer literals are `int` by default; add `L` for `long` (`10_000_000_000L`). Hexadecimal `0xFF`, binary `0b1010`.
+- Decimal literals are `double` by default; add `f` for `float` (`1.5f`).
+- `char` literals use **single** quotes (`'A'`, `'\n'`); `String` literals use **double** quotes.
+
+## Conversions: widening and casting
+
+Java converts automatically when no information can be lost (**widening**: `int` → `long` → `double`):
+
+```java
+public class Main {
+    public static void main(String[] args) {
+        int apples = 7;
+        double asDouble = apples;           // widening: automatic
+        double average = 7.9;
+        int truncated = (int) average;      // narrowing: needs an explicit cast, drops the fraction
+        long big = 3_000_000_000L;
+        int overflowed = (int) big;         // keeps the low 32 bits: a surprising number
+        char letter = 'A';
+        int code = letter;                  // a char is a number (its UTF-16 code)
+
+        System.out.println(asDouble + " " + truncated + " " + overflowed + " " + code + " " + (char) (code + 2));
+        System.out.println(Math.round(7.9) + " " + (int) Math.round(7.5));
+    }
+}
+```
+
+A **cast** `(int) value` forces a narrowing conversion and is your way of saying "I know information may be lost". Casting a `double` to `int` **truncates** towards zero; use `Math.round` to round. Casting a value that doesn't fit wraps around silently, so check ranges first.
+
+## Constants with final
+
+`final` makes a variable unchangeable after its first assignment. Constants are conventionally written in `UPPER_SNAKE_CASE`:
+
+```java
+public class Main {
+    static final double VAT_RATE = 0.20;
+
+    public static void main(String[] args) {
+        final int maxUsers = 100;
+        double net = 50.0;
+        System.out.println("Gross: " + net * (1 + VAT_RATE) + ", limit: " + maxUsers);
+    }
+}
+```
+
+Assigning to a `final` variable again is a compile error, which documents and enforces your intent.
+
+## Naming
+
+Java's conventions: `camelCase` for variables and methods (`totalPrice`), `PascalCase` for classes (`OrderService`), `UPPER_SNAKE_CASE` for constants. Names can't start with a digit or be keywords (`class`, `int`, `new`...).
+
+~~~check
+? What is `(int) 9.99`?
++ 9
+- 10
+- 9.99
+- A compile error
+> Casting to int truncates; Math.round(9.99) gives 10.
+~~~
+
+📚 **Go deeper:** *Java: The Complete Reference*, chapter 3 "Data Types, Variables, and Arrays"; dev.java, "Primitive Types"; the Java Language Specification, chapter 4 (types and values).
+--- goals
+- choose among Java's eight primitive types, with their sizes and ranges
+- write integer, long, floating-point, char and boolean literals
+- convert between types with widening and explicit casts, and know their pitfalls
+- declare constants with final, and follow Java's naming conventions
+--- quiz
+? Which type should hold the number of bytes in a 10 GB file?
+- int
++ long
+- short
+- char
+> int stops at about 2.1 billion.
+? What's the type of the literal `3.0`?
+- float
++ double
+- int
+- long
+> Add f for float: 3.0f.
+? What does `(int) 3_000_000_000L` produce?
+- 3000000000
++ A wrapped-around negative number, because it doesn't fit in int
+- A compile error
+- An exception
+> Narrowing casts keep the low bits silently.
+? How do you declare a constant?
++ `static final double RATE = 0.2;`
+- `const double RATE = 0.2;`
+- `constant RATE = 0.2;`
+- `let RATE = 0.2;`
+> final prevents reassignment.
+--- exercise code java
+::prompt
+A video has `2_750_000_000` views (more than an `int` can hold) and earns `0.0018` dollars per view. Store the views in a `long` and the rate in a `double`, then print:
+
+```
+Views: 2750000000
+Earnings: $4950000.00
+Average per day over 365 days: 7534246 views
+```
+
+The last number is the views divided by 365 as a **whole number** (integer division of the `long`).
+::starter
+public class Main {
+    public static void main(String[] args) {
+        int views = 2750000000;
+    }
+}
+::solution
+public class Main {
+    public static void main(String[] args) {
+        long views = 2_750_000_000L;
+        double ratePerView = 0.0018;
+        System.out.println("Views: " + views);
+        System.out.printf("Earnings: $%.2f%n", views * ratePerView);
+        System.out.println("Average per day over 365 days: " + views / 365 + " views");
+    }
+}
+::expected
+Views: 2750000000
+Earnings: $4950000.00
+Average per day over 365 days: 7534246 views
+::variants
+2_750_000_000L => 3_650_000_000L
+::hints
+- A literal bigger than an int needs `L`: `long views = 2_750_000_000L;`.
+- `views / 365` divides two whole numbers, so the result is a whole number.
+--- exercise code java
+::prompt
+Convert a temperature of `98.6` degrees Fahrenheit to Celsius (`(f - 32) * 5 / 9`), then print it three ways:
+
+```
+Exact: 37.0
+Truncated: 37
+Rounded to tenths: 37.0
+```
+
+Then do the same for `101.3` on the next three lines (`Exact: 38.5`, `Truncated: 38`, `Rounded to tenths: 38.5`). Write the conversion once, in a `static double toCelsius(double f)` method, and use `Math.round(x * 10) / 10.0` for the rounding.
+::starter
+public class Main {
+    public static void main(String[] args) {
+    }
+}
+::solution
+public class Main {
+    static double toCelsius(double f) {
+        return (f - 32) * 5 / 9;
+    }
+
+    static void show(double f) {
+        double c = toCelsius(f);
+        System.out.println("Exact: " + c);
+        System.out.println("Truncated: " + (int) c);
+        System.out.println("Rounded to tenths: " + Math.round(c * 10) / 10.0);
+    }
+
+    public static void main(String[] args) {
+        show(98.6);
+        show(101.3);
+    }
+}
+::expected
+Exact: 37.0
+Truncated: 37
+Rounded to tenths: 37.0
+Exact: 38.5
+Truncated: 38
+Rounded to tenths: 38.5
+::hints
+- `(int) c` truncates; `Math.round(c * 10) / 10.0` rounds to one decimal.
+- A small helper method `show(double f)` avoids writing the three lines twice (methods come in Module 3).
+--- cards
+Primitive types :: byte, short, int, long, float, double, char, boolean — fixed sizes, not objects.
+Literals :: 42 (int), 42L (long), 3.14 (double), 3.14f (float), 'A' (char), 0xFF, 0b101, 1_000_000.
+Widening :: Automatic, lossless: int → long → double.
+Cast :: (int) 3.9 = 3 — explicit narrowing; truncates or wraps silently.
+final :: Can't be reassigned; constants: static final UPPER_SNAKE_CASE.
+
+=== lesson java-operators | Operators and expressions | 60
+## Arithmetic
+
+```java
+public class Main {
+    public static void main(String[] args) {
+        System.out.println(17 + 5);       // 22
+        System.out.println(17 - 5);       // 12
+        System.out.println(17 * 5);       // 85
+        System.out.println(17 / 5);       // 3   integer division: the fraction is dropped
+        System.out.println(17 % 5);       // 2   remainder (modulo)
+        System.out.println(17 / 5.0);     // 3.4 one double operand makes it floating-point
+        System.out.println(-17 / 5);      // -3  truncates towards zero
+        System.out.println(-17 % 5);      // -2  the remainder has the sign of the left side
+    }
+}
+```
+
+**Integer division** is the classic Java surprise (also in C, C# and SQL): `7 / 2` is `3`. When you want a fraction, make one side a `double` (`7 / 2.0`, or `(double) a / b`). The **modulo** `%` is useful for "every n-th" and "is it even?" (`n % 2 == 0`).
+
+## Overflow
+
+Integer arithmetic **wraps around** silently when the result doesn't fit:
+
+```java
+public class Main {
+    public static void main(String[] args) {
+        int max = Integer.MAX_VALUE;
+        System.out.println(max + 1);                  // wraps to the most negative int
+        long safe = (long) max + 1;
+        System.out.println(safe);
+        System.out.println(Math.addExact(5, 7));      // throws ArithmeticException on overflow instead
+        System.out.println(0.1 + 0.2);                // floating-point is approximate
+    }
+}
+```
+
+Use `long` when values can grow large, `Math.addExact`/`multiplyExact` when overflow must be detected, and `BigDecimal` for money (Module 5).
+
+## Assignment, compound and increment operators
+
+```java
+public class Main {
+    public static void main(String[] args) {
+        int score = 10;
+        score += 5;      // score = score + 5  → 15
+        score *= 2;      // → 30
+        score -= 4;      // → 26
+        score /= 3;      // → 8
+        score %= 5;      // → 3
+        int a = score++; // a gets 3, then score becomes 4 (postfix)
+        int b = ++score; // score becomes 5, then b gets 5 (prefix)
+        System.out.println(score + " " + a + " " + b);
+    }
+}
+```
+
+Prefer `count++` on its own line; mixing `++` into larger expressions makes code hard to read.
+
+## Comparison and logical operators
+
+| Operator | Meaning |
+|---|---|
+| `==`, `!=` | equal, not equal (for primitives; for objects, see below) |
+| `<`, `<=`, `>`, `>=` | comparisons |
+| `&&` | and, **short-circuit**: the right side runs only if the left is true |
+| `\|\|` | or, short-circuit: the right side runs only if the left is false |
+| `!` | not |
+| `? :` | conditional (ternary) expression: `cond ? a : b` |
+
+```java
+public class Main {
+    public static void main(String[] args) {
+        int age = 20;
+        boolean hasTicket = true;
+        boolean canEnter = age >= 18 && hasTicket;
+        String label = canEnter ? "welcome" : "sorry";
+        String text = null;
+        boolean empty = text == null || text.isEmpty();   // safe thanks to short-circuiting
+        System.out.println(canEnter + " " + label + " " + empty);
+    }
+}
+```
+
+**`==` on objects compares references** (is it the same object?), not contents. For strings and other objects use `equals` (next lesson): `"a" == new String("a")` is `false`.
+
+## Bitwise operators
+
+`&`, `|`, `^` (xor), `~` (not), `<<`, `>>` and `>>>` work on the bits of integers. They're used for flags, hashing, graphics and low-level protocols:
+
+```java
+public class Main {
+    public static void main(String[] args) {
+        int READ = 0b100, WRITE = 0b010, EXECUTE = 0b001;
+        int permissions = READ | WRITE;
+        System.out.println(Integer.toBinaryString(permissions));
+        System.out.println((permissions & WRITE) != 0);
+        System.out.println((permissions & EXECUTE) != 0);
+        System.out.println(1 << 10);
+    }
+}
+```
+
+## Precedence
+
+`*`, `/`, `%` bind tighter than `+`, `-`; comparisons come next, then `&&`, then `||`, then the ternary and assignments. When in doubt, add parentheses: `(a + b) / 2`, `(x > 0) && (y > 0)`.
+
+~~~check
+? What does `10 / 4 * 4` evaluate to?
++ 8
+- 10
+- 10.0
+- 2.5
+> 10 / 4 is 2 (integer division), then 2 * 4.
+~~~
+
+📚 **Go deeper:** *Java: The Complete Reference*, chapter 4 "Operators"; dev.java, "Operators"; Joshua Bloch and Neal Gafter, *Java Puzzlers* (the surprises of integer arithmetic).
+--- goals
+- compute with arithmetic operators, including integer division and remainder
+- recognise integer overflow and floating-point approximation
+- use compound assignment and increment operators
+- combine conditions with short-circuit logical operators and the ternary operator
+- know when bitwise operators are used, and rely on parentheses for precedence
+--- quiz
+? What is `7 % 3`?
++ 1
+- 2
+- 2.33
+- 0
+> The remainder of 7 / 3.
+? What does `(double) 7 / 2` give?
++ 3.5
+- 3.0
+- 3
+- 4
+> The cast applies to 7 first, so the division is floating-point.
+? Why is `s != null && s.length() > 0` safe when s is null?
++ && stops after the first false operand, so length() isn't called
+- Java ignores null
+- It isn't safe
+- && evaluates right to left
+> Short-circuit evaluation.
+? What does `Integer.MAX_VALUE + 1` give?
++ Integer.MIN_VALUE (it wraps around)
+- An exception
+- 2147483648
+- A compile error
+> Use Math.addExact to detect overflow.
+--- exercise code java
+::prompt
+A school bus carries `40` children per trip. Given `259` children, print:
+
+```
+Full buses: 6
+Children on the last bus: 19
+Buses needed: 7
+Even number of children: false
+```
+
+Compute every value from the two numbers (the buses needed are the full buses plus one if there's a remainder, using the ternary operator).
+::starter
+public class Main {
+    public static void main(String[] args) {
+        int children = 259;
+        int perBus = 40;
+    }
+}
+::solution
+public class Main {
+    public static void main(String[] args) {
+        int children = 259;
+        int perBus = 40;
+        int full = children / perBus;
+        int rest = children % perBus;
+        int needed = full + (rest > 0 ? 1 : 0);
+        System.out.println("Full buses: " + full);
+        System.out.println("Children on the last bus: " + rest);
+        System.out.println("Buses needed: " + needed);
+        System.out.println("Even number of children: " + (children % 2 == 0));
+    }
+}
+::expected
+Full buses: 6
+Children on the last bus: 19
+Buses needed: 7
+Even number of children: false
+::variants
+259 => 320
+::hints
+- `children / perBus` gives the full buses; `children % perBus` the remainder.
+- `(rest > 0 ? 1 : 0)` adds the partly full bus.
+--- cards
+Integer division :: 7 / 2 = 3; make one operand double for 3.5.
+% (modulo) :: Remainder: 7 % 3 = 1; n % 2 == 0 tests even.
+Overflow :: int arithmetic wraps silently; use long or Math.addExact.
+++ / += :: count++ (after), ++count (before); x += 5 means x = x + 5.
+&& / || :: Short-circuit: the right side runs only when needed.
+Ternary :: cond ? a : b — an if/else expression.
+== on objects :: Compares references, not contents; use equals.
+
+=== lesson java-strings | Strings and text | 70
+## String basics
+
+`String` is the type for text. Strings are **objects**, but Java gives them special syntax (literals in double quotes and `+` for joining):
+
+```java
+public class Main {
+    public static void main(String[] args) {
+        String language = "Java";
+        System.out.println(language.length());              // 4
+        System.out.println(language.toUpperCase());         // JAVA
+        System.out.println(language.charAt(0));             // J
+        System.out.println(language.indexOf("va"));         // 2
+        System.out.println(language.substring(1, 3));       // av (from 1, up to but not including 3)
+        System.out.println(language.contains("av"));        // true
+        System.out.println(language.replace("a", "4"));     // J4v4
+        System.out.println("  padded  ".strip() + "|");     // padded|
+        System.out.println(String.join(", ", "a", "b", "c"));
+        System.out.println("a,b,,c".split(",").length);     // 4
+        System.out.println("ha".repeat(3));                 // hahaha
+    }
+}
+```
+
+Indexes start at **0**; `substring(start, end)` excludes `end`. Other useful methods: `startsWith`, `endsWith`, `isEmpty`, `isBlank`, `lastIndexOf`, `toLowerCase`, `trim`, `chars()`.
+
+## Strings are immutable
+
+No `String` method changes the string: they all return a **new** string.
+
+```java
+public class Main {
+    public static void main(String[] args) {
+        String name = "ada";
+        name.toUpperCase();                  // result thrown away!
+        System.out.println(name);            // still "ada"
+        name = name.toUpperCase();           // keep the result
+        System.out.println(name);
+    }
+}
+```
+
+Immutability makes strings safe to share between parts of a program (and threads), and lets Java reuse identical literals.
+
+## Comparing strings: equals, never ==
+
+```java
+public class Main {
+    public static void main(String[] args) {
+        String a = "hello";
+        String b = new String("hello");
+        System.out.println(a == b);                       // false: different objects
+        System.out.println(a.equals(b));                  // true: same characters
+        System.out.println("HELLO".equalsIgnoreCase(a));  // true
+        System.out.println("apple".compareTo("banana"));  // negative: "apple" sorts first
+    }
+}
+```
+
+`==` compares **references**. It sometimes appears to work for strings (identical literals are shared), which makes the bug especially sneaky. Always use `equals` (or `equalsIgnoreCase`), and `compareTo` for alphabetical order. A safe pattern when one side may be `null`: `"admin".equals(role)`.
+
+## Building strings efficiently: StringBuilder
+
+Because strings are immutable, `s += x` in a loop creates a new string every time. For building text piece by piece, use a **`StringBuilder`**:
+
+```java
+public class Main {
+    public static void main(String[] args) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 1; i <= 5; i++) {
+            sb.append(i);
+            if (i < 5) sb.append(" -> ");
+        }
+        System.out.println(sb.toString());
+        System.out.println(new StringBuilder("stressed").reverse());
+    }
+}
+```
+
+## Text blocks and formatting
+
+**Text blocks** (Java 15+) write multi-line strings between triple quotes, without `\n` escapes:
+
+```java
+public class Main {
+    public static void main(String[] args) {
+        String json = """
+            {
+              "name": "%s",
+              "level": %d
+            }
+            """.formatted("Ada", 3);
+        System.out.print(json);
+    }
+}
+```
+
+The common indentation is removed automatically. `formatted(...)` (like `String.format`) fills `%s`/`%d` placeholders.
+
+Escape sequences in normal strings: `\n` (new line), `\t` (tab), `\"` (quote), `\\` (backslash), `é` (a Unicode character).
+
+## Characters
+
+A `char` is a single UTF-16 code unit. The `Character` class helps classify them:
+
+```java
+public class Main {
+    public static void main(String[] args) {
+        String text = "R2-D2 lands!";
+        int letters = 0, digits = 0;
+        for (char c : text.toCharArray()) {
+            if (Character.isLetter(c)) letters++;
+            else if (Character.isDigit(c)) digits++;
+        }
+        System.out.println(letters + " letters, " + digits + " digits");
+    }
+}
+```
+
+~~~check
+? `String s = "java"; s.toUpperCase(); System.out.println(s);` prints...
++ java
+- JAVA
+- An error
+- Java
+> Strings are immutable; the result was discarded.
+~~~
+
+📚 **Go deeper:** *Java: The Complete Reference*, chapter 15 "String Handling"; dev.java, "Strings" and "Text Blocks"; the `String` and `StringBuilder` API documentation.
+--- goals
+- use the common String methods, with zero-based indexes
+- explain why strings are immutable and keep the results of String methods
+- compare strings with equals and compareTo, never ==
+- build strings with StringBuilder, text blocks and formatted
+- classify characters with the Character class
+--- quiz
+? What does `"banana".indexOf("na")` return?
++ 2
+- 3
+- 4
+- 1
+> Indexes start at 0.
+? Which compares two strings' contents?
++ `a.equals(b)`
+- `a == b`
+- `a = b`
+- `a.compare(b) == true`
+> == compares references.
+? Why use StringBuilder in a loop?
++ Each += on a String creates a new object; StringBuilder appends in place
+- Strings can't be joined in loops
+- StringBuilder sorts text
+- It's required by the compiler
+> It avoids creating many temporary strings.
+? What's `"Hello".substring(1, 4)`?
++ "ell"
+- "ello"
+- "Hell"
+- "el"
+> From index 1 up to (not including) 4.
+--- exercise code java
+::prompt
+Write `static String initials(String fullName)` returning the upper-case initials of each word, separated by dots, like `A.K.L.` for `"ada king lovelace"`. Extra spaces between words must be ignored. The program prints:
+
+```
+A.K.L.
+G.H.
+T.B.
+```
+::starter
+public class Main {
+    static String initials(String fullName) {
+        return "";
+    }
+
+    public static void main(String[] args) {
+        System.out.println(initials("ada king lovelace"));
+        System.out.println(initials("  grace   hopper "));
+        System.out.println(initials("Tim Berners-Lee"));
+    }
+}
+::solution
+public class Main {
+    static String initials(String fullName) {
+        StringBuilder sb = new StringBuilder();
+        for (String word : fullName.strip().split("\\s+")) {
+            sb.append(Character.toUpperCase(word.charAt(0))).append('.');
+        }
+        return sb.toString();
+    }
+
+    public static void main(String[] args) {
+        System.out.println(initials("ada king lovelace"));
+        System.out.println(initials("  grace   hopper "));
+        System.out.println(initials("Tim Berners-Lee"));
+    }
+}
+::expected
+A.K.L.
+G.H.
+T.B.
+::variants
+"ada king lovelace" => "alan mathison turing"
+::hints
+- `fullName.strip().split("\\s+")` splits on any run of spaces (in a Java string, the regex `\s+` is written `"\\s+"`).
+- Use a `StringBuilder` and `Character.toUpperCase(word.charAt(0))`.
+--- exercise code java
+::prompt
+Write `static boolean isPalindrome(String text)` that ignores case and everything that isn't a letter or digit. Print the result for three phrases:
+
+```
+A man, a plan, a canal: Panama -> true
+Java -> false
+Was it a car or a cat I saw? -> true
+```
+::starter
+public class Main {
+    static boolean isPalindrome(String text) {
+        return false;
+    }
+
+    public static void main(String[] args) {
+        String[] phrases = {"A man, a plan, a canal: Panama", "Java", "Was it a car or a cat I saw?"};
+        for (String p : phrases) {
+            System.out.println(p + " -> " + isPalindrome(p));
+        }
+    }
+}
+::solution
+public class Main {
+    static boolean isPalindrome(String text) {
+        StringBuilder cleaned = new StringBuilder();
+        for (char c : text.toCharArray()) {
+            if (Character.isLetterOrDigit(c)) cleaned.append(Character.toLowerCase(c));
+        }
+        String forward = cleaned.toString();
+        return forward.equals(cleaned.reverse().toString());
+    }
+
+    public static void main(String[] args) {
+        String[] phrases = {"A man, a plan, a canal: Panama", "Java", "Was it a car or a cat I saw?"};
+        for (String p : phrases) {
+            System.out.println(p + " -> " + isPalindrome(p));
+        }
+    }
+}
+::expected
+A man, a plan, a canal: Panama -> true
+Java -> false
+Was it a car or a cat I saw? -> true
+::variants
+"Java" => "Racecar"
+::hints
+- Keep only `Character.isLetterOrDigit(c)` characters, lower-cased, in a `StringBuilder`.
+- Compare with `equals` against the reversed text (`new StringBuilder(s).reverse().toString()`).
+--- cards
+String methods :: length, charAt, indexOf, substring(start, end), contains, replace, split, strip, toUpperCase, repeat, join.
+Immutable strings :: Methods return new strings; keep the result: s = s.trim().
+equals vs == :: equals compares characters; == compares references. "x".equals(maybeNull) is null-safe.
+StringBuilder :: Mutable text: append, insert, reverse, toString — efficient in loops.
+Text block :: """ multi-line text """ (Java 15+); .formatted(...) fills placeholders.
+
+=== lesson java-input | Reading input: Scanner | 55
+## Reading what the user types
+
+Programs read keyboard input from **standard input**, `System.in`. The easiest way is a **`Scanner`**, from the `java.util` package (so it needs an `import` at the top of the file):
+
+```java
+// stdin: Ada | 36
+import java.util.Scanner;
+
+public class Main {
+    public static void main(String[] args) {
+        Scanner in = new Scanner(System.in);
+        System.out.print("What's your name? ");
+        String name = in.nextLine();
+        System.out.print("How old are you? ");
+        int age = in.nextInt();
+        System.out.println();
+        System.out.println("Hi " + name + ", next year you'll be " + (age + 1) + ".");
+    }
+}
+```
+
+In DevQuest, the input lines go in the box under the example (one line per read) before you press **▶ Run**; this example fills in `Ada` and `36` for you (from its `// stdin:` comment), and you can change them. As in a real terminal capture, what you type isn't repeated in the output, which is why the example prints an empty line before its answer.
+
+| Method | Reads |
+|---|---|
+| `nextLine()` | the rest of the current line, as a `String` |
+| `next()` | the next word (up to whitespace) |
+| `nextInt()`, `nextDouble()`, `nextLong()`, `nextBoolean()` | the next token, converted |
+| `hasNextInt()`, `hasNextLine()`, `hasNext()` | whether such input is available (without reading it) |
+
+## The nextInt / nextLine trap
+
+`nextInt()` reads the number but **not** the line break after it. A `nextLine()` right after returns the empty rest of that line:
+
+```java
+import java.util.Scanner;
+
+public class Main {
+    public static void main(String[] args) {
+        Scanner in = new Scanner("42\nAda\n");   // a Scanner can also read from a string, handy for tests
+        int age = in.nextInt();
+        String name = in.nextLine();             // reads "" (the rest of the "42" line)
+        System.out.println("[" + name + "]");
+        name = in.nextLine();                    // now reads "Ada"
+        System.out.println("[" + name + "]");
+    }
+}
+```
+
+Two simple fixes: call `in.nextLine()` once after `nextInt()` to skip the line break, or read every line with `nextLine()` and convert it yourself with `Integer.parseInt(line.strip())`. The second approach is more robust, and is how most programs read line-based input.
+
+## Parsing and validating
+
+`Integer.parseInt`, `Double.parseDouble` and `Long.parseLong` convert text to numbers, and throw `NumberFormatException` for invalid text. `hasNextInt()` lets you check before reading:
+
+```java
+import java.util.Scanner;
+
+public class Main {
+    public static void main(String[] args) {
+        Scanner in = new Scanner("12 seven 30 4.5 8");
+        int sum = 0;
+        while (in.hasNext()) {
+            if (in.hasNextInt()) sum += in.nextInt();
+            else System.out.println("skipping " + in.next());
+        }
+        System.out.println("sum = " + sum);
+    }
+}
+```
+
+## Reading until the end of input
+
+`while (in.hasNextLine())` processes every line until the input ends, which is how command-line tools read files piped into them (`java Main < data.txt`).
+
+~~~check
+? Input `25` then `Ada`. After `int n = in.nextInt();`, what does `in.nextLine()` return?
++ An empty string (the rest of the first line)
+- "Ada"
+- "25"
+- It throws an exception
+> nextInt leaves the line break behind.
+~~~
+
+📚 **Go deeper:** *Java: The Complete Reference*, chapter 18 ("Scanner"); the `java.util.Scanner` API documentation; dev.java, "Reading Input".
+--- goals
+- read input with Scanner: nextLine, next and the typed next methods
+- avoid the nextInt/nextLine trap
+- parse and validate text with parseInt, hasNextInt and NumberFormatException
+- process input until it ends
+--- quiz
+? Which import does Scanner need?
++ `import java.util.Scanner;`
+- `import java.io.Scanner;`
+- `import Scanner;`
+- None
+> Scanner lives in java.util.
+? What does `Integer.parseInt("12a")` do?
++ Throws NumberFormatException
+- Returns 12
+- Returns 0
+- Returns null
+> Validate first or catch the exception (Module 5).
+? Which loop reads every remaining line?
++ `while (in.hasNextLine()) { String line = in.nextLine(); ... }`
+- `for (String line : in) { ... }`
+- `while (in.nextLine() != null)`
+- `do { } while (true);`
+> hasNextLine checks before reading.
+--- exercise code java
+::prompt
+Write a **tip calculator** that reads two lines: the bill amount and the tip percentage. It prints (with prompts, which don't end with a line break):
+
+```
+Bill: Tip %:
+Tip: 9.45
+Total: 72.45
+Per person (3): 24.15
+```
+
+The third line splits the total between 3 people. Read each line with `nextLine()` and convert it with `Double.parseDouble` and `Integer.parseInt`. (The prompts `Bill: ` and `Tip %: ` are printed with `print`, so they share the first line, and then `println()` ends it.)
+::stdin
+63
+15
+::starter
+import java.util.Scanner;
+
+public class Main {
+    public static void main(String[] args) {
+        Scanner in = new Scanner(System.in);
+    }
+}
+::solution
+import java.util.Scanner;
+
+public class Main {
+    public static void main(String[] args) {
+        Scanner in = new Scanner(System.in);
+        System.out.print("Bill: ");
+        double bill = Double.parseDouble(in.nextLine().strip());
+        System.out.print("Tip %: ");
+        int percent = Integer.parseInt(in.nextLine().strip());
+        System.out.println();
+        double tip = bill * percent / 100;
+        double total = bill + tip;
+        System.out.printf("Tip: %.2f%n", tip);
+        System.out.printf("Total: %.2f%n", total);
+        System.out.printf("Per person (3): %.2f%n", total / 3);
+    }
+}
+::expected
+Bill: Tip %:
+Tip: 9.45
+Total: 72.45
+Per person (3): 24.15
+::cases
+>>> 100
+>>> 20
+Bill: Tip %:
+Tip: 20.00
+Total: 120.00
+Per person (3): 40.00
+::hints
+- `double bill = Double.parseDouble(in.nextLine().strip());`
+- Print the prompts with `print`, then `System.out.println();` to end the line.
+--- exercise code java
+::prompt
+Read numbers, one per line, until the input ends. Ignore lines that aren't whole numbers (print `ignored: <line>` for them), and finally print the count, sum and maximum of the valid numbers:
+
+```
+ignored: twelve
+ignored: 4.5
+count=4 sum=38 max=21
+```
+
+For no valid numbers at all, print `no numbers`.
+::stdin
+7
+twelve
+21
+4.5
+-3
+13
+::starter
+import java.util.Scanner;
+
+public class Main {
+    public static void main(String[] args) {
+        Scanner in = new Scanner(System.in);
+    }
+}
+::solution
+import java.util.Scanner;
+
+public class Main {
+    public static void main(String[] args) {
+        Scanner in = new Scanner(System.in);
+        int count = 0;
+        int sum = 0;
+        int max = Integer.MIN_VALUE;
+        while (in.hasNextLine()) {
+            String line = in.nextLine().strip();
+            if (line.isEmpty()) continue;
+            try {
+                int n = Integer.parseInt(line);
+                count++;
+                sum += n;
+                max = Math.max(max, n);
+            } catch (NumberFormatException e) {
+                System.out.println("ignored: " + line);
+            }
+        }
+        if (count == 0) System.out.println("no numbers");
+        else System.out.println("count=" + count + " sum=" + sum + " max=" + max);
+    }
+}
+::expected
+ignored: twelve
+ignored: 4.5
+count=4 sum=38 max=21
+::cases
+>>> abc
+ignored: abc
+no numbers
+::hints
+- `while (in.hasNextLine())` reads until the end.
+- `Integer.parseInt` throws `NumberFormatException` for invalid text: wrap it in `try { ... } catch (NumberFormatException e) { ... }` (Module 5 explains try/catch; here it's all you need).
+- Start `max` at `Integer.MIN_VALUE`, and update it with `Math.max`.
+--- cards
+Scanner :: new Scanner(System.in) — nextLine(), next(), nextInt(), nextDouble(), hasNextInt(), hasNextLine().
+nextInt trap :: nextInt leaves the line break; a following nextLine returns "". Read lines and parse instead.
+Parsing :: Integer.parseInt, Double.parseDouble — NumberFormatException on bad input.
+Read to the end :: while (in.hasNextLine()) { ... }
+
+=== lesson java-m2-test | Module 2 test | 120 | exam
+This test covers Module 2: primitive types, casts and constants, operators (integer division, overflow, logic), strings and StringBuilder, and reading input with Scanner.
+
+Before you start, check that you can:
+
+- pick the right numeric type and cast safely;
+- predict integer division, remainders and short-circuit logic;
+- work with strings using equals, substring, split and StringBuilder;
+- read and parse input line by line.
+--- goals
+- handle numbers, text and input precisely in Java
+--- quiz
+? What is `5 / 2 + 5 % 2`?
++ 3
+- 3.5
+- 2
+- 4
+> 2 + 1.
+? Which type is `'x'`?
++ char
+- String
+- byte
+- Character only
+> Single quotes are for one char.
+? `"Java".equals("java")` is...
++ false
+- true
+- a compile error
+- null
+> equals is case-sensitive; use equalsIgnoreCase.
+? What does `sb.append("a").append("b")` return?
++ The same StringBuilder, so calls can be chained
+- A new String "ab"
+- void
+- null
+> append returns this.
+--- exercise code java
+::prompt
+Read a line of text and print a **word report**: the number of words, the longest word (the first one if several tie), and each vowel's count (only vowels that appear, in `aeiou` order), ignoring case:
+
+```
+Words: 9
+Longest: quick
+a=1 e=3 i=1 o=4 u=2
+```
+::stdin
+The quick brown fox jumps over the lazy dog
+::starter
+import java.util.Scanner;
+
+public class Main {
+    public static void main(String[] args) {
+        Scanner in = new Scanner(System.in);
+        String line = in.nextLine();
+    }
+}
+::solution
+import java.util.Scanner;
+
+public class Main {
+    public static void main(String[] args) {
+        Scanner in = new Scanner(System.in);
+        String line = in.nextLine().strip();
+        String[] words = line.split("\\s+");
+        String longest = "";
+        for (String w : words) {
+            if (w.length() > longest.length()) longest = w;
+        }
+        System.out.println("Words: " + words.length);
+        System.out.println("Longest: " + longest);
+        StringBuilder report = new StringBuilder();
+        String lower = line.toLowerCase();
+        for (char v : "aeiou".toCharArray()) {
+            int count = 0;
+            for (char c : lower.toCharArray()) {
+                if (c == v) count++;
+            }
+            if (count > 0) {
+                if (report.length() > 0) report.append(' ');
+                report.append(v).append('=').append(count);
+            }
+        }
+        System.out.println(report);
+    }
+}
+::expected
+Words: 9
+Longest: quick
+a=1 e=3 i=1 o=4 u=2
+::cases
+>>> Hello   world from Java
+Words: 4
+Longest: Hello
+a=2 e=1 o=3
+::hints
+- `line.split("\\s+")` gives the words; compare lengths to find the longest.
+- Loop over `"aeiou".toCharArray()` and count each vowel in the lower-cased line; append only counts above 0.

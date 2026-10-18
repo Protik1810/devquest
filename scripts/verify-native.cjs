@@ -57,7 +57,9 @@ function applyVariants(code, variants) {
   const examples = fs.existsSync(examplesFile) ? JSON.parse(fs.readFileSync(examplesFile, 'utf8')).filter((x) => langs[x.lang] && (!only || x.lang === only || x.id.includes(only))) : [];
   let badExamples = 0;
   for (const x of examples) {
-    const r = await t.runProgram(x.lang, x.code);
+    // "// stdin: Ada | 36" gives an interactive example its typed lines
+    const typed = x.code.match(/^\s*\/\/ stdin: (.*)$/m)?.[1].split('|').map((s) => s.trim()).join('\n');
+    const r = await t.runProgram(x.lang, x.code, typed);
     const shouldFail = /^\s*\/\/ error\b/im.test(x.code);
     if (r.ok === shouldFail) {
       badExamples++;
