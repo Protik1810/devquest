@@ -1,0 +1,1352 @@
+=== module Module 4 · Object-oriented C#
+
+=== lesson cs-classes | Classes, objects and properties | 75
+## A class with fields, a constructor and methods
+
+```csharp
+var alice = new BankAccount("Alice", 100);
+var bob = new BankAccount("Bob", 20);
+alice.Deposit(50);
+Console.WriteLine(bob.Withdraw(30));      // False: not enough money
+Console.WriteLine(alice);
+Console.WriteLine(bob.Balance);
+
+class BankAccount
+{
+    private decimal _balance;               // a field: private by convention, _camelCase
+
+    public BankAccount(string owner, decimal opening)
+    {
+        Owner = owner;
+        _balance = opening;
+    }
+
+    public string Owner { get; }            // a read-only auto-property
+    public decimal Balance => _balance;     // a computed, read-only property
+
+    public void Deposit(decimal amount) => _balance += amount;
+
+    public bool Withdraw(decimal amount)
+    {
+        if (amount > _balance) return false;
+        _balance -= amount;
+        return true;
+    }
+
+    public override string ToString() => $"{Owner}: {_balance}";
+}
+```
+
+- A **constructor** has the class's name and no return type; `new` creates an object and runs it.
+- `this` refers to the current object (needed only when names clash).
+- `override ToString()` controls how the object prints (every class inherits from `object`).
+
+## Properties
+
+**Properties** are C#'s answer to Java's getters and setters: they look like fields from outside, but run code:
+
+```csharp
+var t = new Thermostat();
+t.Target = 30;                       // the setter clamps it
+Console.WriteLine(t.Target);
+t.Target = 18.5;
+Console.WriteLine($"{t.Target} {t.IsHeating}");
+Console.WriteLine(t.Name);
+
+class Thermostat
+{
+    private double _target = 20;
+    public double Current { get; set; } = 19;        // auto-property with an initial value
+
+    public double Target
+    {
+        get => _target;
+        set => _target = Math.Clamp(value, 5, 28);   // value is the assigned value
+    }
+
+    public bool IsHeating => Current < Target;       // computed, read-only
+    public string Name { get; init; } = "Living room"; // settable only during initialisation
+}
+```
+
+| Form | Meaning |
+|---|---|
+| `public int X { get; set; }` | auto-property: the compiler creates the hidden field |
+| `public int X { get; }` | read-only: set only in the constructor |
+| `public int X { get; init; }` | settable in an object initialiser, then read-only |
+| `public int X { get; private set; }` | readable by all, settable only inside the class |
+| `public int X => expr;` | computed, read-only |
+
+## Object initialisers
+
+```csharp
+var p = new Product { Name = "Lamp", Price = 35m, Tags = { "home", "light" } };
+Console.WriteLine($"{p.Name} {p.Price} [{string.Join(", ", p.Tags)}]");
+
+class Product
+{
+    public required string Name { get; init; }      // must be set by every creator (C# 11)
+    public decimal Price { get; init; }
+    public List<string> Tags { get; } = new();
+}
+```
+
+An **object initialiser** `{ Name = ..., Price = ... }` sets properties right after construction. **`required`** members must be set there, or the code doesn't compile: a clean alternative to long constructors.
+
+## Primary constructors
+
+C# 12 lets a class declare its constructor parameters in its header; they're in scope throughout the class:
+
+```csharp
+var g = new Greeter("Hello");
+Console.WriteLine(g.Greet("Ada"));
+
+class Greeter(string greeting)
+{
+    public string Greet(string name) => $"{greeting}, {name}!";
+}
+```
+
+## Classes are reference types
+
+Variables of a class type hold **references**; assigning shares the object, and `null` means "no object" (using it throws `NullReferenceException`). Objects nothing refers to are freed by the garbage collector.
+
+~~~check
+? What's the main difference between a property and a public field?
++ A property runs code (getter/setter), so it can validate, compute or be read-only
+- Properties are faster
+- Fields can't be public
+- There's no difference
+> Public fields are discouraged; properties are the norm.
+~~~
+
+📚 **Go deeper:** Microsoft Learn, "Classes", "Properties", "Object and collection initializers" and "Primary constructors"; *Programming C#*, chapter 4 "Classes and Objects".
+--- goals
+- define classes with fields, constructors, methods and ToString
+- use auto-properties, computed properties, init and private setters
+- create objects with initialisers and required members
+- write primary constructors
+--- quiz
+? Which property can only be set during object creation?
++ `{ get; init; }`
+- `{ get; set; }`
+- `{ get; private set; }`
+- `=> value`
+> init accessors (C# 9).
+? What does `required` on a property do?
++ Every object initialiser must set it, or the code doesn't compile
+- Makes it non-null at run time
+- Makes it read-only
+- Validates its value
+> C# 11.
+? In `set => _x = value;`, what is `value`?
++ The value being assigned to the property
+- A keyword for null
+- The old value
+- A field
+> The implicit setter parameter.
+--- exercise code csharp
+::prompt
+Write a class `Counter` with a read-only `Label` (from the constructor), a `Count` that can be read from outside but only changed inside the class (`private set`), methods `Increment()`, `IncrementBy(int n)` (ignoring negative `n`) and `Reset()`, and `ToString()` returning `label: count`. The program prints:
+
+```
+clicks: 3
+views: 10
+clicks: 0
+```
+::starter
+var clicks = new Counter("clicks");
+var views = new Counter("views");
+clicks.Increment();
+clicks.Increment();
+clicks.Increment();
+views.IncrementBy(10);
+views.IncrementBy(-5);
+Console.WriteLine(clicks);
+Console.WriteLine(views);
+clicks.Reset();
+Console.WriteLine(clicks);
+
+class Counter
+{
+}
+::solution
+var clicks = new Counter("clicks");
+var views = new Counter("views");
+clicks.Increment();
+clicks.Increment();
+clicks.Increment();
+views.IncrementBy(10);
+views.IncrementBy(-5);
+Console.WriteLine(clicks);
+Console.WriteLine(views);
+clicks.Reset();
+Console.WriteLine(clicks);
+
+class Counter(string label)
+{
+    public string Label { get; } = label;
+    public int Count { get; private set; }
+
+    public void Increment() => Count++;
+
+    public void IncrementBy(int n)
+    {
+        if (n > 0) Count += n;
+    }
+
+    public void Reset() => Count = 0;
+
+    public override string ToString() => $"{Label}: {Count}";
+}
+::expected
+clicks: 3
+views: 10
+clicks: 0
+::variants
+IncrementBy(10) => IncrementBy(7)
+::hints
+- `public int Count { get; private set; }` is readable everywhere but settable only inside.
+- A primary constructor `class Counter(string label)` and `public string Label { get; } = label;`.
+--- cards
+Class :: Fields, constructors, methods, properties; new creates objects (references).
+Auto-property :: public int X { get; set; } — the compiler creates the field.
+init / private set :: Set only in initialisers / only inside the class.
+Computed property :: public bool IsEmpty => Count == 0;
+Object initialiser :: new Product { Name = "Lamp", Price = 35m }; required members must be set.
+Primary constructor :: class Greeter(string greeting) { ... uses greeting ... } (C# 12).
+
+=== lesson cs-encapsulation | Encapsulation, static and immutability | 65
+## Access modifiers
+
+| Modifier | Visible from |
+|---|---|
+| `private` | the type itself (the **default** for members) |
+| `protected` | the type and derived classes |
+| `internal` | the same **assembly** (project) (the default for top-level types) |
+| `protected internal` / `private protected` | combinations of the above |
+| `public` | everywhere |
+
+Keep fields `private`, expose behaviour through methods and properties, and validate in one place:
+
+```csharp
+var acc = new Account("Ada", 100);
+acc.Deposit(25);
+try
+{
+    acc.Withdraw(500);
+}
+catch (InvalidOperationException e)
+{
+    Console.WriteLine($"Refused: {e.Message}");
+}
+Console.WriteLine($"{acc.Owner} has {acc.Balance}");
+
+class Account
+{
+    public Account(string owner, decimal opening)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(owner);
+        ArgumentOutOfRangeException.ThrowIfNegative(opening);
+        Owner = owner;
+        Balance = opening;
+    }
+
+    public string Owner { get; }
+    public decimal Balance { get; private set; }
+
+    public void Deposit(decimal amount)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(amount);
+        Balance += amount;
+    }
+
+    public void Withdraw(decimal amount)
+    {
+        if (amount > Balance) throw new InvalidOperationException("insufficient funds");
+        Balance -= amount;
+    }
+}
+```
+
+The `ThrowIf...` helpers (.NET 7+) make argument validation one line each.
+
+## static members and static classes
+
+`static` fields, properties and methods belong to the type, shared by all instances. A **static class** can't be instantiated and holds only static members: the place for utility functions (`Math`, `Console`, `File`):
+
+```csharp
+var a = new Ticket();
+var b = new Ticket();
+var c = new Ticket();
+Console.WriteLine($"{a.Number} {b.Number} {c.Number} issued: {Ticket.Issued}");
+Console.WriteLine(TextUtils.Shout("hello"));
+
+class Ticket
+{
+    private static int s_next = 1;
+    public static int Issued => s_next - 1;
+    public int Number { get; } = s_next++;
+}
+
+static class TextUtils
+{
+    public static string Shout(string s) => s.ToUpper() + "!";
+}
+```
+
+## readonly, const and immutability
+
+- `const`: a compile-time constant (numbers, strings).
+- `readonly` field: assigned only in its declaration or the constructor.
+- Immutable classes: only get-only or `init` properties, no setters, and methods that return **new** objects (like `string` and `DateTime`).
+
+```csharp
+var price = new Money(19.99m, "EUR");
+var doubled = price.Times(2);
+Console.WriteLine($"{price} -> {doubled}");
+
+sealed class Money(decimal amount, string currency)
+{
+    public decimal Amount { get; } = amount;
+    public string Currency { get; } = currency;
+    public Money Times(int factor) => new(Amount * factor, Currency);
+    public override string ToString() => $"{Amount:F2} {Currency}";
+}
+```
+
+(`new(...)` with the type omitted is a **target-typed new**: the type comes from the context.) `sealed` prevents inheritance. **Records** (lesson 5) make such types one line long.
+
+~~~check
+? What's the default accessibility of a class member with no modifier?
++ private
+- public
+- internal
+- protected
+> Top-level types default to internal.
+~~~
+
+📚 **Go deeper:** Microsoft Learn, "Access modifiers", "Static classes and static class members" and "readonly"; *Programming C#*, chapter 4 (access, static members).
+--- goals
+- choose access modifiers, including internal and protected
+- validate arguments and protect invariants in one place
+- use static members and static classes
+- design immutable classes with get-only properties and readonly
+--- quiz
+? What does `internal` mean?
++ Visible within the same assembly (project)
+- Visible only to the class
+- Visible everywhere
+- Visible to subclasses only
+> The default for top-level types.
+? Can you create an instance of a static class?
++ No
+- Yes
+- Only once
+- Only with new()
+> It holds only static members.
+? When can a readonly field be assigned?
++ In its declaration or in a constructor
+- Anywhere in the class
+- Only in static methods
+- Never
+> const is fixed at compile time instead.
+--- exercise code csharp
+::prompt
+Write an encapsulated `Temperature` class:
+
+- a private constructor; create instances with static factory methods `FromCelsius(double)` and `FromFahrenheit(double)` (stored internally in Celsius);
+- read-only properties `Celsius` and `Fahrenheit` (computed);
+- values below absolute zero (−273.15 °C) throw `ArgumentOutOfRangeException`;
+- a static property `Created` counting instances;
+- `ToString()` returning e.g. `37.0°C / 98.6°F`.
+
+The program prints:
+
+```
+37.0°C / 98.6°F
+100.0°C / 212.0°F
+refused: below absolute zero
+created: 2
+```
+::starter
+Console.WriteLine(Temperature.FromCelsius(37));
+Console.WriteLine(Temperature.FromFahrenheit(212));
+try
+{
+    Temperature.FromCelsius(-300);
+}
+catch (ArgumentOutOfRangeException)
+{
+    Console.WriteLine("refused: below absolute zero");
+}
+Console.WriteLine($"created: {Temperature.Created}");
+
+class Temperature
+{
+}
+::solution
+Console.WriteLine(Temperature.FromCelsius(37));
+Console.WriteLine(Temperature.FromFahrenheit(212));
+try
+{
+    Temperature.FromCelsius(-300);
+}
+catch (ArgumentOutOfRangeException)
+{
+    Console.WriteLine("refused: below absolute zero");
+}
+Console.WriteLine($"created: {Temperature.Created}");
+
+class Temperature
+{
+    public static int Created { get; private set; }
+
+    private Temperature(double celsius)
+    {
+        if (celsius < -273.15) throw new ArgumentOutOfRangeException(nameof(celsius), "below absolute zero");
+        Celsius = celsius;
+        Created++;
+    }
+
+    public double Celsius { get; }
+    public double Fahrenheit => Celsius * 9 / 5 + 32;
+
+    public static Temperature FromCelsius(double c) => new(c);
+    public static Temperature FromFahrenheit(double f) => new((f - 32) * 5 / 9);
+
+    public override string ToString() => $"{Celsius:F1}°C / {Fahrenheit:F1}°F";
+}
+::expected
+37.0°C / 98.6°F
+100.0°C / 212.0°F
+refused: below absolute zero
+created: 2
+::variants
+FromCelsius(37) => FromCelsius(20)
+::hints
+- Validate in the private constructor, so both factories share the check, and count only successful creations.
+- `public static int Created { get; private set; }`.
+--- cards
+Access modifiers :: private (default for members), protected, internal (assembly, default for types), public.
+Argument validation :: ArgumentException.ThrowIfNullOrWhiteSpace, ArgumentOutOfRangeException.ThrowIfNegative...
+static class :: Only static members; can't be instantiated (Math, File).
+readonly / const :: Assigned once (declaration or constructor) / compile-time constant.
+Target-typed new :: Money m = new(10m, "EUR"); the type comes from the context.
+
+=== lesson cs-inheritance | Inheritance and polymorphism | 75
+## Base and derived classes
+
+```csharp
+Employee[] staff = { new Employee("Ada", 4000), new Manager("Grace", 6000, 1500) };
+foreach (Employee e in staff) Console.WriteLine(e.Describe());
+
+class Employee(string name, decimal salary)
+{
+    public string Name { get; } = name;
+    protected decimal Salary { get; } = salary;
+
+    public virtual decimal MonthlyPay() => Salary;
+    public string Describe() => $"{Name} ({GetType().Name}): {MonthlyPay()}";
+}
+
+class Manager(string name, decimal salary, decimal bonus) : Employee(name, salary)
+{
+    public override decimal MonthlyPay() => base.MonthlyPay() + bonus;
+}
+```
+
+- `class Manager : Employee` derives from `Employee` (single inheritance, like Java); the base constructor is called with the arguments after the colon (`: Employee(name, salary)`, or `: base(...)` in a classic constructor).
+- C# methods are **not virtual by default** (unlike Java): a method must be marked **`virtual`** to be overridable, and the override must say **`override`**. `base.Method()` calls the base version.
+- `sealed override` stops further overriding; a `sealed class` can't be derived from.
+
+## Abstract classes and polymorphism
+
+```csharp
+Shape[] shapes = { new Circle(1), new Rectangle(2, 3), new Circle(0.5) };
+foreach (Shape s in shapes) Console.WriteLine($"{s.Name}: {s.Area():F2}");
+Console.WriteLine($"Total: {shapes.Sum(s => s.Area()):F2}");
+
+abstract class Shape
+{
+    public abstract double Area();
+    public string Name => GetType().Name;
+}
+
+class Circle(double radius) : Shape
+{
+    public override double Area() => Math.PI * radius * radius;
+}
+
+class Rectangle(double width, double height) : Shape
+{
+    public override double Area() => width * height;
+}
+```
+
+A call through a base-type reference runs the **actual object's** override (dynamic dispatch). Abstract classes can't be instantiated, and their abstract members must be overridden.
+
+## Equality: Equals, GetHashCode and ==
+
+For classes, `Equals` and `==` compare **references** by default. To give a class value semantics, override `Equals` and `GetHashCode` together (and usually `==`/`!=` too, lesson 6), or use a **record**, which does it for you (lesson 5):
+
+```csharp
+var a = new Isbn("978-0134685991");
+var b = new Isbn("978-0134685991");
+Console.WriteLine($"{a == b} {a.Equals(b)} {a.GetHashCode() == b.GetHashCode()}");
+
+sealed class Isbn(string code)
+{
+    public string Code { get; } = code;
+    public override bool Equals(object? obj) => obj is Isbn other && other.Code == Code;
+    public override int GetHashCode() => Code.GetHashCode();
+}
+```
+
+(`a == b` is still `False`: overriding `Equals` doesn't change `==` for classes.)
+
+## Type tests and casts
+
+`is` tests a type and binds a variable; `as` converts or gives `null`; a cast `(Circle)shape` throws `InvalidCastException` if wrong:
+
+```csharp
+object[] things = { new Circle(2), "text", 42 };
+foreach (object t in things)
+{
+    string kind = t switch
+    {
+        Circle c => $"circle with area {c.Area():F1}",
+        string s => $"string of length {s.Length}",
+        int n when n > 40 => "a big int",
+        _ => "something else",
+    };
+    Console.WriteLine(kind);
+}
+
+class Circle(double r)
+{
+    public double Area() => Math.PI * r * r;
+}
+```
+
+Prefer **composition** ("has a") to inheritance ("is a") unless the relationship is genuinely "is a": deep hierarchies are rigid. Many style guides recommend `sealed` by default.
+
+~~~check
+? In C#, can a derived class override a method that isn't marked virtual?
++ No: only virtual, abstract or override members can be overridden
+- Yes, always (like Java)
+- Only in the same file
+- Only with new
+> `new` hides a method instead, which is rarely what you want.
+~~~
+
+📚 **Go deeper:** Microsoft Learn, "Inheritance", "Polymorphism" and "Equality comparisons"; *Programming C#*, chapter 5 "Inheritance and Polymorphism".
+--- goals
+- derive classes, call base constructors and methods
+- use virtual, override, abstract and sealed
+- apply polymorphism through base-class references
+- give classes value equality with Equals and GetHashCode
+- test types with is, as, casts and type patterns
+--- quiz
+? What keyword lets a method be overridden?
++ virtual
+- override
+- base
+- sealed
+> Methods are non-virtual by default in C#.
+? What does `base.MonthlyPay()` call?
++ The base class's version of the method
+- The derived version
+- A static method
+- The constructor
+> Used inside overrides.
+? Does overriding Equals change what `==` does on a class?
++ No, == still compares references unless overloaded
+- Yes
+- Only for sealed classes
+- Only for records
+> Records overload == for you.
+--- exercise code csharp
+::prompt
+Model a small zoo: `abstract class Animal(string name)` with a `Name` property, an abstract `Sound` property and a `Speak()` method returning `<name> says <sound>`; `Dog` (`Woof`), `Cat` (`Meow`) and `Cow` (`Moo`). The program prints:
+
+```
+Rex says Woof
+Tom says Meow
+Daisy says Moo
+3 animals, 1 dogs
+```
+::starter
+Animal[] zoo = { new Dog("Rex"), new Cat("Tom"), new Cow("Daisy") };
+int dogs = 0;
+foreach (Animal a in zoo)
+{
+    Console.WriteLine(a.Speak());
+}
+Console.WriteLine($"{zoo.Length} animals, {dogs} dogs");
+::solution
+Animal[] zoo = { new Dog("Rex"), new Cat("Tom"), new Cow("Daisy") };
+int dogs = 0;
+foreach (Animal a in zoo)
+{
+    Console.WriteLine(a.Speak());
+    if (a is Dog) dogs++;
+}
+Console.WriteLine($"{zoo.Length} animals, {dogs} dogs");
+
+abstract class Animal(string name)
+{
+    public string Name { get; } = name;
+    public abstract string Sound { get; }
+    public string Speak() => $"{Name} says {Sound}";
+}
+
+class Dog(string name) : Animal(name)
+{
+    public override string Sound => "Woof";
+}
+
+class Cat(string name) : Animal(name)
+{
+    public override string Sound => "Meow";
+}
+
+class Cow(string name) : Animal(name)
+{
+    public override string Sound => "Moo";
+}
+::expected
+Rex says Woof
+Tom says Meow
+Daisy says Moo
+3 animals, 1 dogs
+::variants
+new Cat("Tom") => new Dog("Fido")
+::hints
+- Properties can be abstract too: `public abstract string Sound { get; }`, overridden with `public override string Sound => "Woof";`.
+- `class Dog(string name) : Animal(name)` passes the name to the base class.
+--- cards
+Inheritance :: class B : A — single inheritance; base(...) / A(...) calls the base constructor.
+virtual / override :: Methods must be virtual to be overridden (not virtual by default, unlike Java).
+abstract / sealed :: Must be overridden / can't be derived from or further overridden.
+Equality :: Override Equals + GetHashCode for value equality; == stays reference equality for classes.
+is / as / cast :: t is Circle c; t as Circle (null if not); (Circle)t throws if not.
+
+=== lesson cs-interfaces | Interfaces | 65
+## Contracts
+
+```csharp
+IPaymentMethod[] methods = { new Card("4242"), new PayPal("ada@example.com"), new GiftCard(20) };
+foreach (var m in methods) Console.WriteLine($"{m.Describe()} -> {(m.Pay(25) ? "paid" : "declined")}");
+
+interface IPaymentMethod
+{
+    bool Pay(decimal amount);
+    string Describe();
+}
+
+class Card(string last4) : IPaymentMethod
+{
+    public bool Pay(decimal amount) => true;
+    public string Describe() => $"Card ending {last4}";
+}
+
+class PayPal(string email) : IPaymentMethod
+{
+    public bool Pay(decimal amount) => amount <= 1000;
+    public string Describe() => $"PayPal {email}";
+}
+
+class GiftCard(decimal balance) : IPaymentMethod
+{
+    private decimal _balance = balance;
+    public bool Pay(decimal amount)
+    {
+        if (amount > _balance) return false;
+        _balance -= amount;
+        return true;
+    }
+    public string Describe() => $"Gift card ({_balance} left)";
+}
+```
+
+- Interface names start with **`I`** by convention (`IComparable`, `IDisposable`, `IEnumerable<T>`).
+- A class can implement many interfaces (and extend one class): `class Duck : Animal, IFlyer, ISwimmer`.
+- Interfaces can contain properties and events, **default implementations** (C# 8) and static members.
+
+## Standard interfaces worth knowing
+
+| Interface | Gives |
+|---|---|
+| `IComparable<T>` | a natural order: `CompareTo`, used by `Sort` and `OrderBy` |
+| `IEquatable<T>` | typed equality (`Equals(T)`) |
+| `IEnumerable<T>` | "can be iterated with foreach" (and LINQ) |
+| `IDisposable` | a `Dispose()` method to release resources, used by `using` (Module 5) |
+| `IComparer<T>`, `IEqualityComparer<T>` | external comparison strategies |
+
+```csharp
+var versions = new List<Version>{ new(1, 10), new(1, 2), new(0, 9) };
+versions.Sort();
+Console.WriteLine(string.Join(", ", versions));
+
+class Version(int major, int minor) : IComparable<Version>
+{
+    public int Major { get; } = major;
+    public int Minor { get; } = minor;
+
+    public int CompareTo(Version? other)
+    {
+        if (other is null) return 1;
+        int byMajor = Major.CompareTo(other.Major);
+        return byMajor != 0 ? byMajor : Minor.CompareTo(other.Minor);
+    }
+
+    public override string ToString() => $"{Major}.{Minor}";
+}
+```
+
+## Explicit interface implementation
+
+When two interfaces have a member with the same name, or a member shouldn't clutter the class's public API, implement it **explicitly**; it's then only reachable through the interface:
+
+```csharp
+var file = new LogFile();
+((IAuditable)file).Audit();
+
+interface IAuditable { void Audit(); }
+
+class LogFile : IAuditable
+{
+    void IAuditable.Audit() => Console.WriteLine("audited");
+}
+```
+
+## Interfaces and dependency injection
+
+Code that depends on interfaces (`ILogger`, `IOrderRepository`, `IClock`) can be given any implementation: a real database in production, an in-memory fake in tests. ASP.NET Core's built-in **dependency injection** container is built around this: classes declare the interfaces they need in their constructors, and the framework supplies implementations.
+
+~~~check
+? What does implementing `IComparable<T>` give a class?
++ A natural order, so collections of it can be sorted
+- Equality
+- foreach support
+- Serialization
+> CompareTo returns negative, zero or positive.
+~~~
+
+📚 **Go deeper:** Microsoft Learn, "Interfaces" and "Explicit interface implementation"; *Programming C#*, chapter 8 "Interfaces"; "Dependency injection in .NET".
+--- goals
+- define and implement interfaces, including several per class
+- use default interface members
+- implement IComparable<T> and know the other standard interfaces
+- use explicit implementation, and explain interfaces in dependency injection
+--- quiz
+? What's the naming convention for interfaces?
++ They start with I, like IShape
+- They end with Interface
+- All capitals
+- No convention
+> IDisposable, IEnumerable, IComparable...
+? How many interfaces can a class implement?
++ Any number
+- One
+- Two
+- None if it has a base class
+> But only one base class.
+? How is an explicitly implemented member called?
++ Through a reference of the interface type
+- Directly on the class
+- With base
+- It can't be called
+> ((IAuditable)file).Audit().
+--- exercise code csharp
+::prompt
+Implement a notification system: `interface INotifier` with `bool Send(string to, string message)`, a `string Channel { get; }` property, and a **default method** `string Report(string to, string message)` returning `<channel> to <to>: sent` or `... failed`. `EmailNotifier` (`email`) succeeds when `to` contains `@`; `SmsNotifier` (`sms`) when `to` is all digits and at least 8 long. The program prints:
+
+```
+email to ada@example.com: sent
+email to not-an-email: failed
+sms to 07700900123: sent
+sms to 12ab: failed
+```
+::starter
+INotifier email = new EmailNotifier();
+INotifier sms = new SmsNotifier();
+Console.WriteLine(email.Report("ada@example.com", "Hi"));
+Console.WriteLine(email.Report("not-an-email", "Hi"));
+Console.WriteLine(sms.Report("07700900123", "Hi"));
+Console.WriteLine(sms.Report("12ab", "Hi"));
+
+interface INotifier
+{
+}
+::solution
+INotifier email = new EmailNotifier();
+INotifier sms = new SmsNotifier();
+Console.WriteLine(email.Report("ada@example.com", "Hi"));
+Console.WriteLine(email.Report("not-an-email", "Hi"));
+Console.WriteLine(sms.Report("07700900123", "Hi"));
+Console.WriteLine(sms.Report("12ab", "Hi"));
+
+interface INotifier
+{
+    string Channel { get; }
+    bool Send(string to, string message);
+    string Report(string to, string message) => $"{Channel} to {to}: {(Send(to, message) ? "sent" : "failed")}";
+}
+
+class EmailNotifier : INotifier
+{
+    public string Channel => "email";
+    public bool Send(string to, string message) => to.Contains('@');
+}
+
+class SmsNotifier : INotifier
+{
+    public string Channel => "sms";
+    public bool Send(string to, string message) => to.Length >= 8 && to.All(char.IsDigit);
+}
+::expected
+email to ada@example.com: sent
+email to not-an-email: failed
+sms to 07700900123: sent
+sms to 12ab: failed
+::hints
+- A default method has a body inside the interface; implementations inherit it when used through the interface type.
+- `to.All(char.IsDigit)` (LINQ) checks every character.
+--- cards
+Interface :: interface IShape { double Area(); } — implemented by any number of classes; names start with I.
+Default interface member :: A method body inside an interface (C# 8), available through the interface.
+Standard interfaces :: IComparable<T>, IEquatable<T>, IEnumerable<T>, IDisposable, IComparer<T>.
+Explicit implementation :: void IAuditable.Audit() — only callable through the interface.
+Dependency injection :: Depend on interfaces; the DI container supplies implementations (ASP.NET Core).
+
+=== lesson cs-structs-records | Structs, records and enums | 75
+## Records: value-like types in one line
+
+```csharp
+var a = new Point(3, 4);
+var b = new Point(3, 4);
+Console.WriteLine(a);                       // Point { X = 3, Y = 4 }
+Console.WriteLine($"{a == b} {a.Equals(b)} {ReferenceEquals(a, b)}");
+var moved = a with { X = 10 };              // a copy with one property changed
+Console.WriteLine($"{moved} {a.DistanceToOrigin()}");
+var (x, y) = a;                             // deconstruction
+Console.WriteLine($"{x},{y}");
+
+record Point(int X, int Y)
+{
+    public double DistanceToOrigin() => Math.Sqrt(X * X + Y * Y);
+}
+```
+
+A **record** generates init-only properties, a constructor, value-based `Equals`, `GetHashCode`, `==`/`!=`, a readable `ToString`, deconstruction and **`with` expressions** (non-destructive mutation). Records can have extra members and validation:
+
+```csharp
+Console.WriteLine(new Email("Ada@Example.com"));
+try { new Email("nope"); }
+catch (ArgumentException e) { Console.WriteLine($"Rejected: {e.Message}"); }
+
+record Email
+{
+    public string Address { get; }
+    public Email(string address)
+    {
+        if (!address.Contains('@')) throw new ArgumentException($"not an email: {address}");
+        Address = address.ToLowerInvariant();
+    }
+}
+```
+
+## Structs: value types
+
+A **struct** is a value type: variables hold the data itself, and assignment **copies** it. Structs suit small, immutable values (coordinates, money amounts, colours); .NET's `int`, `double`, `DateTime`, `TimeSpan` and `Guid` are all structs.
+
+```csharp
+var p1 = new Vector2(1, 2);
+var p2 = p1;                // a full copy
+p2 = p2 with { X = 99 };
+Console.WriteLine($"{p1} {p2} {p1 + new Vector2(0.5, 0.5)}");
+
+readonly record struct Vector2(double X, double Y)
+{
+    public static Vector2 operator +(Vector2 a, Vector2 b) => new(a.X + b.X, a.Y + b.Y);
+    public double Length => Math.Sqrt(X * X + Y * Y);
+}
+```
+
+`readonly record struct` (C# 10) combines both ideas: an immutable value type with record features. Rules of thumb: use a `class` for things with identity and changing state; a `record` (class) for immutable data; a `struct` only for small values that are created in large numbers, where avoiding heap allocations matters.
+
+## Enums
+
+```csharp
+var status = OrderStatus.Shipped;
+Console.WriteLine($"{status} {(int)status} {Enum.Parse<OrderStatus>("Paid")}");
+foreach (OrderStatus s in Enum.GetValues<OrderStatus>()) Console.Write(s + " ");
+Console.WriteLine();
+string message = status switch
+{
+    OrderStatus.Pending => "Waiting for payment",
+    OrderStatus.Paid => "Being prepared",
+    OrderStatus.Shipped => "On its way",
+    OrderStatus.Delivered => "Delivered",
+    _ => "Unknown",
+};
+Console.WriteLine(message);
+
+var perms = Permissions.Read | Permissions.Write;
+Console.WriteLine($"{perms} can write: {perms.HasFlag(Permissions.Write)} can delete: {perms.HasFlag(Permissions.Delete)}");
+
+enum OrderStatus { Pending, Paid, Shipped, Delivered }
+
+[Flags]
+enum Permissions { None = 0, Read = 1, Write = 2, Delete = 4 }
+```
+
+C# enums are **named integers** (unlike Java's enums, they can't have fields or methods; use extension methods or a switch for behaviour). `[Flags]` enums combine values with `|` and test them with `HasFlag` or `&`. Because any integer can be cast to an enum, a switch over an enum needs a `_` arm.
+
+~~~check
+? What does `p with { X = 10 }` do on a record?
++ Returns a copy of p with X changed; p is unchanged
+- Changes p
+- Compiles only for structs
+- Creates a subclass
+> Non-destructive mutation.
+~~~
+
+📚 **Go deeper:** Microsoft Learn, "Records", "Structure types", "Choosing between class and struct" and "Enumeration types"; *Programming C#*, chapter 7 "Structs".
+--- goals
+- declare records with value equality, with expressions and deconstruction
+- choose between classes, records and structs
+- write readonly record structs
+- use enums and [Flags] enums
+--- quiz
+? Which type is a value type?
++ struct
+- class
+- record (class)
+- interface
+> Records are classes unless declared record struct.
+? What does `==` do on two records with the same values?
++ Returns true (value equality)
+- Returns false
+- Compile error
+- Compares hash codes only
+> Generated by the compiler.
+? How do you combine flags of a [Flags] enum?
++ With the | operator
+- With +
+- With a list
+- You can't
+> Test with HasFlag or &.
+--- exercise code csharp
+::prompt
+Model playing cards with an `enum Suit { Clubs, Diamonds, Hearts, Spades }`, an `enum Rank` from `Two = 2` to `Ace = 14`, and a `record Card(Rank Rank, Suit Suit)` with `ToString()` like `A♠` / `10♥` (labels `2`..`10`, `J`, `Q`, `K`, `A`; symbols `♣ ♦ ♥ ♠`) and `bool Beats(Card other)`. The program prints:
+
+```
+A♠ beats 10♥: True
+2♣ beats K♦: False
+same card equal: True
+Deck size: 52
+```
+::starter
+var a = new Card(Rank.Ace, Suit.Spades);
+var b = new Card(Rank.Ten, Suit.Hearts);
+var c = new Card(Rank.Two, Suit.Clubs);
+var d = new Card(Rank.King, Suit.Diamonds);
+Console.WriteLine($"{a} beats {b}: {a.Beats(b)}");
+Console.WriteLine($"{c} beats {d}: {c.Beats(d)}");
+Console.WriteLine($"same card equal: {a == new Card(Rank.Ace, Suit.Spades)}");
+int deck = 0;
+foreach (Suit s in Enum.GetValues<Suit>()) foreach (Rank r in Enum.GetValues<Rank>()) deck++;
+Console.WriteLine($"Deck size: {deck}");
+::solution
+var a = new Card(Rank.Ace, Suit.Spades);
+var b = new Card(Rank.Ten, Suit.Hearts);
+var c = new Card(Rank.Two, Suit.Clubs);
+var d = new Card(Rank.King, Suit.Diamonds);
+Console.WriteLine($"{a} beats {b}: {a.Beats(b)}");
+Console.WriteLine($"{c} beats {d}: {c.Beats(d)}");
+Console.WriteLine($"same card equal: {a == new Card(Rank.Ace, Suit.Spades)}");
+int deck = 0;
+foreach (Suit s in Enum.GetValues<Suit>()) foreach (Rank r in Enum.GetValues<Rank>()) deck++;
+Console.WriteLine($"Deck size: {deck}");
+
+enum Suit { Clubs, Diamonds, Hearts, Spades }
+
+enum Rank { Two = 2, Three, Four, Five, Six, Seven, Eight, Nine, Ten, Jack, Queen, King, Ace }
+
+record Card(Rank Rank, Suit Suit)
+{
+    public bool Beats(Card other) => Rank > other.Rank;
+
+    public override string ToString()
+    {
+        string label = Rank switch
+        {
+            Rank.Jack => "J",
+            Rank.Queen => "Q",
+            Rank.King => "K",
+            Rank.Ace => "A",
+            _ => ((int)Rank).ToString(),
+        };
+        char symbol = Suit switch
+        {
+            Suit.Clubs => '♣',
+            Suit.Diamonds => '♦',
+            Suit.Hearts => '♥',
+            _ => '♠',
+        };
+        return $"{label}{symbol}";
+    }
+}
+::expected
+A♠ beats 10♥: True
+2♣ beats K♦: False
+same card equal: True
+Deck size: 52
+::hints
+- `enum Rank { Two = 2, Three, ... Ace }` numbers the rest automatically (3, 4, ... 14).
+- Enums compare like their numbers: `Rank > other.Rank`.
+- Records compare by value, so `==` works out of the box.
+--- cards
+record :: record P(int X, int Y); — init properties, value equality, ToString, deconstruction, with.
+with :: var b = a with { X = 1 }; — a modified copy.
+struct :: A value type, copied on assignment; for small values. readonly record struct for immutable ones.
+enum :: Named integer constants; [Flags] for combinable options (|, HasFlag).
+
+=== lesson cs-operators-indexers | Operator overloading, indexers and extension methods | 65
+## Operator overloading
+
+Types can define how operators work on them. It suits mathematical and value types:
+
+```csharp
+var a = new Money(10.50m, "EUR");
+var b = new Money(4.25m, "EUR");
+Console.WriteLine(a + b);
+Console.WriteLine(a * 3);
+Console.WriteLine(a > b);
+Console.WriteLine(a == new Money(10.50m, "EUR"));
+
+readonly record struct Money(decimal Amount, string Currency)
+{
+    public static Money operator +(Money x, Money y)
+    {
+        if (x.Currency != y.Currency) throw new InvalidOperationException("currency mismatch");
+        return new Money(x.Amount + y.Amount, x.Currency);
+    }
+
+    public static Money operator *(Money x, int factor) => x with { Amount = x.Amount * factor };
+    public static bool operator >(Money x, Money y) => x.Amount > y.Amount;
+    public static bool operator <(Money x, Money y) => x.Amount < y.Amount;
+
+    public override string ToString() => $"{Amount:F2} {Currency}";
+}
+```
+
+Operators are `public static` methods named `operator +`. Some come in pairs (`<` with `>`, `==` with `!=`). Overload operators only when their meaning is obvious; a method with a clear name is better otherwise.
+
+**Conversion operators** define casts: `public static implicit operator decimal(Money m) => m.Amount;` lets a `Money` be used where a `decimal` is expected (`explicit` requires a cast).
+
+## Indexers
+
+An **indexer** lets objects be used with `[ ]`, like arrays and dictionaries:
+
+```csharp
+var board = new Board(3);
+board[1, 1] = 'X';
+board[0, 2] = 'O';
+Console.WriteLine(board);
+Console.WriteLine(board["b2"]);
+
+class Board(int size)
+{
+    private readonly char[,] _cells = InitCells(size);
+
+    private static char[,] InitCells(int size)
+    {
+        var cells = new char[size, size];
+        for (int r = 0; r < size; r++) for (int c = 0; c < size; c++) cells[r, c] = '.';
+        return cells;
+    }
+
+    public char this[int row, int col]
+    {
+        get => _cells[row, col];
+        set => _cells[row, col] = value;
+    }
+
+    public char this[string square] => this[square[1] - '1', square[0] - 'a'];   // "b2" → row 1, col 1
+
+    public override string ToString()
+    {
+        var lines = new List<string>();
+        for (int r = 0; r < size; r++)
+        {
+            var row = new char[size];
+            for (int c = 0; c < size; c++) row[c] = _cells[r, c];
+            lines.Add(new string(row));
+        }
+        return string.Join("\n", lines);
+    }
+}
+```
+
+## Extension methods
+
+An **extension method** adds a method to an existing type, even one you don't own (`string`, `int`, `IEnumerable<T>`), without inheritance. It's a static method in a static class whose first parameter is marked `this`:
+
+```csharp
+Console.WriteLine("hello world".ToTitleCase());
+Console.WriteLine(7.IsBetween(1, 10));
+Console.WriteLine("racecar".IsPalindrome());
+
+static class StringExtensions
+{
+    public static string ToTitleCase(this string s) =>
+        string.Join(" ", s.Split(' ').Select(w => w.Length == 0 ? w : char.ToUpper(w[0]) + w[1..]));
+
+    public static bool IsPalindrome(this string s) => s.SequenceEqual(s.Reverse());
+
+    public static bool IsBetween(this int n, int low, int high) => n >= low && n <= high;
+}
+```
+
+The whole of **LINQ** (Module 5) is a set of extension methods on `IEnumerable<T>`. C# 14 extends this idea with **extension blocks**, which can also add extension properties.
+
+~~~check
+? What makes a static method an extension method?
++ `this` before its first parameter, in a static class
+- The keyword extension
+- Being in the same namespace
+- Overriding
+> Called as if it were an instance method: "x".Method().
+~~~
+
+📚 **Go deeper:** Microsoft Learn, "Operator overloading", "Indexers" and "Extension methods"; *Programming C#*, chapter 6 "Operator Overloading" and chapter 9 (indexers).
+--- goals
+- overload arithmetic and comparison operators, and define conversions
+- write indexers, including several parameters or string keys
+- add methods to existing types with extension methods
+--- quiz
+? How is an operator overload declared?
++ public static T operator +(T a, T b)
+- public T plus(T other)
+- override +
+- operator T +
+> Always public static.
+? What does an indexer let you write?
++ obj[index] on your own objects
+- obj.Index()
+- foreach over obj
+- obj++
+> public T this[int i] { get; set; }
+? Where must extension methods be declared?
++ In a static, non-generic class
+- In the extended class
+- In an interface
+- Anywhere
+> With this on the first parameter.
+--- exercise code csharp
+::prompt
+Write a `readonly record struct Fraction` that always stores the fraction **reduced** (denominator positive), with operators `+` and `*`, a `ToString()` like `3/4` (or just `2` for whole numbers), and an **extension method** `Fraction Over(this int numerator, int denominator)` so you can write `1.Over(2)`. The program prints:
+
+```
+1/2 + 1/3 = 5/6
+2/3 * 3/4 = 1/2
+3/-6 = -1/2
+4/2 = 2
+1/2 == 2/4: True
+```
+::starter
+var half = 1.Over(2);
+Console.WriteLine($"1/2 + 1/3 = {half + 1.Over(3)}");
+Console.WriteLine($"2/3 * 3/4 = {2.Over(3) * 3.Over(4)}");
+Console.WriteLine($"3/-6 = {3.Over(-6)}");
+Console.WriteLine($"4/2 = {4.Over(2)}");
+Console.WriteLine($"1/2 == 2/4: {half == 2.Over(4)}");
+::solution
+var half = 1.Over(2);
+Console.WriteLine($"1/2 + 1/3 = {half + 1.Over(3)}");
+Console.WriteLine($"2/3 * 3/4 = {2.Over(3) * 3.Over(4)}");
+Console.WriteLine($"3/-6 = {3.Over(-6)}");
+Console.WriteLine($"4/2 = {4.Over(2)}");
+Console.WriteLine($"1/2 == 2/4: {half == 2.Over(4)}");
+
+readonly record struct Fraction
+{
+    public int Numerator { get; }
+    public int Denominator { get; }
+
+    public Fraction(int numerator, int denominator)
+    {
+        if (denominator == 0) throw new DivideByZeroException();
+        int sign = denominator < 0 ? -1 : 1;
+        int g = Gcd(Math.Abs(numerator), Math.Abs(denominator));
+        Numerator = sign * numerator / g;
+        Denominator = Math.Abs(denominator) / g;
+    }
+
+    private static int Gcd(int a, int b) => b == 0 ? Math.Max(a, 1) : Gcd(b, a % b);
+
+    public static Fraction operator +(Fraction x, Fraction y) =>
+        new(x.Numerator * y.Denominator + y.Numerator * x.Denominator, x.Denominator * y.Denominator);
+
+    public static Fraction operator *(Fraction x, Fraction y) =>
+        new(x.Numerator * y.Numerator, x.Denominator * y.Denominator);
+
+    public override string ToString() => Denominator == 1 ? $"{Numerator}" : $"{Numerator}/{Denominator}";
+}
+
+static class FractionExtensions
+{
+    public static Fraction Over(this int numerator, int denominator) => new(numerator, denominator);
+}
+::expected
+1/2 + 1/3 = 5/6
+2/3 * 3/4 = 1/2
+3/-6 = -1/2
+4/2 = 2
+1/2 == 2/4: True
+::hints
+- Reduce in the constructor by the greatest common divisor; since fractions are always reduced, the record's generated equality is correct.
+- `public static Fraction operator +(Fraction x, Fraction y) => new(...)`.
+- The extension method lives in a `static class`: `public static Fraction Over(this int n, int d) => new(n, d);`.
+--- cards
+Operator overloading :: public static T operator +(T a, T b); pairs: == / !=, < / >.
+Conversion operator :: public static implicit/explicit operator decimal(Money m).
+Indexer :: public T this[int i] { get; set; } — also several or non-integer parameters.
+Extension method :: public static R M(this T x, ...) in a static class; called as x.M(...). LINQ is built this way.
+
+=== lesson cs-m4-test | Module 4 test | 150 | exam
+This test covers Module 4: classes and properties, encapsulation and static members, inheritance and polymorphism, interfaces, records, structs and enums, operator overloading, indexers and extension methods.
+
+Before you start, check that you can:
+
+- design classes with properties that protect their data;
+- use virtual/override, abstract classes and interfaces;
+- choose between classes, records and structs;
+- add operators, indexers and extension methods where they help.
+--- goals
+- design object-oriented C# programs
+- choose the right kind of type for each job
+--- quiz
+? Which is best for an immutable `Address(Street, City)` value?
++ A record
+- A static class
+- An enum
+- An abstract class
+> Value equality and with expressions for free.
+? Why must a base method be marked `virtual`?
++ C# methods aren't overridable by default
+- For performance only
+- To make it public
+- It doesn't have to be
+> Unlike Java.
+? What's copied by `var b = a;` when a is a struct?
++ All of its data
+- Only a reference
+- Nothing
+- Only public fields
+> Structs are value types.
+? Where does `"text".Shout()` come from if string has no Shout method?
++ An extension method in a static class
+- Inheritance from string
+- A partial class
+- Reflection
+> this string parameter.
+--- exercise code csharp
+::prompt
+**A parking garage.** Write:
+
+- `enum VehicleType { Motorbike, Car, Van }` and an **extension method** `decimal HourlyRate(this VehicleType t)` (1.5, 3.0, 5.0);
+- `record Vehicle(string Plate, VehicleType Type)`;
+- `class Garage(int capacity)` with `bool Park(Vehicle v)` (false when full or already parked), `decimal? Leave(string plate, int hours)` returning the fee (rate × hours, at most 8 hours charged) or `null` if the vehicle isn't parked, and a `Free` property.
+
+The program prints:
+
+```
+park AB12: True
+park CD34: True
+park AB12 again: False
+park EF56: False
+free: 0
+fee CD34 (3h): 15.0
+fee AB12 (10h): 24.0
+fee ZZ99: none
+free: 2
+```
+::starter
+var g = new Garage(2);
+Console.WriteLine($"park AB12: {g.Park(new Vehicle("AB12", VehicleType.Car))}");
+Console.WriteLine($"park CD34: {g.Park(new Vehicle("CD34", VehicleType.Van))}");
+Console.WriteLine($"park AB12 again: {g.Park(new Vehicle("AB12", VehicleType.Car))}");
+Console.WriteLine($"park EF56: {g.Park(new Vehicle("EF56", VehicleType.Motorbike))}");
+Console.WriteLine($"free: {g.Free}");
+Console.WriteLine($"fee CD34 (3h): {g.Leave("CD34", 3)}");
+Console.WriteLine($"fee AB12 (10h): {g.Leave("AB12", 10)}");
+Console.WriteLine($"fee ZZ99: {g.Leave("ZZ99", 1)?.ToString() ?? "none"}");
+Console.WriteLine($"free: {g.Free}");
+::solution
+var g = new Garage(2);
+Console.WriteLine($"park AB12: {g.Park(new Vehicle("AB12", VehicleType.Car))}");
+Console.WriteLine($"park CD34: {g.Park(new Vehicle("CD34", VehicleType.Van))}");
+Console.WriteLine($"park AB12 again: {g.Park(new Vehicle("AB12", VehicleType.Car))}");
+Console.WriteLine($"park EF56: {g.Park(new Vehicle("EF56", VehicleType.Motorbike))}");
+Console.WriteLine($"free: {g.Free}");
+Console.WriteLine($"fee CD34 (3h): {g.Leave("CD34", 3)}");
+Console.WriteLine($"fee AB12 (10h): {g.Leave("AB12", 10)}");
+Console.WriteLine($"fee ZZ99: {g.Leave("ZZ99", 1)?.ToString() ?? "none"}");
+Console.WriteLine($"free: {g.Free}");
+
+enum VehicleType { Motorbike, Car, Van }
+
+static class VehicleTypeExtensions
+{
+    public static decimal HourlyRate(this VehicleType t) => t switch
+    {
+        VehicleType.Motorbike => 1.5m,
+        VehicleType.Car => 3.0m,
+        _ => 5.0m,
+    };
+}
+
+record Vehicle(string Plate, VehicleType Type);
+
+class Garage(int capacity)
+{
+    private readonly List<Vehicle> _parked = new();
+
+    public int Free => capacity - _parked.Count;
+
+    public bool Park(Vehicle v)
+    {
+        if (Free == 0 || _parked.Exists(p => p.Plate == v.Plate)) return false;
+        _parked.Add(v);
+        return true;
+    }
+
+    public decimal? Leave(string plate, int hours)
+    {
+        Vehicle? v = _parked.Find(p => p.Plate == plate);
+        if (v is null) return null;
+        _parked.Remove(v);
+        return v.Type.HourlyRate() * Math.Min(hours, 8);
+    }
+}
+::expected
+park AB12: True
+park CD34: True
+park AB12 again: False
+park EF56: False
+free: 0
+fee CD34 (3h): 15.0
+fee AB12 (10h): 24.0
+fee ZZ99: none
+free: 2
+::variants
+Leave("CD34", 3) => Leave("CD34", 2)
+::hints
+- `decimal?` is a nullable decimal: return `null` when the vehicle isn't parked.
+- `List<T>.Exists(predicate)` and `Find(predicate)` search with a lambda.
+- `1.5m * 3` keeps decimal precision: `15.0` prints with the scale of the rate.
