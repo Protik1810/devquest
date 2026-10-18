@@ -1,0 +1,1437 @@
+=== module Module 6 · Professional Java
+
+=== lesson java-packages | Packages, modules and JARs | 60
+## Packages: organising classes
+
+Real projects have hundreds of classes, organised into **packages**: namespaces that mirror folders. The first line of a file declares its package, and the file lives in the matching folder:
+
+```
+src/main/java/
+└── com/acme/shop/
+    ├── Main.java                 package com.acme.shop;
+    ├── model/
+    │   ├── Product.java          package com.acme.shop.model;
+    │   └── Order.java
+    └── service/
+        └── OrderService.java     package com.acme.shop.service;
+```
+
+```
+package com.acme.shop.service;
+
+import com.acme.shop.model.Order;
+import com.acme.shop.model.Product;
+import java.util.List;
+
+public class OrderService {
+    public Order place(List<Product> products) { ... }
+}
+```
+
+- Package names are lower case and start with a reversed domain you control (`com.acme`), which keeps names globally unique.
+- **`import`** lets you use a class by its short name; without it you'd write `java.util.List` in full. `java.lang` (`String`, `Math`, `System`...) is imported automatically. `import java.util.*;` imports a whole package (style guides usually prefer explicit imports).
+- The **fully qualified name** of a class includes its package: `com.acme.shop.model.Order`.
+
+## Access across packages
+
+Packages are also an encapsulation boundary. With no modifier, a class or member is **package-private**: visible only inside its package. Make public only what other packages need: the API, not the helpers.
+
+## JAR files
+
+Compiled classes are distributed as **JAR files** (Java ARchives, ZIP files of `.class` files plus metadata):
+
+```
+javac -d out $(find src -name "*.java")
+jar --create --file shop.jar --main-class com.acme.shop.Main -C out .
+java -jar shop.jar
+```
+
+Libraries are JARs on the **classpath**; a runnable application JAR names its main class in its manifest. In practice, build tools (next lesson) do all of this, and frameworks like Spring Boot package everything, dependencies included, into one runnable "fat" JAR.
+
+## Modules (Java 9+)
+
+The **Java Platform Module System** (JPMS) adds a level above packages: a **module** declares, in `module-info.java`, which packages it exports and which modules it needs:
+
+```
+module com.acme.shop {
+    requires java.sql;
+    exports com.acme.shop.api;      // only this package is visible to other modules
+}
+```
+
+Modules give strong encapsulation (non-exported packages are invisible even if their classes are public) and let `jlink` build a small custom runtime. The JDK itself is modularised (`java.base`, `java.sql`, `java.net.http`...). Many applications still run on the classpath without their own `module-info.java`, but you'll meet modules in libraries and when building lean container images.
+
+~~~check
+? A class has no access modifier. Who can use it?
++ Classes in the same package
+- Everyone
+- Only subclasses
+- Only the class itself
+> Package-private is the default.
+~~~
+
+📚 **Go deeper:** *Java: The Complete Reference*, chapter 9 "Packages and Interfaces"; dev.java, "Packages" and "Introduction to Modules"; the `jar` and `jlink` tool documentation.
+--- goals
+- organise classes into packages that mirror folders, and import them
+- use package-private access to hide implementation details
+- explain JAR files, the classpath and runnable JARs
+- describe what JPMS modules add
+--- quiz
+? Where does `package com.acme.shop.model;` code live?
++ In the folder com/acme/shop/model
+- Anywhere
+- In a folder named model only
+- In a JAR only
+> Packages mirror the directory structure.
+? Which package is imported automatically?
++ java.lang
+- java.util
+- java.io
+- None
+> String, Math, System, Integer...
+? What does a module's `exports` clause do?
++ Makes a package visible to other modules
+- Compiles the module
+- Imports another module
+- Creates a JAR
+> Unexported packages stay hidden.
+--- exercise code java
+::prompt
+Packages need several files, so this exercise practises their companion skill: **fully qualified names** and imports. Without adding any `import` line, use fully qualified class names to print the following, using `java.util.List.of`, `java.util.Collections.max`, `java.time.LocalDate.of` and `java.time.temporal.ChronoUnit.DAYS.between`:
+
+```
+max: 42
+days: 365
+```
+
+(The days are between 2025-01-01 and 2026-01-01.)
+::starter
+public class Main {
+    public static void main(String[] args) {
+        var numbers = List.of(7, 42, 13);
+    }
+}
+::solution
+public class Main {
+    public static void main(String[] args) {
+        var numbers = java.util.List.of(7, 42, 13);
+        System.out.println("max: " + java.util.Collections.max(numbers));
+        long days = java.time.temporal.ChronoUnit.DAYS.between(java.time.LocalDate.of(2025, 1, 1), java.time.LocalDate.of(2026, 1, 1));
+        System.out.println("days: " + days);
+    }
+}
+::expected
+max: 42
+days: 365
+::variants
+42 => 99
+::hints
+- A class can always be used by its fully qualified name: `java.util.List.of(...)`.
+- `java.time.temporal.ChronoUnit.DAYS.between(start, end)` counts days.
+--- cards
+Package :: package com.acme.shop; — a namespace matching the folder path; reversed-domain names.
+import :: import java.util.List; — use a class by its short name; java.lang is automatic.
+Package-private :: No modifier: visible only within the package.
+JAR :: ZIP of .class files + manifest; java -jar app.jar runs one with a Main-Class.
+Module :: module-info.java: requires other modules, exports packages (JPMS, Java 9+).
+
+=== lesson java-build | Build tools: Maven and Gradle | 55
+## Why build tools
+
+A real project needs more than `javac`: downloading libraries (and *their* libraries), compiling hundreds of files, running tests, packaging JARs, generating documentation, publishing releases. **Build tools** automate all of it from a declarative description of the project. The two standards:
+
+- **Maven** (2004): XML configuration (`pom.xml`), strict conventions, very widespread in enterprises.
+- **Gradle** (2012): configuration as code (Kotlin or Groovy, `build.gradle.kts`), faster incremental builds, standard for Android.
+
+Both use the same **standard layout** and the same central repository of libraries, **Maven Central**:
+
+```
+my-app/
+├── pom.xml (or build.gradle.kts)
+└── src/
+    ├── main/java/        application code
+    ├── main/resources/   configuration files, templates
+    ├── test/java/        tests
+    └── test/resources/
+```
+
+## Maven
+
+```
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>com.acme</groupId>
+  <artifactId>shop</artifactId>
+  <version>1.0.0</version>
+
+  <properties>
+    <maven.compiler.release>21</maven.compiler.release>
+  </properties>
+
+  <dependencies>
+    <dependency>
+      <groupId>com.google.code.gson</groupId>
+      <artifactId>gson</artifactId>
+      <version>2.11.0</version>
+    </dependency>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <version>5.11.0</version>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+</project>
+```
+
+A library is identified by **coordinates**: `groupId:artifactId:version`. Maven downloads it and everything it depends on (**transitive dependencies**). The `test` scope keeps JUnit out of the production JAR.
+
+Maven's lifecycle runs phases in order; each command runs all phases before it:
+
+```
+mvn compile     # compile src/main/java
+mvn test        # ...and run the tests
+mvn package     # ...and build target/shop-1.0.0.jar
+mvn install     # ...and copy it to your local repository (~/.m2)
+mvn clean       # delete target/
+```
+
+## Gradle
+
+The same project in Gradle's Kotlin DSL:
+
+```
+plugins {
+    application
+}
+
+java {
+    toolchain { languageVersion = JavaLanguageVersion.of(21) }
+}
+
+repositories { mavenCentral() }
+
+dependencies {
+    implementation("com.google.code.gson:gson:2.11.0")
+    testImplementation("org.junit.jupiter:junit-jupiter:5.11.0")
+}
+
+application { mainClass = "com.acme.shop.Main" }
+```
+
+```
+./gradlew build     # compile, test and package
+./gradlew run       # run the application
+./gradlew test
+```
+
+The `gradlew` script (the **Gradle wrapper**, committed to the repository) downloads the right Gradle version, so every developer and CI server builds the same way; Maven has an equivalent `mvnw`.
+
+## Dependency hygiene
+
+- Pin versions, and update them regularly (tools like Dependabot or Renovate open the pull requests).
+- Fewer dependencies means a smaller attack surface: check a library is maintained before adding it.
+- Scan for known vulnerabilities (OWASP Dependency-Check, GitHub's alerts): the Log4Shell vulnerability (2021) in a popular logging library affected a huge part of the Java world.
+- `mvn dependency:tree` / `./gradlew dependencies` show where a library comes from.
+
+~~~check
+? What do Maven coordinates consist of?
++ groupId, artifactId and version
+- URL and path
+- Package and class
+- Name and hash
+> e.g. org.junit.jupiter:junit-jupiter:5.11.0
+~~~
+
+📚 **Go deeper:** Maven's "Getting Started Guide" (maven.apache.org); Gradle's "Building Java Applications" guide (docs.gradle.org); dev.java, "Build Tools".
+--- goals
+- explain what build tools do, and the standard Maven/Gradle project layout
+- declare dependencies with coordinates and scopes
+- run the Maven lifecycle and Gradle tasks
+- keep dependencies up to date and secure
+--- quiz
+? Which Maven command compiles, tests and builds the JAR?
++ mvn package
+- mvn compile
+- mvn clean
+- mvn start
+> Phases run in order up to the one requested.
+? What does the `test` scope mean for a dependency?
++ It's available to tests only, not packaged with the application
+- It's downloaded at test time from the internet
+- It's tested before use
+- It's optional
+> Gradle: testImplementation.
+? Why commit the Gradle wrapper (gradlew)?
++ Everyone builds with the same Gradle version without installing it
+- It contains the compiled code
+- It's required by Git
+- It replaces the JDK
+> Reproducible builds.
+--- exercise code java
+::prompt
+Build tools parse **coordinates** constantly. Write `static String describe(String coordinates)` that splits `groupId:artifactId:version[:scope]` and returns, for example, `junit-jupiter 5.11.0 from org.junit.jupiter (test)`; the scope defaults to `compile`. Invalid input (fewer than 3 or more than 4 parts, or an empty part) returns `invalid: <input>`. The program prints:
+
+```
+gson 2.11.0 from com.google.code.gson (compile)
+junit-jupiter 5.11.0 from org.junit.jupiter (test)
+invalid: com.acme:shop
+invalid: a::1.0
+```
+::starter
+public class Main {
+    static String describe(String coordinates) {
+        return "";
+    }
+
+    public static void main(String[] args) {
+        System.out.println(describe("com.google.code.gson:gson:2.11.0"));
+        System.out.println(describe("org.junit.jupiter:junit-jupiter:5.11.0:test"));
+        System.out.println(describe("com.acme:shop"));
+        System.out.println(describe("a::1.0"));
+    }
+}
+::solution
+public class Main {
+    static String describe(String coordinates) {
+        String[] parts = coordinates.split(":", -1);
+        if (parts.length < 3 || parts.length > 4) return "invalid: " + coordinates;
+        for (String p : parts) {
+            if (p.isBlank()) return "invalid: " + coordinates;
+        }
+        String scope = parts.length == 4 ? parts[3] : "compile";
+        return parts[1] + " " + parts[2] + " from " + parts[0] + " (" + scope + ")";
+    }
+
+    public static void main(String[] args) {
+        System.out.println(describe("com.google.code.gson:gson:2.11.0"));
+        System.out.println(describe("org.junit.jupiter:junit-jupiter:5.11.0:test"));
+        System.out.println(describe("com.acme:shop"));
+        System.out.println(describe("a::1.0"));
+    }
+}
+::expected
+gson 2.11.0 from com.google.code.gson (compile)
+junit-jupiter 5.11.0 from org.junit.jupiter (test)
+invalid: com.acme:shop
+invalid: a::1.0
+::variants
+gson:2.11.0 => gson:2.10.1
+::hints
+- `split(":", -1)` keeps empty parts (without `-1`, trailing empty parts are dropped).
+- Check the number of parts, then that none is blank.
+--- cards
+Maven / Gradle :: Build tools: dependencies, compile, test, package, publish. pom.xml / build.gradle.kts.
+Standard layout :: src/main/java, src/main/resources, src/test/java.
+Coordinates :: groupId:artifactId:version from Maven Central; transitive dependencies come along.
+Lifecycle :: mvn compile → test → package → install; ./gradlew build / test / run.
+Wrapper :: mvnw / gradlew pin the build tool version for everyone.
+
+=== lesson java-testing | Testing with JUnit | 65
+## Automated tests
+
+A test is code that checks other code: it calls a method with known inputs and **asserts** the result. A good test suite runs in seconds, after every change, and catches regressions long before users do. Java's standard test framework is **JUnit 5** (Jupiter):
+
+```
+import static org.junit.jupiter.api.Assertions.*;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+
+class PriceCalculatorTest {
+    private PriceCalculator calc;
+
+    @BeforeEach
+    void setUp() {
+        calc = new PriceCalculator(0.20);      // a fresh object for every test
+    }
+
+    @Test
+    void addsVat() {
+        assertEquals(120.0, calc.gross(100.0), 0.001);
+    }
+
+    @Test
+    void rejectsNegativePrices() {
+        var e = assertThrows(IllegalArgumentException.class, () -> calc.gross(-1));
+        assertEquals("price must not be negative", e.getMessage());
+    }
+
+    @ParameterizedTest
+    @CsvSource({"0, 0", "10, 12", "99.99, 119.988"})
+    void grossForManyPrices(double net, double expected) {
+        assertEquals(expected, calc.gross(net), 0.001);
+    }
+}
+```
+
+- Test classes live in `src/test/java`, usually one per class under test, named `...Test`.
+- `@Test` marks a test method; `@BeforeEach` runs before every test (fresh state, so tests don't affect each other); `@AfterEach`, `@BeforeAll` and `@AfterAll` also exist.
+- Assertions: `assertEquals(expected, actual)` (with a tolerance for doubles), `assertTrue`, `assertNull`, `assertThrows`, `assertAll`. **AssertJ** offers more readable fluent assertions: `assertThat(list).hasSize(3).contains("a")`.
+- `@ParameterizedTest` runs one test with many inputs.
+- `mvn test` or `./gradlew test` runs everything; IDEs run single tests with one click.
+
+## What and how to test
+
+- Test **behaviour**, through the public API, not private details: tests then survive refactoring.
+- Name tests after the behaviour (`rejectsNegativePrices`), and keep the **Arrange, Act, Assert** shape.
+- Cover the edges: empty input, zero, negative numbers, maximum values, `null`, duplicates.
+- Each test should fail for one reason, and never depend on another test's leftovers.
+- Replace slow or external dependencies (databases, clocks, payment APIs) with **test doubles**: hand-written fakes behind an interface, or a mocking library like **Mockito** (`when(repo.find(1)).thenReturn(...)`).
+- **Test-driven development** (TDD): write a failing test, make it pass with the simplest code, refactor. It keeps designs small and testable.
+
+## Testing without a framework
+
+DevQuest runs single files without JUnit on the classpath, so the exercises use a few lines of home-made assertions. The ideas are identical:
+
+```java
+public class Main {
+    static int passed = 0, failed = 0;
+
+    static void check(String name, Object expected, Object actual) {
+        if (java.util.Objects.equals(expected, actual)) passed++;
+        else {
+            failed++;
+            System.out.println("FAIL " + name + ": expected " + expected + " but got " + actual);
+        }
+    }
+
+    static String slugify(String title) {
+        return title.strip().toLowerCase().replaceAll("[^a-z0-9]+", "-").replaceAll("(^-|-$)", "");
+    }
+
+    public static void main(String[] args) {
+        check("simple", "hello-world", slugify("Hello World"));
+        check("punctuation", "java-21-is-here", slugify("Java 21 is here!"));
+        check("extra spaces", "a-b", slugify("  a   b  "));
+        check("empty", "", slugify(""));
+        System.out.println(passed + " passed, " + failed + " failed");
+    }
+}
+```
+
+~~~check
+? Why does JUnit run @BeforeEach before every test?
++ So each test starts from fresh state and tests don't affect each other
+- To make tests faster
+- Because tests run in parallel always
+- To print a header
+> Independent tests are reliable tests.
+~~~
+
+📚 **Go deeper:** the JUnit 5 User Guide (junit.org/junit5/docs/current/user-guide); Kent Beck, *Test-Driven Development: By Example*; the AssertJ and Mockito documentation; DevQuest's Software Engineering Practice track (testing strategy).
+--- goals
+- write JUnit 5 tests with @Test, @BeforeEach, assertions and parameterized tests
+- test behaviour through public APIs, including edge cases and exceptions
+- replace external dependencies with fakes and mocks
+- explain test-driven development
+--- quiz
+? Where do JUnit tests live in a Maven/Gradle project?
++ src/test/java
+- src/main/java
+- test/ at the root
+- Inside the classes they test
+> They're compiled separately and not shipped.
+? How do you test that a method throws?
++ `assertThrows(IllegalArgumentException.class, () -> calc.gross(-1))`
+- try/catch with an empty catch
+- `assertEquals(exception, ...)`
+- You can't
+> assertThrows returns the exception for further checks.
+? What does a mock replace?
++ A dependency, such as a database or an external API, with a controllable stand-in
+- The JUnit framework
+- The code under test
+- The JVM
+> Tests stay fast and deterministic.
+--- exercise code java
+::prompt
+Write the **tests first**, then the code. `static boolean isValidIsbn10(String isbn)` checks an ISBN-10: after removing hyphens there must be 10 characters, the first 9 digits and the last a digit or `X` (= 10), and the sum of each digit × (10 − position) must be divisible by 11. The `main` method runs `check` assertions (written for you) and must print:
+
+```
+7 passed, 0 failed
+```
+::starter
+public class Main {
+    static int passed = 0, failed = 0;
+
+    static void check(String name, boolean expected, boolean actual) {
+        if (expected == actual) passed++;
+        else {
+            failed++;
+            System.out.println("FAIL " + name);
+        }
+    }
+
+    static boolean isValidIsbn10(String isbn) {
+        return false;
+    }
+
+    public static void main(String[] args) {
+        check("valid", true, isValidIsbn10("0-306-40615-2"));
+        check("valid with X", true, isValidIsbn10("0-8044-2957-X"));
+        check("no hyphens", true, isValidIsbn10("0306406152"));
+        check("wrong check digit", false, isValidIsbn10("0-306-40615-3"));
+        check("too short", false, isValidIsbn10("030640615"));
+        check("letter inside", false, isValidIsbn10("03064A6152"));
+        check("X not last", false, isValidIsbn10("X306406152"));
+        System.out.println(passed + " passed, " + failed + " failed");
+    }
+}
+::solution
+public class Main {
+    static int passed = 0, failed = 0;
+
+    static void check(String name, boolean expected, boolean actual) {
+        if (expected == actual) passed++;
+        else {
+            failed++;
+            System.out.println("FAIL " + name);
+        }
+    }
+
+    static boolean isValidIsbn10(String isbn) {
+        String digits = isbn.replace("-", "");
+        if (digits.length() != 10) return false;
+        int sum = 0;
+        for (int i = 0; i < 10; i++) {
+            char c = digits.charAt(i);
+            int value;
+            if (Character.isDigit(c)) value = c - '0';
+            else if (c == 'X' && i == 9) value = 10;
+            else return false;
+            sum += value * (10 - i);
+        }
+        return sum % 11 == 0;
+    }
+
+    public static void main(String[] args) {
+        check("valid", true, isValidIsbn10("0-306-40615-2"));
+        check("valid with X", true, isValidIsbn10("0-8044-2957-X"));
+        check("no hyphens", true, isValidIsbn10("0306406152"));
+        check("wrong check digit", false, isValidIsbn10("0-306-40615-3"));
+        check("too short", false, isValidIsbn10("030640615"));
+        check("letter inside", false, isValidIsbn10("03064A6152"));
+        check("X not last", false, isValidIsbn10("X306406152"));
+        System.out.println(passed + " passed, " + failed + " failed");
+    }
+}
+::expected
+7 passed, 0 failed
+::hints
+- Remove hyphens with `replace("-", "")` and check the length.
+- Position `i` (0 to 9) has weight `10 - i`; `X` counts as 10, only in the last position.
+--- cards
+JUnit 5 :: @Test methods with assertEquals, assertTrue, assertThrows; @BeforeEach for fresh state; @ParameterizedTest.
+Test layout :: src/test/java, ClassNameTest; run with mvn test / ./gradlew test.
+Good tests :: Test behaviour via the public API; Arrange-Act-Assert; edges; independent.
+Test doubles :: Fakes or Mockito mocks replace databases, clocks, external APIs.
+TDD :: Red (failing test) → green (simplest code) → refactor.
+
+=== lesson java-io | Files and I/O | 65
+## java.nio.file: Path and Files
+
+Modern Java reads and writes files with **`Path`** (a location) and the static helpers in **`Files`** (`java.nio.file`, Java 7+):
+
+```java
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.List;
+
+public class Main {
+    public static void main(String[] args) throws IOException {
+        Path dir = Files.createTempDirectory("devquest");
+        Path notes = dir.resolve("notes.txt");
+
+        Files.writeString(notes, "first line\n");
+        Files.writeString(notes, "second line\n", java.nio.file.StandardOpenOption.APPEND);
+        Files.write(dir.resolve("todo.txt"), List.of("buy milk", "learn Java"));
+
+        System.out.println(Files.readString(notes).strip());
+        List<String> todo = Files.readAllLines(dir.resolve("todo.txt"));
+        System.out.println(todo.size() + " tasks: " + todo);
+        System.out.println(Files.exists(notes) + " " + Files.size(notes) + " bytes");
+        System.out.println(notes.getFileName() + " in " + notes.getParent().getFileName().toString().startsWith("devquest"));
+    }
+}
+```
+
+| Method | Does |
+|---|---|
+| `Files.readString(path)` / `writeString` | whole file as one string |
+| `Files.readAllLines` / `write(path, lines)` | list of lines |
+| `Files.lines(path)` | a lazy `Stream<String>` (for big files; close it with try-with-resources) |
+| `Files.newBufferedReader` / `newBufferedWriter` | line-by-line streaming |
+| `Files.exists`, `isDirectory`, `size`, `createDirectories`, `copy`, `move`, `delete`, `list`, `walk` | file system operations |
+
+`Path.of("data", "orders.csv")` builds paths portably (no `\` versus `/` worries); `resolve` appends a part. File operations throw the checked `IOException`, which you must catch or declare (here `main` declares it). Text uses **UTF-8** by default since Java 18.
+
+## Processing a file as a stream
+
+```java
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.List;
+import java.util.stream.Stream;
+
+public class Main {
+    public static void main(String[] args) throws IOException {
+        Path csv = Files.createTempFile("sales", ".csv");
+        Files.write(csv, List.of("region,amount", "north,120", "south,300", "north,80"));
+
+        try (Stream<String> lines = Files.lines(csv)) {
+            int northTotal = lines.skip(1)                       // skip the header
+                .map(line -> line.split(","))
+                .filter(parts -> parts[0].equals("north"))
+                .mapToInt(parts -> Integer.parseInt(parts[1]))
+                .sum();
+            System.out.println("north: " + northTotal);
+        }
+        Files.delete(csv);
+    }
+}
+```
+
+Real CSV has quoted fields with commas inside, so production code uses a library (Apache Commons CSV, OpenCSV, Jackson) instead of `split`.
+
+## Streams of bytes and characters
+
+Under `Files` lies the older `java.io` package: **byte streams** (`InputStream`/`OutputStream`) for binary data and **character streams** (`Reader`/`Writer`) for text, combined like building blocks (`new BufferedReader(new InputStreamReader(socket.getInputStream(), UTF_8))`). You'll meet them with network sockets, HTTP bodies and libraries. Always wrap them in try-with-resources.
+
+## Serialization
+
+Turning objects into bytes or text to store or send them is **serialization**. Java's built-in `Serializable` mechanism is considered legacy and a security risk; modern code uses **JSON** with Jackson or Gson (`objectMapper.writeValueAsString(order)`), or formats like Protocol Buffers.
+
+~~~check
+? Why does `Files.readString` need a try/catch or `throws`?
++ It throws the checked IOException
+- It's deprecated
+- It returns null on errors
+- Files are always missing
+> File operations can fail for many reasons.
+~~~
+
+📚 **Go deeper:** *Java: The Complete Reference*, chapters 19 "Input/Output: Exploring java.io" and 27 (NIO); dev.java, "Java I/O" and "Working with Files"; *Effective Java*, item 85 ("prefer alternatives to Java serialization").
+--- goals
+- read and write text files with Path and Files
+- process large files lazily with Files.lines and try-with-resources
+- handle IOException, and build paths portably
+- recognise java.io streams and modern serialization formats
+--- quiz
+? Which reads a whole small text file into a String?
++ `Files.readString(path)`
+- `new File(path).toString()`
+- `Path.read(path)`
+- `System.in.read()`
+> Files.readAllLines gives a list of lines.
+? Why use Files.lines inside try-with-resources?
++ It keeps the file open until the stream is closed
+- It's faster
+- It's required by the compiler
+- To avoid UTF-8
+> Close it to release the file handle.
+? What's the modern choice for sending objects to a web API?
++ JSON via Jackson or Gson
+- Java's built-in Serializable
+- toString()
+- Writing raw bytes
+> Built-in serialization is legacy and risky.
+--- exercise code java
+::prompt
+Write a program that creates a temporary CSV file of grades (written for you), then reads it with `Files.readAllLines` and prints each student's average (one decimal) sorted by name, plus the class's best student:
+
+```
+ada: 91.0
+bob: 74.5
+cy: 88.3
+Best: ada
+```
+
+Each line is `name,grade1,grade2,...` (no header). Delete the file at the end.
+::starter
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.List;
+
+public class Main {
+    public static void main(String[] args) throws IOException {
+        Path file = Files.createTempFile("grades", ".csv");
+        Files.write(file, List.of("cy,90,85,90", "ada,95,87", "bob,70,79"));
+    }
+}
+::solution
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
+
+public class Main {
+    public static void main(String[] args) throws IOException {
+        Path file = Files.createTempFile("grades", ".csv");
+        Files.write(file, List.of("cy,90,85,90", "ada,95,87", "bob,70,79"));
+
+        Map<String, Double> averages = new TreeMap<>();
+        for (String line : Files.readAllLines(file)) {
+            String[] parts = line.split(",");
+            double sum = 0;
+            for (int i = 1; i < parts.length; i++) sum += Integer.parseInt(parts[i]);
+            averages.put(parts[0], sum / (parts.length - 1));
+        }
+        String best = null;
+        for (Map.Entry<String, Double> e : averages.entrySet()) {
+            System.out.printf("%s: %.1f%n", e.getKey(), e.getValue());
+            if (best == null || e.getValue() > averages.get(best)) best = e.getKey();
+        }
+        System.out.println("Best: " + best);
+        Files.delete(file);
+    }
+}
+::expected
+ada: 91.0
+bob: 74.5
+cy: 88.3
+Best: ada
+::variants
+"bob,70,79" => "bob,99,98"
+::hints
+- `for (String line : Files.readAllLines(file))`, then `line.split(",")`.
+- A `TreeMap<String, Double>` keeps the names sorted.
+--- cards
+Path / Files :: Path.of("a", "b.txt"); Files.readString, writeString, readAllLines, write, lines, exists, delete.
+IOException :: Checked: catch it or declare throws.
+Files.lines :: Lazy Stream<String> for big files — use try-with-resources.
+java.io :: InputStream/OutputStream (bytes), Reader/Writer (text), buffered and wrapped.
+Serialization today :: JSON with Jackson/Gson (or Protocol Buffers), not java.io.Serializable.
+
+=== lesson java-concurrency | Concurrency and virtual threads | 85
+## Doing several things at once
+
+A **thread** is an independent path of execution inside a program. Servers handle many requests at once with threads; desktop apps keep the interface responsive while working in the background. Java has had threads since version 1.0, and Java 21 added **virtual threads**, which make them cheap enough to use by the million.
+
+```java
+public class Main {
+    public static void main(String[] args) throws InterruptedException {
+        Thread worker = new Thread(() -> System.out.println("hello from " + Thread.currentThread().getName()), "worker-1");
+        worker.start();          // runs the lambda concurrently
+        worker.join();           // wait for it to finish
+        System.out.println("main is done");
+    }
+}
+```
+
+`start()` begins the thread (calling `run()` directly would just run it in the current thread); `join()` waits for it.
+
+## Executors: don't manage threads by hand
+
+In real code, submit **tasks** to an **ExecutorService**, which manages threads for you, and get results back as **Futures**:
+
+```java
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+
+public class Main {
+    static long slowSquare(int n) throws InterruptedException {
+        Thread.sleep(100);           // pretend this calls a slow service
+        return (long) n * n;
+    }
+
+    public static void main(String[] args) throws Exception {
+        long start = System.nanoTime();
+        try (ExecutorService pool = Executors.newVirtualThreadPerTaskExecutor()) {
+            List<Future<Long>> futures = new ArrayList<>();
+            for (int i = 1; i <= 50; i++) {
+                int n = i;
+                futures.add(pool.submit(() -> slowSquare(n)));
+            }
+            long sum = 0;
+            for (Future<Long> f : futures) sum += f.get();   // get() waits for each result
+            System.out.println("sum of squares: " + sum);
+        }
+        long ms = (System.nanoTime() - start) / 1_000_000;
+        System.out.println(ms < 2000 ? "finished in well under the 5 s a single thread would need" : "slow");
+    }
+}
+```
+
+Fifty tasks that each wait 100 ms finish in about 100 ms, because they wait **concurrently**. `Executors.newVirtualThreadPerTaskExecutor()` (Java 21) runs each task on its own **virtual thread**: a lightweight thread managed by the JVM, ideal for I/O-heavy work (HTTP calls, database queries). For CPU-heavy work, a fixed pool sized to the processor cores (`Executors.newFixedThreadPool(n)`) is better. The executor is `AutoCloseable` (Java 19+): closing it waits for all tasks.
+
+## Race conditions
+
+Threads share memory, and that's where bugs start. `count++` is really three steps (read, add, write), so two threads can interleave them and lose updates:
+
+```java
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
+
+public class Main {
+    static int unsafeCount = 0;
+    static final AtomicInteger safeCount = new AtomicInteger();
+    static int lockedCount = 0;
+    static final Object lock = new Object();
+
+    public static void main(String[] args) {
+        try (ExecutorService pool = Executors.newFixedThreadPool(4)) {
+            for (int t = 0; t < 4; t++) {
+                pool.submit(() -> {
+                    for (int i = 0; i < 100_000; i++) {
+                        unsafeCount++;                      // race condition
+                        safeCount.incrementAndGet();        // atomic
+                        synchronized (lock) { lockedCount++; }  // one thread at a time
+                    }
+                });
+            }
+        }
+        System.out.println("atomic: " + safeCount.get() + ", synchronized: " + lockedCount);
+        System.out.println("unsafe lost updates: " + (unsafeCount < 400_000 ? "probably" : "not this time"));
+    }
+}
+```
+
+Tools for safe sharing, from simplest to most delicate:
+
+1. **Don't share mutable state**: give each task its own data and combine results at the end (as with the futures above), or use immutable objects.
+2. **Concurrent collections**: `ConcurrentHashMap`, `CopyOnWriteArrayList`, `BlockingQueue` (for producer-consumer pipelines).
+3. **Atomic variables**: `AtomicInteger`, `AtomicLong`, `LongAdder`.
+4. **Locks**: `synchronized` blocks and methods, or `ReentrantLock`; keep critical sections short, and always acquire several locks in the same order to avoid **deadlocks**.
+
+## CompletableFuture: composing asynchronous work
+
+`CompletableFuture` chains asynchronous steps, much like JavaScript promises:
+
+```java
+import java.util.concurrent.CompletableFuture;
+
+public class Main {
+    public static void main(String[] args) {
+        CompletableFuture<String> user = CompletableFuture.supplyAsync(() -> "ada");
+        CompletableFuture<Integer> orders = CompletableFuture.supplyAsync(() -> 3);
+        String summary = user
+            .thenCombine(orders, (name, count) -> name + " has " + count + " orders")
+            .thenApply(String::toUpperCase)
+            .exceptionally(e -> "unavailable")
+            .join();
+        System.out.println(summary);
+    }
+}
+```
+
+With virtual threads, much code that used to need `CompletableFuture` chains can again be written in plain, blocking, sequential style, one virtual thread per request, which is easier to read and debug.
+
+~~~check
+? Why can `count++` lose updates when two threads run it?
++ It's a read, an add and a write; threads can interleave those steps
+- ++ isn't allowed in threads
+- The JVM ignores it
+- Integers are immutable
+> Use AtomicInteger or synchronized.
+~~~
+
+📚 **Go deeper:** *Java: The Complete Reference*, chapters 11 "Multithreaded Programming" and 26 "The Concurrency Utilities"; Brian Goetz et al., *Java Concurrency in Practice*; JEP 444 (virtual threads); dev.java, "Virtual Threads".
+--- goals
+- start and join threads, and run tasks with executors and futures
+- choose virtual threads for I/O-bound work and fixed pools for CPU-bound work
+- recognise race conditions and fix them with confinement, atomics, concurrent collections and locks
+- compose asynchronous work with CompletableFuture
+--- quiz
+? What does `thread.start()` do that `thread.run()` doesn't?
++ Runs the code on a new thread
+- Nothing different
+- Waits for the thread
+- Stops the thread
+> run() executes in the calling thread.
+? Which executor suits thousands of tasks that wait on network calls (Java 21)?
++ Executors.newVirtualThreadPerTaskExecutor()
+- A single-thread executor
+- A fixed pool of 2 threads
+- No executor: call them one by one
+> Virtual threads are cheap while blocked.
+? What does `future.get()` do?
++ Waits for the task and returns its result (or throws its exception)
+- Starts the task
+- Cancels the task
+- Returns null immediately
+> It blocks until done.
+? Which is a thread-safe counter?
++ AtomicInteger
+- int
+- Integer
+- ArrayList<Integer>
+> Or a synchronized block.
+--- exercise code java
+::prompt
+Simulate fetching prices from several shops **in parallel**. `static int fetchPrice(String shop)` (provided) sleeps 200 ms and returns a price. Using `Executors.newVirtualThreadPerTaskExecutor()` and futures, fetch all five prices concurrently, then print them in shop order, the cheapest shop, and whether everything took **less than 600 ms** (sequentially it would take a full second):
+
+```
+alpha: 35
+bravo: 46
+charlie: 34
+delta: 38
+echo: 33
+Cheapest: echo (33)
+Fast: true
+```
+::starter
+import java.util.List;
+
+public class Main {
+    static int fetchPrice(String shop) throws InterruptedException {
+        Thread.sleep(200);
+        return 30 + Math.abs(shop.hashCode() % 17);
+    }
+
+    public static void main(String[] args) throws Exception {
+        List<String> shops = List.of("alpha", "bravo", "charlie", "delta", "echo");
+        long start = System.nanoTime();
+        for (String shop : shops) {
+            System.out.println(shop + ": " + fetchPrice(shop));
+        }
+        long ms = (System.nanoTime() - start) / 1_000_000;
+        System.out.println("Fast: " + (ms < 600));
+    }
+}
+::solution
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+
+public class Main {
+    static int fetchPrice(String shop) throws InterruptedException {
+        Thread.sleep(200);
+        return 30 + Math.abs(shop.hashCode() % 17);
+    }
+
+    public static void main(String[] args) throws Exception {
+        List<String> shops = List.of("alpha", "bravo", "charlie", "delta", "echo");
+        long start = System.nanoTime();
+        List<Integer> prices = new ArrayList<>();
+        try (ExecutorService pool = Executors.newVirtualThreadPerTaskExecutor()) {
+            List<Future<Integer>> futures = new ArrayList<>();
+            for (String shop : shops) futures.add(pool.submit(() -> fetchPrice(shop)));
+            for (Future<Integer> f : futures) prices.add(f.get());
+        }
+        long ms = (System.nanoTime() - start) / 1_000_000;
+        int cheapest = 0;
+        for (int i = 0; i < shops.size(); i++) {
+            System.out.println(shops.get(i) + ": " + prices.get(i));
+            if (prices.get(i) < prices.get(cheapest)) cheapest = i;
+        }
+        System.out.println("Cheapest: " + shops.get(cheapest) + " (" + prices.get(cheapest) + ")");
+        System.out.println("Fast: " + (ms < 600));
+    }
+}
+::expected
+alpha: 35
+bravo: 46
+charlie: 34
+delta: 38
+echo: 33
+Cheapest: echo (33)
+Fast: true
+::hints
+- Submit every task first (collecting the `Future`s), then call `get()` on each: the waiting happens in parallel.
+- Keep the results in a list in shop order, so the printing order doesn't depend on which task finished first.
+--- cards
+Thread :: new Thread(runnable).start(); join() waits. Prefer executors.
+ExecutorService :: submit(task) → Future; future.get() waits for the result; close() waits for all tasks.
+Virtual threads :: Java 21: Executors.newVirtualThreadPerTaskExecutor() — cheap threads for I/O-bound work.
+Race condition :: Unsynchronised shared mutable state; count++ isn't atomic.
+Thread safety tools :: Confinement, immutability, ConcurrentHashMap, AtomicInteger, synchronized/locks.
+CompletableFuture :: supplyAsync, thenApply, thenCombine, exceptionally, join — async pipelines.
+
+=== lesson java-modern | Modern Java: pattern matching and design | 75
+## Pattern matching
+
+Java 16 to 21 added **pattern matching**, which tests the shape of a value and extracts its parts in one step. With sealed types and records, it gives Java a clean way to model data, close to functional languages:
+
+```java
+public class Main {
+    sealed interface Shape permits Circle, Rectangle, Triangle {}
+    record Circle(double radius) implements Shape {}
+    record Rectangle(double width, double height) implements Shape {}
+    record Triangle(double base, double height) implements Shape {}
+
+    static double area(Shape shape) {
+        return switch (shape) {
+            case Circle c -> Math.PI * c.radius() * c.radius();
+            case Rectangle(double w, double h) -> w * h;               // record pattern: deconstruct
+            case Triangle(double b, double h) when b <= 0 -> 0;          // guard
+            case Triangle(double b, double h) -> b * h / 2;
+        };
+    }
+
+    public static void main(String[] args) {
+        Shape[] shapes = {new Circle(1), new Rectangle(2, 3), new Triangle(4, 5), new Triangle(-1, 2)};
+        for (Shape s : shapes) System.out.printf("%s -> %.2f%n", s, area(s));
+    }
+}
+```
+
+- `case Circle c` is a **type pattern**: it matches circles and binds `c`.
+- `case Rectangle(double w, double h)` is a **record pattern**: it deconstructs the record into its components (patterns can nest).
+- `when` adds a **guard** condition.
+- Because `Shape` is **sealed**, the compiler knows the switch covers every case: no `default`, and adding a new shape makes every incomplete switch a compile error. This is the same exhaustiveness check TypeScript gives discriminated unions.
+
+Pattern matching also works with `instanceof` (`if (obj instanceof String s && !s.isEmpty())`) and for `null` (`case null ->`).
+
+## Data-oriented programming
+
+Combining records (data), sealed interfaces (closed sets of alternatives) and pattern-matching switches (behaviour) is called **data-oriented programming**. It complements classic OOP: use polymorphic methods when the set of operations is fixed and new types are added often; use sealed hierarchies and switches when the set of types is fixed and new operations are added often (like an interpreter's expression types, or a payment workflow's states).
+
+## Design patterns in Java
+
+The classic design patterns (*Design Patterns*, 1994, written with C++ and Smalltalk; Java made them famous) appear throughout Java code and frameworks:
+
+| Pattern | In Java |
+|---|---|
+| **Builder** | `HttpRequest.newBuilder().uri(...).header(...).build()`, Lombok's `@Builder` |
+| **Factory method** | `List.of(...)`, `Executors.newFixedThreadPool(n)`, `LocalDate.of(...)` |
+| **Singleton** | an `enum` with one constant, or a framework-managed bean |
+| **Strategy** | pass a lambda or interface implementation: `list.sort(comparator)` |
+| **Observer** | listeners and event buses, reactive streams |
+| **Decorator** | `new BufferedReader(new FileReader(...))` |
+| **Adapter** | `Arrays.asList(array)` |
+| **Template method** | abstract classes with overridable steps |
+| **Dependency injection** | Spring and Jakarta EE construct objects and pass in their dependencies |
+
+Since Java 8, many patterns are a lambda away: a strategy is a `Function`, a command is a `Runnable`. Here's a builder, used whenever an object has many optional settings:
+
+```java
+public class Main {
+    public static void main(String[] args) {
+        Pizza pizza = new Pizza.Builder("Margherita").size(32).extraCheese().topping("basil").build();
+        System.out.println(pizza);
+    }
+}
+
+final class Pizza {
+    private final String name;
+    private final int size;
+    private final boolean extraCheese;
+    private final java.util.List<String> toppings;
+
+    private Pizza(Builder b) {
+        this.name = b.name;
+        this.size = b.size;
+        this.extraCheese = b.extraCheese;
+        this.toppings = java.util.List.copyOf(b.toppings);
+    }
+
+    @Override
+    public String toString() {
+        return name + " " + size + "cm" + (extraCheese ? " +cheese" : "") + " " + toppings;
+    }
+
+    static final class Builder {
+        private final String name;
+        private int size = 26;
+        private boolean extraCheese;
+        private final java.util.List<String> toppings = new java.util.ArrayList<>();
+
+        Builder(String name) { this.name = name; }
+        Builder size(int cm) { this.size = cm; return this; }
+        Builder extraCheese() { this.extraCheese = true; return this; }
+        Builder topping(String t) { toppings.add(t); return this; }
+        Pizza build() { return new Pizza(this); }
+    }
+}
+```
+
+## Annotations
+
+Annotations (`@Override`, `@Deprecated`, `@FunctionalInterface`, `@SuppressWarnings`) are metadata on code. Frameworks rely on them heavily: Spring's `@RestController` and `@GetMapping`, JPA's `@Entity` and `@Id`, JUnit's `@Test`, Lombok's `@Getter`. They're read by the compiler, by annotation processors at build time, or by frameworks at run time through **reflection**.
+
+~~~check
+? What makes a switch over a sealed interface exhaustive without default?
++ The compiler knows every permitted subtype, and checks each is covered
+- Sealed interfaces can't have new implementations at all at run time only
+- default is implied
+- Records are always exhaustive
+> Add a subtype and incomplete switches stop compiling.
+~~~
+
+📚 **Go deeper:** JEPs 440 and 441 (record patterns, pattern matching for switch); Brian Goetz, "Data-Oriented Programming in Java" (InfoQ article); *Design Patterns* (Gamma, Helm, Johnson, Vlissides); *Effective Java*, item 2 (builders); *Java: The Complete Reference*, chapter 12 (annotations).
+--- goals
+- use type patterns, record patterns and guards in switch and instanceof
+- model closed alternatives with sealed interfaces and records (data-oriented programming)
+- recognise common design patterns in Java code, and implement a builder
+- explain what annotations are used for
+--- quiz
+? What does `case Rectangle(double w, double h) ->` do?
++ Matches a Rectangle record and binds its components to w and h
+- Creates a rectangle
+- Compares two rectangles
+- Casts to double
+> A record pattern deconstructs the record.
+? What's `when` for in a case label?
++ A guard: an extra condition the case requires
+- A loop
+- A time check
+- An alias for default
+> case Triangle t when t.base() <= 0 -> ...
+? Which pattern does `HttpRequest.newBuilder().uri(u).build()` use?
++ Builder
+- Singleton
+- Observer
+- Adapter
+> Fluent setters, then build().
+--- exercise code java
+::prompt
+Write a tiny **expression evaluator** with a sealed interface and records: `Num(double value)`, `Add(Expr left, Expr right)`, `Mul(Expr left, Expr right)` and `Neg(Expr inner)`. Write `static double eval(Expr e)` and `static String show(Expr e)` with **pattern-matching switches** (no `default`). `show` adds parentheses around every `Add` and `Mul`, writes `Neg` as `-` before its inner expression, and numbers without a decimal part as integers. The program prints:
+
+```
+((2 + 3) * -4) = -20.0
+(1.5 + (2 * 3)) = 7.5
+```
+::starter
+public class Main {
+    sealed interface Expr permits Num, Add, Mul, Neg {}
+    record Num(double value) implements Expr {}
+    record Add(Expr left, Expr right) implements Expr {}
+    record Mul(Expr left, Expr right) implements Expr {}
+    record Neg(Expr inner) implements Expr {}
+
+    static double eval(Expr e) {
+        return 0;
+    }
+
+    static String show(Expr e) {
+        return "";
+    }
+
+    public static void main(String[] args) {
+        Expr a = new Mul(new Add(new Num(2), new Num(3)), new Neg(new Num(4)));
+        Expr b = new Add(new Num(1.5), new Mul(new Num(2), new Num(3)));
+        System.out.println(show(a) + " = " + eval(a));
+        System.out.println(show(b) + " = " + eval(b));
+    }
+}
+::solution
+public class Main {
+    sealed interface Expr permits Num, Add, Mul, Neg {}
+    record Num(double value) implements Expr {}
+    record Add(Expr left, Expr right) implements Expr {}
+    record Mul(Expr left, Expr right) implements Expr {}
+    record Neg(Expr inner) implements Expr {}
+
+    static double eval(Expr e) {
+        return switch (e) {
+            case Num n -> n.value();
+            case Add(Expr l, Expr r) -> eval(l) + eval(r);
+            case Mul(Expr l, Expr r) -> eval(l) * eval(r);
+            case Neg(Expr inner) -> -eval(inner);
+        };
+    }
+
+    static String show(Expr e) {
+        return switch (e) {
+            case Num n when n.value() == Math.floor(n.value()) -> String.valueOf((long) n.value());
+            case Num n -> String.valueOf(n.value());
+            case Add(Expr l, Expr r) -> "(" + show(l) + " + " + show(r) + ")";
+            case Mul(Expr l, Expr r) -> "(" + show(l) + " * " + show(r) + ")";
+            case Neg(Expr inner) -> "-" + show(inner);
+        };
+    }
+
+    public static void main(String[] args) {
+        Expr a = new Mul(new Add(new Num(2), new Num(3)), new Neg(new Num(4)));
+        Expr b = new Add(new Num(1.5), new Mul(new Num(2), new Num(3)));
+        System.out.println(show(a) + " = " + eval(a));
+        System.out.println(show(b) + " = " + eval(b));
+    }
+}
+::expected
+((2 + 3) * -4) = -20.0
+(1.5 + (2 * 3)) = 7.5
+::variants
+new Num(1.5) => new Num(2.5)
+::hints
+- `case Add(Expr l, Expr r) -> eval(l) + eval(r);` deconstructs and recurses.
+- For whole numbers, use a guarded case: `case Num n when n.value() == Math.floor(n.value()) -> String.valueOf((long) n.value());` before the general `case Num n`.
+--- cards
+Type pattern :: case Circle c -> ... / if (o instanceof String s) — test and bind.
+Record pattern :: case Point(int x, int y) -> ... — deconstruct records (nestable).
+Guard :: case X x when condition -> ...
+Sealed + switch :: Exhaustive without default; adding a subtype breaks incomplete switches (good).
+Builder :: Fluent setters returning this, then build() creating an immutable object.
+Annotations :: Metadata (@Override, @Test, @Entity...) read by compilers, processors and frameworks.
+
+=== lesson java-jvm | Inside the JVM | 60
+## What happens when a Java program runs
+
+1. **Class loading**: the JVM finds `.class` files (in JARs, on the classpath or module path) and loads them lazily, the first time a class is used. **Class loaders** form a hierarchy (bootstrap, platform, application), which is also how application servers isolate applications.
+2. **Verification**: the bytecode is checked for safety (no invalid jumps, type errors or stack overflows).
+3. **Execution**: the bytecode is first **interpreted**. The JVM profiles which methods are "hot", and the **JIT compiler** (C1 quickly, then C2 with aggressive optimisations: inlining, escape analysis, loop unrolling) compiles them to native machine code. This is why Java programs get faster after a **warm-up** period, and why micro-benchmarks need a harness like **JMH**.
+
+You can look at bytecode with `javap -c Main.class`: a stack-based instruction set (`iload`, `iadd`, `invokevirtual`...).
+
+## Memory: stack and heap
+
+- Each thread has a **stack** of frames, one per method call, holding local variables and partial results. Primitives in local variables live there. Deep recursion overflows it (`StackOverflowError`).
+- **Objects** live on the **heap**, shared by all threads. Local variables hold references to them.
+
+```java
+public class Main {
+    public static void main(String[] args) {
+        Runtime rt = Runtime.getRuntime();
+        System.out.println("processors: " + (rt.availableProcessors() > 0));
+        System.out.println("max heap set: " + (rt.maxMemory() > 0));
+        long before = rt.totalMemory() - rt.freeMemory();
+        int[][] big = new int[1000][1000];      // about 4 MB on the heap
+        long after = rt.totalMemory() - rt.freeMemory();
+        System.out.println("allocated something: " + (after > before || big.length == 1000));
+    }
+}
+```
+
+## Garbage collection
+
+The **garbage collector** frees objects that are no longer reachable from any live reference (local variables, static fields, other live objects). Most objects die young, so the heap is split into generations, and young objects are collected cheaply and often. Modern collectors:
+
+- **G1** (default): balances throughput and pause times, for most applications;
+- **ZGC** and **Shenandoah**: pauses of a millisecond or less even with huge heaps, for latency-sensitive services;
+- **Parallel**: maximum throughput for batch jobs.
+
+GC doesn't make memory leaks impossible: objects kept reachable by mistake (a static map that only grows, listeners never removed, caches without limits) are never freed and eventually cause `OutOfMemoryError`.
+
+## Tuning and observing
+
+```
+java -Xms512m -Xmx2g -XX:+UseZGC -jar app.jar     # initial and maximum heap, collector
+jcmd <pid> GC.heap_info                           # inspect a running JVM
+jstack <pid>                                      # thread dump (find deadlocks, stuck threads)
+jfr / JDK Mission Control                         # low-overhead profiling and event recording
+```
+
+In containers, modern JVMs respect the container's CPU and memory limits. For fast start-up (serverless, CLIs), **GraalVM Native Image** compiles Java ahead of time into a native executable that starts in milliseconds, at the cost of some flexibility.
+
+The JVM runs many languages besides Java: **Kotlin**, **Scala**, **Groovy** and **Clojure** all compile to bytecode and share the same libraries, tools and runtime.
+
+~~~check
+? Why do Java programs often get faster after running for a while?
++ The JIT compiler compiles hot methods to optimised machine code
+- The garbage collector speeds up the CPU
+- The JVM caches results of every method
+- They don't
+> Interpretation first, compilation for hot code.
+~~~
+
+📚 **Go deeper:** *The Java Virtual Machine Specification* (docs.oracle.com/javase/specs); Scott Oaks, *Java Performance* (2nd edition); dev.java, "Garbage Collection" and "JDK Flight Recorder"; *Java: The Complete Reference*, chapter 1 (bytecode).
+--- goals
+- describe class loading, verification, interpretation and JIT compilation
+- distinguish stack and heap memory
+- explain how garbage collection works, and how memory leaks still happen
+- name the main JVM tuning and observability tools, and other JVM languages
+--- quiz
+? Where do objects live?
++ On the heap
+- On the stack
+- In the class file
+- In registers only
+> Local variables hold references to them.
+? What does the garbage collector free?
++ Objects that are no longer reachable from live references
+- All objects older than a minute
+- Objects marked final
+- Nothing until the program ends
+> Reachability decides.
+? Which tool gives a thread dump of a running JVM?
++ jstack (or jcmd Thread.print)
+- javac
+- javap
+- jar
+> Useful for deadlocks and stuck requests.
+--- exercise code java
+::prompt
+A classic memory leak: a cache that only grows. Write a small **LRU cache** (least recently used) that keeps at most `capacity` entries, by extending `LinkedHashMap` with **access order** and overriding `removeEldestEntry`. The program prints:
+
+```
+{b=2, c=3}
+{c=3, b=2}
+{b=2, d=4}
+size stays bounded: true
+```
+::starter
+import java.util.LinkedHashMap;
+import java.util.Map;
+
+public class Main {
+    public static void main(String[] args) {
+        LruCache<String, Integer> cache = new LruCache<>(2);
+        cache.put("a", 1);
+        cache.put("b", 2);
+        cache.put("c", 3);
+        System.out.println(cache);
+        cache.get("b");
+        System.out.println(cache);
+        cache.put("d", 4);
+        System.out.println(cache);
+        for (int i = 0; i < 10_000; i++) cache.put("k" + i, i);
+        System.out.println("size stays bounded: " + (cache.size() == 2));
+    }
+}
+
+class LruCache<K, V> extends LinkedHashMap<K, V> {
+    LruCache(int capacity) {
+    }
+}
+::solution
+import java.util.LinkedHashMap;
+import java.util.Map;
+
+public class Main {
+    public static void main(String[] args) {
+        LruCache<String, Integer> cache = new LruCache<>(2);
+        cache.put("a", 1);
+        cache.put("b", 2);
+        cache.put("c", 3);
+        System.out.println(cache);
+        cache.get("b");
+        System.out.println(cache);
+        cache.put("d", 4);
+        System.out.println(cache);
+        for (int i = 0; i < 10_000; i++) cache.put("k" + i, i);
+        System.out.println("size stays bounded: " + (cache.size() == 2));
+    }
+}
+
+class LruCache<K, V> extends LinkedHashMap<K, V> {
+    private final int capacity;
+
+    LruCache(int capacity) {
+        super(16, 0.75f, true);          // true = access order: get() moves an entry to the end
+        this.capacity = capacity;
+    }
+
+    @Override
+    protected boolean removeEldestEntry(Map.Entry<K, V> eldest) {
+        return size() > capacity;
+    }
+}
+::expected
+{b=2, c=3}
+{c=3, b=2}
+{b=2, d=4}
+size stays bounded: true
+::hints
+- `super(16, 0.75f, true)` creates a LinkedHashMap ordered by access instead of insertion.
+- `removeEldestEntry` is called after each `put`: return `true` when the size exceeds the capacity.
+--- cards
+JVM pipeline :: Class loading → bytecode verification → interpretation → JIT compilation of hot methods.
+Stack vs heap :: Stack frames per thread (locals, calls); heap for all objects (shared).
+Garbage collection :: Frees unreachable objects; generational; G1 default, ZGC/Shenandoah for low pauses.
+Memory leak in Java :: Objects kept reachable by mistake: unbounded caches, static collections, listeners.
+JVM tools :: -Xmx, jcmd, jstack, JFR/Mission Control, javap; GraalVM native image for fast start-up.
+
+=== lesson java-m6-test | Module 6 test | 150 | exam
+This test covers Module 6: packages, modules and JARs, Maven and Gradle, JUnit testing, files, concurrency, pattern matching and design patterns, and the JVM.
+
+Before you start, check that you can:
+
+- organise and build a multi-package project;
+- write tests for your code;
+- read and write files safely;
+- run work concurrently without races;
+- model data with sealed types, records and pattern matching;
+- explain how the JVM runs and manages your program.
+--- goals
+- work like a professional Java developer
+--- quiz
+? Which command builds a Maven project's JAR after running the tests?
++ mvn package
+- mvn compile
+- java -jar
+- javac -jar
+> package includes the test phase.
+? Two threads increment a shared int without synchronisation. What can happen?
++ Lost updates (a race condition)
+- A compile error
+- Nothing: ints are atomic
+- An immediate exception
+> Use AtomicInteger, a lock, or avoid sharing.
+? What's required for `switch (shape)` with type patterns to need no default?
++ shape's type is sealed and every permitted subtype has a case
+- shape is a record
+- shape is final
+- Java 8
+> Exhaustiveness via sealed hierarchies.
+? Which can still cause OutOfMemoryError in a garbage-collected language?
++ A static map that grows forever
+- Creating many short-lived objects
+- Calling methods recursively once
+- Using records
+> Reachable objects are never collected.
+--- exercise code java
+::prompt
+**Concurrent word counts.** Several "documents" are processed in parallel by a fixed thread pool of 3 threads; each task counts its document's words (lower-cased, split on non-letters) and merges them into a shared **`ConcurrentHashMap`** with `merge`. After all tasks finish, print the 3 most frequent words (ties alphabetical) and the total word count:
+
+```
+the: 6
+fox: 3
+dog: 2
+total: 21
+```
+::starter
+import java.util.List;
+
+public class Main {
+    public static void main(String[] args) throws Exception {
+        List<String> documents = List.of(
+            "The quick brown fox jumps over the lazy dog.",
+            "The fox sleeps. The dog barks!",
+            "A fox, the end; the END?");
+    }
+}
+::solution
+import java.util.Comparator;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
+public class Main {
+    public static void main(String[] args) throws Exception {
+        List<String> documents = List.of(
+            "The quick brown fox jumps over the lazy dog.",
+            "The fox sleeps. The dog barks!",
+            "A fox, the end; the END?");
+
+        Map<String, Integer> counts = new ConcurrentHashMap<>();
+        try (ExecutorService pool = Executors.newFixedThreadPool(3)) {
+            for (String doc : documents) {
+                pool.submit(() -> {
+                    for (String word : doc.toLowerCase().split("[^a-z]+")) {
+                        if (!word.isEmpty()) counts.merge(word, 1, Integer::sum);
+                    }
+                });
+            }
+        }
+        counts.entrySet().stream()
+            .sorted(Comparator.comparing((Map.Entry<String, Integer> e) -> -e.getValue()).thenComparing(Map.Entry::getKey))
+            .limit(3)
+            .forEach(e -> System.out.println(e.getKey() + ": " + e.getValue()));
+        System.out.println("total: " + counts.values().stream().mapToInt(Integer::intValue).sum());
+    }
+}
+::expected
+the: 6
+fox: 3
+dog: 2
+total: 21
+::hints
+- `ConcurrentHashMap.merge(word, 1, Integer::sum)` is atomic, so tasks can update it safely.
+- Closing the executor (try-with-resources) waits until every task is done.
+- Sort entries by count descending, then by key, and `limit(3)`.
