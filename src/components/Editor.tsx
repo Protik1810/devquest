@@ -77,7 +77,7 @@ export function Editor({ lang, value, onChange, height = '280px', onRun }: { lan
         }
       }}
     >
-      <CodeMirror value={value} height={height} theme={theme === 'light' ? 'light' : oneDark} extensions={theme === 'light' ? [ext, a11y] : [ext, a11y, readableComments]} onChange={onChange} basicSetup={{ tabSize: ['python', 'java', 'kotlin', 'csharp', 'c', 'cpp', 'rust', 'swift', 'php', 'powershell'].includes(lang) ? 4 : 2 }} />
+      <CodeMirror value={value} height={height} theme={theme === 'light' ? 'light' : oneDark} extensions={theme === 'light' ? [ext, a11y] : [ext, a11y, readableComments]} onChange={onChange} basicSetup={{ tabSize: ['python', 'java', 'kotlin', 'csharp', 'go', 'c', 'cpp', 'rust', 'swift', 'php', 'powershell'].includes(lang) ? 4 : 2 }} />
     </div>
   );
 }

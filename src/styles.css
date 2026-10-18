@@ -56,7 +56,7 @@ a:hover { text-decoration: underline; }
 h1 { font-size: 1.8rem; margin: 0.3em 0; line-height: 1.25; }
 h2 { font-size: 1.3rem; margin: 1.4em 0 0.6em; }
 h3 { margin: 0.2em 0 0.6em; }
-code, pre { font-family: var(--mono); font-size: 0.88em; }
+code, pre { font-family: var(--mono); font-size: 0.88em; tab-size: 4; }
 .muted { color: var(--muted); }
 .small { font-size: 0.85rem; }
 .big { font-size: 1.35rem; font-weight: 700; }

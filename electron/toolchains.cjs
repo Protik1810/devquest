@@ -241,7 +241,7 @@ async function runProgram(lang, code, stdin) {
       break;
     case 'go':
       write('main.go', code);
-      steps.push([t.go, ['run', 'main.go'], { timeoutMs: 60000 }, false]);
+      steps.push([t.go, ['build', '-o', exe, 'main.go'], { timeoutMs: 60000 }, true], [exe, [], {}, false]);
       break;
     case 'rust':
       write('main.rs', code);
@@ -313,7 +313,7 @@ async function runProgram(lang, code, stdin) {
   }
 
   // Messages show file names, not the temporary folder they were compiled in
-  const hideDir = (text) => text.split(dir + path.sep).join('');
+  const hideDir = (text) => text.split(dir + path.sep).join('').split(dir.split(path.sep).join('/') + '/').join('');
   try {
     let output = '';
     for (const [cmd, args, opts, compile] of steps) {
@@ -324,6 +324,8 @@ async function runProgram(lang, code, stdin) {
           // MSVC writes errors to stdout; drop its echo of the file name
           let lines = (r.stdout + r.stderr).split('\n').filter((l) => !/^\s*main\.(c|cpp)\s*$/.test(l));
           // dotnet build prints each error twice, with the project file appended, among build chatter
+          // go build adds a package header and ".\" before file names
+          if (lang === 'go') lines = lines.filter((l) => !/^# /.test(l)).map((l) => l.replace(/^\.[\\/]/, ''));
           if (lang === 'csharp') lines = [...new Set(lines.filter((l) => /: error /.test(l)).map((l) => l.replace(/\s*\[[^\]]*\.csproj\]\s*$/, '')))];
           return { ok: false, output: '', error: `Compile error:\n${hideDir(lines.join('\n').trim())}`, compileError: true };
         }

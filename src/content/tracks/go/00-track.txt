@@ -1,0 +1,9 @@
++++ track
+id: go
+title: Go
+icon: 🐹
+tier: 1
+color: #00add8
+kind: language
+blurb: Google's small, fast language for back ends, cloud infrastructure and command-line tools (Docker, Kubernetes and Terraform are written in Go), taught from first principles to professional practice: types, slices and maps, functions and closures, explicit error handling, structs, methods and interfaces, generics, goroutines and channels, synchronization and context, packages and modules, files and JSON, testing and HTTP servers. Programs run on the Go toolchain installed on your computer in the desktop app.
++++

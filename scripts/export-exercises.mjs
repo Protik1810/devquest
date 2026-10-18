@@ -21,7 +21,7 @@ try {
   const examples = [];
   for (const t of TRACKS)
     for (const l of t.lessons)
-      for (const m of (l.body ?? '').matchAll(/^```(java|csharp)[ \t]*\n([\s\S]*?)^```[ \t]*$/gm)) examples.push({ id: l.id, lang: m[1], code: m[2] });
+      for (const m of (l.body ?? '').matchAll(/^```(java|csharp|go)[ \t]*\n([\s\S]*?)^```[ \t]*$/gm)) examples.push({ id: l.id, lang: m[1], code: m[2] });
   fs.mkdirSync(path.join(root, '.cache'), { recursive: true });
   fs.writeFileSync(path.join(root, '.cache', 'exercises.json'), JSON.stringify(out, null, 1));
   fs.writeFileSync(path.join(root, '.cache', 'examples.json'), JSON.stringify(examples, null, 1));

@@ -1,0 +1,811 @@
+=== module Module 1 · Getting started
+
+=== lesson go-why | What Go is | 50
+## A language designed for big software
+
+**Go** (often called *Golang* because of its old website, golang.org) was designed at Google in 2007 by Robert Griesemer, Rob Pike and Ken Thompson (one of the creators of Unix and of C's predecessor B). It was released as open source in 2009, and Go 1.0 arrived in 2012.
+
+Its designers were frustrated by huge C++ code bases that took close to an hour to compile, by complicated type hierarchies, and by how hard it was to use many CPU cores safely. So they made a deliberately **small** language:
+
+- **compiled to native machine code**, very quickly: a large program builds in seconds, into a single executable file with no runtime to install;
+- **statically typed**, with type inference (`x := 42`) so it feels light;
+- **garbage collected**, so you don't free memory by hand as in C;
+- **concurrency built in**: *goroutines* (very cheap threads) and *channels* (pipes between them) are part of the language;
+- **few features on purpose**: no classes and no inheritance (structs, methods and interfaces instead), no exceptions (errors are ordinary values), one loop keyword (`for`). Generics arrived only in Go 1.18 (2022), after years of careful design.
+
+```
+main.go  --go build-->  one native executable (app.exe / app)  --> runs directly on Windows, Linux or macOS
+```
+
+## Where Go is used
+
+- **Cloud infrastructure**: Docker, Kubernetes, Terraform, Prometheus, etcd and most "cloud-native" tools are written in Go.
+- **Back ends and APIs**: Google, Uber, Twitch, Dropbox, Cloudflare and many start-ups run Go services; the standard library includes a production-quality HTTP server.
+- **Command-line tools**: GitHub's `gh`, Hugo, and countless DevOps tools, because one static binary is easy to distribute.
+- **Networking and systems**: proxies, databases (CockroachDB), message queues.
+
+## What working with Go feels like
+
+Go values **simplicity and readability over cleverness**. There's usually one obvious way to write something, all Go code is formatted the same way by `gofmt`, and the standard library covers most everyday needs (HTTP, JSON, files, testing, cryptography). The **Go 1 compatibility promise** means code written for Go 1.0 still compiles today. A new version ships every six months (February and August); this course needs **Go 1.23 or newer**.
+
+## Running Go in DevQuest
+
+DevQuest runs your Go programs with the **Go toolchain installed on your computer**, in the desktop app (the next lesson shows how to install it). On the web and on Android, the AI tutor checks your code by tracing it, or you compare your answer with the solution. Press **▶ Run**:
+
+```go
+package main
+
+import (
+	"fmt"
+	"runtime"
+)
+
+func main() {
+	fmt.Println("Hello from Go!")
+	fmt.Println("running on", runtime.GOOS, "with", runtime.NumCPU(), "CPUs")
+}
+```
+
+~~~check
+? What does `go build` produce?
++ A single native executable for the target operating system
+- Bytecode for a virtual machine
+- JavaScript
+- A .dll that needs a runtime installed
+> Go programs don't need a separate runtime to be installed.
+~~~
+
+📚 **Go deeper:** go.dev ("A Tour of Go" and "Effective Go"); Alan Donovan and Brian Kernighan, *The Go Programming Language*, chapter 1 (Tutorial); Rob Pike's talk "Go at Google: Language Design in the Service of Software Engineering".
+--- goals
+- explain how Go programs are compiled into a single native executable
+- describe where Go is used: cloud infrastructure, back ends and CLI tools
+- name Go's main design choices: simplicity, garbage collection, built-in concurrency, errors as values
+--- quiz
+? Who designed Go?
++ Robert Griesemer, Rob Pike and Ken Thompson at Google
+- James Gosling at Sun
+- Anders Hejlsberg at Microsoft
+- Guido van Rossum
+> Ken Thompson also co-created Unix.
+? Which of these is NOT part of Go?
++ Class inheritance
+- Garbage collection
+- Goroutines and channels
+- Static typing
+> Go uses structs, methods, interfaces and composition instead.
+? Which famous tools are written in Go?
++ Docker and Kubernetes
+- Linux and Git
+- Photoshop and Excel
+- Unity and Unreal
+> Most cloud-native tooling is Go.
+? How does Go handle errors?
++ As ordinary values returned by functions
+- With checked exceptions
+- With try/catch only
+- It ignores them
+> Panics exist, but only for bugs and truly exceptional situations.
+--- exercise code go
+::prompt
+Change the program so it prints exactly:
+
+```
+Go was announced in 2009.
+It compiles to native code.
+Gophers love simplicity!
+```
+
+`fmt.Println` prints its arguments separated by spaces, followed by a line break.
+::starter
+package main
+
+import "fmt"
+
+func main() {
+	fmt.Println("Go was announced in", 2007)
+}
+::solution
+package main
+
+import "fmt"
+
+func main() {
+	fmt.Println("Go was announced in 2009.")
+	fmt.Println("It compiles to native code.")
+	fmt.Println("Gophers love simplicity!")
+}
+::expected
+Go was announced in 2009.
+It compiles to native code.
+Gophers love simplicity!
+::hints
+- One `fmt.Println` per line.
+- Text goes between double quotes: `"like this"`.
+--- cards
+Go :: A compiled, statically typed, garbage-collected language from Google (2009) with built-in concurrency.
+go build :: Compiles a program into one native executable.
+Goroutine :: A very cheap thread managed by the Go runtime.
+Errors in Go :: Ordinary values returned by functions, not exceptions.
+gofmt :: The tool that formats all Go code the same way.
+
+=== lesson go-setup | Installing Go and running programs | 55
+## Install the toolchain
+
+Download the installer for your system from **go.dev/dl** and run it (on Linux you can also use your package manager, but it may be older; on macOS, `brew install go` works). Then open a new terminal and check:
+
+```
+go version
+```
+
+You should see something like `go version go1.27.2 windows/amd64`. DevQuest's desktop app finds Go automatically (Settings → Local compilers shows what it found).
+
+For editing, **Visual Studio Code** with the official **Go extension** is the most popular choice (it installs `gopls`, the Go language server, for completion and errors as you type); **GoLand** (JetBrains) is a full IDE.
+
+## Your first project
+
+Go code lives in **modules**: a folder with a `go.mod` file that names the module and the Go version. Create one:
+
+```
+mkdir hello
+cd hello
+go mod init example.com/hello
+```
+
+`go.mod` now contains:
+
+```
+module example.com/hello
+
+go 1.27
+```
+
+The module path is usually where the code will live online (`github.com/yourname/hello`); for a private experiment any name works. Create `main.go`:
+
+```
+package main
+
+import "fmt"
+
+func main() {
+	fmt.Println("Hello, Go!")
+}
+```
+
+## The go command
+
+One command does almost everything:
+
+| Command | Does |
+|---|---|
+| `go run .` | compile and run the program in this folder (nothing is left behind) |
+| `go build` | compile it into an executable (`hello.exe` on Windows, `hello` elsewhere) |
+| `go fmt ./...` | format all files the standard way (editors do it on save) |
+| `go vet ./...` | report suspicious code that compiles but is probably wrong |
+| `go test ./...` | run the tests (Module 7) |
+| `go get example.com/pkg` | add a dependency to `go.mod` |
+| `go mod tidy` | add missing and remove unused dependencies |
+| `go doc fmt.Println` | show documentation |
+
+`./...` means "this folder and all folders below it".
+
+**Cross-compiling** is famously easy: `GOOS=linux GOARCH=arm64 go build` (in a Unix shell; in PowerShell set `$env:GOOS` and `$env:GOARCH` first) builds a Linux ARM executable from any computer.
+
+## Formatting is not optional
+
+Go has one official style, applied by `gofmt`: **tabs** for indentation, braces on the same line, aligned comments. Nobody argues about style in Go code reviews, because the tool decides. Opening braces must stay on the same line: Go automatically inserts semicolons at line ends, so a `{` on the next line is a syntax error.
+
+```go
+package main
+
+import "fmt"
+
+func main() {
+	name := "gopher"
+	for i := 1; i <= 3; i++ {
+		fmt.Println(i, "hello,", name)
+	}
+}
+```
+
+~~~check
+? What does `go mod init example.com/hello` create?
++ A go.mod file that defines the module
+- A compiled executable
+- A Git repository
+- A main.go file
+> Every Go project starts with go.mod.
+~~~
+
+📚 **Go deeper:** go.dev/doc/install, "Tutorial: Get started with Go" and "How to Write Go Code" (go.dev/doc/code); *The Go Programming Language*, section 1.1 and chapter 10.
+--- goals
+- install Go and check the version
+- create a module with go mod init and run it with go run
+- use go build, go fmt, go vet and go doc
+- explain why gofmt style and same-line braces are required
+--- quiz
+? Which command compiles and runs the program in the current folder?
++ go run .
+- go build --run
+- go exec
+- go start
+> go build only compiles.
+? What does `go vet` do?
++ Reports suspicious code that compiles but is probably wrong
+- Formats the code
+- Downloads dependencies
+- Runs the tests
+> Run it often; editors run it for you.
+? Why must `{` stay at the end of the line in Go?
++ Go inserts semicolons at line ends, so a brace on the next line breaks the syntax
+- It's only a style preference
+- Tabs require it
+- It doesn't; both work
+> gofmt also enforces it.
+? What does `./...` mean in `go test ./...`?
++ This folder and every folder below it
+- The parent folder
+- All Go modules on the computer
+- Only hidden folders
+> Three dots: recursive.
+--- exercise code go
+::prompt
+`fmt.Printf` prints formatted text: `%s` is replaced by a string, `%d` by an integer, and `\n` is a line break (Printf doesn't add one). Complete the program so it prints:
+
+```
+module: example.com/hello
+go version: 1.27
+files: 2
+```
+
+Use one `Printf` per line with the variables given.
+::starter
+package main
+
+import "fmt"
+
+func main() {
+	module := "example.com/hello"
+	version := "1.27"
+	files := 2
+	fmt.Println(module, version, files)
+}
+::solution
+package main
+
+import "fmt"
+
+func main() {
+	module := "example.com/hello"
+	version := "1.27"
+	files := 2
+	fmt.Printf("module: %s\n", module)
+	fmt.Printf("go version: %s\n", version)
+	fmt.Printf("files: %d\n", files)
+}
+::expected
+module: example.com/hello
+go version: 1.27
+files: 2
+::hints
+- `fmt.Printf("module: %s\n", module)` fills `%s` with the variable.
+- Don't forget `\n` at the end of each format string.
+--- cards
+go.mod :: Defines a module: its path and Go version (go mod init <path>).
+go run . :: Compile and run without keeping an executable.
+go build :: Compile into an executable.
+go fmt / go vet :: Format code / find suspicious code.
+GOOS / GOARCH :: Environment variables that pick the target system when cross-compiling.
+
+=== lesson go-basics | Hello, Go: the structure of a program | 65
+## Packages, imports and main
+
+Every Go file starts by saying which **package** it belongs to. A program's entry point is the function **`main`** in package **`main`**:
+
+```go
+package main // this file belongs to the executable program
+
+import (
+	"fmt"     // formatted printing
+	"strings" // string helpers
+)
+
+// main is where the program starts
+func main() {
+	greeting := strings.ToUpper("hello")
+	fmt.Println(greeting, "from Go")
+}
+```
+
+- `import` lists the packages the file uses, from the **standard library** (`fmt`, `strings`, `os`, `math`, …) or from other modules.
+- You call a package's functions with its name: `strings.ToUpper`. Only names starting with a **capital letter** are visible outside their package (*exported*): `fmt.Println` is exported, a function `helper` wouldn't be.
+- `//` starts a comment to the end of the line; `/* ... */` spans lines.
+- There are no semicolons at line ends: the compiler adds them.
+
+## Variables
+
+Go has several ways to declare a variable; all of them give it a fixed **type**:
+
+```go
+package main
+
+import "fmt"
+
+func main() {
+	var city string = "Lisbon" // full form
+	var year = 2026            // type inferred: int
+	temperature := 21.5        // short form, inside functions: float64
+	var visits int             // no value: the zero value, 0
+
+	var (
+		active  bool   // false
+		nickname string // "" (empty string)
+	)
+
+	city = "Porto"  // assign a new value of the same type
+	visits++        // add 1
+
+	fmt.Println(city, year, temperature, visits, active, nickname == "")
+	a, b := 1, 2
+	a, b = b, a // swap in one statement
+	fmt.Println(a, b)
+}
+```
+
+- `:=` declares **and** assigns, and only works inside functions; `=` assigns to an existing variable.
+- Every type has a **zero value**: `0` for numbers, `false` for `bool`, `""` for strings, `nil` for pointers, slices, maps and some others. A Go variable is never "uninitialised".
+- The compiler **refuses unused variables and unused imports**. It feels strict at first, but it keeps programs clean. Assign to the blank identifier `_` to ignore a value on purpose.
+
+## Constants
+
+```go
+package main
+
+import "fmt"
+
+const appName = "Tracker"
+const maxUsers = 100
+
+const (
+	Small = iota // 0
+	Medium       // 1
+	Large        // 2
+)
+
+func main() {
+	fmt.Println(appName, maxUsers, Small, Medium, Large)
+	const ratio = 1.0 / 3 // untyped constant: exact until used
+	fmt.Printf("%.4f\n", ratio)
+}
+```
+
+Constants are computed by the compiler. **`iota`** counts up inside a `const` group, Go's simple way to make enumerations.
+
+## Printing with fmt
+
+| Function | Does |
+|---|---|
+| `fmt.Println(a, b)` | values separated by spaces, then a line break |
+| `fmt.Print(a, b)` | no line break (spaces only between non-strings) |
+| `fmt.Printf(format, args...)` | formatted: `%d` integer, `%s` string, `%f` float (`%.2f` two decimals), `%t` bool, `%v` any value, `%q` quoted, `%T` the type, `%5d` width 5, `%-8s` left-aligned |
+| `fmt.Sprintf(...)` | like Printf but returns the string |
+
+```go
+package main
+
+import "fmt"
+
+func main() {
+	item, qty, price := "coffee", 3, 2.5
+	fmt.Printf("%-8s x%d = %6.2f\n", item, qty, float64(qty)*price)
+	fmt.Printf("%v %T | %q\n", qty, price, item)
+	line := fmt.Sprintf("%s costs %.2f", item, price)
+	fmt.Println(line)
+}
+```
+
+Note `float64(qty)`: Go never converts between numeric types automatically; you write the conversion.
+
+~~~check
+? What is the value of `var count int` before anything is assigned?
++ 0
+- nil
+- undefined
+- It doesn't compile
+> Every type has a zero value.
+~~~
+
+📚 **Go deeper:** A Tour of Go, "Basics"; go.dev/ref/spec ("Declarations and scope", "Constants"); *The Go Programming Language*, chapter 2 (Program Structure).
+--- goals
+- write a program with package main, imports and func main
+- explain exported (capitalised) names
+- declare variables with var and :=, and know each type's zero value
+- declare constants and enumerations with iota
+- print values with Println, Printf verbs and Sprintf
+--- quiz
+? Where can you use `x := 5`?
++ Only inside functions
+- Anywhere, including package level
+- Only in for loops
+- Only for constants
+> At package level you need var.
+? Which name is exported from its package?
++ ParseConfig
+- parseConfig
+- _parseConfig
+- parse_config
+> A capital first letter means exported.
+? What happens if you declare a variable and never use it?
++ The program doesn't compile
+- A warning is printed
+- It's removed silently
+- It's set to nil
+> The same goes for unused imports.
+? What does `%v` print in Printf?
++ Any value in its default format
+- Only strings
+- The variable's name
+- The type of the value
+> %T prints the type.
+--- exercise code go
+::prompt
+Declare these variables and print them as shown:
+
+- `language`, a string, with `:=` set to `"Go"`;
+- `version` with `var` and the value `1.27`;
+- `lessons`, an `int` declared with `var` and **no value** (so it's 0), then increased by 5 with `lessons += 5`;
+- `ready`, a `bool` with its zero value.
+
+```
+Go 1.27
+lessons: 5
+ready: false
+```
+::starter
+package main
+
+import "fmt"
+
+func main() {
+	fmt.Println("Go 1.27")
+}
+::solution
+package main
+
+import "fmt"
+
+func main() {
+	language := "Go"
+	var version = 1.27
+	var lessons int
+	lessons += 5
+	var ready bool
+	fmt.Println(language, version)
+	fmt.Println("lessons:", lessons)
+	fmt.Println("ready:", ready)
+}
+::expected
+Go 1.27
+lessons: 5
+ready: false
+::hints
+- `var lessons int` starts at 0.
+- `fmt.Println("lessons:", lessons)` adds the space for you.
+--- exercise code go
+::prompt
+A shop's price list. Declare the constants `shop = "Gopher Goods"` and `taxRate = 0.2`, and the iota group `Book`, `Pen`, `Lamp` (0, 1, 2). Then print the table with `Printf`: the name left-aligned in 6 characters (`%-6s`), the code (`%d`), and the price with tax, with two decimals in 7 characters (`%7.2f`).
+
+```
+Gopher Goods
+Book   0   15.00
+Pen    1    1.80
+Lamp   2   42.00
+```
+
+The prices before tax are 12.5, 1.5 and 35.
+::starter
+package main
+
+import "fmt"
+
+func main() {
+	fmt.Println("Gopher Goods")
+}
+::solution
+package main
+
+import "fmt"
+
+const shop = "Gopher Goods"
+const taxRate = 0.2
+
+const (
+	Book = iota
+	Pen
+	Lamp
+)
+
+func main() {
+	fmt.Println(shop)
+	fmt.Printf("%-6s %d %7.2f\n", "Book", Book, 12.5*(1+taxRate))
+	fmt.Printf("%-6s %d %7.2f\n", "Pen", Pen, 1.5*(1+taxRate))
+	fmt.Printf("%-6s %d %7.2f\n", "Lamp", Lamp, 35*(1+taxRate))
+}
+::expected
+Gopher Goods
+Book   0   15.00
+Pen    1    1.80
+Lamp   2   42.00
+::hints
+- `const ( Book = iota; Pen; Lamp )` (one per line) gives 0, 1, 2.
+- `fmt.Printf("%-6s %d %7.2f\n", "Book", Book, 12.5*(1+taxRate))`.
+--- cards
+package main + func main :: The entry point of a Go program.
+Exported name :: Starts with a capital letter: visible outside its package.
+:= :: Declare and assign inside a function, with the type inferred.
+Zero value :: 0, false, "" or nil: the value of a variable nobody assigned.
+iota :: Counts 0, 1, 2… inside a const group.
+Printf verbs :: %d int, %s string, %.2f float, %v any, %T type, %q quoted.
+
+=== lesson go-errors | Reading compiler errors and panics | 55
+## Compile errors
+
+Go's compiler is fast and strict. It reports problems with the **file, line and column**, then a message:
+
+```
+main.go:6:2: "os" imported and not used
+main.go:10:2: declared and not used: total
+main.go:11:18: cannot use "5" (untyped string constant) as int value in variable declaration
+main.go:12:6: undefined: fmt.Printn
+```
+
+Read them like this: `main.go:11:18` is line 11, column 18. Fix the **first** error first; later ones are often consequences of it. This example doesn't compile on purpose; press ▶ Run and read the messages:
+
+```go
+// error
+package main
+
+import (
+	"fmt"
+	"os"
+)
+
+func main() {
+	total := 0
+	var count int = "5"
+	fmt.Printn(count)
+}
+```
+
+The most common messages for beginners:
+
+| Message | Meaning |
+|---|---|
+| `declared and not used: x` | delete the variable, use it, or assign it to `_` |
+| `"os" imported and not used` | remove the import (editors do it for you) |
+| `undefined: x` | a typo, a missing import, or a lowercase (unexported) name from another package |
+| `cannot use x (variable of type float64) as int value` | convert explicitly: `int(x)` |
+| `missing return` | a function with a result type must return on every path |
+| `syntax error: unexpected newline` | often a `{` on the next line, or a missing comma in a multi-line list |
+
+## Runtime panics
+
+Some mistakes can only be found while the program runs: indexing past the end of a slice, dividing an integer by zero, using a `nil` map or pointer. Go then **panics**: it stops the program and prints the reason and a **stack trace**, the list of function calls that led there, most recent first:
+
+```go
+// error
+package main
+
+import "fmt"
+
+func main() {
+	scores := []int{90, 75, 82}
+	fmt.Println("average of the first four:", average(scores, 4))
+}
+
+func average(values []int, n int) int {
+	sum := 0
+	for i := 0; i < n; i++ {
+		sum += values[i]
+	}
+	return sum / n
+}
+```
+
+```
+panic: runtime error: index out of range [3] with length 3
+
+goroutine 1 [running]:
+main.average(...)
+	main.go:14
+main.main()
+	main.go:8 +0xc6
+```
+
+Read it bottom-up to see the path (`main` called `average`), and top-down to find **where** it broke: line 14 of `main.go`, inside `average`. The message says exactly what happened: index 3 in a slice of length 3.
+
+Expected problems (a missing file, invalid input) are not panics in Go: functions **return an `error` value**, which you check. That's Module 3's topic.
+
+## A debugging habit
+
+1. Read the whole message; note the file and line.
+2. Print values just before the failing line (`fmt.Println("i =", i)`) or use the debugger in VS Code (Delve).
+3. Change one thing at a time, and run again.
+
+~~~check
+? In `main.go:12:15: undefined: total`, what does 15 mean?
++ The column on line 12
+- The error number
+- The number of errors
+- The line count
+> file:line:column.
+~~~
+
+📚 **Go deeper:** go.dev/doc/effective_go ("Errors"); the Go FAQ ("Why does Go not have exceptions?"); *The Go Programming Language*, section 5.9 (Panic).
+--- goals
+- read Go compile errors by file, line and column
+- fix the most common beginner compile errors
+- read a panic message and stack trace to find the failing line
+- tell panics (bugs) apart from error values (expected problems)
+--- quiz
+? Which error do you get for an import you never use?
++ "pkg" imported and not used
+- warning: unused import
+- undefined: pkg
+- Nothing; it's ignored
+> Go refuses unused imports.
+? What does a panic print?
++ The reason and a stack trace of the function calls
+- Only "error"
+- Nothing; the program just stops
+- A compile error
+> Read it to find the failing line.
+? What's the usual Go way to report "file not found"?
++ Return an error value
+- Panic
+- Print and exit silently
+- Return -1
+> Panics are for bugs.
+--- exercise code go
+::prompt
+This program has three compile errors. Fix them (don't remove the `total` calculation) so it prints:
+
+```
+items: 3
+total: 7.50
+```
+::starter
+package main
+
+import (
+	"fmt"
+	"os"
+)
+
+func main() {
+	prices := []float64{2.5, 3.0, 2.0}
+	count := "3"
+	total := 0.0
+	for _, p := range prices {
+		total += p
+	}
+	fmt.Println("items:", count + 0)
+	fmt.Printf("total: %.2f\n", totl)
+}
+::solution
+package main
+
+import "fmt"
+
+func main() {
+	prices := []float64{2.5, 3.0, 2.0}
+	count := 3
+	total := 0.0
+	for _, p := range prices {
+		total += p
+	}
+	fmt.Println("items:", count+0)
+	fmt.Printf("total: %.2f\n", total)
+}
+::expected
+items: 3
+total: 7.50
+::hints
+- `"os"` is never used: remove it from the imports.
+- `count` must be a number, not a string, to add `0` to it.
+- Check the spelling of `total` in the last line.
+--- cards
+file:line:col :: Where a compile error is: main.go:12:15.
+declared and not used :: Go refuses unused variables (and imports).
+Panic :: A runtime failure (bad index, nil map, integer division by zero) that stops the program with a stack trace.
+Stack trace :: The chain of function calls that led to a panic, most recent first.
+
+=== lesson go-m1-test | Module 1 test | 120 | exam
+This test covers Module 1: what Go is, the go command and modules, program structure, variables and constants, printing, and reading errors.
+
+Before you start, check that you can:
+
+- create and run a Go program;
+- declare variables and constants, and print them with Printf;
+- read a compile error or a panic and find the line.
+--- goals
+- write, run and fix a small Go program
+--- quiz
+? Which file defines a Go module?
++ go.mod
+- package.json
+- main.go
+- go.sum only
+> go.sum records dependency checksums.
+? What does `fmt.Printf("%5.1f|", 3.14159)` print?
++ "  3.1|"
+- "3.14159|"
+- "3.1|"
+- "    3|"
+> Width 5, one decimal.
+? `x` already exists in this scope. Which line does NOT compile?
++ x := 6
+- x = 6
+- x++
+- x, y := 6, 7 (y is new)
+> := needs at least one new variable on its left.
+? What is `Large` in `const ( Small = iota; Medium; Large )`?
++ 2
+- 0
+- 3
+- "Large"
+> iota counts from 0.
+--- exercise code go
+::prompt
+**A trip receipt.** Using constants for the fixed values and variables for the rest, print exactly:
+
+```
+=== Lisbon trip ===
+nights:         3
+per night:  89.90
+hotel:     269.70
+city tax:    6.00
+total:     275.70
+```
+
+- `const city = "Lisbon"`, `const cityTaxPerNight = 2.0`;
+- `nights := 3`, `perNight := 89.90`;
+- hotel = nights × per night; city tax = nights × tax; total = both. You'll need `float64(nights)`.
+- labels are left-aligned in 10 characters (`%-10s`), numbers right-aligned in 7 (`%7d` and `%7.2f`).
+::starter
+package main
+
+import "fmt"
+
+func main() {
+	fmt.Println("=== Lisbon trip ===")
+}
+::solution
+package main
+
+import "fmt"
+
+const city = "Lisbon"
+const cityTaxPerNight = 2.0
+
+func main() {
+	nights := 3
+	perNight := 89.90
+	hotel := float64(nights) * perNight
+	tax := float64(nights) * cityTaxPerNight
+	fmt.Printf("=== %s trip ===\n", city)
+	fmt.Printf("%-10s%7d\n", "nights:", nights)
+	fmt.Printf("%-10s%7.2f\n", "per night:", perNight)
+	fmt.Printf("%-10s%7.2f\n", "hotel:", hotel)
+	fmt.Printf("%-10s%7.2f\n", "city tax:", tax)
+	fmt.Printf("%-10s%7.2f\n", "total:", hotel+tax)
+}
+::expected
+=== Lisbon trip ===
+nights:         3
+per night:  89.90
+hotel:     269.70
+city tax:    6.00
+total:     275.70
+::hints
+- `float64(nights) * perNight`: Go won't multiply an int by a float64 without the conversion.
+- `fmt.Printf("%-10s%7.2f\n", "hotel:", hotel)` pads the label to 10 characters.
