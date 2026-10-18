@@ -1,0 +1,1338 @@
+=== module Module 5 · The core library
+
+=== lesson cs-exceptions | Exceptions and resources | 70
+## try, catch, finally
+
+```csharp
+string[] inputs = { "42", "x7", "-3" };
+foreach (string input in inputs)
+{
+    try
+    {
+        int n = int.Parse(input);
+        Console.WriteLine($"square root of {n} = {SafeSqrt(n):F2}");
+    }
+    catch (FormatException)
+    {
+        Console.WriteLine($"not a number: {input}");
+    }
+    catch (ArgumentOutOfRangeException e) when (e.ParamName == "n")
+    {
+        Console.WriteLine($"invalid: {e.Message}");
+    }
+    finally
+    {
+        Console.WriteLine($"-- done with {input}");
+    }
+}
+
+static double SafeSqrt(int n)
+{
+    ArgumentOutOfRangeException.ThrowIfNegative(n);
+    return Math.Sqrt(n);
+}
+```
+
+- The first `catch` whose type matches handles the exception; put specific types before general ones.
+- **Exception filters** (`when (...)`) add a condition without catching and rethrowing.
+- `finally` always runs.
+- `throw;` (alone, inside a catch) rethrows the current exception **keeping its stack trace**; `throw e;` would reset it.
+
+Unlike Java, C# has **no checked exceptions**: the compiler never forces you to catch or declare them. Document what a method throws (XML `<exception>` comments), and catch exceptions where you can actually handle them.
+
+## Custom exceptions
+
+```csharp
+var wallet = new Wallet(30);
+try
+{
+    wallet.Pay(50);
+}
+catch (InsufficientFundsException e)
+{
+    Console.WriteLine($"{e.Message} (short by {e.ShortBy})");
+}
+
+class InsufficientFundsException(decimal shortBy) : Exception("Insufficient funds")
+{
+    public decimal ShortBy { get; } = shortBy;
+}
+
+class Wallet(decimal balance)
+{
+    private decimal _balance = balance;
+
+    public void Pay(decimal amount)
+    {
+        if (amount > _balance) throw new InsufficientFundsException(amount - _balance);
+        _balance -= amount;
+    }
+}
+```
+
+Derive from `Exception` (or a more specific built-in type), name the class `...Exception`, and pass the original exception as the **inner exception** when wrapping (`new ServiceException("...", ex)`).
+
+## using: releasing resources
+
+Files, connections and streams implement **`IDisposable`**; their `Dispose()` must be called even when errors happen. The **`using`** statement does it automatically:
+
+```csharp
+using (var first = new Resource("database"))
+using (var second = new Resource("log file"))
+{
+    Console.WriteLine("working with both");
+}
+
+void Work()
+{
+    using var r = new Resource("cache");      // using declaration: disposed at the end of the scope
+    Console.WriteLine("inside Work");
+}
+Work();
+
+class Resource : IDisposable
+{
+    private readonly string _name;
+    public Resource(string name) { _name = name; Console.WriteLine($"open {_name}"); }
+    public void Dispose() => Console.WriteLine($"dispose {_name}");
+}
+```
+
+Resources are disposed in reverse order. `using var x = ...;` (C# 8) disposes at the end of the enclosing block, which avoids nesting.
+
+## Good practice
+
+- Don't catch `Exception` and ignore it; catch specific types where you can recover.
+- Validate arguments early (`ArgumentNullException.ThrowIfNull`, `ArgumentException.ThrowIfNullOrEmpty`).
+- Use the **Try pattern** (`bool TryX(..., out result)`) for failures that are expected and frequent, like parsing user input; exceptions are for exceptional situations.
+
+~~~check
+? What's the difference between `throw;` and `throw e;` in a catch block?
++ throw; keeps the original stack trace; throw e; resets it to this point
+- None
+- throw e; doesn't compile
+- throw; creates a new exception
+> Always prefer throw; to rethrow.
+~~~
+
+📚 **Go deeper:** Microsoft Learn, "Exceptions and exception handling", "Best practices for exceptions" and "using statement"; *Programming C#*, chapter 11 "Handling Exceptions".
+--- goals
+- handle exceptions with try, catch (with filters) and finally, and rethrow correctly
+- explain that C# has no checked exceptions
+- write custom exception types with inner exceptions
+- release resources with using statements and declarations
+--- quiz
+? Does C# force you to catch exceptions a method can throw?
++ No: there are no checked exceptions
+- Yes, like Java
+- Only for IOException
+- Only in async methods
+> Catch where you can handle them.
+? What does `catch (IOException e) when (e.HResult == 32)` do?
++ Catches only IOExceptions for which the filter is true
+- Catches all exceptions
+- Doesn't compile
+- Throws when the condition is true
+> Exception filters.
+? Which interface does `using` work with?
++ IDisposable (or IAsyncDisposable with await using)
+- IComparable
+- IEnumerable
+- ICloneable
+> Dispose() is called automatically.
+--- exercise code csharp
+::prompt
+Write `static int ParseAge(string? text)` that:
+
+- throws `ArgumentException("age is empty")` for null or blank text;
+- throws `ArgumentException("not a number: <text>")` when it isn't an integer, with the `FormatException` as the **inner exception** (use `int.Parse` in a try/catch);
+- throws `new ArgumentOutOfRangeException(nameof(text), $"out of range: {n}")` outside 0 to 150 (its `Message` also names the parameter, which the program cuts off before printing);
+- returns the age otherwise.
+
+The program prints:
+
+```
+36 -> 36
+" 7 " -> 7
+"" -> error: age is empty
+abc -> error: not a number: abc
+200 -> error: out of range: 200
+inner kept: True
+```
+::starter
+string[] inputs = { "36", " 7 ", "", "abc", "200" };
+foreach (string input in inputs)
+{
+    string label = input.Trim() == input && input.Length > 0 ? input : $"\"{input}\"";
+    try
+    {
+        Console.WriteLine($"{label} -> {ParseAge(input)}");
+    }
+    catch (ArgumentException e)
+    {
+        Console.WriteLine($"{label} -> error: {e.Message.Split(" (")[0]}");
+    }
+}
+try
+{
+    ParseAge("x");
+}
+catch (ArgumentException e)
+{
+    Console.WriteLine($"inner kept: {e.InnerException is FormatException}");
+}
+
+static int ParseAge(string? text) => int.Parse(text!);
+::solution
+string[] inputs = { "36", " 7 ", "", "abc", "200" };
+foreach (string input in inputs)
+{
+    string label = input.Trim() == input && input.Length > 0 ? input : $"\"{input}\"";
+    try
+    {
+        Console.WriteLine($"{label} -> {ParseAge(input)}");
+    }
+    catch (ArgumentException e)
+    {
+        Console.WriteLine($"{label} -> error: {e.Message.Split(" (")[0]}");
+    }
+}
+try
+{
+    ParseAge("x");
+}
+catch (ArgumentException e)
+{
+    Console.WriteLine($"inner kept: {e.InnerException is FormatException}");
+}
+
+static int ParseAge(string? text)
+{
+    if (string.IsNullOrWhiteSpace(text)) throw new ArgumentException("age is empty");
+    int n;
+    try
+    {
+        n = int.Parse(text);
+    }
+    catch (FormatException e)
+    {
+        throw new ArgumentException($"not a number: {text}", e);
+    }
+    if (n is < 0 or > 150) throw new ArgumentOutOfRangeException(nameof(text), $"out of range: {n}");
+    return n;
+}
+::expected
+36 -> 36
+" 7 " -> 7
+"" -> error: age is empty
+abc -> error: not a number: abc
+200 -> error: out of range: 200
+inner kept: True
+::hints
+- `string.IsNullOrWhiteSpace(text)` catches null, empty and blank.
+- `throw new ArgumentException($"not a number: {text}", e);` keeps the FormatException as the inner exception.
+- `ArgumentOutOfRangeException` is a subclass of `ArgumentException`, so the program's catch handles it.
+--- cards
+try / catch / finally :: Specific catches first; when (...) filters; finally always runs.
+throw; :: Rethrows keeping the stack trace (never throw e; to rethrow).
+No checked exceptions :: C# never forces catching or declaring.
+Custom exception :: class MyException(string msg) : Exception(msg); wrap with an inner exception.
+using :: using (var r = ...) { } or using var r = ...; — calls Dispose() automatically.
+
+=== lesson cs-collections | Collections | 75
+## The main collections
+
+`System.Collections.Generic` provides type-safe collections (imported implicitly):
+
+| Type | Holds | Notes |
+|---|---|---|
+| `List<T>` | an ordered, growable list | the default choice |
+| `Dictionary<TKey, TValue>` | key → value | fast lookups by key |
+| `HashSet<T>` | unique elements | fast membership tests, set operations |
+| `Queue<T>` / `Stack<T>` | FIFO / LIFO | |
+| `PriorityQueue<TElement, TPriority>` | elements by priority | smallest priority first |
+| `SortedDictionary`, `SortedSet`, `SortedList` | sorted by key | |
+| `LinkedList<T>` | doubly linked list | rarely the best choice |
+
+## List
+
+```csharp
+var tasks = new List<string> { "write tests", "fix bug" };
+tasks.Add("deploy");
+tasks.Insert(0, "coffee");
+Console.WriteLine($"{string.Join(", ", tasks)} ({tasks.Count})");
+Console.WriteLine($"{tasks[1]} {tasks.Contains("fix bug")} {tasks.IndexOf("deploy")}");
+tasks.Remove("coffee");
+tasks.RemoveAll(t => t.StartsWith("fix"));
+tasks.Sort();
+Console.WriteLine(string.Join(", ", tasks));
+
+List<int> numbers = [5, 3, 8];          // collection expression (C# 12)
+numbers.AddRange([1, 9]);
+Console.WriteLine($"{numbers.Count} items, first {numbers[0]}, last {numbers[^1]}");
+```
+
+`Count` (not `Length`) gives the size. Changing a list while `foreach`-ing over it throws `InvalidOperationException`; use `RemoveAll` or loop over a copy.
+
+## Dictionary
+
+```csharp
+string text = "the cat and the hat and the bat";
+var counts = new Dictionary<string, int>();
+foreach (string word in text.Split(' '))
+{
+    counts[word] = counts.GetValueOrDefault(word) + 1;
+}
+foreach (var (word, count) in counts.OrderBy(kv => kv.Key)) Console.WriteLine($"{word}: {count}");
+
+var capitals = new Dictionary<string, string> { ["France"] = "Paris", ["Japan"] = "Tokyo" };
+Console.WriteLine(capitals["Japan"]);
+if (capitals.TryGetValue("Peru", out string? city)) Console.WriteLine(city);
+else Console.WriteLine("Peru: unknown");
+Console.WriteLine(capitals.ContainsKey("France"));
+```
+
+- `dict[key] = value` adds or replaces; reading a missing key with `dict[key]` throws `KeyNotFoundException`.
+- `TryGetValue` (the Try pattern again) and `GetValueOrDefault` read safely.
+- Iterating gives `KeyValuePair<TKey, TValue>` items, which deconstruct into `(key, value)`.
+- A `Dictionary` has no guaranteed order; sort when the order matters.
+
+## HashSet, Queue, Stack and PriorityQueue
+
+```csharp
+var visits = new[] { "home", "about", "home", "blog", "about" };
+var unique = new HashSet<string>(visits);
+Console.WriteLine($"{unique.Count} unique, added contact: {unique.Add("contact")}, added home: {unique.Add("home")}");
+var a = new HashSet<string> { "csharp", "sql", "git" };
+a.IntersectWith(["git", "docker"]);
+Console.WriteLine(string.Join(",", a));
+
+var stack = new Stack<char>();
+foreach (char c in "abc") stack.Push(c);
+Console.WriteLine($"{stack.Pop()}{stack.Pop()}");
+
+var queue = new Queue<string>();
+queue.Enqueue("first");
+queue.Enqueue("second");
+Console.WriteLine(queue.Dequeue());
+
+var pq = new PriorityQueue<string, int>();
+pq.Enqueue("low", 5);
+pq.Enqueue("urgent", 1);
+pq.Enqueue("normal", 3);
+Console.WriteLine($"{pq.Dequeue()} {pq.Dequeue()}");
+```
+
+## Read-only and immutable collections
+
+Expose collections as **interfaces** (`IReadOnlyList<T>`, `IReadOnlyDictionary<K, V>`, `IEnumerable<T>`) so callers can't modify your internal state. `System.Collections.Immutable` (`ImmutableList`, `ImmutableDictionary`) and **frozen** collections (`FrozenDictionary`, .NET 8) offer truly unchangeable and fast-to-read versions.
+
+~~~check
+? What happens when you read `dict["missing"]` from a Dictionary?
++ KeyNotFoundException
+- It returns null
+- It returns default
+- It adds the key
+> Use TryGetValue or GetValueOrDefault.
+~~~
+
+📚 **Go deeper:** Microsoft Learn, "Collections" and "Selecting a collection class"; *Programming C#*, chapter 9 "Arrays, Indexers, and Collections".
+--- goals
+- use List, Dictionary, HashSet, Queue, Stack and PriorityQueue
+- read dictionaries safely with TryGetValue and GetValueOrDefault
+- count and group with dictionaries
+- expose collections through read-only interfaces
+--- quiz
+? Which property gives a List's size?
++ Count
+- Length
+- Size
+- Capacity
+> Arrays use Length.
+? Which collection answers "have I seen this?" fastest?
++ HashSet<T>
+- List<T>
+- Queue<T>
+- Stack<T>
+> Constant-time Contains.
+? What type should a method return to stop callers modifying an internal list?
++ IReadOnlyList<T> (or IEnumerable<T>)
+- List<T>
+- T[]
+- object
+> Return an interface without mutators.
+--- exercise code csharp
+::prompt
+Given orders as `customer:product` strings, print the number of distinct customers, each customer's products (customers alphabetically, products in buying order without duplicates) and the most ordered product (alphabetically first on ties):
+
+```
+Customers: 3
+ada: book, lamp, pen
+bob: pen
+cy: lamp, book
+Most ordered: book
+```
+::starter
+string[] orders = { "ada:book", "bob:pen", "ada:lamp", "cy:lamp", "ada:book", "cy:book", "ada:pen" };
+::solution
+string[] orders = { "ada:book", "bob:pen", "ada:lamp", "cy:lamp", "ada:book", "cy:book", "ada:pen" };
+var byCustomer = new SortedDictionary<string, List<string>>();
+var productCounts = new SortedDictionary<string, int>();
+foreach (string order in orders)
+{
+    string[] parts = order.Split(':');
+    if (!byCustomer.TryGetValue(parts[0], out var products))
+    {
+        products = new List<string>();
+        byCustomer[parts[0]] = products;
+    }
+    if (!products.Contains(parts[1])) products.Add(parts[1]);
+    productCounts[parts[1]] = productCounts.GetValueOrDefault(parts[1]) + 1;
+}
+Console.WriteLine($"Customers: {byCustomer.Count}");
+foreach (var (customer, products) in byCustomer) Console.WriteLine($"{customer}: {string.Join(", ", products)}");
+string? best = null;
+foreach (var (product, count) in productCounts)
+{
+    if (best is null || count > productCounts[best]) best = product;
+}
+Console.WriteLine($"Most ordered: {best}");
+::expected
+Customers: 3
+ada: book, lamp, pen
+bob: pen
+cy: lamp, book
+Most ordered: book
+::variants
+"cy:book" => "cy:pen"
+::hints
+- A `SortedDictionary<string, List<string>>` keeps customers sorted.
+- `TryGetValue` finds an existing list or tells you to create one.
+- Count products in a `SortedDictionary<string, int>`; a strict `>` keeps the alphabetically first on ties.
+--- exercise code csharp
+::prompt
+Check whether brackets are **balanced** with a `Stack<char>`: `()`, `[]` and `{}` must open and close in the right order; other characters are ignored:
+
+```
+(a[b]{c}) -> True
+(] -> False
+((()) -> False
+{[()()]} -> True
+ -> True
+```
+::starter
+foreach (string s in new[] { "(a[b]{c})", "(]", "((())", "{[()()]}", "" })
+{
+    Console.WriteLine($"{s} -> {Balanced(s)}");
+}
+
+static bool Balanced(string s) => false;
+::solution
+foreach (string s in new[] { "(a[b]{c})", "(]", "((())", "{[()()]}", "" })
+{
+    Console.WriteLine($"{s} -> {Balanced(s)}");
+}
+
+static bool Balanced(string s)
+{
+    var stack = new Stack<char>();
+    foreach (char c in s)
+    {
+        switch (c)
+        {
+            case '(' or '[' or '{':
+                stack.Push(c);
+                break;
+            case ')' or ']' or '}':
+                if (stack.Count == 0) return false;
+                char open = stack.Pop();
+                if ((c, open) is not ((')', '(') or (']', '[') or ('}', '{'))) return false;
+                break;
+        }
+    }
+    return stack.Count == 0;
+}
+::expected
+(a[b]{c}) -> True
+(] -> False
+((()) -> False
+{[()()]} -> True
+ -> True
+::hints
+- Push opening brackets; on a closing one, pop and check it matches.
+- A tuple pattern checks the pair: `(c, open) is (')', '(') or (']', '[') or ('}', '{')`.
+--- cards
+List<T> :: Add, Insert, Remove, RemoveAll, Contains, IndexOf, Sort, Count; [1, 2, 3] collection expressions.
+Dictionary :: d[k] = v; TryGetValue(k, out v); GetValueOrDefault; ContainsKey; KeyNotFoundException.
+HashSet / Queue / Stack :: Unique items / Enqueue-Dequeue / Push-Pop.
+PriorityQueue<T, P> :: Dequeues the element with the smallest priority.
+Read-only exposure :: Return IReadOnlyList<T> / IReadOnlyDictionary<K, V> / IEnumerable<T>.
+
+=== lesson cs-generics | Generics | 65
+## Generic types and methods
+
+```csharp
+var text = new Box<string>("hello");
+var number = new Box<int>(42);
+Console.WriteLine($"{text.Value.ToUpper()} {number.Value + 1}");
+Console.WriteLine(FirstOrDefault(new List<string>(), "none"));
+Console.WriteLine(Max([3, 9, 4]) + " " + Max(["pear", "apple", "zucchini"]));
+var pair = new Pair<string, double>("coffee", 2.5);
+Console.WriteLine(pair);
+
+static T FirstOrDefault<T>(List<T> list, T fallback) => list.Count == 0 ? fallback : list[0];
+
+static T Max<T>(List<T> items) where T : IComparable<T>
+{
+    T best = items[0];
+    foreach (T item in items) if (item.CompareTo(best) > 0) best = item;
+    return best;
+}
+
+class Box<T>(T value)
+{
+    public T Value { get; } = value;
+}
+
+record Pair<TFirst, TSecond>(TFirst First, TSecond Second);
+```
+
+Type parameters (`T`, or descriptive names starting with `T` like `TKey`) are replaced by real types at each use, and the compiler infers them from arguments when it can.
+
+Unlike Java, .NET generics are **reified**: the runtime knows the real type arguments. A `List<int>` stores real `int`s (no boxing), `typeof(T)` works, and `new T()` is possible with a constraint.
+
+## Constraints
+
+`where` clauses restrict what `T` can be, which unlocks operations on it:
+
+| Constraint | Means |
+|---|---|
+| `where T : IComparable<T>` | T implements that interface (so `CompareTo` is allowed) |
+| `where T : class` / `struct` | reference type / value type |
+| `where T : new()` | has a parameterless constructor (`new T()` is allowed) |
+| `where T : BaseClass` | derives from a class |
+| `where T : notnull` | non-nullable type |
+
+```csharp
+var registry = new Registry<Plugin>();
+registry.Create();
+registry.Create();
+Console.WriteLine(registry.Count);
+
+class Registry<T> where T : class, new()
+{
+    private readonly List<T> _items = new();
+    public int Count => _items.Count;
+    public T Create()
+    {
+        var item = new T();
+        _items.Add(item);
+        return item;
+    }
+}
+
+class Plugin { }
+```
+
+## Variance in generic interfaces
+
+`IEnumerable<string>` can be used where an `IEnumerable<object>` is expected, because `IEnumerable<out T>` is **covariant** (it only gives `T`s out). `Action<in T>` is **contravariant** (it only takes `T`s in). `List<T>` is neither, since it both reads and writes. You'll mostly benefit from variance without thinking about it; when writing interfaces, `out` and `in` declare it (like Java's `? extends` / `? super`, but on the declaration).
+
+```csharp
+IEnumerable<string> words = new List<string> { "a", "b" };
+IEnumerable<object> objects = words;            // covariance
+Action<object> printAny = o => Console.WriteLine($"[{o}]");
+Action<string> printString = printAny;          // contravariance
+foreach (object o in objects) printString((string)o);
+```
+
+## Generic math
+
+Since .NET 7, interfaces like `INumber<T>` let you write one method for every numeric type:
+
+```csharp
+using System.Numerics;
+
+Console.WriteLine(Sum([1, 2, 3]) + " " + Sum([1.5, 2.25]) + " " + Sum([0.1m, 0.2m]));
+
+static T Sum<T>(IEnumerable<T> values) where T : INumber<T>
+{
+    T total = T.Zero;
+    foreach (T v in values) total += v;
+    return total;
+}
+```
+
+~~~check
+? Can a generic C# method write `new T()`?
++ Yes, with the constraint where T : new()
+- Never
+- Always
+- Only for structs
+> Generics are reified in .NET.
+~~~
+
+📚 **Go deeper:** Microsoft Learn, "Generics", "Constraints on type parameters", "Covariance and contravariance in generics" and "Generic math"; *C# in a Nutshell*, chapter 3 (generics).
+--- goals
+- write generic classes, records and methods
+- constrain type parameters with where clauses
+- explain reified generics and how they differ from Java's
+- recognise covariance and contravariance, and generic math
+--- quiz
+? What does `where T : IComparable<T>` allow?
++ Calling CompareTo on T values
+- Creating new T()
+- Comparing with ==
+- Nothing
+> Constraints unlock members.
+? How do .NET generics differ from Java's?
++ They're reified: the runtime knows the type arguments (no erasure)
+- They don't support classes
+- They're erased at compile time
+- They can't use value types
+> List<int> stores real ints.
+? Why can an IEnumerable<string> be assigned to an IEnumerable<object>?
++ IEnumerable<out T> is covariant
+- string inherits from IEnumerable
+- All generics are covariant
+- It can't
+> It only produces Ts.
+--- exercise code csharp
+::prompt
+Write a generic class `Stats<T> where T : IComparable<T>` that collects items and reports minimum, maximum and count (`ToString()` like `min=2 max=31 count=5`), and a generic method `static List<T> LastN<T>(List<T> items, int n)` returning the last `n` items (all if fewer). The program prints:
+
+```
+numbers: min=2 max=31 count=5
+words: min=apple max=pear count=3
+last 2: 16, 2
+last 9: 7, 31, 9, 16, 2
+```
+::starter
+List<int> numbers = [7, 31, 9, 16, 2];
+var ns = new Stats<int>();
+foreach (int n in numbers) ns.Add(n);
+var ws = new Stats<string>();
+foreach (string w in new[] { "kiwi", "pear", "apple" }) ws.Add(w);
+Console.WriteLine($"numbers: {ns}");
+Console.WriteLine($"words: {ws}");
+Console.WriteLine($"last 2: {string.Join(", ", LastN(numbers, 2))}");
+Console.WriteLine($"last 9: {string.Join(", ", LastN(numbers, 9))}");
+::solution
+List<int> numbers = [7, 31, 9, 16, 2];
+var ns = new Stats<int>();
+foreach (int n in numbers) ns.Add(n);
+var ws = new Stats<string>();
+foreach (string w in new[] { "kiwi", "pear", "apple" }) ws.Add(w);
+Console.WriteLine($"numbers: {ns}");
+Console.WriteLine($"words: {ws}");
+Console.WriteLine($"last 2: {string.Join(", ", LastN(numbers, 2))}");
+Console.WriteLine($"last 9: {string.Join(", ", LastN(numbers, 9))}");
+
+static List<T> LastN<T>(List<T> items, int n) => items.GetRange(Math.Max(0, items.Count - n), Math.Min(n, items.Count));
+
+class Stats<T> where T : IComparable<T>
+{
+    private T? _min;
+    private T? _max;
+    private int _count;
+
+    public void Add(T item)
+    {
+        if (_count == 0 || item.CompareTo(_min!) < 0) _min = item;
+        if (_count == 0 || item.CompareTo(_max!) > 0) _max = item;
+        _count++;
+    }
+
+    public override string ToString() => $"min={_min} max={_max} count={_count}";
+}
+::expected
+numbers: min=2 max=31 count=5
+words: min=apple max=pear count=3
+last 2: 16, 2
+last 9: 7, 31, 9, 16, 2
+::variants
+[7, 31, 9, 16, 2] => [7, 3, 99, 16, 12]
+::hints
+- Keep `_min`, `_max` and `_count` fields; compare with `CompareTo`.
+- `items.GetRange(start, count)` returns a slice of a list.
+--- cards
+Generic type / method :: class Box<T>, static T Max<T>(List<T> xs) — T inferred from arguments.
+where constraints :: where T : IComparable<T>, class, struct, new(), notnull, BaseClass.
+Reified generics :: .NET keeps type arguments at run time (List<int> without boxing, typeof(T), new T()).
+Variance :: IEnumerable<out T> covariant, Action<in T> contravariant.
+Generic math :: where T : INumber<T> — one algorithm for all numeric types.
+
+=== lesson cs-delegates-events | Delegates, lambdas and events | 70
+## Delegates: methods as values
+
+A **delegate** is a type-safe reference to a method. The built-in generic delegates cover almost every need:
+
+| Delegate | Shape | Example |
+|---|---|---|
+| `Func<T, TResult>` | takes T, returns TResult | `Func<int, int> square = x => x * x;` |
+| `Func<TResult>` | no parameters | `Func<DateTime> now = () => DateTime.Now;` |
+| `Action<T>` | takes T, returns nothing | `Action<string> log = Console.WriteLine;` |
+| `Predicate<T>` | takes T, returns bool | `Predicate<int> isEven = n => n % 2 == 0;` |
+
+```csharp
+Func<int, int> square = x => x * x;
+Func<int, int, int> add = (a, b) => a + b;
+Action<string> shout = s => Console.WriteLine(s.ToUpper() + "!");
+Predicate<int> isEven = n => n % 2 == 0;
+
+Console.WriteLine($"{square(7)} {add(2, 3)} {isEven(10)}");
+shout("hi");
+
+int Apply(Func<int, int> f, int value) => f(value);
+Console.WriteLine(Apply(square, 4) + " " + Apply(x => x + 100, 4));
+
+Func<int, int> compose = x => square(add(x, 1));
+Console.WriteLine(compose(2));
+```
+
+A **lambda** (`x => x * x`) creates a delegate inline; a **method group** (`Console.WriteLine`) can be used where a matching delegate is expected. Lambdas **capture** variables from the enclosing scope (closures), and see later changes to them.
+
+You can also declare your own delegate types (`delegate decimal PriceRule(decimal price);`), which gives the shape a name; modern code mostly uses `Func` and `Action`.
+
+## Events: the observer pattern built into the language
+
+An **event** lets an object notify any number of subscribers. Subscribers attach handlers with `+=` and detach with `-=`; only the owning class can raise the event:
+
+```csharp
+var sensor = new TemperatureSensor();
+sensor.TooHot += (sender, e) => Console.WriteLine($"ALERT: {e.Celsius} °C");
+sensor.TooHot += (sender, e) => Console.WriteLine($"logged reading {e.Celsius}");
+foreach (double reading in new[] { 21.5, 31.0, 24.0, 35.5 }) sensor.Record(reading);
+
+class TemperatureEventArgs(double celsius) : EventArgs
+{
+    public double Celsius { get; } = celsius;
+}
+
+class TemperatureSensor
+{
+    public event EventHandler<TemperatureEventArgs>? TooHot;
+
+    public void Record(double celsius)
+    {
+        if (celsius > 30) TooHot?.Invoke(this, new TemperatureEventArgs(celsius));
+    }
+}
+```
+
+- `EventHandler<TArgs>` is the standard event signature: `(object? sender, TArgs e)`.
+- `TooHot?.Invoke(...)` raises the event only if someone subscribed (`?.` skips a `null` delegate).
+- Events power UI frameworks (button clicks in WPF, WinForms, MAUI), file watchers, timers and domain events. Unsubscribe (`-=`) when a short-lived listener is attached to a long-lived publisher, or the publisher keeps it alive (a classic memory leak).
+
+## Multicast delegates
+
+Delegates can hold several methods: `+=` adds one, and invoking calls them all in order. That's what events use internally.
+
+```csharp
+Action<string> pipeline = s => Console.Write($"[{s}] ");
+pipeline += s => Console.Write($"<{s.Length}> ");
+pipeline += _ => Console.WriteLine("done");
+pipeline("hello");
+```
+
+~~~check
+? Which built-in delegate fits a function taking a string and returning a bool?
++ Func<string, bool> (or Predicate<string>)
+- Action<string, bool>
+- Action<bool>
+- Func<bool, string>
+> The last type argument of Func is the result.
+~~~
+
+📚 **Go deeper:** Microsoft Learn, "Delegates", "Lambda expressions" and "Events"; *Programming C#*, chapter 12 "Delegates and Events".
+--- goals
+- use Func, Action and Predicate delegates, lambdas and method groups
+- explain closures
+- declare, subscribe to and raise events with EventHandler<T>
+- recognise multicast delegates and event-related memory leaks
+--- quiz
+? What's `Func<int, string>`?
++ A function taking an int and returning a string
+- A function taking a string and returning an int
+- An action with two parameters
+- A predicate
+> The result type comes last.
+? How do you subscribe a handler to an event?
++ obj.Event += handler;
+- obj.Event = handler;
+- obj.Subscribe(handler);
+- obj.Event.Add(handler);
+> -= unsubscribes.
+? Why write `TooHot?.Invoke(...)`?
++ The event is null when nobody has subscribed
+- To make it asynchronous
+- To catch exceptions
+- It's required syntax
+> ?. skips the call on null.
+--- exercise code csharp
+::prompt
+Build a tiny **price rules engine** with delegates: a list of `Func<decimal, decimal>` rules applied in order to a base price. Write `static decimal ApplyAll(decimal price, List<Func<decimal, decimal>> rules, Action<string> log)` and the rules: 10% off, a 2.00 discount but never below 0, and rounding to 2 decimals. The `Action<string>` log receives a line per step; format every price with `:0.00`. The program prints:
+
+```
+start 49.90
+after rule 1: 44.91
+after rule 2: 42.91
+after rule 3: 42.91
+final: 42.91
+start 1.50
+after rule 1: 1.35
+after rule 2: 0.00
+after rule 3: 0.00
+final: 0.00
+```
+::starter
+var rules = new List<Func<decimal, decimal>>();
+Action<string> log = Console.WriteLine;
+foreach (decimal price in new[] { 49.90m, 1.50m })
+{
+    Console.WriteLine($"final: {ApplyAll(price, rules, log):0.00}");
+}
+
+static decimal ApplyAll(decimal price, List<Func<decimal, decimal>> rules, Action<string> log) => price;
+::solution
+var rules = new List<Func<decimal, decimal>>
+{
+    p => p * 0.9m,
+    p => Math.Max(0, p - 2.00m),
+    p => Math.Round(p, 2),
+};
+Action<string> log = Console.WriteLine;
+foreach (decimal price in new[] { 49.90m, 1.50m })
+{
+    Console.WriteLine($"final: {ApplyAll(price, rules, log):0.00}");
+}
+
+static decimal ApplyAll(decimal price, List<Func<decimal, decimal>> rules, Action<string> log)
+{
+    log($"start {price:0.00}");
+    for (int i = 0; i < rules.Count; i++)
+    {
+        price = rules[i](price);
+        log($"after rule {i + 1}: {price:0.00}");
+    }
+    return price;
+}
+::expected
+start 49.90
+after rule 1: 44.91
+after rule 2: 42.91
+after rule 3: 42.91
+final: 42.91
+start 1.50
+after rule 1: 1.35
+after rule 2: 0.00
+after rule 3: 0.00
+final: 0.00
+::hints
+- A list of lambdas: `new List<Func<decimal, decimal>> { p => p * 0.9m, ... }`.
+- `Math.Max(0, p - 2.00m)` keeps the price at or above zero.
+- Call each rule like a method: `price = rules[i](price);`.
+--- cards
+Func / Action / Predicate :: Func<T, R> returns R; Action<T> returns nothing; Predicate<T> returns bool.
+Lambda :: (a, b) => a + b — creates a delegate; captures variables (closure).
+Method group :: Action<string> log = Console.WriteLine;
+event :: public event EventHandler<TArgs>? Changed; subscribers += / -=; raise with Changed?.Invoke(this, args).
+Multicast :: A delegate can hold several methods; invoking calls them all.
+
+=== lesson cs-linq | LINQ: querying data | 85
+## Language-Integrated Query
+
+**LINQ** is C#'s most loved feature: a set of query operators that work on any sequence (`IEnumerable<T>`): arrays, lists, dictionaries, files, databases (through Entity Framework) and XML. It's what streams are to Java, and more:
+
+```csharp
+var orders = new List<Order>
+{
+    new("ada", "book", 2, 12.5m), new("bob", "pen", 10, 1.2m),
+    new("ada", "lamp", 1, 35.0m), new("cy", "book", 1, 12.5m),
+};
+
+var bigOrders = orders
+    .Where(o => o.Total > 20)
+    .OrderByDescending(o => o.Total)
+    .Select(o => $"{o.Customer}:{o.Product}={o.Total}")
+    .ToList();
+Console.WriteLine(string.Join(", ", bigOrders));
+
+Console.WriteLine($"revenue {orders.Sum(o => o.Total)}, books {orders.Count(o => o.Product == "book")}, any big {orders.Any(o => o.Total > 30)}");
+Console.WriteLine($"first pen buyer: {orders.First(o => o.Product == "pen").Customer}");
+Console.WriteLine($"cheapest: {orders.MinBy(o => o.Price)!.Product}");
+
+record Order(string Customer, string Product, int Quantity, decimal Price)
+{
+    public decimal Total => Quantity * Price;
+}
+```
+
+| Operator | Does |
+|---|---|
+| `Where` | filter |
+| `Select` | transform each element |
+| `SelectMany` | flatten nested sequences |
+| `OrderBy` / `OrderByDescending` / `ThenBy` | sort |
+| `GroupBy` | group by a key |
+| `Join` | join two sequences on a key |
+| `Distinct`, `DistinctBy`, `Union`, `Intersect`, `Except` | set operations |
+| `Take`, `Skip`, `TakeWhile`, `Chunk` | slices and paging |
+| `Count`, `Sum`, `Average`, `Min`, `Max`, `MinBy`, `MaxBy`, `Aggregate` | summaries |
+| `First`, `FirstOrDefault`, `Single`, `Any`, `All`, `Contains` | element and tests |
+| `ToList`, `ToArray`, `ToDictionary`, `ToHashSet`, `ToLookup` | materialise |
+
+## Deferred execution
+
+Most LINQ operators are **lazy**: building a query doesn't run it; enumerating it does (each time). Operators like `ToList`, `Count` and `First` run it immediately:
+
+```csharp
+var numbers = new List<int> { 1, 2, 3 };
+var evens = numbers.Where(n => n % 2 == 0);   // nothing runs yet
+numbers.Add(4);
+Console.WriteLine(string.Join(",", evens));   // runs now: sees 4 too
+var snapshot = evens.ToList();                // runs and stores the result
+numbers.Add(6);
+Console.WriteLine($"{evens.Count()} vs {snapshot.Count}");
+```
+
+Materialise with `ToList()` when you'll use a result several times, or when the source may change.
+
+## Grouping and joining
+
+```csharp
+var sales = new[]
+{
+    (Region: "north", Product: "tea", Amount: 120m), (Region: "south", Product: "coffee", Amount: 300m),
+    (Region: "north", Product: "coffee", Amount: 80m), (Region: "south", Product: "tea", Amount: 50m),
+    (Region: "north", Product: "tea", Amount: 30m),
+};
+
+foreach (var g in sales.GroupBy(s => s.Region).OrderBy(g => g.Key))
+{
+    Console.WriteLine($"{g.Key}: {g.Sum(s => s.Amount)} in {g.Count()} sales, products {string.Join("/", g.Select(s => s.Product).Distinct())}");
+}
+
+var prices = new Dictionary<string, decimal> { ["tea"] = 2.5m, ["coffee"] = 3.0m };
+var withPrices = sales
+    .Join(prices, s => s.Product, p => p.Key, (s, p) => $"{s.Product}@{p.Value}")
+    .Distinct();
+Console.WriteLine(string.Join(", ", withPrices));
+```
+
+## Query syntax
+
+LINQ also has a SQL-like **query syntax**, which the compiler translates into the same method calls. It's handy for joins and multiple `from` clauses:
+
+```csharp
+int[] numbers = { 5, 12, 8, 21, 3 };
+var query = from n in numbers
+            where n > 4
+            orderby n descending
+            select n * 10;
+Console.WriteLine(string.Join(" ", query));
+```
+
+With **Entity Framework Core**, the same LINQ queries are translated into **SQL** and run in the database: `db.Orders.Where(o => o.Total > 20).ToListAsync()`. Your SQL course knowledge tells you what they become.
+
+~~~check
+? When does `list.Where(x => x > 2)` run its filter?
++ When the result is enumerated (foreach, ToList, Count...)
+- Immediately
+- Never
+- When the list changes
+> Deferred execution.
+~~~
+
+📚 **Go deeper:** Microsoft Learn, "Language Integrated Query (LINQ)" and "Standard query operators"; Joseph Albahari, *C# in a Nutshell* (LINQ chapters) and LINQPad; Jon Skeet, *C# in Depth*.
+--- goals
+- filter, transform, sort and summarise sequences with LINQ operators
+- explain deferred execution, and materialise results when needed
+- group and join data with GroupBy and Join
+- read and write query syntax, and know how EF Core translates LINQ to SQL
+--- quiz
+? Which operator transforms each element?
++ Select
+- Where
+- Aggregate
+- Distinct
+> Where filters.
+? What does `First` do when nothing matches?
++ Throws InvalidOperationException (FirstOrDefault returns default instead)
+- Returns null
+- Returns an empty list
+- Returns 0
+> Choose based on whether "none" is expected.
+? What's the LINQ equivalent of SQL's GROUP BY?
++ GroupBy
+- Join
+- Select
+- OrderBy
+> Each group has a Key and its elements.
+? Why call ToList() on a query you'll use twice?
++ To run it once and store the results (a query re-runs on every enumeration)
+- Queries can't be enumerated twice
+- To sort it
+- It's required by the compiler
+> Deferred execution re-evaluates.
+--- exercise code csharp
+::prompt
+Using **LINQ only** (no explicit loops except the final printing), analyse employees and print:
+
+```
+Engineers: Ada, Linus
+Average salary: 5250
+Highest paid: Grace (7000)
+By department: Engineering=2, Management=1, Sales=1
+Names: ADA, BOB, GRACE, LINUS
+Anyone below 3500: True
+```
+::starter
+var staff = new List<Employee>
+{
+    new("Ada", "Engineering", 6000), new("Bob", "Sales", 3000),
+    new("Grace", "Management", 7000), new("Linus", "Engineering", 5000),
+};
+
+record Employee(string Name, string Department, decimal Salary);
+::solution
+var staff = new List<Employee>
+{
+    new("Ada", "Engineering", 6000), new("Bob", "Sales", 3000),
+    new("Grace", "Management", 7000), new("Linus", "Engineering", 5000),
+};
+
+Console.WriteLine($"Engineers: {string.Join(", ", staff.Where(e => e.Department == "Engineering").Select(e => e.Name))}");
+Console.WriteLine($"Average salary: {staff.Average(e => e.Salary)}");
+var top = staff.MaxBy(e => e.Salary)!;
+Console.WriteLine($"Highest paid: {top.Name} ({top.Salary})");
+var byDept = staff.GroupBy(e => e.Department).OrderBy(g => g.Key).Select(g => $"{g.Key}={g.Count()}");
+Console.WriteLine($"By department: {string.Join(", ", byDept)}");
+Console.WriteLine($"Names: {string.Join(", ", staff.Select(e => e.Name.ToUpper()))}");
+Console.WriteLine($"Anyone below 3500: {staff.Any(e => e.Salary < 3500)}");
+
+record Employee(string Name, string Department, decimal Salary);
+::expected
+Engineers: Ada, Linus
+Average salary: 5250
+Highest paid: Grace (7000)
+By department: Engineering=2, Management=1, Sales=1
+Names: ADA, BOB, GRACE, LINUS
+Anyone below 3500: True
+::variants
+new("Bob", "Sales", 3000) => new("Bob", "Sales", 4000)
+::hints
+- `staff.Where(...).Select(e => e.Name)` then `string.Join(", ", ...)`.
+- `MaxBy(e => e.Salary)` returns the employee, not just the salary.
+- `GroupBy(e => e.Department).OrderBy(g => g.Key)` then format each group with `g.Count()`.
+--- cards
+LINQ :: Query operators on IEnumerable<T>: Where, Select, OrderBy, GroupBy, Join, Sum, Count, Any, First...
+Deferred execution :: Queries run when enumerated (and each time); ToList()/ToArray() materialise.
+MinBy / MaxBy :: Return the element with the smallest/largest key.
+GroupBy :: Groups with a Key and elements; summarise each with Count(), Sum()...
+Query syntax :: from x in xs where ... orderby ... select ...
+EF Core :: Translates LINQ queries to SQL for databases.
+
+=== lesson cs-nulls-dates | Nullability, numbers and dates | 70
+## Nullable value types
+
+Value types can't normally be `null`. Adding `?` makes a **nullable value type**, useful for "unknown" values (an optional age, a missing reading):
+
+```csharp
+int? age = null;
+Console.WriteLine($"{age.HasValue} {age ?? -1} {age.GetValueOrDefault()}");
+age = 36;
+Console.WriteLine($"{age.Value} {age + 1}");
+double? reading = null;
+Console.WriteLine(reading * 2 is null);       // arithmetic with null gives null
+```
+
+## Nullable reference types
+
+Reference types could always hold `null`, and `NullReferenceException` was the most common .NET bug. **Nullable reference types** (C# 8, enabled in new projects with `<Nullable>enable</Nullable>`) make the compiler track nullability: `string` means "never null", `string?` means "may be null", and the compiler **warns** when you might dereference a null:
+
+```csharp
+#nullable enable
+string name = "Ada";
+string? nickname = null;
+
+Console.WriteLine(name.Length);
+Console.WriteLine(nickname?.Length);               // ?. : null if nickname is null
+Console.WriteLine(nickname ?? "(no nickname)");    // ?? : a fallback
+nickname ??= "Countess";                           // assign only if null
+Console.WriteLine(nickname.ToUpper());             // the compiler knows it isn't null now
+
+string? FindEmail(string user) => user == "ada" ? "ada@example.com" : null;
+string? email = FindEmail("bob");
+if (email is not null) Console.WriteLine(email.Length);
+else Console.WriteLine("no email");
+```
+
+| Operator | Meaning |
+|---|---|
+| `x?.Member` | null-conditional: evaluates to null if x is null |
+| `x?[i]` | null-conditional indexing |
+| `x ?? y` | null-coalescing: x, or y if x is null |
+| `x ??= y` | assign y only if x is null |
+| `x!` | null-forgiving: "trust me, it's not null" (silences the warning; use sparingly) |
+| `is null` / `is not null` | the reliable null tests |
+
+The checks are compile-time **warnings** (they don't change run-time behaviour), but they catch most null bugs before they happen. Teams usually turn nullable warnings into errors. (DevQuest's runner builds without them, so lesson examples opt in with `#nullable enable`.)
+
+## Numbers: decimal, Math and formatting
+
+`decimal` (Module 2) handles money exactly; `Math` provides `Round` (with `MidpointRounding.AwayFromZero` for commercial rounding; the default is banker's rounding to even), `Floor`, `Ceiling`, `Abs`, `Clamp`, `Pow`, `Sqrt`...
+
+```csharp
+Console.WriteLine($"{Math.Round(2.5)} {Math.Round(3.5)} {Math.Round(2.5, MidpointRounding.AwayFromZero)}");
+Console.WriteLine($"{Math.Round(19.995m, 2)} {Math.Round(19.995m, 2, MidpointRounding.AwayFromZero)}");
+Console.WriteLine($"{1234567.891:N2} {0.075:P1} {42:D5} {255:X}");
+```
+
+Banker's rounding (2.5 → 2, 3.5 → 4) avoids bias in large sums, which is why .NET uses it by default; invoices usually want `AwayFromZero`.
+
+## Dates and times
+
+| Type | Represents |
+|---|---|
+| `DateOnly` / `TimeOnly` | a calendar date / a time of day (.NET 6+) |
+| `DateTime` | date and time; `Kind` says local, UTC or unspecified |
+| `DateTimeOffset` | date and time with an offset from UTC: the best choice for timestamps |
+| `TimeSpan` | a duration |
+| `TimeZoneInfo` | time zone conversions |
+
+```csharp
+var release = new DateOnly(2026, 3, 15);
+var deadline = release.AddDays(42);
+Console.WriteLine($"{deadline:yyyy-MM-dd} {deadline.DayOfWeek}");
+Console.WriteLine(deadline.DayNumber - release.DayNumber);
+
+var meeting = new DateTimeOffset(2026, 3, 15, 16, 0, 0, TimeSpan.Zero);
+var later = meeting + TimeSpan.FromMinutes(135);
+Console.WriteLine($"{later:HH:mm} UTC, lasts {later - meeting}");
+Console.WriteLine(DateOnly.Parse("2026-12-25").DayOfYear);
+Console.WriteLine(new DateTime(2026, 2, 1).AddMonths(1).AddDays(-1).Day);   // days in February 2026
+```
+
+Store timestamps as UTC (`DateTimeOffset.UtcNow`), convert to local time only for display, and in testable code inject a **`TimeProvider`** (.NET 8) instead of calling `DateTime.Now` directly.
+
+~~~check
+? What does `name?.Length` give when name is null?
++ null
+- 0
+- It throws NullReferenceException
+- An empty string
+> The null-conditional operator short-circuits.
+~~~
+
+📚 **Go deeper:** Microsoft Learn, "Nullable value types", "Nullable reference types", "Math.Round" and "DateOnly and TimeOnly"; *C# in a Nutshell*, chapter 6 (dates and times).
+--- goals
+- use nullable value types and the null operators ?., ??, ??= and !
+- enable and work with nullable reference types
+- round correctly, including banker's rounding, and format numbers
+- work with DateOnly, DateTimeOffset, TimeSpan and date arithmetic
+--- quiz
+? What is `null ?? "x"`?
++ "x"
+- null
+- An exception
+- ""
+> ?? gives the right side when the left is null.
+? What does `Math.Round(2.5)` return in .NET?
++ 2 (banker's rounding to even)
+- 3
+- 2.5
+- An error
+> Use MidpointRounding.AwayFromZero for 3.
+? Which type is best for a timestamp stored in a database?
++ DateTimeOffset (in UTC)
+- DateOnly
+- string
+- TimeSpan
+> It carries its offset from UTC.
+? Do nullable reference type annotations change run-time behaviour?
++ No: they're compile-time warnings that catch null bugs early
+- Yes, they throw on null
+- Yes, they convert null to ""
+- They only work in Release builds
+> Treat the warnings seriously.
+--- exercise code csharp
+::prompt
+Write an invoice calculator with `decimal` and `DateOnly`. Lines are records `Line(string Item, decimal UnitPrice, int Quantity)`; the subtotal is the sum of price × quantity; VAT is 20%, rounded **away from zero** to 2 decimals; the invoice date is `2026-01-31` and payment is due **30 days** later, moved to the next **Monday** if it falls on a weekend. Optional `Discount` (a `decimal?`, null here) is shown as `none`. Print:
+
+```
+Subtotal: 61.94
+Discount: none
+VAT: 12.39
+Total: 74.33
+Due: 2026-03-02 (Monday)
+```
+::starter
+var lines = new List<Line>
+{
+    new("Notebook", 3.49m, 5),
+    new("Pen pack", 4.25m, 2),
+    new("Desk lamp", 35.99m, 1),
+};
+decimal? discount = null;
+var invoiceDate = new DateOnly(2026, 1, 31);
+
+record Line(string Item, decimal UnitPrice, int Quantity);
+::solution
+var lines = new List<Line>
+{
+    new("Notebook", 3.49m, 5),
+    new("Pen pack", 4.25m, 2),
+    new("Desk lamp", 35.99m, 1),
+};
+decimal? discount = null;
+var invoiceDate = new DateOnly(2026, 1, 31);
+
+decimal subtotal = lines.Sum(l => l.UnitPrice * l.Quantity) - (discount ?? 0);
+decimal vat = Math.Round(subtotal * 0.20m, 2, MidpointRounding.AwayFromZero);
+Console.WriteLine($"Subtotal: {subtotal}");
+Console.WriteLine($"Discount: {discount?.ToString() ?? "none"}");
+Console.WriteLine($"VAT: {vat}");
+Console.WriteLine($"Total: {subtotal + vat}");
+
+var due = invoiceDate.AddDays(30);
+due = due.DayOfWeek switch
+{
+    DayOfWeek.Saturday => due.AddDays(2),
+    DayOfWeek.Sunday => due.AddDays(1),
+    _ => due,
+};
+Console.WriteLine($"Due: {due:yyyy-MM-dd} ({due.DayOfWeek})");
+
+record Line(string Item, decimal UnitPrice, int Quantity);
+::expected
+Subtotal: 61.94
+Discount: none
+VAT: 12.39
+Total: 74.33
+Due: 2026-03-02 (Monday)
+::variants
+new DateOnly(2026, 1, 31) => new DateOnly(2026, 2, 2)
+::hints
+- `lines.Sum(l => l.UnitPrice * l.Quantity)` gives the subtotal; subtract `discount ?? 0`.
+- `Math.Round(x, 2, MidpointRounding.AwayFromZero)`.
+- A switch expression on `due.DayOfWeek` moves weekend dates to Monday.
+--- cards
+Nullable value type :: int? x = null; x.HasValue, x.Value, x ?? fallback.
+Nullable reference types :: string never null, string? maybe null; compiler warnings catch dereferences.
+Null operators :: ?. (conditional), ?? (coalescing), ??= (assign if null), ! (forgiving), is null / is not null.
+Rounding :: Math.Round defaults to banker's rounding (to even); AwayFromZero for invoices.
+Dates :: DateOnly, TimeOnly, DateTime, DateTimeOffset (timestamps, UTC), TimeSpan; inject TimeProvider in tests.
+
+=== lesson cs-m5-test | Module 5 test | 150 | exam
+This test covers Module 5: exceptions and using, collections, generics, delegates and events, LINQ, nullability, numbers and dates.
+
+Before you start, check that you can:
+
+- handle errors and release resources correctly;
+- choose and use the right collection;
+- write generic code with constraints;
+- pass behaviour around with delegates and events;
+- query data with LINQ, and handle null safely.
+--- goals
+- use .NET's standard library like a professional
+--- quiz
+? Which reads a dictionary value safely?
++ dict.TryGetValue(key, out var value)
+- dict[key]
+- dict.Get(key)
+- dict.Find(key)
+> dict[key] throws for a missing key.
+? What does `new[] { 3, 1, 2 }.OrderBy(x => x).First()` return?
++ 1
+- 3
+- 2
+- [1, 2, 3]
+> Sorted ascending, then the first.
+? What does `using var file = ...;` guarantee?
++ file.Dispose() is called at the end of the enclosing scope
+- The file is opened read-only
+- The file is never null
+- The variable can't be reassigned only
+> A using declaration.
+? Which delegate fits `(int a, int b) => a + b`?
++ Func<int, int, int>
+- Action<int, int>
+- Predicate<int>
+- Func<int>
+> Two inputs, one result.
+--- exercise code csharp
+::prompt
+**Log analyser.** Each log line looks like `2026-03-15T10:02:11 ERROR payment timeout`. Parse lines into `record LogEntry(DateTime Time, string Level, string Message)` with a `static LogEntry? TryParse(string line)` that returns `null` for malformed lines (bad format or invalid date: use `DateTime.TryParse` with `CultureInfo.InvariantCulture`). Then with LINQ print:
+
+```
+Malformed lines: 2
+Levels: ERROR=3, INFO=2, WARN=1
+First error: 10:02:11 payment timeout
+Errors per hour: 10=2, 11=1
+Most common error: payment timeout (2)
+```
+
+Ties for the most common error go to the alphabetically first message.
+::starter
+using System.Globalization;
+
+string[] lines =
+{
+    "2026-03-15T09:58:00 INFO service started",
+    "2026-03-15T10:02:11 ERROR payment timeout",
+    "garbage line",
+    "2026-03-15T10:15:40 WARN slow query",
+    "2026-03-15T10:47:03 ERROR payment timeout",
+    "2026-13-40T10:00:00 ERROR bad date",
+    "2026-03-15T11:05:59 ERROR disk full",
+    "2026-03-15T11:30:00 INFO backup done",
+};
+
+record LogEntry(DateTime Time, string Level, string Message);
+::solution
+using System.Globalization;
+
+string[] lines =
+{
+    "2026-03-15T09:58:00 INFO service started",
+    "2026-03-15T10:02:11 ERROR payment timeout",
+    "garbage line",
+    "2026-03-15T10:15:40 WARN slow query",
+    "2026-03-15T10:47:03 ERROR payment timeout",
+    "2026-13-40T10:00:00 ERROR bad date",
+    "2026-03-15T11:05:59 ERROR disk full",
+    "2026-03-15T11:30:00 INFO backup done",
+};
+
+var parsed = lines.Select(LogEntry.TryParse).ToList();
+var entries = parsed.OfType<LogEntry>().ToList();
+Console.WriteLine($"Malformed lines: {parsed.Count(e => e is null)}");
+Console.WriteLine($"Levels: {string.Join(", ", entries.GroupBy(e => e.Level).OrderBy(g => g.Key).Select(g => $"{g.Key}={g.Count()}"))}");
+var errors = entries.Where(e => e.Level == "ERROR").ToList();
+var first = errors.MinBy(e => e.Time)!;
+Console.WriteLine($"First error: {first.Time:HH:mm:ss} {first.Message}");
+Console.WriteLine($"Errors per hour: {string.Join(", ", errors.GroupBy(e => e.Time.Hour).OrderBy(g => g.Key).Select(g => $"{g.Key}={g.Count()}"))}");
+var top = errors.GroupBy(e => e.Message).OrderByDescending(g => g.Count()).ThenBy(g => g.Key).First();
+Console.WriteLine($"Most common error: {top.Key} ({top.Count()})");
+
+record LogEntry(DateTime Time, string Level, string Message)
+{
+    public static LogEntry? TryParse(string line)
+    {
+        string[] parts = line.Split(' ', 3);
+        if (parts.Length < 3) return null;
+        if (!DateTime.TryParse(parts[0], CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTime time)) return null;
+        return new LogEntry(time, parts[1], parts[2]);
+    }
+}
+::expected
+Malformed lines: 2
+Levels: ERROR=3, INFO=2, WARN=1
+First error: 10:02:11 payment timeout
+Errors per hour: 10=2, 11=1
+Most common error: payment timeout (2)
+::hints
+- `line.Split(' ', 3)` keeps the message's spaces in the third part.
+- `lines.Select(LogEntry.TryParse)` gives entries and nulls; `OfType<LogEntry>()` keeps the non-null ones.
+- `OrderByDescending(g => g.Count()).ThenBy(g => g.Key).First()` breaks ties alphabetically.
