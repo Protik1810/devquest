@@ -1,0 +1,983 @@
+=== module Module 3 · Control flow, methods and arrays
+
+=== lesson java-control | Decisions: if and switch | 60
+## if, else if, else
+
+```java
+public class Main {
+    public static void main(String[] args) {
+        int score = 72;
+        String grade;
+        if (score >= 90) {
+            grade = "A";
+        } else if (score >= 75) {
+            grade = "B";
+        } else if (score >= 60) {
+            grade = "C";
+        } else {
+            grade = "F";
+        }
+        System.out.println("Grade: " + grade);
+    }
+}
+```
+
+The condition must be a `boolean`: Java has no "truthy" values, so `if (count)` is a compile error (write `if (count > 0)`). Braces can be left out for a single statement, but always writing them avoids a classic bug when a second line is added later.
+
+Notice that `grade` is declared without a value and assigned in every branch: the compiler checks that every path assigns it before use (remove the `else` and you get `variable grade might not have been initialized`).
+
+## switch expressions (Java 14+)
+
+When one value is compared against several constants, a **switch expression** is clearer than a chain of `if`s:
+
+```java
+public class Main {
+    public static void main(String[] args) {
+        String day = "SAT";
+        int hours = switch (day) {
+            case "MON", "TUE", "WED", "THU" -> 8;
+            case "FRI" -> 6;
+            case "SAT", "SUN" -> 0;
+            default -> throw new IllegalArgumentException("Unknown day: " + day);
+        };
+        System.out.println(day + ": " + hours + " working hours");
+
+        int month = 2;
+        String season = switch (month) {
+            case 12, 1, 2 -> "winter";
+            case 3, 4, 5 -> "spring";
+            case 6, 7, 8 -> "summer";
+            case 9, 10, 11 -> "autumn";
+            default -> "invalid";
+        };
+        System.out.println(season);
+    }
+}
+```
+
+- `case A, B ->` lists several values; the arrow form never "falls through".
+- A switch **expression** produces a value and must be **exhaustive**: every possible input needs a case (hence `default`). With enums and sealed types (Module 4), the compiler can check exhaustiveness without a `default`.
+- For a multi-line case, use a block and `yield`: `case "FRI" -> { log(); yield 6; }`.
+- `switch` works on `int`, `char`, `String`, enums, and (Java 21) on any object with **pattern matching** (Module 6).
+
+## The old switch statement
+
+Existing code is full of the older form, with colons and `break`:
+
+```java
+public class Main {
+    public static void main(String[] args) {
+        int level = 2;
+        switch (level) {
+            case 1:
+                System.out.println("beginner");
+                break;
+            case 2:
+                System.out.println("intermediate");
+                // no break: falls through into the next case!
+            case 3:
+                System.out.println("advanced");
+                break;
+            default:
+                System.out.println("unknown");
+        }
+    }
+}
+```
+
+Forgetting a `break` makes execution **fall through** into the next case (here, level 2 prints two lines). Prefer the arrow form in new code.
+
+~~~check
+? Why is `if (items)` a compile error when `items` is an int?
++ Java conditions must be boolean; there's no truthiness
+- if needs braces
+- int can't be compared
+- It isn't an error
+> Write if (items > 0).
+~~~
+
+📚 **Go deeper:** *Java: The Complete Reference*, chapter 5 "Control Statements"; dev.java, "Branching with Switch Expressions"; JEP 361 (switch expressions).
+--- goals
+- branch with if, else if and else on boolean conditions
+- use switch expressions with arrow cases, several labels, yield and exhaustiveness
+- recognise the classic switch statement and fall-through
+--- quiz
+? What happens with no `break` in a classic `case 2:`?
++ Execution falls through into the next case
+- Compile error
+- The switch ends
+- It loops
+> The arrow form avoids fall-through.
+? A switch expression on a String without `default`. What happens?
++ Compile error: the switch expression doesn't cover all possible values
+- Returns null for unknown values
+- Throws at run time only
+- Works fine
+> Expressions must be exhaustive.
+? Which is a valid case label in a switch expression?
++ `case "SAT", "SUN" -> 0;`
+- `case "SAT" || "SUN": 0`
+- `case in ("SAT", "SUN") -> 0`
+- `when "SAT" -> 0`
+> Several labels separated by commas.
+--- exercise code java
+::prompt
+Write `static String shippingCost(String zone, double weightKg)` using a **switch expression** on the zone for the base price (`"domestic"` 4.0, `"europe"` 9.5, `"world"` 15.0, anything else throws `IllegalArgumentException`), plus `2.0` per kg above 2 kg (`if`). Return the cost formatted with two decimals. The program prints:
+
+```
+domestic 1.5kg: 4.00
+europe 3.0kg: 11.50
+world 5.0kg: 21.00
+```
+::starter
+public class Main {
+    static String shippingCost(String zone, double weightKg) {
+        return "";
+    }
+
+    public static void main(String[] args) {
+        System.out.println("domestic 1.5kg: " + shippingCost("domestic", 1.5));
+        System.out.println("europe 3.0kg: " + shippingCost("europe", 3.0));
+        System.out.println("world 5.0kg: " + shippingCost("world", 5.0));
+    }
+}
+::solution
+public class Main {
+    static String shippingCost(String zone, double weightKg) {
+        double base = switch (zone) {
+            case "domestic" -> 4.0;
+            case "europe" -> 9.5;
+            case "world" -> 15.0;
+            default -> throw new IllegalArgumentException("Unknown zone: " + zone);
+        };
+        double extra = 0;
+        if (weightKg > 2) {
+            extra = (weightKg - 2) * 2.0;
+        }
+        return String.format("%.2f", base + extra);
+    }
+
+    public static void main(String[] args) {
+        System.out.println("domestic 1.5kg: " + shippingCost("domestic", 1.5));
+        System.out.println("europe 3.0kg: " + shippingCost("europe", 3.0));
+        System.out.println("world 5.0kg: " + shippingCost("world", 5.0));
+    }
+}
+::expected
+domestic 1.5kg: 4.00
+europe 3.0kg: 11.50
+world 5.0kg: 21.00
+::variants
+3.0) => 4.5)
+::hints
+- `double base = switch (zone) { case "domestic" -> 4.0; ... default -> throw new IllegalArgumentException(...); };`
+- `String.format("%.2f", value)` returns the formatted text.
+--- cards
+if / else if / else :: Conditions must be boolean; always use braces.
+Definite assignment :: The compiler checks a local variable is assigned on every path before use.
+Switch expression :: var x = switch (v) { case A, B -> 1; default -> 0; }; — no fall-through, must be exhaustive.
+yield :: Returns a value from a block case: case X -> { ...; yield 5; }
+Classic switch :: case X: ... break; — forgetting break falls through.
+
+=== lesson java-loops | Loops | 60
+## while and do-while
+
+```java
+public class Main {
+    public static void main(String[] args) {
+        int balance = 1000;
+        int years = 0;
+        while (balance < 2000) {
+            balance += balance * 7 / 100;
+            years++;
+        }
+        System.out.println("Doubled after " + years + " years: " + balance);
+
+        int n = 0;
+        do {
+            System.out.print(n + " ");
+            n += 3;
+        } while (n < 10);
+        System.out.println();
+    }
+}
+```
+
+`while` checks its condition **before** each round (it may run zero times); `do ... while` checks **after**, so it always runs at least once (useful for "ask until the answer is valid").
+
+## for loops
+
+The classic `for` has three parts: initialisation, condition, update:
+
+```java
+public class Main {
+    public static void main(String[] args) {
+        for (int i = 1; i <= 5; i++) {
+            System.out.print(i * i + " ");
+        }
+        System.out.println();
+        for (int i = 10; i > 0; i -= 3) {
+            System.out.print(i + " ");
+        }
+        System.out.println();
+    }
+}
+```
+
+The **enhanced for** (for-each) loops over every element of an array or collection, without an index:
+
+```java
+public class Main {
+    public static void main(String[] args) {
+        String[] planets = {"Mercury", "Venus", "Earth"};
+        for (String planet : planets) {
+            System.out.println(planet + " has " + planet.length() + " letters");
+        }
+    }
+}
+```
+
+Use for-each whenever you don't need the index; it can't go out of bounds.
+
+## break, continue and labels
+
+```java
+public class Main {
+    public static void main(String[] args) {
+        for (int n = 1; n <= 20; n++) {
+            if (n % 2 == 0) continue;     // skip even numbers
+            if (n > 9) break;             // stop the loop entirely
+            System.out.print(n + " ");
+        }
+        System.out.println();
+
+        outer:
+        for (int row = 1; row <= 3; row++) {
+            for (int col = 1; col <= 3; col++) {
+                if (row * col == 4) break outer;   // leaves both loops
+                System.out.print(row + "x" + col + " ");
+            }
+        }
+        System.out.println();
+    }
+}
+```
+
+A **label** (`outer:`) lets `break` or `continue` act on an outer loop, which avoids flag variables in nested searches.
+
+## Nested loops
+
+```java
+public class Main {
+    public static void main(String[] args) {
+        for (int row = 1; row <= 4; row++) {
+            StringBuilder line = new StringBuilder();
+            for (int col = 1; col <= 4; col++) {
+                line.append(String.format("%4d", row * col));
+            }
+            System.out.println(line);
+        }
+    }
+}
+```
+
+An infinite loop (`while (true)`) is fine when something inside ends it with `break` or `return`; an accidental one makes DevQuest stop the program after a timeout.
+
+~~~check
+? How many times does `for (int i = 0; i < 10; i += 2)` run its body?
++ 5
+- 10
+- 4
+- 6
+> i = 0, 2, 4, 6, 8.
+~~~
+
+📚 **Go deeper:** *Java: The Complete Reference*, chapter 5 (iteration and jump statements); dev.java, "Control Flow Statements".
+--- goals
+- repeat code with while, do-while and for loops
+- loop over arrays and collections with for-each
+- control loops with break, continue and labels
+- write nested loops
+--- quiz
+? Which loop always runs its body at least once?
+- while
++ do-while
+- for
+- for-each
+> The condition is checked after the body.
+? What does `continue` do?
++ Skips to the next round of the loop
+- Ends the loop
+- Ends the method
+- Restarts the program
+> break ends the loop.
+? When should you prefer for-each over an indexed for?
++ When you don't need the index
+- Never
+- Only for arrays of numbers
+- When modifying the array's size
+> It's shorter and can't go out of bounds.
+--- exercise code java
+::prompt
+**FizzBuzz, then a twist.** For the numbers 1 to `15`, print `Fizz` for multiples of 3, `Buzz` for multiples of 5, `FizzBuzz` for multiples of both, and the number otherwise, all on one line separated by spaces. Then print how many numbers were replaced by a word:
+
+```
+1 2 Fizz 4 Buzz Fizz 7 8 Fizz Buzz 11 Fizz 13 14 FizzBuzz
+Words: 7
+```
+::starter
+public class Main {
+    public static void main(String[] args) {
+        int limit = 15;
+    }
+}
+::solution
+public class Main {
+    public static void main(String[] args) {
+        int limit = 15;
+        StringBuilder line = new StringBuilder();
+        int words = 0;
+        for (int i = 1; i <= limit; i++) {
+            String item;
+            if (i % 15 == 0) item = "FizzBuzz";
+            else if (i % 3 == 0) item = "Fizz";
+            else if (i % 5 == 0) item = "Buzz";
+            else item = String.valueOf(i);
+            if (!item.equals(String.valueOf(i))) words++;
+            if (i > 1) line.append(' ');
+            line.append(item);
+        }
+        System.out.println(line);
+        System.out.println("Words: " + words);
+    }
+}
+::expected
+1 2 Fizz 4 Buzz Fizz 7 8 Fizz Buzz 11 Fizz 13 14 FizzBuzz
+Words: 7
+::variants
+limit = 15 => limit = 20
+::hints
+- Check the multiple of 15 first.
+- Build the line in a `StringBuilder`, adding a space before every item except the first.
+--- exercise code java
+::prompt
+Print a **diamond** of stars with a given half-height `n = 4` using nested loops (each line has leading spaces, then an odd number of stars, and no trailing spaces):
+
+```
+   *
+  ***
+ *****
+*******
+ *****
+  ***
+   *
+```
+::starter
+public class Main {
+    public static void main(String[] args) {
+        int n = 4;
+    }
+}
+::solution
+public class Main {
+    static void row(int n, int i) {
+        System.out.println(" ".repeat(n - i) + "*".repeat(2 * i - 1));
+    }
+
+    public static void main(String[] args) {
+        int n = 4;
+        for (int i = 1; i <= n; i++) row(n, i);
+        for (int i = n - 1; i >= 1; i--) row(n, i);
+    }
+}
+::expected
+   *
+  ***
+ *****
+*******
+ *****
+  ***
+   *
+::variants
+n = 4 => n = 3
+::hints
+- Row `i` (1 to n) has `n - i` spaces and `2 * i - 1` stars.
+- Go up from 1 to n, then down from n - 1 to 1. `" ".repeat(k)` builds k spaces (or use an inner loop).
+--- cards
+while / do-while :: Check before / after the body; do-while runs at least once.
+for :: for (init; condition; update) { ... }
+for-each :: for (Type x : arrayOrCollection) — no index, no bounds errors.
+break / continue :: Leave the loop / skip to the next round; labels target outer loops: break outer;
+
+=== lesson java-methods | Methods | 70
+## Defining and calling methods
+
+A **method** is a named, reusable block of code with **parameters** and a **return type**:
+
+```java
+public class Main {
+    static double circleArea(double radius) {
+        return Math.PI * radius * radius;
+    }
+
+    static void printLine(String text, int width) {
+        System.out.println("=".repeat(width));
+        System.out.println(text);
+        System.out.println("=".repeat(width));
+    }
+
+    public static void main(String[] args) {
+        double area = circleArea(2.0);
+        printLine(String.format("Area: %.2f", area), 12);
+    }
+}
+```
+
+- `static` methods belong to the class and are called by name (from another class: `Main.circleArea(2)`). Module 4 introduces instance methods, which belong to objects.
+- The **return type** comes before the name; `void` means nothing is returned. Every path of a non-void method must `return` a value of that type.
+- **Parameters** are typed; arguments must match (or widen to) those types.
+
+Good methods are **short**, do **one thing**, and have a name that's a verb describing it (`calculateTotal`, `isValid`, `formatDate`).
+
+## Arguments are passed by value
+
+Java copies each argument's value into the parameter. For primitives, the method can't change the caller's variable. For objects, the copied value is a **reference**: the method can change the object it points to, but not make the caller's variable point elsewhere.
+
+```java
+public class Main {
+    static void tryToChange(int number, int[] numbers, StringBuilder text) {
+        number = 99;                 // changes the local copy only
+        numbers[0] = 99;             // changes the array the caller also sees
+        text.append(" world");       // changes the shared object
+        text = new StringBuilder("replaced");   // the caller's variable is unaffected
+    }
+
+    public static void main(String[] args) {
+        int n = 1;
+        int[] arr = {1, 2};
+        StringBuilder sb = new StringBuilder("hello");
+        tryToChange(n, arr, sb);
+        System.out.println(n + " " + arr[0] + " " + sb);
+    }
+}
+```
+
+## Overloading
+
+Several methods can share a name if their **parameter lists differ**; the compiler picks the best match:
+
+```java
+public class Main {
+    static int max(int a, int b) { return a > b ? a : b; }
+    static int max(int a, int b, int c) { return max(max(a, b), c); }
+    static double max(double a, double b) { return a > b ? a : b; }
+
+    public static void main(String[] args) {
+        System.out.println(max(3, 9) + " " + max(4, 1, 7) + " " + max(2.5, 1.5));
+    }
+}
+```
+
+## Varargs
+
+`Type... name` accepts any number of arguments, received as an array:
+
+```java
+public class Main {
+    static int sum(int... numbers) {
+        int total = 0;
+        for (int n : numbers) total += n;
+        return total;
+    }
+
+    public static void main(String[] args) {
+        System.out.println(sum() + " " + sum(5) + " " + sum(1, 2, 3, 4));
+    }
+}
+```
+
+## Recursion
+
+A method can call itself. Every recursive method needs a **base case** that stops the recursion:
+
+```java
+public class Main {
+    static long factorial(int n) {
+        if (n <= 1) return 1;            // base case
+        return n * factorial(n - 1);     // recursive case
+    }
+
+    static int fibonacci(int n) {
+        return n < 2 ? n : fibonacci(n - 1) + fibonacci(n - 2);
+    }
+
+    public static void main(String[] args) {
+        System.out.println(factorial(20) + " " + fibonacci(20));
+    }
+}
+```
+
+Each call uses space on the **call stack**; very deep recursion (tens of thousands of levels) throws `StackOverflowError`. Loops are usually better for simple repetition; recursion shines for trees, divide-and-conquer and backtracking (see the DSA track).
+
+~~~check
+? A method receives an `int[]` and sets `arr[0] = 5`. Does the caller see the change?
++ Yes: the reference was copied, so both point to the same array
+- No: Java passes everything by value, so arrays are copied
+- Only if the method returns the array
+- Only for static methods
+> The reference is copied, not the array.
+~~~
+
+📚 **Go deeper:** *Java: The Complete Reference*, chapter 6 (methods) and chapter 7 "A Closer Look at Methods and Classes" (overloading, recursion, varargs, argument passing); dev.java, "Defining Methods".
+--- goals
+- define static methods with parameters and return types, and call them
+- explain pass-by-value for primitives and references
+- overload methods and use varargs
+- write recursive methods with a base case
+--- quiz
+? What must a method with return type `int` do on every path?
++ Return an int value
+- Print a value
+- Throw an exception
+- Nothing
+> Otherwise: "missing return statement".
+? Can two methods be named `area` with parameters `(double r)` and `(double w, double h)`?
++ Yes, that's overloading
+- No, names must be unique
+- Only if one is static
+- Only if they return different types
+> The return type alone can't distinguish overloads.
+? What's missing from `static int f(int n) { return n * f(n - 1); }`?
++ A base case, so it recurses until StackOverflowError
+- A return type
+- Parameters
+- Nothing
+> Recursion needs a stopping condition.
+--- exercise code java
+::prompt
+Write these methods and make the program print:
+
+```
+gcd(84, 36) = 12
+lcm(4, 6) = 12
+isPrime(97) = true
+primes up to 30: 2 3 5 7 11 13 17 19 23 29
+```
+
+- `static int gcd(int a, int b)`: the greatest common divisor, **recursively** (Euclid: `gcd(a, b) = gcd(b, a % b)`, `gcd(a, 0) = a`);
+- `static int lcm(int a, int b)`: `a / gcd(a, b) * b`;
+- `static boolean isPrime(int n)`: test divisors up to the square root;
+- `static String primesUpTo(int limit)`: the primes separated by spaces.
+::starter
+public class Main {
+    public static void main(String[] args) {
+        System.out.println("gcd(84, 36) = " + gcd(84, 36));
+        System.out.println("lcm(4, 6) = " + lcm(4, 6));
+        System.out.println("isPrime(97) = " + isPrime(97));
+        System.out.println("primes up to 30: " + primesUpTo(30));
+    }
+}
+::solution
+public class Main {
+    static int gcd(int a, int b) {
+        return b == 0 ? a : gcd(b, a % b);
+    }
+
+    static int lcm(int a, int b) {
+        return a / gcd(a, b) * b;
+    }
+
+    static boolean isPrime(int n) {
+        if (n < 2) return false;
+        for (int d = 2; (long) d * d <= n; d++) {
+            if (n % d == 0) return false;
+        }
+        return true;
+    }
+
+    static String primesUpTo(int limit) {
+        StringBuilder sb = new StringBuilder();
+        for (int n = 2; n <= limit; n++) {
+            if (isPrime(n)) {
+                if (sb.length() > 0) sb.append(' ');
+                sb.append(n);
+            }
+        }
+        return sb.toString();
+    }
+
+    public static void main(String[] args) {
+        System.out.println("gcd(84, 36) = " + gcd(84, 36));
+        System.out.println("lcm(4, 6) = " + lcm(4, 6));
+        System.out.println("isPrime(97) = " + isPrime(97));
+        System.out.println("primes up to 30: " + primesUpTo(30));
+    }
+}
+::expected
+gcd(84, 36) = 12
+lcm(4, 6) = 12
+isPrime(97) = true
+primes up to 30: 2 3 5 7 11 13 17 19 23 29
+::variants
+isPrime(97) => isPrime(91)
+::hints
+- `gcd`: `return b == 0 ? a : gcd(b, a % b);`
+- `isPrime`: return false below 2, then try divisors `d` while `d * d <= n`.
+--- cards
+Static method :: static ReturnType name(Type param, ...) { ... return value; }
+Pass by value :: Primitives are copied; for objects the reference is copied, so the object can be changed.
+Overloading :: Same name, different parameter lists (not just a different return type).
+Varargs :: static int sum(int... xs) — receives an array.
+Recursion :: A method calling itself; needs a base case; deep recursion → StackOverflowError.
+
+=== lesson java-arrays | Arrays | 65
+## Fixed-size lists of values
+
+An **array** holds a fixed number of values of one type:
+
+```java
+import java.util.Arrays;
+
+public class Main {
+    public static void main(String[] args) {
+        int[] scores = new int[4];           // four ints, all 0
+        scores[0] = 90;
+        scores[3] = 75;
+        String[] names = {"Ada", "Grace", "Linus"};  // created with values
+
+        System.out.println(scores.length + " " + names.length);
+        System.out.println(names[1] + " " + scores[3]);
+        System.out.println(Arrays.toString(scores));
+    }
+}
+```
+
+- Indexes run from `0` to `length - 1`; anything else throws `ArrayIndexOutOfBoundsException`.
+- New arrays are filled with defaults: `0`, `0.0`, `false`, or `null` for objects.
+- `length` is a field (no parentheses), unlike `String.length()`.
+- Printing an array directly shows something like `[I@1b6d3586`; use `Arrays.toString`.
+
+## The Arrays helper class
+
+```java
+import java.util.Arrays;
+
+public class Main {
+    public static void main(String[] args) {
+        int[] numbers = {42, 7, 19, 3, 25};
+        int[] copy = Arrays.copyOf(numbers, numbers.length);
+        Arrays.sort(copy);
+        System.out.println(Arrays.toString(copy));
+        System.out.println(Arrays.binarySearch(copy, 19));          // index in the sorted array
+        System.out.println(Arrays.equals(numbers, copy));            // false: different order
+        int[] filled = new int[5];
+        Arrays.fill(filled, 7);
+        System.out.println(Arrays.toString(filled));
+        System.out.println(Arrays.stream(numbers).sum() + " " + Arrays.stream(numbers).max().getAsInt());
+    }
+}
+```
+
+Arrays are objects: `int[] b = a;` copies the **reference**, so both names refer to the same array. Use `Arrays.copyOf` or `clone()` for a real copy, and `Arrays.equals` to compare contents (`==` compares references).
+
+## Multi-dimensional arrays
+
+A 2D array is an array of arrays:
+
+```java
+public class Main {
+    public static void main(String[] args) {
+        int[][] grid = {
+            {1, 2, 3},
+            {4, 5, 6},
+        };
+        int total = 0;
+        for (int[] row : grid) {
+            for (int value : row) total += value;
+        }
+        System.out.println(grid.length + " rows, " + grid[0].length + " columns, total " + total);
+        System.out.println(grid[1][2]);
+    }
+}
+```
+
+## Arrays and command-line arguments
+
+`main(String[] args)` receives the program's command-line arguments: `java Main.java report 2026` gives `args = {"report", "2026"}`.
+
+Arrays can't grow. When you need a list that changes size, use an `ArrayList` (Module 5); arrays remain the right tool for fixed-size data, grids, and performance-critical code.
+
+~~~check
+? `int[] a = {1, 2, 3}; int[] b = a; b[0] = 9;` What's `a[0]`?
++ 9
+- 1
+- 0
+- An error
+> Both variables refer to the same array.
+~~~
+
+📚 **Go deeper:** *Java: The Complete Reference*, chapter 3 (arrays) and chapter 18 ("Arrays"); dev.java, "Arrays".
+--- goals
+- create, index and loop over arrays, and know their default values
+- use Arrays.toString, sort, copyOf, fill, equals and binarySearch
+- explain that arrays are reference types
+- work with 2D arrays and command-line arguments
+--- quiz
+? What's the last valid index of an array with length 5?
++ 4
+- 5
+- 6
+- -1
+> Indexes run from 0 to length - 1.
+? What does `new boolean[3]` contain?
++ false, false, false
+- null, null, null
+- true, true, true
+- Nothing until assigned: reading is an error
+> Default values.
+? How do you print an int array's contents?
++ `Arrays.toString(arr)`
+- `System.out.println(arr)`
+- `arr.toString()`
+- `String.valueOf(arr)`
+> The others print a type and hash code.
+--- exercise code java
+::prompt
+Daily temperatures for a week are given. Print the **average** (one decimal), the **hottest day number** (1-based; the first if tied), the temperatures **sorted** (without changing the original array), and the original array afterwards:
+
+```
+Average: 18.4
+Hottest day: 5
+Sorted: [12, 15, 17, 19, 21, 21, 24]
+Original: [17, 12, 19, 15, 24, 21, 21]
+```
+::starter
+import java.util.Arrays;
+
+public class Main {
+    public static void main(String[] args) {
+        int[] temps = {17, 12, 19, 15, 24, 21, 21};
+    }
+}
+::solution
+import java.util.Arrays;
+
+public class Main {
+    public static void main(String[] args) {
+        int[] temps = {17, 12, 19, 15, 24, 21, 21};
+        int sum = 0;
+        int hottest = 0;
+        for (int i = 0; i < temps.length; i++) {
+            sum += temps[i];
+            if (temps[i] > temps[hottest]) hottest = i;
+        }
+        System.out.printf("Average: %.1f%n", (double) sum / temps.length);
+        System.out.println("Hottest day: " + (hottest + 1));
+        int[] sorted = Arrays.copyOf(temps, temps.length);
+        Arrays.sort(sorted);
+        System.out.println("Sorted: " + Arrays.toString(sorted));
+        System.out.println("Original: " + Arrays.toString(temps));
+    }
+}
+::expected
+Average: 18.4
+Hottest day: 5
+Sorted: [12, 15, 17, 19, 21, 21, 24]
+Original: [17, 12, 19, 15, 24, 21, 21]
+::variants
+{17, 12, 19, 15, 24, 21, 21} => {9, 30, 19, 15, 24, 21, 11}
+::hints
+- Track the index of the hottest day with a strict `>` so the first maximum wins.
+- Sort a copy: `Arrays.copyOf(temps, temps.length)`.
+--- exercise code java
+::prompt
+A cinema hall is a 2D array of seats (`true` = taken). Write `static int[] findPair(boolean[][] hall)` returning the `{row, seat}` (0-based) of the **first two adjacent free seats** in reading order (the left seat's position), or `null` if there are none. The program prints:
+
+```
+Free seats: 9 of 20
+First pair: row 1, seats 2 and 3
+Full hall: no pair
+```
+::starter
+public class Main {
+    static int[] findPair(boolean[][] hall) {
+        return null;
+    }
+
+    static int countFree(boolean[][] hall) {
+        return 0;
+    }
+
+    public static void main(String[] args) {
+        boolean[][] hall = {
+            {true, false, true, false, true},
+            {true, true, false, false, true},
+            {false, true, false, true, false},
+            {true, false, true, false, true},
+        };
+        System.out.println("Free seats: " + countFree(hall) + " of 20");
+        int[] pair = findPair(hall);
+        System.out.println(pair == null ? "No pair" : "First pair: row " + pair[0] + ", seats " + pair[1] + " and " + (pair[1] + 1));
+        boolean[][] full = {{true, false, true}, {false, true, false}};
+        System.out.println(findPair(full) == null ? "Full hall: no pair" : "Full hall: pair?");
+    }
+}
+::solution
+public class Main {
+    static int[] findPair(boolean[][] hall) {
+        for (int row = 0; row < hall.length; row++) {
+            for (int seat = 0; seat + 1 < hall[row].length; seat++) {
+                if (!hall[row][seat] && !hall[row][seat + 1]) return new int[] {row, seat};
+            }
+        }
+        return null;
+    }
+
+    static int countFree(boolean[][] hall) {
+        int free = 0;
+        for (boolean[] row : hall) {
+            for (boolean taken : row) {
+                if (!taken) free++;
+            }
+        }
+        return free;
+    }
+
+    public static void main(String[] args) {
+        boolean[][] hall = {
+            {true, false, true, false, true},
+            {true, true, false, false, true},
+            {false, true, false, true, false},
+            {true, false, true, false, true},
+        };
+        System.out.println("Free seats: " + countFree(hall) + " of 20");
+        int[] pair = findPair(hall);
+        System.out.println(pair == null ? "No pair" : "First pair: row " + pair[0] + ", seats " + pair[1] + " and " + (pair[1] + 1));
+        boolean[][] full = {{true, false, true}, {false, true, false}};
+        System.out.println(findPair(full) == null ? "Full hall: no pair" : "Full hall: pair?");
+    }
+}
+::expected
+Free seats: 9 of 20
+First pair: row 1, seats 2 and 3
+Full hall: no pair
+::hints
+- Loop over rows, and over seats while `seat + 1 < hall[row].length`.
+- Return `new int[] {row, seat}` as soon as both seats are free.
+--- cards
+Array :: Fixed size, one type: int[] a = new int[5]; String[] s = {"a", "b"}; a.length.
+Default values :: 0, 0.0, false, '\u0000', null.
+Arrays class :: toString, sort, copyOf, fill, equals, binarySearch, stream.
+Array references :: b = a shares the array; copy with Arrays.copyOf or clone().
+2D array :: int[][] grid = {{1, 2}, {3, 4}}; grid[row][col].
+
+=== lesson java-m3-test | Module 3 test | 120 | exam
+This test covers Module 3: if and switch, loops, methods (parameters, return values, overloading, varargs, recursion) and arrays.
+
+Before you start, check that you can:
+
+- choose between if chains and switch expressions;
+- write loops with for, for-each, while, break and continue;
+- split a program into small methods;
+- work with 1D and 2D arrays and the Arrays class.
+--- goals
+- structure programs with control flow and methods
+- solve problems with loops and arrays
+--- quiz
+? Which loop prints 3 2 1?
++ `for (int i = 3; i > 0; i--) System.out.print(i + " ");`
+- `for (int i = 3; i < 0; i--) ...`
+- `for (int i = 1; i <= 3; i++) ...`
+- `while (i > 0) ...` with i undeclared
+> Count down while i > 0.
+? What does `static void f(int x) { x++; }` do to the caller's variable?
++ Nothing: x is a copy
+- Increments it
+- Compile error
+- Sets it to 0
+> Primitives are passed by value.
+? `int[][] m = new int[3][4];` What's `m[2].length`?
++ 4
+- 3
+- 12
+- 2
+> 3 rows of 4 columns.
+--- exercise code java
+::prompt
+**Run-length encoding.** Write `static String encode(String s)` that compresses runs of the same character as count + character (`"aaabccdddd"` → `"3a1b2c4d"`) and `static String decode(String s)` that reverses it (counts can have several digits: `"12x1y"` → twelve `x` then `y`). The program prints:
+
+```
+3a1b2c4d
+aaabccdddd
+12x1y
+true
+```
+
+The last line checks that decoding the encoding gives back the original for `"xxxxxxxxxxxxy"`.
+::starter
+public class Main {
+    static String encode(String s) {
+        return "";
+    }
+
+    static String decode(String s) {
+        return "";
+    }
+
+    public static void main(String[] args) {
+        System.out.println(encode("aaabccdddd"));
+        System.out.println(decode("3a1b2c4d"));
+        String text = "xxxxxxxxxxxxy";
+        System.out.println(encode(text));
+        System.out.println(decode(encode(text)).equals(text));
+    }
+}
+::solution
+public class Main {
+    static String encode(String s) {
+        StringBuilder out = new StringBuilder();
+        int i = 0;
+        while (i < s.length()) {
+            char c = s.charAt(i);
+            int run = 0;
+            while (i < s.length() && s.charAt(i) == c) {
+                run++;
+                i++;
+            }
+            out.append(run).append(c);
+        }
+        return out.toString();
+    }
+
+    static String decode(String s) {
+        StringBuilder out = new StringBuilder();
+        int count = 0;
+        for (char c : s.toCharArray()) {
+            if (Character.isDigit(c)) {
+                count = count * 10 + (c - '0');
+            } else {
+                out.append(String.valueOf(c).repeat(count));
+                count = 0;
+            }
+        }
+        return out.toString();
+    }
+
+    public static void main(String[] args) {
+        System.out.println(encode("aaabccdddd"));
+        System.out.println(decode("3a1b2c4d"));
+        String text = "xxxxxxxxxxxxy";
+        System.out.println(encode(text));
+        System.out.println(decode(encode(text)).equals(text));
+    }
+}
+::expected
+3a1b2c4d
+aaabccdddd
+12x1y
+true
+::variants
+"xxxxxxxxxxxxy" => "zzzzzzzzzzww"
+::hints
+- Encode: walk the string; for each character, count how long its run is.
+- Decode: build the count digit by digit (`count * 10 + (c - '0')`), and on a letter append it `count` times.
