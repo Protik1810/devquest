@@ -235,7 +235,8 @@ async function runProgram(lang, code, stdin) {
   switch (lang) {
     case 'java':
       write('Main.java', code);
-      steps.push([t.java, ['Main.java'], {}, false]);
+      // UTF-8 output on every OS (Windows would otherwise use its legacy code page and print ? for ♠, é...)
+      steps.push([t.java, ['-Dstdout.encoding=UTF-8', '-Dstderr.encoding=UTF-8', 'Main.java'], {}, false]);
       break;
     case 'go':
       write('main.go', code);
@@ -259,7 +260,7 @@ async function runProgram(lang, code, stdin) {
       break;
     case 'kotlin':
       write('main.kt', code);
-      steps.push([t.kotlinc, ['main.kt', '-include-runtime', '-d', 'main.jar', '-nowarn'], { timeoutMs: 120000 }, true], [t.java, ['-jar', 'main.jar'], {}, false]);
+      steps.push([t.kotlinc, ['main.kt', '-include-runtime', '-d', 'main.jar', '-nowarn'], { timeoutMs: 120000 }, true], [t.java, ['-Dstdout.encoding=UTF-8', '-Dstderr.encoding=UTF-8', '-jar', 'main.jar'], {}, false]);
       break;
     case 'swift':
       write('main.swift', code);

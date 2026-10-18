@@ -1,0 +1,1569 @@
+=== module Module 4 · Object-oriented Java
+
+=== lesson java-oop | Classes and objects | 75
+## Bundling data with behaviour
+
+So far, `Main` held static methods and local variables. Real programs model **things**: accounts, orders, players. A **class** describes a kind of thing: the data each one holds (**fields**) and what it can do (**methods**). An **object** is one instance of a class, created with **`new`**.
+
+```java
+public class Main {
+    public static void main(String[] args) {
+        BankAccount alice = new BankAccount("Alice", 100);
+        BankAccount bob = new BankAccount("Bob", 20);
+        alice.deposit(50);
+        bob.withdraw(30);
+        System.out.println(alice.describe());
+        System.out.println(bob.describe());
+    }
+}
+
+class BankAccount {
+    String owner;
+    double balance;
+
+    BankAccount(String owner, double opening) {
+        this.owner = owner;
+        this.balance = opening;
+    }
+
+    void deposit(double amount) {
+        balance += amount;
+    }
+
+    boolean withdraw(double amount) {
+        if (amount > balance) return false;
+        balance -= amount;
+        return true;
+    }
+
+    String describe() {
+        return owner + ": " + balance;
+    }
+}
+```
+
+- **Fields** (`owner`, `balance`) are variables that belong to each object: Alice's balance and Bob's are separate.
+- The **constructor** (`BankAccount(...)`, same name as the class, no return type) initialises a new object. `new BankAccount("Alice", 100)` allocates the object and runs it.
+- **Instance methods** (no `static`) work on a particular object: `alice.deposit(50)` changes Alice's balance. Inside, fields can be used directly, or as `this.balance`.
+- **`this`** refers to the current object; it's needed when a parameter has the same name as a field (`this.owner = owner`).
+
+Bob's withdrawal of 30 fails (he has 20), and the method reports it by returning `false`, which the example ignores. Real code would check it.
+
+## References and null
+
+A variable of a class type holds a **reference** to an object, not the object itself:
+
+```java
+public class Main {
+    public static void main(String[] args) {
+        Point a = new Point(1, 2);
+        Point b = a;            // same object, two references
+        b.x = 10;
+        System.out.println(a.x);
+        Point c = null;         // refers to no object
+        System.out.println(c == null);
+    }
+}
+
+class Point {
+    int x, y;
+    Point(int x, int y) { this.x = x; this.y = y; }
+}
+```
+
+`null` means "no object". Calling a method or reading a field through a `null` reference throws `NullPointerException`, the most common Java exception. Objects that nothing refers to any more are freed by the **garbage collector**.
+
+## Default values and multiple constructors
+
+Fields get default values (`0`, `false`, `null`) if not initialised. A class can have several constructors (overloading), and one can call another with `this(...)`:
+
+```java
+public class Main {
+    public static void main(String[] args) {
+        System.out.println(new Pizza("Margherita").describe());
+        System.out.println(new Pizza("Diavola", 30, true).describe());
+    }
+}
+
+class Pizza {
+    String name;
+    int diameterCm;
+    boolean extraCheese;
+
+    Pizza(String name) {
+        this(name, 26, false);        // delegate to the full constructor
+    }
+
+    Pizza(String name, int diameterCm, boolean extraCheese) {
+        this.name = name;
+        this.diameterCm = diameterCm;
+        this.extraCheese = extraCheese;
+    }
+
+    String describe() {
+        return name + " " + diameterCm + "cm" + (extraCheese ? " + cheese" : "");
+    }
+}
+```
+
+If you write no constructor, Java provides an empty default one; as soon as you write any, it doesn't.
+
+## toString
+
+Every class can override **`toString()`**, which Java calls whenever an object is printed or joined to a string:
+
+```java
+public class Main {
+    public static void main(String[] args) {
+        Temperature t = new Temperature(21.5);
+        System.out.println(t);
+        System.out.println("Now: " + t);
+    }
+}
+
+class Temperature {
+    double celsius;
+    Temperature(double celsius) { this.celsius = celsius; }
+
+    @Override
+    public String toString() {
+        return celsius + "°C";
+    }
+}
+```
+
+`@Override` asks the compiler to check that this method really overrides one from a parent class (all classes inherit from `Object`, which has a default `toString`). Lesson 3 explains inheritance.
+
+~~~check
+? What does `new` do?
++ Creates an object and runs its constructor, returning a reference to it
+- Declares a class
+- Copies an existing object
+- Creates a static method
+> The variable then holds the reference.
+~~~
+
+📚 **Go deeper:** *Java: The Complete Reference*, chapter 6 "Introducing Classes"; dev.java, "Classes and Objects"; Joshua Bloch, *Effective Java*, chapter 2 (creating objects).
+--- goals
+- define classes with fields, constructors and instance methods
+- create objects with new, and use this
+- explain references, null and NullPointerException
+- overload and chain constructors, and override toString
+--- quiz
+? What distinguishes a constructor from a method?
++ It has the class's name and no return type
+- It's always static
+- It must be private
+- It returns this
+> Constructors initialise new objects.
+? `Point b = a; b.x = 10;` What happens to `a.x`?
++ It's 10: both variables refer to the same object
+- Unchanged
+- Compile error
+- a becomes null
+> Assigning copies the reference.
+? When is `this` required?
++ When a parameter or local variable hides a field with the same name
+- In every method
+- Only in static methods
+- Never
+> this.owner = owner.
+? What happens when you call a method on a variable that holds null?
++ NullPointerException
+- Nothing
+- It returns null
+- Compile error
+> null refers to no object.
+--- exercise code java
+::prompt
+Write a class `Counter` with:
+
+- a `String label` and an `int count` (starting at 0);
+- a constructor taking the label;
+- `void increment()`, `void incrementBy(int n)` (ignore negative `n`), `void reset()`;
+- `toString()` returning `label: count`.
+
+The program prints:
+
+```
+clicks: 3
+views: 10
+clicks: 0
+```
+::starter
+public class Main {
+    public static void main(String[] args) {
+        Counter clicks = new Counter("clicks");
+        Counter views = new Counter("views");
+        clicks.increment();
+        clicks.increment();
+        clicks.increment();
+        views.incrementBy(10);
+        views.incrementBy(-5);
+        System.out.println(clicks);
+        System.out.println(views);
+        clicks.reset();
+        System.out.println(clicks);
+    }
+}
+
+class Counter {
+}
+::solution
+public class Main {
+    public static void main(String[] args) {
+        Counter clicks = new Counter("clicks");
+        Counter views = new Counter("views");
+        clicks.increment();
+        clicks.increment();
+        clicks.increment();
+        views.incrementBy(10);
+        views.incrementBy(-5);
+        System.out.println(clicks);
+        System.out.println(views);
+        clicks.reset();
+        System.out.println(clicks);
+    }
+}
+
+class Counter {
+    String label;
+    int count;
+
+    Counter(String label) {
+        this.label = label;
+    }
+
+    void increment() {
+        count++;
+    }
+
+    void incrementBy(int n) {
+        if (n > 0) count += n;
+    }
+
+    void reset() {
+        count = 0;
+    }
+
+    @Override
+    public String toString() {
+        return label + ": " + count;
+    }
+}
+::expected
+clicks: 3
+views: 10
+clicks: 0
+::variants
+incrementBy(10) => incrementBy(7)
+::hints
+- `int count;` starts at 0 automatically.
+- `toString` must be `public String toString()` (it overrides `Object`'s public method).
+--- cards
+Class :: A blueprint: fields (data) + constructors + methods (behaviour).
+Object :: An instance created with new ClassName(args); variables hold references to it.
+Constructor :: Same name as the class, no return type; this(...) calls another constructor.
+this :: The current object; this.field = param resolves name clashes.
+null / NPE :: null = no object; using it throws NullPointerException.
+toString :: Override public String toString() to control how an object prints.
+
+=== lesson java-encapsulation | Encapsulation, static and immutability | 75
+## Protect your data: private fields
+
+In the last lesson, any code could write `alice.balance = -1_000_000`. **Encapsulation** hides an object's fields and exposes only methods that keep its data valid:
+
+```java
+public class Main {
+    public static void main(String[] args) {
+        Account acc = new Account("Ada", 100);
+        acc.deposit(25);
+        try {
+            acc.withdraw(500);
+        } catch (IllegalArgumentException e) {
+            System.out.println("Refused: " + e.getMessage());
+        }
+        System.out.println(acc.getOwner() + " has " + acc.getBalance());
+    }
+}
+
+class Account {
+    private final String owner;
+    private double balance;
+
+    Account(String owner, double opening) {
+        if (opening < 0) throw new IllegalArgumentException("opening balance can't be negative");
+        this.owner = owner;
+        this.balance = opening;
+    }
+
+    public String getOwner() { return owner; }
+    public double getBalance() { return balance; }
+
+    public void deposit(double amount) {
+        if (amount <= 0) throw new IllegalArgumentException("deposit must be positive");
+        balance += amount;
+    }
+
+    public void withdraw(double amount) {
+        if (amount > balance) throw new IllegalArgumentException("insufficient funds");
+        balance -= amount;
+    }
+}
+```
+
+The class now guarantees an **invariant**: the balance is never negative, whatever other code does. Invalid requests are rejected by **throwing an exception** (Module 5 covers `try`/`catch`).
+
+## Access modifiers
+
+| Modifier | Visible from |
+|---|---|
+| `private` | the class itself only |
+| (none: package-private) | classes in the same package |
+| `protected` | the same package, and subclasses |
+| `public` | everywhere |
+
+The rule of thumb: **fields `private`**, and methods as restricted as possible. **Getters** (`getBalance()`) expose values; **setters** (`setName(...)`) should exist only when a field really may change, and should validate. Not every field needs a getter and setter: expose behaviour (`deposit`), not data.
+
+## static members
+
+`static` fields and methods belong to the **class**, shared by all objects:
+
+```java
+public class Main {
+    public static void main(String[] args) {
+        Ticket a = new Ticket();
+        Ticket b = new Ticket();
+        Ticket c = new Ticket();
+        System.out.println(a.getNumber() + " " + b.getNumber() + " " + c.getNumber());
+        System.out.println("Issued: " + Ticket.issued());
+    }
+}
+
+class Ticket {
+    private static int nextNumber = 1;    // one counter for the whole class
+    private final int number;             // one per ticket
+
+    Ticket() {
+        number = nextNumber++;
+    }
+
+    int getNumber() { return number; }
+    static int issued() { return nextNumber - 1; }
+}
+```
+
+Static methods can't use instance fields (there's no `this`). Typical static members: constants (`Math.PI`), factory methods (`List.of(...)`), utility methods (`Math.max`), and counters like this one.
+
+## Immutable objects
+
+An **immutable** object can't change after construction: all fields `private final`, no setters, and "changing" methods return a **new** object (like `String`). Immutable objects are simple to reason about, safe to share and to use as map keys, and thread-safe:
+
+```java
+public class Main {
+    public static void main(String[] args) {
+        Money price = new Money(1999, "EUR");
+        Money doubled = price.times(2);
+        System.out.println(price + " -> " + doubled);
+    }
+}
+
+final class Money {
+    private final long cents;
+    private final String currency;
+
+    Money(long cents, String currency) {
+        this.cents = cents;
+        this.currency = currency;
+    }
+
+    Money times(int factor) {
+        return new Money(cents * factor, currency);
+    }
+
+    @Override
+    public String toString() {
+        return String.format("%d.%02d %s", cents / 100, cents % 100, currency);
+    }
+}
+```
+
+`final class` also prevents subclasses from breaking the guarantees. Java's **records** (lesson 5) make such classes one line long.
+
+~~~check
+? Why make fields private?
++ So only the class's own methods can change them, keeping its data valid
+- To make them faster
+- Because public fields don't compile
+- To hide them from the debugger
+> Encapsulation protects invariants.
+~~~
+
+📚 **Go deeper:** *Java: The Complete Reference*, chapter 7 (access control, static, final); *Effective Java*, items 15 to 17 ("minimize the accessibility of classes and members", "minimize mutability").
+--- goals
+- encapsulate data with private fields and validating methods
+- choose access modifiers deliberately
+- use static fields and methods for class-wide data and utilities
+- design immutable classes
+--- quiz
+? Which modifier makes a member visible only inside its class?
++ private
+- protected
+- package-private (none)
+- public
+> The default (no modifier) is package-private.
+? Can a static method read an instance field directly?
++ No: there's no current object (this)
+- Yes, always
+- Only if the field is public
+- Only in main
+> Pass an object or make the field static.
+? What makes a class immutable?
++ private final fields, no setters, and methods that return new objects instead of changing this one
+- Making it public
+- Only having static methods
+- Using var
+> Like String.
+--- exercise code java
+::prompt
+Write an encapsulated `Thermostat` class:
+
+- private `double target` (start at 20.0) and `final double min` / `max` given to the constructor;
+- `void setTarget(double t)` that **clamps** the value into `[min, max]`;
+- `void raise()` and `void lower()` changing the target by 0.5 (also clamped);
+- `double getTarget()`;
+- a static counter of created thermostats, `static int created()`.
+
+The program prints:
+
+```
+20.0
+25.0
+16.0
+16.5
+created: 2
+```
+::starter
+public class Main {
+    public static void main(String[] args) {
+        Thermostat living = new Thermostat(16, 25);
+        Thermostat office = new Thermostat(18, 24);
+        System.out.println(living.getTarget());
+        living.setTarget(30);
+        System.out.println(living.getTarget());
+        living.setTarget(10);
+        System.out.println(living.getTarget());
+        living.raise();
+        System.out.println(living.getTarget());
+        office.lower();
+        System.out.println("created: " + Thermostat.created());
+    }
+}
+
+class Thermostat {
+}
+::solution
+public class Main {
+    public static void main(String[] args) {
+        Thermostat living = new Thermostat(16, 25);
+        Thermostat office = new Thermostat(18, 24);
+        System.out.println(living.getTarget());
+        living.setTarget(30);
+        System.out.println(living.getTarget());
+        living.setTarget(10);
+        System.out.println(living.getTarget());
+        living.raise();
+        System.out.println(living.getTarget());
+        office.lower();
+        System.out.println("created: " + Thermostat.created());
+    }
+}
+
+class Thermostat {
+    private static int count = 0;
+    private final double min;
+    private final double max;
+    private double target = 20.0;
+
+    Thermostat(double min, double max) {
+        this.min = min;
+        this.max = max;
+        count++;
+    }
+
+    void setTarget(double t) {
+        target = Math.max(min, Math.min(max, t));
+    }
+
+    void raise() { setTarget(target + 0.5); }
+    void lower() { setTarget(target - 0.5); }
+    double getTarget() { return target; }
+    static int created() { return count; }
+}
+::expected
+20.0
+25.0
+16.0
+16.5
+created: 2
+::variants
+setTarget(30) => setTarget(23)
+::hints
+- Clamp with `Math.max(min, Math.min(max, t))`.
+- `raise` and `lower` can reuse `setTarget`.
+- A `private static int count` incremented in the constructor counts instances.
+--- cards
+Encapsulation :: Private fields + public behaviour that keeps the object's invariants.
+Access modifiers :: private (class), package-private (package), protected (+ subclasses), public (all).
+static :: Belongs to the class, shared by all instances; no this.
+Immutable class :: final class, private final fields, no setters, "changes" return new objects.
+
+=== lesson java-inheritance | Inheritance and polymorphism | 80
+## extends: building on a class
+
+A class can **extend** another, inheriting its fields and methods and adding or changing behaviour. The parent is the **superclass**, the child the **subclass**:
+
+```java
+public class Main {
+    public static void main(String[] args) {
+        Employee e = new Employee("Ada", 4000);
+        Manager m = new Manager("Grace", 6000, 1500);
+        System.out.println(e.describe());
+        System.out.println(m.describe());
+        System.out.println(m.getName() + " earns " + m.monthlyPay());
+    }
+}
+
+class Employee {
+    private final String name;
+    protected final double salary;
+
+    Employee(String name, double salary) {
+        this.name = name;
+        this.salary = salary;
+    }
+
+    String getName() { return name; }
+    double monthlyPay() { return salary; }
+    String describe() { return name + " (" + getClass().getSimpleName() + "): " + monthlyPay(); }
+}
+
+class Manager extends Employee {
+    private final double bonus;
+
+    Manager(String name, double salary, double bonus) {
+        super(name, salary);        // must come first: initialise the Employee part
+        this.bonus = bonus;
+    }
+
+    @Override
+    double monthlyPay() {
+        return super.monthlyPay() + bonus;   // reuse the parent's version
+    }
+}
+```
+
+- `super(...)` calls the parent's constructor (it must be the first statement).
+- **Overriding** replaces an inherited method; `super.method()` calls the parent's version. Always write **`@Override`**: the compiler then catches typos and signature mismatches.
+- `protected` members are visible to subclasses.
+- Java has **single inheritance**: a class extends exactly one class (`Object` if none is given). It can implement many interfaces (next lesson).
+
+## Polymorphism
+
+A variable of a superclass type can refer to any subclass object, and calls go to the **object's actual class** (dynamic dispatch):
+
+```java
+public class Main {
+    public static void main(String[] args) {
+        Shape[] shapes = {new Circle(1), new Rectangle(2, 3), new Circle(0.5)};
+        double total = 0;
+        for (Shape s : shapes) {
+            System.out.printf("%s: %.2f%n", s.name(), s.area());
+            total += s.area();
+        }
+        System.out.printf("Total: %.2f%n", total);
+    }
+}
+
+abstract class Shape {
+    abstract double area();
+    String name() { return getClass().getSimpleName(); }
+}
+
+class Circle extends Shape {
+    private final double r;
+    Circle(double r) { this.r = r; }
+    @Override double area() { return Math.PI * r * r; }
+}
+
+class Rectangle extends Shape {
+    private final double w, h;
+    Rectangle(double w, double h) { this.w = w; this.h = h; }
+    @Override double area() { return w * h; }
+}
+```
+
+The loop doesn't know or care which shapes it has: adding a `Triangle` requires no change to it. That's the **open/closed principle** in action, the main payoff of polymorphism.
+
+An **abstract class** can't be instantiated (`new Shape()` is an error) and can declare **abstract methods** with no body, which every concrete subclass must implement.
+
+## The Object class: equals and hashCode
+
+Every class inherits from `java.lang.Object`: `toString()`, `equals(Object)`, `hashCode()`, `getClass()`. By default, `equals` compares **references** (same object). For value-like classes, override `equals` **and** `hashCode` together, so that equal objects work correctly in sets and maps (Module 5):
+
+```java
+import java.util.Objects;
+
+public class Main {
+    public static void main(String[] args) {
+        Isbn a = new Isbn("978-0134685991");
+        Isbn b = new Isbn("978-0134685991");
+        System.out.println(a == b);           // false: two objects
+        System.out.println(a.equals(b));      // true: same value
+        System.out.println(a.hashCode() == b.hashCode());
+    }
+}
+
+final class Isbn {
+    private final String code;
+    Isbn(String code) { this.code = code; }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (!(o instanceof Isbn other)) return false;
+        return code.equals(other.code);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(code);
+    }
+}
+```
+
+(`o instanceof Isbn other` tests the type and, if it matches, gives you `other` already cast: **pattern matching**, Java 16+.) Records (lesson 5) generate `equals`, `hashCode` and `toString` for you.
+
+## Casting objects
+
+Upcasting (subclass to superclass) is automatic. Downcasting needs a check, or it throws `ClassCastException`; pattern matching makes it safe and short: `if (shape instanceof Circle c) { ... c ... }`.
+
+## Prefer composition to inheritance
+
+Inheritance creates a tight coupling: a subclass depends on its parent's internals, and deep hierarchies become rigid. Use `extends` for a genuine "is a" relationship (a `Manager` **is an** `Employee`); otherwise build objects from other objects (**composition**: a `Car` **has an** `Engine`). *Effective Java* (item 18) and most modern design advice say: favour composition over inheritance, and mark classes `final` unless designed for extension.
+
+~~~check
+? `Shape s = new Circle(1); s.area();` Which area() runs?
++ Circle's, because calls go to the object's actual class
+- Shape's
+- Neither: compile error
+- Both
+> Dynamic dispatch.
+~~~
+
+📚 **Go deeper:** *Java: The Complete Reference*, chapter 8 "Inheritance"; *Effective Java*, items 10, 11 (equals and hashCode) and 18, 19 (composition, designing for inheritance); dev.java, "Inheritance".
+--- goals
+- create subclasses with extends, super and @Override
+- use polymorphism through superclass references and abstract classes
+- override equals and hashCode consistently
+- use instanceof pattern matching for safe casts
+- choose between inheritance and composition
+--- quiz
+? What must the first statement of a subclass constructor be, if present?
++ super(...) (or this(...))
+- return
+- @Override
+- extends
+> The parent part is initialised first.
+? Why override hashCode whenever you override equals?
++ Equal objects must have equal hash codes, or hash-based collections break
+- The compiler requires it
+- hashCode is used by toString
+- To make objects immutable
+> HashSet and HashMap rely on both.
+? Can you write `new Shape()` when Shape is abstract?
++ No
+- Yes
+- Only inside Shape
+- Only with a cast
+> Abstract classes are meant to be extended.
+? A Car has an Engine. Which relationship fits?
++ Composition: Car has a field of type Engine
+- Car extends Engine
+- Engine extends Car
+- Both extend Vehicle
+> "Has a" is composition; "is a" is inheritance.
+--- exercise code java
+::prompt
+Model a small zoo with polymorphism:
+
+- `abstract class Animal` with a private `name`, a constructor, `getName()`, an abstract `String sound()` and a concrete `String speak()` returning `<name> says <sound>`;
+- `Dog` (sound `Woof`), `Cat` (sound `Meow`) and `Cow` (sound `Moo`), each overriding `sound()`.
+
+The program loops over an array of animals:
+
+```
+Rex says Woof
+Tom says Meow
+Daisy says Moo
+3 animals, 1 dogs
+```
+
+The last line counts the dogs with `instanceof`.
+::starter
+public class Main {
+    public static void main(String[] args) {
+        Animal[] zoo = {new Dog("Rex"), new Cat("Tom"), new Cow("Daisy")};
+        int dogs = 0;
+        for (Animal a : zoo) {
+            System.out.println(a.speak());
+        }
+        System.out.println(zoo.length + " animals, " + dogs + " dogs");
+    }
+}
+::solution
+public class Main {
+    public static void main(String[] args) {
+        Animal[] zoo = {new Dog("Rex"), new Cat("Tom"), new Cow("Daisy")};
+        int dogs = 0;
+        for (Animal a : zoo) {
+            System.out.println(a.speak());
+            if (a instanceof Dog) dogs++;
+        }
+        System.out.println(zoo.length + " animals, " + dogs + " dogs");
+    }
+}
+
+abstract class Animal {
+    private final String name;
+    Animal(String name) { this.name = name; }
+    String getName() { return name; }
+    abstract String sound();
+    String speak() { return name + " says " + sound(); }
+}
+
+class Dog extends Animal {
+    Dog(String name) { super(name); }
+    @Override String sound() { return "Woof"; }
+}
+
+class Cat extends Animal {
+    Cat(String name) { super(name); }
+    @Override String sound() { return "Meow"; }
+}
+
+class Cow extends Animal {
+    Cow(String name) { super(name); }
+    @Override String sound() { return "Moo"; }
+}
+::expected
+Rex says Woof
+Tom says Meow
+Daisy says Moo
+3 animals, 1 dogs
+::variants
+new Cat("Tom") => new Dog("Fido")
+::hints
+- Each subclass needs a constructor calling `super(name)`.
+- `if (a instanceof Dog) dogs++;`
+--- exercise code java
+::prompt
+Give `Fraction` value semantics: it stores a numerator and denominator **reduced** to lowest terms (with the sign on the numerator, denominator positive), and overrides `equals`, `hashCode` and `toString` (`3/4`, or just `2` when the denominator is 1). Add `plus(Fraction other)` returning a new fraction. The program prints:
+
+```
+1/2 equals 2/4: true
+1/2 == 2/4: false
+1/2 + 1/3 = 5/6
+3/-6 = -1/2
+4/2 = 2
+same hash: true
+```
+::starter
+public class Main {
+    public static void main(String[] args) {
+        Fraction half = new Fraction(1, 2);
+        Fraction twoQuarters = new Fraction(2, 4);
+        System.out.println("1/2 equals 2/4: " + half.equals(twoQuarters));
+        System.out.println("1/2 == 2/4: " + (half == twoQuarters));
+        System.out.println("1/2 + 1/3 = " + half.plus(new Fraction(1, 3)));
+        System.out.println("3/-6 = " + new Fraction(3, -6));
+        System.out.println("4/2 = " + new Fraction(4, 2));
+        System.out.println("same hash: " + (half.hashCode() == twoQuarters.hashCode()));
+    }
+}
+
+final class Fraction {
+    private final int num;
+    private final int den;
+
+    Fraction(int num, int den) {
+        this.num = num;
+        this.den = den;
+    }
+
+    Fraction plus(Fraction other) {
+        return this;
+    }
+}
+::solution
+import java.util.Objects;
+
+public class Main {
+    public static void main(String[] args) {
+        Fraction half = new Fraction(1, 2);
+        Fraction twoQuarters = new Fraction(2, 4);
+        System.out.println("1/2 equals 2/4: " + half.equals(twoQuarters));
+        System.out.println("1/2 == 2/4: " + (half == twoQuarters));
+        System.out.println("1/2 + 1/3 = " + half.plus(new Fraction(1, 3)));
+        System.out.println("3/-6 = " + new Fraction(3, -6));
+        System.out.println("4/2 = " + new Fraction(4, 2));
+        System.out.println("same hash: " + (half.hashCode() == twoQuarters.hashCode()));
+    }
+}
+
+final class Fraction {
+    private final int num;
+    private final int den;
+
+    Fraction(int num, int den) {
+        if (den == 0) throw new ArithmeticException("denominator is zero");
+        int sign = den < 0 ? -1 : 1;
+        int g = gcd(Math.abs(num), Math.abs(den));
+        this.num = sign * num / g;
+        this.den = Math.abs(den) / g;
+    }
+
+    private static int gcd(int a, int b) {
+        return b == 0 ? Math.max(a, 1) : gcd(b, a % b);
+    }
+
+    Fraction plus(Fraction other) {
+        return new Fraction(num * other.den + other.num * den, den * other.den);
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        return o instanceof Fraction f && num == f.num && den == f.den;
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(num, den);
+    }
+
+    @Override
+    public String toString() {
+        return den == 1 ? String.valueOf(num) : num + "/" + den;
+    }
+}
+::expected
+1/2 equals 2/4: true
+1/2 == 2/4: false
+1/2 + 1/3 = 5/6
+3/-6 = -1/2
+4/2 = 2
+same hash: true
+::hints
+- Reduce in the constructor by the greatest common divisor, and move a negative sign from the denominator to the numerator.
+- Because fractions are always reduced, `equals` can compare the two fields directly.
+- `Objects.hash(num, den)` gives a hash code consistent with `equals`.
+--- cards
+extends / super :: class B extends A { B() { super(...); } } — single inheritance; super.m() calls the parent's version.
+@Override :: Ask the compiler to check that a method really overrides one.
+Polymorphism :: A superclass reference calls the subclass's override (dynamic dispatch).
+Abstract class :: Can't be instantiated; abstract methods must be implemented by subclasses.
+equals / hashCode :: Override both for value semantics; equal objects need equal hash codes.
+instanceof pattern :: if (o instanceof Circle c) { use c } — test and cast in one step.
+Composition over inheritance :: "Has a" (fields) is usually more flexible than "is a" (extends).
+
+=== lesson java-interfaces | Interfaces and abstract design | 75
+## Contracts: interfaces
+
+An **interface** declares what a type can do, without saying how. Classes **implement** it:
+
+```java
+import java.util.List;
+
+public class Main {
+    public static void main(String[] args) {
+        List<PaymentMethod> methods = List.of(new Card("4242"), new PayPal("ada@example.com"), new GiftCard(20));
+        for (PaymentMethod m : methods) {
+            System.out.println(m.describe() + " -> " + (m.pay(25) ? "paid" : "declined"));
+        }
+    }
+}
+
+interface PaymentMethod {
+    boolean pay(double amount);
+    String describe();
+}
+
+class Card implements PaymentMethod {
+    private final String last4;
+    Card(String last4) { this.last4 = last4; }
+    public boolean pay(double amount) { return true; }
+    public String describe() { return "Card ending " + last4; }
+}
+
+class PayPal implements PaymentMethod {
+    private final String email;
+    PayPal(String email) { this.email = email; }
+    public boolean pay(double amount) { return amount <= 1000; }
+    public String describe() { return "PayPal " + email; }
+}
+
+class GiftCard implements PaymentMethod {
+    private double balance;
+    GiftCard(double balance) { this.balance = balance; }
+    public boolean pay(double amount) {
+        if (amount > balance) return false;
+        balance -= amount;
+        return true;
+    }
+    public String describe() { return "Gift card (" + balance + " left)"; }
+}
+```
+
+- Interface methods are implicitly `public` and `abstract`, so implementations must be `public`.
+- A class can implement **many** interfaces (`class Duck implements Flyer, Swimmer`), unlike `extends`.
+- Code that depends on the **interface** (`PaymentMethod`) works with every implementation, including future ones, and can be tested with fakes. "Program to an interface, not an implementation" is one of the oldest design rules.
+
+The standard library is built on interfaces: `List`, `Map`, `Comparable`, `Runnable`, `AutoCloseable`...
+
+## default and static methods
+
+Since Java 8, interfaces can include **default methods** (with a body, inherited by implementations) and **static methods**:
+
+```java
+public class Main {
+    public static void main(String[] args) {
+        Greeter english = name -> "Hello, " + name;
+        System.out.println(english.greet("Ada"));
+        System.out.println(english.greetAll("Ada", "Grace"));
+        System.out.println(Greeter.polite().greet("Linus"));
+    }
+}
+
+interface Greeter {
+    String greet(String name);
+
+    default String greetAll(String... names) {
+        StringBuilder sb = new StringBuilder();
+        for (String n : names) sb.append(greet(n)).append(". ");
+        return sb.toString().strip();
+    }
+
+    static Greeter polite() {
+        return name -> "Good morning, " + name;
+    }
+}
+```
+
+`Greeter` has exactly one abstract method, so it's a **functional interface**, and a **lambda** (`name -> "Hello, " + name`) can implement it. Module 5 makes heavy use of this.
+
+## Comparable: a standard interface
+
+Implementing `Comparable<T>` gives a class a **natural order**, used by `Arrays.sort`, `Collections.sort` and sorted collections:
+
+```java
+import java.util.Arrays;
+
+public class Main {
+    public static void main(String[] args) {
+        Version[] versions = {new Version(1, 10), new Version(1, 2), new Version(0, 9)};
+        Arrays.sort(versions);
+        System.out.println(Arrays.toString(versions));
+    }
+}
+
+class Version implements Comparable<Version> {
+    final int major, minor;
+    Version(int major, int minor) { this.major = major; this.minor = minor; }
+
+    @Override
+    public int compareTo(Version other) {
+        if (major != other.major) return Integer.compare(major, other.major);
+        return Integer.compare(minor, other.minor);
+    }
+
+    @Override
+    public String toString() { return major + "." + minor; }
+}
+```
+
+`compareTo` returns a negative number, zero or a positive number. Use `Integer.compare`, not subtraction (`a - b` can overflow).
+
+## Interfaces or abstract classes?
+
+| | Interface | Abstract class |
+|---|---|---|
+| implement/extend several | yes | no (one superclass) |
+| fields with state | no (only constants) | yes |
+| constructors | no | yes |
+| best for | capabilities and contracts ("can be paid with", "is comparable") | sharing implementation between closely related classes |
+
+Start with an interface; add an abstract class (often implementing that interface) when several implementations share real code.
+
+## Sealed hierarchies (Java 17+)
+
+A **sealed** interface or class lists exactly which types may implement it. The compiler then knows every possibility, which makes `switch` over it exhaustive without a `default` (Module 6):
+
+```java
+public class Main {
+    public static void main(String[] args) {
+        Shape[] shapes = {new Circle(1), new Square(2)};
+        for (Shape s : shapes) {
+            double area = switch (s) {
+                case Circle c -> Math.PI * c.radius() * c.radius();
+                case Square q -> q.side() * q.side();
+            };
+            System.out.printf("%.2f%n", area);
+        }
+    }
+}
+
+sealed interface Shape permits Circle, Square {}
+record Circle(double radius) implements Shape {}
+record Square(double side) implements Shape {}
+```
+
+(`record` is the next lesson's topic.)
+
+~~~check
+? How many interfaces can a Java class implement?
++ Any number
+- One
+- Two
+- None if it extends a class
+> But it can extend only one class.
+~~~
+
+📚 **Go deeper:** *Java: The Complete Reference*, chapter 9 "Packages and Interfaces"; *Effective Java*, items 20 and 21 ("prefer interfaces to abstract classes", "design interfaces for posterity"); dev.java, "Interfaces" and "Sealed Classes".
+--- goals
+- define interfaces and implement them in several classes
+- program to interfaces, and use default and static interface methods
+- implement Comparable to give classes a natural order
+- choose between interfaces and abstract classes
+- restrict hierarchies with sealed types
+--- quiz
+? What visibility must a method implementing an interface method have?
++ public
+- Any
+- private
+- protected
+> Interface methods are implicitly public.
+? What's a functional interface?
++ An interface with exactly one abstract method, implementable by a lambda
+- An interface with only default methods
+- Any interface in java.util.function only
+- An abstract class
+> Runnable, Comparator, Function...
+? What should `compareTo` return when this object should sort first?
++ A negative number
+- A positive number
+- 0
+- true
+> Negative: this comes first.
+? What does `sealed ... permits A, B` give you?
++ Only A and B may implement it, so switches over it can be exhaustive
+- It makes A and B final automatically always
+- It hides the interface
+- It prevents lambdas
+> The compiler knows every subtype.
+--- exercise code java
+::prompt
+Design a notification system with an interface:
+
+- `interface Notifier { boolean send(String to, String message); String channel(); }`;
+- `EmailNotifier` (channel `email`; succeeds when `to` contains `@`), `SmsNotifier` (channel `sms`; succeeds when `to` is all digits and at least 8 long);
+- a default method `String report(String to, String message)` in the interface returning `<channel> to <to>: sent` or `... failed`.
+
+The program prints:
+
+```
+email to ada@example.com: sent
+email to not-an-email: failed
+sms to 07700900123: sent
+sms to 12ab: failed
+```
+::starter
+import java.util.List;
+
+public class Main {
+    public static void main(String[] args) {
+        Notifier email = new EmailNotifier();
+        Notifier sms = new SmsNotifier();
+        System.out.println(email.report("ada@example.com", "Hi"));
+        System.out.println(email.report("not-an-email", "Hi"));
+        System.out.println(sms.report("07700900123", "Hi"));
+        System.out.println(sms.report("12ab", "Hi"));
+    }
+}
+
+interface Notifier {
+}
+::solution
+public class Main {
+    public static void main(String[] args) {
+        Notifier email = new EmailNotifier();
+        Notifier sms = new SmsNotifier();
+        System.out.println(email.report("ada@example.com", "Hi"));
+        System.out.println(email.report("not-an-email", "Hi"));
+        System.out.println(sms.report("07700900123", "Hi"));
+        System.out.println(sms.report("12ab", "Hi"));
+    }
+}
+
+interface Notifier {
+    boolean send(String to, String message);
+    String channel();
+
+    default String report(String to, String message) {
+        return channel() + " to " + to + ": " + (send(to, message) ? "sent" : "failed");
+    }
+}
+
+class EmailNotifier implements Notifier {
+    public boolean send(String to, String message) { return to.contains("@"); }
+    public String channel() { return "email"; }
+}
+
+class SmsNotifier implements Notifier {
+    public boolean send(String to, String message) { return to.length() >= 8 && to.chars().allMatch(Character::isDigit); }
+    public String channel() { return "sms"; }
+}
+::expected
+email to ada@example.com: sent
+email to not-an-email: failed
+sms to 07700900123: sent
+sms to 12ab: failed
+::hints
+- The default method can call the abstract methods `channel()` and `send(...)`.
+- Implementations must declare the methods `public`.
+- `to.chars().allMatch(Character::isDigit)` checks that every character is a digit (or loop over the characters).
+--- cards
+Interface :: A contract of methods; class X implements A, B. Methods are public abstract by default.
+default method :: An interface method with a body, inherited by implementations.
+Functional interface :: Exactly one abstract method; a lambda can implement it.
+Comparable<T> :: compareTo returns negative/0/positive; gives a natural order. Use Integer.compare.
+Interface vs abstract class :: Many interfaces, one superclass; abstract classes can hold state and constructors.
+Sealed :: sealed interface S permits A, B — a closed hierarchy; enables exhaustive switches.
+
+=== lesson java-records-enums | Records and enums | 70
+## Records: data classes in one line
+
+Many classes just carry data: a point, a money amount, an API response. Writing their constructor, getters, `equals`, `hashCode` and `toString` by hand is long and error-prone. A **record** (Java 16+) declares them all at once:
+
+```java
+public class Main {
+    public static void main(String[] args) {
+        Point a = new Point(3, 4);
+        Point b = new Point(3, 4);
+        System.out.println(a);                  // Point[x=3, y=4]
+        System.out.println(a.x() + " " + a.y());
+        System.out.println(a.equals(b) + " " + (a == b));
+        System.out.println(a.distanceToOrigin());
+        System.out.println(a.withX(10));
+    }
+}
+
+record Point(int x, int y) {
+    double distanceToOrigin() {
+        return Math.sqrt(x * x + y * y);
+    }
+
+    Point withX(int newX) {
+        return new Point(newX, y);
+    }
+}
+```
+
+A record:
+
+- has `private final` fields and an accessor per component (`x()`, not `getX()`);
+- is **immutable** and `final`;
+- gets `equals`, `hashCode` and `toString` based on its components;
+- can have extra methods, static members and a **compact constructor** for validation:
+
+```java
+public class Main {
+    public static void main(String[] args) {
+        System.out.println(new Email("Ada@Example.com"));
+        try {
+            new Email("nope");
+        } catch (IllegalArgumentException e) {
+            System.out.println("Rejected: " + e.getMessage());
+        }
+    }
+}
+
+record Email(String address) {
+    Email {
+        if (!address.contains("@")) throw new IllegalArgumentException("not an email: " + address);
+        address = address.toLowerCase();
+    }
+}
+```
+
+Use records for **values** and data transfer objects; use classes for things with identity and changing state (an account, a game character).
+
+## Enums: a fixed set of constants
+
+An **enum** defines a type with a fixed set of named values:
+
+```java
+public class Main {
+    public static void main(String[] args) {
+        Status s = Status.SHIPPED;
+        System.out.println(s + " " + s.ordinal() + " " + s.name());
+        for (Status status : Status.values()) {
+            System.out.print(status + " ");
+        }
+        System.out.println();
+        System.out.println(Status.valueOf("PAID").next());
+        String message = switch (s) {
+            case PENDING -> "Waiting for payment";
+            case PAID -> "Being prepared";
+            case SHIPPED -> "On its way";
+            case DELIVERED -> "Delivered";
+        };
+        System.out.println(message);
+    }
+}
+
+enum Status {
+    PENDING, PAID, SHIPPED, DELIVERED;
+
+    Status next() {
+        return this == DELIVERED ? this : values()[ordinal() + 1];
+    }
+}
+```
+
+- Enum values are **singletons** and can be compared with `==`.
+- `values()`, `valueOf(String)`, `name()` and `ordinal()` come for free.
+- A `switch` over an enum that covers every constant needs no `default`: add a constant and the compiler flags every incomplete switch expression.
+
+Enums are full classes: they can have fields, constructors and methods, even per-constant behaviour:
+
+```java
+public class Main {
+    public static void main(String[] args) {
+        for (Planet p : Planet.values()) {
+            System.out.printf("%-7s %5.2f%n", p, p.surfaceGravity());
+        }
+    }
+}
+
+enum Planet {
+    MERCURY(3.303e23, 2.4397e6),
+    EARTH(5.976e24, 6.37814e6),
+    JUPITER(1.9e27, 7.1492e7);
+
+    private static final double G = 6.67300E-11;
+    private final double mass;
+    private final double radius;
+
+    Planet(double mass, double radius) {
+        this.mass = mass;
+        this.radius = radius;
+    }
+
+    double surfaceGravity() {
+        return G * mass / (radius * radius);
+    }
+}
+```
+
+Use enums instead of string or int constants for anything with a known set of values: statuses, roles, directions, units. The compiler then catches typos. `EnumMap` and `EnumSet` (Module 5) are fast collections keyed by enums.
+
+~~~check
+? What does a record give you automatically?
++ A constructor, accessors, equals, hashCode and toString, with immutable fields
+- Setters for every field
+- A database table
+- Inheritance from another record
+> Records can implement interfaces but not extend classes.
+~~~
+
+📚 **Go deeper:** *Java: The Complete Reference*, chapter 12 "Enumerations, Autoboxing, and Annotations"; *Effective Java*, items 34 to 38 (enums); dev.java, "Records" and "Enums"; JEP 395 (records).
+--- goals
+- declare records, with methods and compact constructors for validation
+- choose between records and classes
+- define enums with values(), valueOf, fields, constructors and methods
+- switch exhaustively over enums
+--- quiz
+? How do you read the component `x` of `record Point(int x, int y)`?
++ `p.x()`
+- `p.getX()`
+- `p.x` from outside the record
+- `Point.x`
+> Accessors are named after the components.
+? Can a record's fields be changed after construction?
++ No: they're final
+- Yes, with setters
+- Only in the same package
+- Only the first field
+> Return a new record instead ("withers").
+? How do you compare two enum values?
++ With == (each constant is a single object)
+- Only with equals
+- With compareTo only
+- They can't be compared
+> == is safe and clear for enums.
+? What's the main advantage of an enum over String constants for statuses?
++ The compiler checks values, so typos and missing cases are caught
+- Enums are faster to type
+- Enums can be any value at run time
+- Strings can't be switched on
+> Type safety.
+--- exercise code java
+::prompt
+Model playing cards:
+
+- `enum Suit { CLUBS, DIAMONDS, HEARTS, SPADES }` with a method `char symbol()` returning `♣ ♦ ♥ ♠` (use a switch);
+- `enum Rank` with values `TWO` to `ACE` and an `int value` field (2 to 10, then J=11, Q=12, K=13, A=14) and a `String label` (`"2"`..`"10"`, `"J"`, `"Q"`, `"K"`, `"A"`);
+- `record Card(Rank rank, Suit suit)` with `toString()` returning label + symbol (like `10♥`) and `boolean beats(Card other)` comparing rank values.
+
+The program prints:
+
+```
+A♠ beats 10♥: true
+2♣ beats K♦: false
+Deck size: 52
+```
+::starter
+public class Main {
+    public static void main(String[] args) {
+        Card a = new Card(Rank.ACE, Suit.SPADES);
+        Card b = new Card(Rank.TEN, Suit.HEARTS);
+        Card c = new Card(Rank.TWO, Suit.CLUBS);
+        Card d = new Card(Rank.KING, Suit.DIAMONDS);
+        System.out.println(a + " beats " + b + ": " + a.beats(b));
+        System.out.println(c + " beats " + d + ": " + c.beats(d));
+        int deck = 0;
+        for (Suit s : Suit.values()) for (Rank r : Rank.values()) deck++;
+        System.out.println("Deck size: " + deck);
+    }
+}
+::solution
+public class Main {
+    public static void main(String[] args) {
+        Card a = new Card(Rank.ACE, Suit.SPADES);
+        Card b = new Card(Rank.TEN, Suit.HEARTS);
+        Card c = new Card(Rank.TWO, Suit.CLUBS);
+        Card d = new Card(Rank.KING, Suit.DIAMONDS);
+        System.out.println(a + " beats " + b + ": " + a.beats(b));
+        System.out.println(c + " beats " + d + ": " + c.beats(d));
+        int deck = 0;
+        for (Suit s : Suit.values()) for (Rank r : Rank.values()) deck++;
+        System.out.println("Deck size: " + deck);
+    }
+}
+
+enum Suit {
+    CLUBS, DIAMONDS, HEARTS, SPADES;
+
+    char symbol() {
+        return switch (this) {
+            case CLUBS -> '♣';
+            case DIAMONDS -> '♦';
+            case HEARTS -> '♥';
+            case SPADES -> '♠';
+        };
+    }
+}
+
+enum Rank {
+    TWO(2, "2"), THREE(3, "3"), FOUR(4, "4"), FIVE(5, "5"), SIX(6, "6"), SEVEN(7, "7"), EIGHT(8, "8"),
+    NINE(9, "9"), TEN(10, "10"), JACK(11, "J"), QUEEN(12, "Q"), KING(13, "K"), ACE(14, "A");
+
+    final int value;
+    final String label;
+
+    Rank(int value, String label) {
+        this.value = value;
+        this.label = label;
+    }
+}
+
+record Card(Rank rank, Suit suit) {
+    boolean beats(Card other) {
+        return rank.value > other.rank.value;
+    }
+
+    @Override
+    public String toString() {
+        return rank.label + suit.symbol();
+    }
+}
+::expected
+A♠ beats 10♥: true
+2♣ beats K♦: false
+Deck size: 52
+::hints
+- An enum with fields: `TWO(2, "2"), ...;` then fields and a constructor `Rank(int value, String label)`.
+- `switch (this)` inside `Suit` covers all four constants without a `default`.
+- A record can override `toString()` (it must be `public`).
+--- cards
+record :: record P(int x, int y) {} — final, immutable, with constructor, accessors x(), equals, hashCode, toString.
+Compact constructor :: record E(String a) { E { validate/normalise a; } }
+enum :: A fixed set of constants: values(), valueOf, name(), ordinal(); compare with ==.
+Enum with fields :: PLANET(mass, radius); private final fields + constructor + methods.
+Exhaustive enum switch :: A switch expression covering every constant needs no default.
+
+=== lesson java-m4-test | Module 4 test | 150 | exam
+This test covers Module 4: classes and objects, encapsulation, static members and immutability, inheritance and polymorphism, interfaces, records and enums.
+
+Before you start, check that you can:
+
+- design a class with private state and validating methods;
+- use inheritance and polymorphism, and override equals/hashCode;
+- program to interfaces, and implement Comparable;
+- choose records and enums where they fit.
+--- goals
+- design object-oriented programs in Java
+- choose between classes, abstract classes, interfaces, records and enums
+--- quiz
+? Which is the best type for an immutable `Money(amount, currency)` value?
++ A record
+- An abstract class
+- An enum
+- An interface
+> Records are immutable data carriers with equals/hashCode.
+? `Animal a = new Dog(); a.sound();` calls...
++ Dog's sound() if it overrides it
+- Animal's sound() always
+- A compile error
+- Both
+> Dynamic dispatch.
+? What happens if a class overrides equals but not hashCode?
++ Equal objects may be lost or duplicated in HashSet/HashMap
+- Compile error
+- Nothing
+- equals stops working
+> The contract requires both.
+? What does `protected` allow?
++ Access from the same package and from subclasses
+- Access from everywhere
+- Access only from the class
+- Access only from subclasses in other packages
+> Wider than package-private.
+--- exercise code java
+::prompt
+**A parking garage.** Write:
+
+- `enum VehicleType { MOTORBIKE, CAR, VAN }` with an `hourlyRate` field (1.5, 3.0, 5.0);
+- `record Vehicle(String plate, VehicleType type)`;
+- `class Garage` with a capacity (constructor), a private map or list of parked vehicles, `boolean park(Vehicle v)` (false when full or already parked), `double leave(String plate, int hours)` returning the fee (rate × hours, at most 8 hours charged; `-1` if the vehicle isn't parked) and `int free()`.
+
+The program prints:
+
+```
+park AB12: true
+park CD34: true
+park AB12 again: false
+park EF56: false
+free: 0
+fee CD34 (3h): 15.0
+fee AB12 (10h): 24.0
+fee ZZ99: -1.0
+free: 2
+```
+
+(Use `java.util.ArrayList`; Module 5 covers collections, and here you only need `add`, `remove` and a loop.)
+::starter
+import java.util.ArrayList;
+
+public class Main {
+    public static void main(String[] args) {
+        Garage g = new Garage(2);
+        System.out.println("park AB12: " + g.park(new Vehicle("AB12", VehicleType.CAR)));
+        System.out.println("park CD34: " + g.park(new Vehicle("CD34", VehicleType.VAN)));
+        System.out.println("park AB12 again: " + g.park(new Vehicle("AB12", VehicleType.CAR)));
+        System.out.println("park EF56: " + g.park(new Vehicle("EF56", VehicleType.MOTORBIKE)));
+        System.out.println("free: " + g.free());
+        System.out.println("fee CD34 (3h): " + g.leave("CD34", 3));
+        System.out.println("fee AB12 (10h): " + g.leave("AB12", 10));
+        System.out.println("fee ZZ99: " + g.leave("ZZ99", 1));
+        System.out.println("free: " + g.free());
+    }
+}
+::solution
+import java.util.ArrayList;
+
+public class Main {
+    public static void main(String[] args) {
+        Garage g = new Garage(2);
+        System.out.println("park AB12: " + g.park(new Vehicle("AB12", VehicleType.CAR)));
+        System.out.println("park CD34: " + g.park(new Vehicle("CD34", VehicleType.VAN)));
+        System.out.println("park AB12 again: " + g.park(new Vehicle("AB12", VehicleType.CAR)));
+        System.out.println("park EF56: " + g.park(new Vehicle("EF56", VehicleType.MOTORBIKE)));
+        System.out.println("free: " + g.free());
+        System.out.println("fee CD34 (3h): " + g.leave("CD34", 3));
+        System.out.println("fee AB12 (10h): " + g.leave("AB12", 10));
+        System.out.println("fee ZZ99: " + g.leave("ZZ99", 1));
+        System.out.println("free: " + g.free());
+    }
+}
+
+enum VehicleType {
+    MOTORBIKE(1.5), CAR(3.0), VAN(5.0);
+
+    final double hourlyRate;
+
+    VehicleType(double hourlyRate) {
+        this.hourlyRate = hourlyRate;
+    }
+}
+
+record Vehicle(String plate, VehicleType type) {}
+
+class Garage {
+    private final int capacity;
+    private final ArrayList<Vehicle> parked = new ArrayList<>();
+
+    Garage(int capacity) {
+        this.capacity = capacity;
+    }
+
+    private Vehicle find(String plate) {
+        for (Vehicle v : parked) {
+            if (v.plate().equals(plate)) return v;
+        }
+        return null;
+    }
+
+    boolean park(Vehicle v) {
+        if (parked.size() >= capacity || find(v.plate()) != null) return false;
+        parked.add(v);
+        return true;
+    }
+
+    double leave(String plate, int hours) {
+        Vehicle v = find(plate);
+        if (v == null) return -1;
+        parked.remove(v);
+        return v.type().hourlyRate * Math.min(hours, 8);
+    }
+
+    int free() {
+        return capacity - parked.size();
+    }
+}
+::expected
+park AB12: true
+park CD34: true
+park AB12 again: false
+park EF56: false
+free: 0
+fee CD34 (3h): 15.0
+fee AB12 (10h): 24.0
+fee ZZ99: -1.0
+free: 2
+::variants
+leave("CD34", 3) => leave("CD34", 2)
+::hints
+- Keep a `private final ArrayList<Vehicle> parked = new ArrayList<>();`.
+- A private `find(plate)` helper serves both `park` and `leave`.
+- `Math.min(hours, 8)` caps the charged hours.
