@@ -1747,7 +1747,7 @@ app.MapGet("/products/cheap", async (ShopDb db) =>
 > Usually with a Location header pointing at the new resource.
 ~~~
 
-📚 **Go deeper:** Microsoft Learn, "Minimal APIs quick reference", "Dependency injection in ASP.NET Core", "ASP.NET Core middleware" and "Entity Framework Core: getting started"; *Programming C#*, chapter 15 (Web Services) shows the 2002 approach that ASP.NET Core replaced.
+📚 **Go deeper:** Microsoft Learn, "Minimal APIs quick reference", "Dependency injection in ASP.NET Core", "ASP.NET Core middleware" and "Entity Framework Core: getting started"; *Programming C#*, chapters 15 and 16 (Web Forms and Web Services), show the 2002 approach that ASP.NET Core replaced.
 --- goals
 - describe HTTP requests and responses, and call services with HttpClient
 - explain what ASP.NET Core minimal APIs do: routing, binding, JSON, DI and middleware

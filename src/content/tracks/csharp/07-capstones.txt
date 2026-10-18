@@ -1,0 +1,1305 @@
+=== module Capstone projects
+
+=== lesson cs-project | Capstone 1: a personal expense tracker | 400
+This capstone builds a small but complete application in two steps, the way features grow in real codebases: first the **domain model and business rules**, then **import and reporting**. Step 2's starter contains step 1's solution, so you can continue even if step 1 gave you trouble.
+
+## How a task like this is approached
+
+1. **Model the domain** first: an `Expense` is a value (a record), a `Category` is a fixed set (an enum), and the `Ledger` holds changing state behind a small public API.
+2. **Validate at the boundary:** the ledger refuses invalid expenses with exceptions, so the rest of the code can trust its data.
+3. **Keep I/O separate from logic:** the CSV importer only parses lines and reports problems; the ledger decides what's valid; the report only reads. Each piece is easy to test on its own.
+4. **Answer questions with LINQ** once the data is right.
+
+The top-level statements are the specification: they call your classes, and the printed output must match exactly. Don't change them.
+--- goals
+- design a domain with an enum, a record and a class that protects its rules
+- validate input with exceptions and report problems without stopping
+- parse CSV safely with DateOnly, decimal and enum parsing in the invariant culture
+- write reports with LINQ: grouping, sorting, percentages and distinct months
+
+--- exercise code csharp
+::prompt
+**Step 1: the ledger.** `Category` and `Expense` are given. Complete `Ledger`:
+
+- `SetBudget(category, monthly)` stores a monthly budget (throw `ArgumentException("budget must be positive")` for 0 or less); `BudgetFor(category)` returns it, or `null` when there's none;
+- `Add(expense)` rejects a blank description (`ArgumentException("description is required")`) and an amount of 0 or less (`ArgumentException("amount must be positive: <amount>")`); otherwise stores it, and when the category has a budget and its total **for that month** is now over it, returns the warning `<Category> over budget in <yyyy-MM> by <excess>` (excess formatted `0.00`); otherwise returns `null`;
+- `Total(year, month)` and `TotalFor(category, year, month)` sum the expenses of a month.
+
+Expected output:
+
+```
+added Rent 850.00
+added Groceries 64.30
+added Cinema 24.00
+added Groceries 88.10
+added Concert 45.00 -> Fun over budget in 2026-03 by 19.00
+added Restaurant 61.75 -> Food over budget in 2026-03 by 14.15
+rejected: description is required
+rejected: amount must be positive: -30
+added Groceries 71.20
+expenses: 7
+March total: 1133.15, April total: 71.20
+March food: 214.15 of 200.00
+budget for Transport: none
+```
+::starter
+var ledger = new Ledger();
+ledger.SetBudget(Category.Food, 200m);
+ledger.SetBudget(Category.Fun, 50m);
+
+Expense[] expenses =
+{
+    new(new DateOnly(2026, 3, 1), "Rent", 850m, Category.Housing),
+    new(new DateOnly(2026, 3, 2), "Groceries", 64.30m, Category.Food),
+    new(new DateOnly(2026, 3, 5), "Cinema", 24m, Category.Fun),
+    new(new DateOnly(2026, 3, 9), "Groceries", 88.10m, Category.Food),
+    new(new DateOnly(2026, 3, 12), "Concert", 45m, Category.Fun),
+    new(new DateOnly(2026, 3, 20), "Restaurant", 61.75m, Category.Food),
+    new(new DateOnly(2026, 3, 21), "", 10m, Category.Other),
+    new(new DateOnly(2026, 3, 22), "Bus pass", -30m, Category.Transport),
+    new(new DateOnly(2026, 4, 2), "Groceries", 71.20m, Category.Food),
+};
+foreach (Expense e in expenses)
+{
+    try
+    {
+        string? warning = ledger.Add(e);
+        Console.WriteLine($"added {e.Description} {e.Amount:0.00}{(warning is null ? "" : $" -> {warning}")}");
+    }
+    catch (ArgumentException ex)
+    {
+        Console.WriteLine($"rejected: {ex.Message}");
+    }
+}
+Console.WriteLine($"expenses: {ledger.Expenses.Count}");
+Console.WriteLine($"March total: {ledger.Total(2026, 3):0.00}, April total: {ledger.Total(2026, 4):0.00}");
+Console.WriteLine($"March food: {ledger.TotalFor(Category.Food, 2026, 3):0.00} of {ledger.BudgetFor(Category.Food):0.00}");
+Console.WriteLine($"budget for Transport: {(ledger.BudgetFor(Category.Transport) is decimal b ? b.ToString("0.00") : "none")}");
+
+enum Category { Food, Transport, Housing, Fun, Other }
+
+record Expense(DateOnly Date, string Description, decimal Amount, Category Category);
+
+class Ledger
+{
+    private readonly List<Expense> _expenses = new();
+    private readonly Dictionary<Category, decimal> _budgets = new();
+
+    public IReadOnlyList<Expense> Expenses => _expenses;
+
+    public void SetBudget(Category category, decimal monthly) { }
+
+    public decimal? BudgetFor(Category category) => null;
+
+    public string? Add(Expense expense) => null;
+
+    public decimal Total(int year, int month) => 0;
+
+    public decimal TotalFor(Category category, int year, int month) => 0;
+}
+::solution
+var ledger = new Ledger();
+ledger.SetBudget(Category.Food, 200m);
+ledger.SetBudget(Category.Fun, 50m);
+
+Expense[] expenses =
+{
+    new(new DateOnly(2026, 3, 1), "Rent", 850m, Category.Housing),
+    new(new DateOnly(2026, 3, 2), "Groceries", 64.30m, Category.Food),
+    new(new DateOnly(2026, 3, 5), "Cinema", 24m, Category.Fun),
+    new(new DateOnly(2026, 3, 9), "Groceries", 88.10m, Category.Food),
+    new(new DateOnly(2026, 3, 12), "Concert", 45m, Category.Fun),
+    new(new DateOnly(2026, 3, 20), "Restaurant", 61.75m, Category.Food),
+    new(new DateOnly(2026, 3, 21), "", 10m, Category.Other),
+    new(new DateOnly(2026, 3, 22), "Bus pass", -30m, Category.Transport),
+    new(new DateOnly(2026, 4, 2), "Groceries", 71.20m, Category.Food),
+};
+foreach (Expense e in expenses)
+{
+    try
+    {
+        string? warning = ledger.Add(e);
+        Console.WriteLine($"added {e.Description} {e.Amount:0.00}{(warning is null ? "" : $" -> {warning}")}");
+    }
+    catch (ArgumentException ex)
+    {
+        Console.WriteLine($"rejected: {ex.Message}");
+    }
+}
+Console.WriteLine($"expenses: {ledger.Expenses.Count}");
+Console.WriteLine($"March total: {ledger.Total(2026, 3):0.00}, April total: {ledger.Total(2026, 4):0.00}");
+Console.WriteLine($"March food: {ledger.TotalFor(Category.Food, 2026, 3):0.00} of {ledger.BudgetFor(Category.Food):0.00}");
+Console.WriteLine($"budget for Transport: {(ledger.BudgetFor(Category.Transport) is decimal b ? b.ToString("0.00") : "none")}");
+
+enum Category { Food, Transport, Housing, Fun, Other }
+
+record Expense(DateOnly Date, string Description, decimal Amount, Category Category);
+
+class Ledger
+{
+    private readonly List<Expense> _expenses = new();
+    private readonly Dictionary<Category, decimal> _budgets = new();
+
+    public IReadOnlyList<Expense> Expenses => _expenses;
+
+    public void SetBudget(Category category, decimal monthly)
+    {
+        if (monthly <= 0) throw new ArgumentException("budget must be positive");
+        _budgets[category] = monthly;
+    }
+
+    public decimal? BudgetFor(Category category) => _budgets.TryGetValue(category, out decimal b) ? b : null;
+
+    public string? Add(Expense expense)
+    {
+        if (string.IsNullOrWhiteSpace(expense.Description)) throw new ArgumentException("description is required");
+        if (expense.Amount <= 0) throw new ArgumentException($"amount must be positive: {expense.Amount}");
+        _expenses.Add(expense);
+        if (BudgetFor(expense.Category) is not decimal budget) return null;
+        decimal spent = TotalFor(expense.Category, expense.Date.Year, expense.Date.Month);
+        return spent > budget ? $"{expense.Category} over budget in {expense.Date:yyyy-MM} by {spent - budget:0.00}" : null;
+    }
+
+    public decimal Total(int year, int month) => InMonth(year, month).Sum(e => e.Amount);
+
+    public decimal TotalFor(Category category, int year, int month) =>
+        InMonth(year, month).Where(e => e.Category == category).Sum(e => e.Amount);
+
+    private IEnumerable<Expense> InMonth(int year, int month) =>
+        _expenses.Where(e => e.Date.Year == year && e.Date.Month == month);
+}
+::expected
+added Rent 850.00
+added Groceries 64.30
+added Cinema 24.00
+added Groceries 88.10
+added Concert 45.00 -> Fun over budget in 2026-03 by 19.00
+added Restaurant 61.75 -> Food over budget in 2026-03 by 14.15
+rejected: description is required
+rejected: amount must be positive: -30
+added Groceries 71.20
+expenses: 7
+March total: 1133.15, April total: 71.20
+March food: 214.15 of 200.00
+budget for Transport: none
+::hints
+- A private helper `InMonth(year, month)` that filters `_expenses` keeps both totals one line each.
+- `BudgetFor(...) is not decimal budget` returns early when there's no budget.
+- `$"{expense.Date:yyyy-MM}"` formats the month; validate **before** adding to the list.
+
+--- exercise code csharp
+::prompt
+**Step 2: import and reports.** Your step 1 `Ledger` is included. Write:
+
+- `CsvImport.Into(ledger, path)`: reads the file lazily (`File.ReadLines`), skips the header, and adds one expense per line. It never stops at a bad line; it collects errors in this order of checks: `line <n>: expected 4 fields, found <k>`, `line <n>: invalid date <text>` (`DateOnly.TryParseExact` with `yyyy-MM-dd`), `line <n>: invalid amount <text>` (`decimal.TryParse` with the invariant culture), `line <n>: unknown category <text>` (`Enum.TryParse` plus `Enum.IsDefined`), and the ledger's own rejection as `line <n>: <message>`;
+- `Report.MonthSummary(year, month)`: one line per category, largest amount first, formatted `{Category,-9} {Sum,8:0.00} {Percent,5:0.0}%`, then `{"Total",-9} {total,8:0.00}`;
+- `AverageDaily(year, month)`: the month's total divided by the number of days in the month;
+- `TopExpenses(n)`: the largest expenses (ties by date);
+- `Recurring()`: descriptions that occur in at least two different months, alphabetically;
+- `BusiestWeekday()`: the day of the week with the highest spending.
+
+Expected output:
+
+```
+imported 10 expenses, 5 errors
+  line 4: invalid amount abc
+  line 6: invalid date 2026-02-30
+  line 9: unknown category Presents
+  line 12: expected 4 fields, found 2
+  line 13: amount must be positive: -15.00
+March 2026:
+  Housing     850.00  73.1%
+  Food        214.15  18.4%
+  Fun          69.00   5.9%
+  Transport    30.00   2.6%
+  Total      1163.15
+average per day in March: 37.52
+top 3: Rent 850.00, Rent 850.00, Groceries 88.10
+recurring: Bus pass, Groceries, Rent
+busiest weekday: Sunday
+```
+::starter
+using System.Globalization;
+
+string path = Path.Combine(Path.GetTempPath(), $"devquest-expenses-{Guid.NewGuid():N}.csv");
+File.WriteAllLines(path, new[]
+{
+    "date,description,amount,category",
+    "2026-03-01,Rent,850.00,Housing",
+    "2026-03-02,Groceries,64.30,Food",
+    "2026-03-04,Taxi,abc,Transport",
+    "2026-03-05,Cinema,24.00,Fun",
+    "2026-02-30,Groceries,12.00,Food",
+    "2026-03-09,Groceries,88.10,Food",
+    "2026-03-12,Concert,45.00,Fun",
+    "2026-03-14,Gift,20.00,Presents",
+    "2026-03-20,Restaurant,61.75,Food",
+    "2026-03-21,Bus pass,30.00,Transport",
+    "2026-03-23,Coffee",
+    "2026-03-28,Refund,-15.00,Other",
+    "2026-04-01,Rent,850.00,Housing",
+    "2026-04-02,Groceries,71.20,Food",
+    "2026-04-04,Bus pass,30.00,Transport",
+});
+try
+{
+    var ledger = new Ledger();
+    ledger.SetBudget(Category.Food, 200m);
+    List<string> errors = CsvImport.Into(ledger, path);
+    Console.WriteLine($"imported {ledger.Expenses.Count} expenses, {errors.Count} errors");
+    foreach (string error in errors) Console.WriteLine($"  {error}");
+
+    var report = new Report(ledger);
+    Console.WriteLine("March 2026:");
+    foreach (string line in report.MonthSummary(2026, 3)) Console.WriteLine($"  {line}");
+    Console.WriteLine($"average per day in March: {report.AverageDaily(2026, 3):0.00}");
+    Console.WriteLine($"top 3: {string.Join(", ", report.TopExpenses(3).Select(e => $"{e.Description} {e.Amount:0.00}"))}");
+    Console.WriteLine($"recurring: {string.Join(", ", report.Recurring())}");
+    Console.WriteLine($"busiest weekday: {report.BusiestWeekday()}");
+}
+finally
+{
+    File.Delete(path);
+}
+
+static class CsvImport
+{
+    public static List<string> Into(Ledger ledger, string path) => new List<string>();
+}
+
+class Report(Ledger ledger)
+{
+    public IEnumerable<string> MonthSummary(int year, int month) => [];
+
+    public decimal AverageDaily(int year, int month) => 0;
+
+    public IEnumerable<Expense> TopExpenses(int n) => [];
+
+    public IEnumerable<string> Recurring() => [];
+
+    public DayOfWeek BusiestWeekday() => DayOfWeek.Monday;
+}
+
+enum Category { Food, Transport, Housing, Fun, Other }
+
+record Expense(DateOnly Date, string Description, decimal Amount, Category Category);
+
+class Ledger
+{
+    private readonly List<Expense> _expenses = new();
+    private readonly Dictionary<Category, decimal> _budgets = new();
+
+    public IReadOnlyList<Expense> Expenses => _expenses;
+
+    public void SetBudget(Category category, decimal monthly)
+    {
+        if (monthly <= 0) throw new ArgumentException("budget must be positive");
+        _budgets[category] = monthly;
+    }
+
+    public decimal? BudgetFor(Category category) => _budgets.TryGetValue(category, out decimal b) ? b : null;
+
+    public string? Add(Expense expense)
+    {
+        if (string.IsNullOrWhiteSpace(expense.Description)) throw new ArgumentException("description is required");
+        if (expense.Amount <= 0) throw new ArgumentException($"amount must be positive: {expense.Amount}");
+        _expenses.Add(expense);
+        if (BudgetFor(expense.Category) is not decimal budget) return null;
+        decimal spent = TotalFor(expense.Category, expense.Date.Year, expense.Date.Month);
+        return spent > budget ? $"{expense.Category} over budget in {expense.Date:yyyy-MM} by {spent - budget:0.00}" : null;
+    }
+
+    public decimal Total(int year, int month) => InMonth(year, month).Sum(e => e.Amount);
+
+    public decimal TotalFor(Category category, int year, int month) =>
+        InMonth(year, month).Where(e => e.Category == category).Sum(e => e.Amount);
+
+    private IEnumerable<Expense> InMonth(int year, int month) =>
+        _expenses.Where(e => e.Date.Year == year && e.Date.Month == month);
+}
+::solution
+using System.Globalization;
+
+string path = Path.Combine(Path.GetTempPath(), $"devquest-expenses-{Guid.NewGuid():N}.csv");
+File.WriteAllLines(path, new[]
+{
+    "date,description,amount,category",
+    "2026-03-01,Rent,850.00,Housing",
+    "2026-03-02,Groceries,64.30,Food",
+    "2026-03-04,Taxi,abc,Transport",
+    "2026-03-05,Cinema,24.00,Fun",
+    "2026-02-30,Groceries,12.00,Food",
+    "2026-03-09,Groceries,88.10,Food",
+    "2026-03-12,Concert,45.00,Fun",
+    "2026-03-14,Gift,20.00,Presents",
+    "2026-03-20,Restaurant,61.75,Food",
+    "2026-03-21,Bus pass,30.00,Transport",
+    "2026-03-23,Coffee",
+    "2026-03-28,Refund,-15.00,Other",
+    "2026-04-01,Rent,850.00,Housing",
+    "2026-04-02,Groceries,71.20,Food",
+    "2026-04-04,Bus pass,30.00,Transport",
+});
+try
+{
+    var ledger = new Ledger();
+    ledger.SetBudget(Category.Food, 200m);
+    List<string> errors = CsvImport.Into(ledger, path);
+    Console.WriteLine($"imported {ledger.Expenses.Count} expenses, {errors.Count} errors");
+    foreach (string error in errors) Console.WriteLine($"  {error}");
+
+    var report = new Report(ledger);
+    Console.WriteLine("March 2026:");
+    foreach (string line in report.MonthSummary(2026, 3)) Console.WriteLine($"  {line}");
+    Console.WriteLine($"average per day in March: {report.AverageDaily(2026, 3):0.00}");
+    Console.WriteLine($"top 3: {string.Join(", ", report.TopExpenses(3).Select(e => $"{e.Description} {e.Amount:0.00}"))}");
+    Console.WriteLine($"recurring: {string.Join(", ", report.Recurring())}");
+    Console.WriteLine($"busiest weekday: {report.BusiestWeekday()}");
+}
+finally
+{
+    File.Delete(path);
+}
+
+static class CsvImport
+{
+    public static List<string> Into(Ledger ledger, string path)
+    {
+        var errors = new List<string>();
+        int lineNumber = 0;
+        foreach (string line in File.ReadLines(path))
+        {
+            lineNumber++;
+            if (lineNumber == 1) continue;
+            string[] f = line.Split(',');
+            if (f.Length != 4) { errors.Add($"line {lineNumber}: expected 4 fields, found {f.Length}"); continue; }
+            if (!DateOnly.TryParseExact(f[0], "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out DateOnly date))
+            { errors.Add($"line {lineNumber}: invalid date {f[0]}"); continue; }
+            if (!decimal.TryParse(f[2], NumberStyles.Number, CultureInfo.InvariantCulture, out decimal amount))
+            { errors.Add($"line {lineNumber}: invalid amount {f[2]}"); continue; }
+            if (!Enum.TryParse(f[3], out Category category) || !Enum.IsDefined(category))
+            { errors.Add($"line {lineNumber}: unknown category {f[3]}"); continue; }
+            try
+            {
+                ledger.Add(new Expense(date, f[1], amount, category));
+            }
+            catch (ArgumentException e)
+            {
+                errors.Add($"line {lineNumber}: {e.Message}");
+            }
+        }
+        return errors;
+    }
+}
+
+class Report(Ledger ledger)
+{
+    public IEnumerable<string> MonthSummary(int year, int month)
+    {
+        decimal total = ledger.Total(year, month);
+        return ledger.Expenses
+            .Where(e => e.Date.Year == year && e.Date.Month == month)
+            .GroupBy(e => e.Category)
+            .Select(g => (Category: g.Key, Sum: g.Sum(e => e.Amount)))
+            .OrderByDescending(x => x.Sum)
+            .Select(x => $"{x.Category,-9} {x.Sum,8:0.00} {x.Sum / total * 100,5:0.0}%")
+            .Append($"{"Total",-9} {total,8:0.00}");
+    }
+
+    public decimal AverageDaily(int year, int month) => ledger.Total(year, month) / DateTime.DaysInMonth(year, month);
+
+    public IEnumerable<Expense> TopExpenses(int n) =>
+        ledger.Expenses.OrderByDescending(e => e.Amount).ThenBy(e => e.Date).Take(n);
+
+    public IEnumerable<string> Recurring() =>
+        ledger.Expenses
+            .GroupBy(e => e.Description)
+            .Where(g => g.Select(e => (e.Date.Year, e.Date.Month)).Distinct().Count() >= 2)
+            .Select(g => g.Key)
+            .Order();
+
+    public DayOfWeek BusiestWeekday() =>
+        ledger.Expenses
+            .GroupBy(e => e.Date.DayOfWeek)
+            .OrderByDescending(g => g.Sum(e => e.Amount))
+            .First().Key;
+}
+
+enum Category { Food, Transport, Housing, Fun, Other }
+
+record Expense(DateOnly Date, string Description, decimal Amount, Category Category);
+
+class Ledger
+{
+    private readonly List<Expense> _expenses = new();
+    private readonly Dictionary<Category, decimal> _budgets = new();
+
+    public IReadOnlyList<Expense> Expenses => _expenses;
+
+    public void SetBudget(Category category, decimal monthly)
+    {
+        if (monthly <= 0) throw new ArgumentException("budget must be positive");
+        _budgets[category] = monthly;
+    }
+
+    public decimal? BudgetFor(Category category) => _budgets.TryGetValue(category, out decimal b) ? b : null;
+
+    public string? Add(Expense expense)
+    {
+        if (string.IsNullOrWhiteSpace(expense.Description)) throw new ArgumentException("description is required");
+        if (expense.Amount <= 0) throw new ArgumentException($"amount must be positive: {expense.Amount}");
+        _expenses.Add(expense);
+        if (BudgetFor(expense.Category) is not decimal budget) return null;
+        decimal spent = TotalFor(expense.Category, expense.Date.Year, expense.Date.Month);
+        return spent > budget ? $"{expense.Category} over budget in {expense.Date:yyyy-MM} by {spent - budget:0.00}" : null;
+    }
+
+    public decimal Total(int year, int month) => InMonth(year, month).Sum(e => e.Amount);
+
+    public decimal TotalFor(Category category, int year, int month) =>
+        InMonth(year, month).Where(e => e.Category == category).Sum(e => e.Amount);
+
+    private IEnumerable<Expense> InMonth(int year, int month) =>
+        _expenses.Where(e => e.Date.Year == year && e.Date.Month == month);
+}
+::expected
+imported 10 expenses, 5 errors
+  line 4: invalid amount abc
+  line 6: invalid date 2026-02-30
+  line 9: unknown category Presents
+  line 12: expected 4 fields, found 2
+  line 13: amount must be positive: -15.00
+March 2026:
+  Housing     850.00  73.1%
+  Food        214.15  18.4%
+  Fun          69.00   5.9%
+  Transport    30.00   2.6%
+  Total      1163.15
+average per day in March: 37.52
+top 3: Rent 850.00, Rent 850.00, Groceries 88.10
+recurring: Bus pass, Groceries, Rent
+busiest weekday: Sunday
+::hints
+- `continue` after recording an error moves on to the next line.
+- `DateTime.DaysInMonth(year, month)` gives the number of days.
+- For `Recurring`, group by description and count `g.Select(e => (e.Date.Year, e.Date.Month)).Distinct()`.
+
+--- cards
+Domain model :: Values as records, fixed sets as enums, changing state in a class with a small API.
+Validate at the boundary :: Reject bad data where it enters, so the rest of the code can trust it.
+Collect, don't stop :: An importer records each bad line and continues.
+Invariant culture :: Parse files with CultureInfo.InvariantCulture so "64.30" works on every PC.
+
+=== lesson cs-capstone-async | Capstone 2: an async web crawler | 450
+A **web crawler** starts at one page, follows its links, then their links, and so on: search engines, link checkers and archivers all work this way. It's the perfect async exercise: almost all the time goes into **waiting** for pages, broken links must not stop the crawl, and a slow server must not hang it.
+
+The crawler talks to the web through an `IWebClient` interface. The given `FakeWeb` implements it with an in-memory set of pages and artificial delays, so the results are repeatable; a real version would wrap `HttpClient` and implement the same interface. That's dependency injection paying off: the crawler doesn't know or care which one it gets.
+
+## The algorithm: breadth-first search
+
+1. Start with the first page at depth 0, and remember it as **seen**.
+2. Fetch a page, extract its links (`href="..."`), and record the result.
+3. Every link not seen yet becomes a page to visit at **depth + 1**, unless the page is already at the maximum depth.
+4. Continue until there's nothing left to visit.
+
+The `seen` set guarantees each page is fetched once, even when pages link to each other in circles (`/blog/1` and `/blog/2` link to each other).
+
+## From simple to fast and safe
+
+Step 1 fetches one page at a time: simple but slow. Step 2 fetches each depth level **concurrently**, but politely: at most `maxConcurrency` requests at once (a `SemaphoreSlim`), and each request gets a **timeout** (a `CancellationTokenSource`), so one slow server can't stall everything.
+--- goals
+- implement breadth-first search over a graph with a queue and a seen set
+- depend on an interface so the network can be faked
+- run requests concurrently with Task.WhenAll while limiting concurrency with SemaphoreSlim
+- give every request a timeout with CancellationTokenSource, and classify failures
+
+--- exercise code csharp
+::prompt
+**Step 1: a sequential crawler.** Complete `Crawler.CrawlAsync(start, maxDepth)` with a breadth-first search (a `Queue<(string Url, int Depth)>` and a `HashSet<string>` of seen URLs):
+
+- fetch each page with `web.GetAsync(url, CancellationToken.None)`; extract its links with the given `LinkPattern` (`m.Groups[1].Value`, distinct);
+- record `PageResult(url, depth, "ok", <number of links>)`, or `PageResult(url, depth, "broken", 0)` when `GetAsync` throws `HttpRequestException`;
+- queue unseen links at depth + 1 only when the page's depth is below `maxDepth`;
+- return the results sorted by depth, then by URL (`StringComparer.Ordinal`).
+
+Expected output:
+
+```
+0 /            ok       3 links
+1 /about       ok       1 links
+1 /blog        ok       3 links
+1 /docs        ok       3 links
+2 /blog/1      ok       1 links
+2 /blog/2      ok       2 links
+2 /docs/api    ok       1 links
+2 /docs/start  ok       1 links
+2 /old-page    broken   0 links
+2 /team        ok       0 links
+pages: 10, ok: 9, broken: 1, timeouts: 0
+requests: 10, max at once: 1
+```
+::starter
+using System.Text.RegularExpressions;
+
+var web = new FakeWeb(new()
+{
+    ["/"] = ("""<a href="/docs">Docs</a> <a href="/blog">Blog</a> <a href="/about">About</a>""", 40),
+    ["/docs"] = ("""<a href="/docs/start">Start</a> <a href="/docs/api">API</a> <a href="/">Home</a>""", 40),
+    ["/blog"] = ("""<a href="/blog/1">Post 1</a> <a href="/blog/2">Post 2</a> <a href="/old-page">Old</a>""", 40),
+    ["/about"] = ("""<a href="/team">Team</a>""", 40),
+    ["/docs/start"] = ("""<a href="/docs/api">API</a>""", 40),
+    ["/docs/api"] = ("""<a href="/docs/api/v2">v2</a>""", 200),
+    ["/blog/1"] = ("""<a href="/blog/2">next</a>""", 40),
+    ["/blog/2"] = ("""<a href="/blog/1">previous</a> <a href="/blog/3">next</a>""", 40),
+    ["/team"] = ("no links here", 40),
+    ["/blog/3"] = ("too deep to be visited", 40),
+});
+
+var crawler = new Crawler(web);
+List<PageResult> results = await crawler.CrawlAsync("/", maxDepth: 2);
+foreach (PageResult r in results) Console.WriteLine($"{r.Depth} {r.Url,-12} {r.Status,-8} {r.Links} links");
+Console.WriteLine($"pages: {results.Count}, ok: {results.Count(r => r.Status == "ok")}, broken: {results.Count(r => r.Status == "broken")}, timeouts: {results.Count(r => r.Status == "timeout")}");
+Console.WriteLine($"requests: {web.Requests}, max at once: {web.MaxConcurrent}");
+
+record PageResult(string Url, int Depth, string Status, int Links);
+
+interface IWebClient
+{
+    Task<string> GetAsync(string url, CancellationToken token);
+}
+
+class FakeWeb(Dictionary<string, (string Html, int DelayMs)> pages) : IWebClient
+{
+    private int _current;
+    private int _max;
+    private int _requests;
+
+    public int Requests => _requests;
+    public int MaxConcurrent => _max;
+
+    public async Task<string> GetAsync(string url, CancellationToken token)
+    {
+        Interlocked.Increment(ref _requests);
+        int now = Interlocked.Increment(ref _current);
+        int seen;
+        while (now > (seen = _max) && Interlocked.CompareExchange(ref _max, now, seen) != seen) { }
+        try
+        {
+            if (!pages.TryGetValue(url, out var page))
+            {
+                await Task.Delay(10, token);
+                throw new HttpRequestException($"404 {url}");
+            }
+            await Task.Delay(page.DelayMs, token);
+            return page.Html;
+        }
+        finally
+        {
+            Interlocked.Decrement(ref _current);
+        }
+    }
+}
+
+class Crawler(IWebClient web)
+{
+    private static readonly Regex LinkPattern = new("href=\"([^\"]+)\"");
+
+    public async Task<List<PageResult>> CrawlAsync(string start, int maxDepth)
+    {
+        await Task.CompletedTask;
+        return new List<PageResult>();
+    }
+}
+::solution
+using System.Text.RegularExpressions;
+
+var web = new FakeWeb(new()
+{
+    ["/"] = ("""<a href="/docs">Docs</a> <a href="/blog">Blog</a> <a href="/about">About</a>""", 40),
+    ["/docs"] = ("""<a href="/docs/start">Start</a> <a href="/docs/api">API</a> <a href="/">Home</a>""", 40),
+    ["/blog"] = ("""<a href="/blog/1">Post 1</a> <a href="/blog/2">Post 2</a> <a href="/old-page">Old</a>""", 40),
+    ["/about"] = ("""<a href="/team">Team</a>""", 40),
+    ["/docs/start"] = ("""<a href="/docs/api">API</a>""", 40),
+    ["/docs/api"] = ("""<a href="/docs/api/v2">v2</a>""", 200),
+    ["/blog/1"] = ("""<a href="/blog/2">next</a>""", 40),
+    ["/blog/2"] = ("""<a href="/blog/1">previous</a> <a href="/blog/3">next</a>""", 40),
+    ["/team"] = ("no links here", 40),
+    ["/blog/3"] = ("too deep to be visited", 40),
+});
+
+var crawler = new Crawler(web);
+List<PageResult> results = await crawler.CrawlAsync("/", maxDepth: 2);
+foreach (PageResult r in results) Console.WriteLine($"{r.Depth} {r.Url,-12} {r.Status,-8} {r.Links} links");
+Console.WriteLine($"pages: {results.Count}, ok: {results.Count(r => r.Status == "ok")}, broken: {results.Count(r => r.Status == "broken")}, timeouts: {results.Count(r => r.Status == "timeout")}");
+Console.WriteLine($"requests: {web.Requests}, max at once: {web.MaxConcurrent}");
+
+record PageResult(string Url, int Depth, string Status, int Links);
+
+interface IWebClient
+{
+    Task<string> GetAsync(string url, CancellationToken token);
+}
+
+class FakeWeb(Dictionary<string, (string Html, int DelayMs)> pages) : IWebClient
+{
+    private int _current;
+    private int _max;
+    private int _requests;
+
+    public int Requests => _requests;
+    public int MaxConcurrent => _max;
+
+    public async Task<string> GetAsync(string url, CancellationToken token)
+    {
+        Interlocked.Increment(ref _requests);
+        int now = Interlocked.Increment(ref _current);
+        int seen;
+        while (now > (seen = _max) && Interlocked.CompareExchange(ref _max, now, seen) != seen) { }
+        try
+        {
+            if (!pages.TryGetValue(url, out var page))
+            {
+                await Task.Delay(10, token);
+                throw new HttpRequestException($"404 {url}");
+            }
+            await Task.Delay(page.DelayMs, token);
+            return page.Html;
+        }
+        finally
+        {
+            Interlocked.Decrement(ref _current);
+        }
+    }
+}
+
+class Crawler(IWebClient web)
+{
+    private static readonly Regex LinkPattern = new("href=\"([^\"]+)\"");
+
+    public async Task<List<PageResult>> CrawlAsync(string start, int maxDepth)
+    {
+        var results = new List<PageResult>();
+        var seen = new HashSet<string> { start };
+        var queue = new Queue<(string Url, int Depth)>();
+        queue.Enqueue((start, 0));
+        while (queue.Count > 0)
+        {
+            var (url, depth) = queue.Dequeue();
+            try
+            {
+                string html = await web.GetAsync(url, CancellationToken.None);
+                List<string> links = LinkPattern.Matches(html).Select(m => m.Groups[1].Value).Distinct().ToList();
+                results.Add(new PageResult(url, depth, "ok", links.Count));
+                if (depth < maxDepth)
+                {
+                    foreach (string link in links)
+                        if (seen.Add(link)) queue.Enqueue((link, depth + 1));
+                }
+            }
+            catch (HttpRequestException)
+            {
+                results.Add(new PageResult(url, depth, "broken", 0));
+            }
+        }
+        return results.OrderBy(r => r.Depth).ThenBy(r => r.Url, StringComparer.Ordinal).ToList();
+    }
+}
+::expected
+0 /            ok       3 links
+1 /about       ok       1 links
+1 /blog        ok       3 links
+1 /docs        ok       3 links
+2 /blog/1      ok       1 links
+2 /blog/2      ok       2 links
+2 /docs/api    ok       1 links
+2 /docs/start  ok       1 links
+2 /old-page    broken   0 links
+2 /team        ok       0 links
+pages: 10, ok: 9, broken: 1, timeouts: 0
+requests: 10, max at once: 1
+::hints
+- `var (url, depth) = queue.Dequeue();` deconstructs the tuple.
+- `seen.Add(link)` returns `false` for a link that was already seen, so `if (seen.Add(link)) queue.Enqueue(...)` does both jobs.
+- Put the fetch and the link extraction inside `try`, and the "broken" result in `catch (HttpRequestException)`.
+
+--- exercise code csharp
+::prompt
+**Step 2: concurrent, limited and with timeouts.** The crawler now receives `maxConcurrency` and `timeout`, and the page `/docs/api` has become very slow. Rewrite `CrawlAsync` to process the crawl **level by level**: fetch all pages of the current depth at the same time with `Task.WhenAll`, then build the next level from their unseen links.
+
+Write a helper `FetchAsync(url, depth, gate)` that:
+
+- waits on a `SemaphoreSlim(maxConcurrency)` before fetching and releases it in `finally`;
+- creates a `CancellationTokenSource(timeout)` for the request and passes its token to `GetAsync`;
+- returns the result and the links; `"broken"` for an `HttpRequestException`, `"timeout"` for an `OperationCanceledException`.
+
+The fake web counts how many requests ran at the same time: it must never exceed 3.
+
+Expected output:
+
+```
+0 /            ok       3 links
+1 /about       ok       1 links
+1 /blog        ok       3 links
+1 /docs        ok       3 links
+2 /blog/1      ok       1 links
+2 /blog/2      ok       2 links
+2 /docs/api    timeout  0 links
+2 /docs/start  ok       1 links
+2 /old-page    broken   0 links
+2 /team        ok       0 links
+pages: 10, ok: 8, broken: 1, timeouts: 1
+requests: 10, max at once: 3
+```
+::starter
+using System.Text.RegularExpressions;
+
+var web = new FakeWeb(new()
+{
+    ["/"] = ("""<a href="/docs">Docs</a> <a href="/blog">Blog</a> <a href="/about">About</a>""", 40),
+    ["/docs"] = ("""<a href="/docs/start">Start</a> <a href="/docs/api">API</a> <a href="/">Home</a>""", 40),
+    ["/blog"] = ("""<a href="/blog/1">Post 1</a> <a href="/blog/2">Post 2</a> <a href="/old-page">Old</a>""", 40),
+    ["/about"] = ("""<a href="/team">Team</a>""", 40),
+    ["/docs/start"] = ("""<a href="/docs/api">API</a>""", 40),
+    ["/docs/api"] = ("""<a href="/docs/api/v2">v2</a>""", 2000),
+    ["/blog/1"] = ("""<a href="/blog/2">next</a>""", 40),
+    ["/blog/2"] = ("""<a href="/blog/1">previous</a> <a href="/blog/3">next</a>""", 40),
+    ["/team"] = ("no links here", 40),
+    ["/blog/3"] = ("too deep to be visited", 40),
+});
+
+var crawler = new Crawler(web, maxConcurrency: 3, timeout: TimeSpan.FromMilliseconds(300));
+List<PageResult> results = await crawler.CrawlAsync("/", maxDepth: 2);
+foreach (PageResult r in results) Console.WriteLine($"{r.Depth} {r.Url,-12} {r.Status,-8} {r.Links} links");
+Console.WriteLine($"pages: {results.Count}, ok: {results.Count(r => r.Status == "ok")}, broken: {results.Count(r => r.Status == "broken")}, timeouts: {results.Count(r => r.Status == "timeout")}");
+Console.WriteLine($"requests: {web.Requests}, max at once: {web.MaxConcurrent}");
+
+record PageResult(string Url, int Depth, string Status, int Links);
+
+interface IWebClient
+{
+    Task<string> GetAsync(string url, CancellationToken token);
+}
+
+class FakeWeb(Dictionary<string, (string Html, int DelayMs)> pages) : IWebClient
+{
+    private int _current;
+    private int _max;
+    private int _requests;
+
+    public int Requests => _requests;
+    public int MaxConcurrent => _max;
+
+    public async Task<string> GetAsync(string url, CancellationToken token)
+    {
+        Interlocked.Increment(ref _requests);
+        int now = Interlocked.Increment(ref _current);
+        int seen;
+        while (now > (seen = _max) && Interlocked.CompareExchange(ref _max, now, seen) != seen) { }
+        try
+        {
+            if (!pages.TryGetValue(url, out var page))
+            {
+                await Task.Delay(10, token);
+                throw new HttpRequestException($"404 {url}");
+            }
+            await Task.Delay(page.DelayMs, token);
+            return page.Html;
+        }
+        finally
+        {
+            Interlocked.Decrement(ref _current);
+        }
+    }
+}
+
+class Crawler(IWebClient web, int maxConcurrency, TimeSpan timeout)
+{
+    private static readonly Regex LinkPattern = new("href=\"([^\"]+)\"");
+
+    public async Task<List<PageResult>> CrawlAsync(string start, int maxDepth)
+    {
+        var results = new List<PageResult>();
+        var seen = new HashSet<string> { start };
+        var queue = new Queue<(string Url, int Depth)>();
+        queue.Enqueue((start, 0));
+        while (queue.Count > 0)
+        {
+            var (url, depth) = queue.Dequeue();
+            try
+            {
+                string html = await web.GetAsync(url, CancellationToken.None);
+                List<string> links = LinkPattern.Matches(html).Select(m => m.Groups[1].Value).Distinct().ToList();
+                results.Add(new PageResult(url, depth, "ok", links.Count));
+                if (depth < maxDepth)
+                {
+                    foreach (string link in links)
+                        if (seen.Add(link)) queue.Enqueue((link, depth + 1));
+                }
+            }
+            catch (HttpRequestException)
+            {
+                results.Add(new PageResult(url, depth, "broken", 0));
+            }
+        }
+        return results.OrderBy(r => r.Depth).ThenBy(r => r.Url, StringComparer.Ordinal).ToList();
+    }
+}
+::solution
+using System.Text.RegularExpressions;
+
+var web = new FakeWeb(new()
+{
+    ["/"] = ("""<a href="/docs">Docs</a> <a href="/blog">Blog</a> <a href="/about">About</a>""", 40),
+    ["/docs"] = ("""<a href="/docs/start">Start</a> <a href="/docs/api">API</a> <a href="/">Home</a>""", 40),
+    ["/blog"] = ("""<a href="/blog/1">Post 1</a> <a href="/blog/2">Post 2</a> <a href="/old-page">Old</a>""", 40),
+    ["/about"] = ("""<a href="/team">Team</a>""", 40),
+    ["/docs/start"] = ("""<a href="/docs/api">API</a>""", 40),
+    ["/docs/api"] = ("""<a href="/docs/api/v2">v2</a>""", 2000),
+    ["/blog/1"] = ("""<a href="/blog/2">next</a>""", 40),
+    ["/blog/2"] = ("""<a href="/blog/1">previous</a> <a href="/blog/3">next</a>""", 40),
+    ["/team"] = ("no links here", 40),
+    ["/blog/3"] = ("too deep to be visited", 40),
+});
+
+var crawler = new Crawler(web, maxConcurrency: 3, timeout: TimeSpan.FromMilliseconds(300));
+List<PageResult> results = await crawler.CrawlAsync("/", maxDepth: 2);
+foreach (PageResult r in results) Console.WriteLine($"{r.Depth} {r.Url,-12} {r.Status,-8} {r.Links} links");
+Console.WriteLine($"pages: {results.Count}, ok: {results.Count(r => r.Status == "ok")}, broken: {results.Count(r => r.Status == "broken")}, timeouts: {results.Count(r => r.Status == "timeout")}");
+Console.WriteLine($"requests: {web.Requests}, max at once: {web.MaxConcurrent}");
+
+record PageResult(string Url, int Depth, string Status, int Links);
+
+interface IWebClient
+{
+    Task<string> GetAsync(string url, CancellationToken token);
+}
+
+class FakeWeb(Dictionary<string, (string Html, int DelayMs)> pages) : IWebClient
+{
+    private int _current;
+    private int _max;
+    private int _requests;
+
+    public int Requests => _requests;
+    public int MaxConcurrent => _max;
+
+    public async Task<string> GetAsync(string url, CancellationToken token)
+    {
+        Interlocked.Increment(ref _requests);
+        int now = Interlocked.Increment(ref _current);
+        int seen;
+        while (now > (seen = _max) && Interlocked.CompareExchange(ref _max, now, seen) != seen) { }
+        try
+        {
+            if (!pages.TryGetValue(url, out var page))
+            {
+                await Task.Delay(10, token);
+                throw new HttpRequestException($"404 {url}");
+            }
+            await Task.Delay(page.DelayMs, token);
+            return page.Html;
+        }
+        finally
+        {
+            Interlocked.Decrement(ref _current);
+        }
+    }
+}
+
+class Crawler(IWebClient web, int maxConcurrency, TimeSpan timeout)
+{
+    private static readonly Regex LinkPattern = new("href=\"([^\"]+)\"");
+
+    public async Task<List<PageResult>> CrawlAsync(string start, int maxDepth)
+    {
+        var results = new List<PageResult>();
+        var seen = new HashSet<string> { start };
+        var level = new List<string> { start };
+        using var gate = new SemaphoreSlim(maxConcurrency);
+        for (int depth = 0; level.Count > 0 && depth <= maxDepth; depth++)
+        {
+            int d = depth;
+            var fetched = await Task.WhenAll(level.Select(url => FetchAsync(url, d, gate)));
+            results.AddRange(fetched.Select(f => f.Result));
+            level = fetched
+                .SelectMany(f => f.Links)
+                .Where(seen.Add)
+                .ToList();
+        }
+        return results.OrderBy(r => r.Depth).ThenBy(r => r.Url, StringComparer.Ordinal).ToList();
+    }
+
+    private async Task<(PageResult Result, List<string> Links)> FetchAsync(string url, int depth, SemaphoreSlim gate)
+    {
+        await gate.WaitAsync();
+        try
+        {
+            using var cts = new CancellationTokenSource(timeout);
+            string html = await web.GetAsync(url, cts.Token);
+            List<string> links = LinkPattern.Matches(html).Select(m => m.Groups[1].Value).Distinct().ToList();
+            return (new PageResult(url, depth, "ok", links.Count), links);
+        }
+        catch (HttpRequestException)
+        {
+            return (new PageResult(url, depth, "broken", 0), new List<string>());
+        }
+        catch (OperationCanceledException)
+        {
+            return (new PageResult(url, depth, "timeout", 0), new List<string>());
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+}
+::expected
+0 /            ok       3 links
+1 /about       ok       1 links
+1 /blog        ok       3 links
+1 /docs        ok       3 links
+2 /blog/1      ok       1 links
+2 /blog/2      ok       2 links
+2 /docs/api    timeout  0 links
+2 /docs/start  ok       1 links
+2 /old-page    broken   0 links
+2 /team        ok       0 links
+pages: 10, ok: 8, broken: 1, timeouts: 1
+requests: 10, max at once: 3
+::hints
+- `await Task.WhenAll(level.Select(url => FetchAsync(url, d, gate)))` returns an array of `(PageResult, List<string>)` tuples in order.
+- The next level: `fetched.SelectMany(f => f.Links).Where(seen.Add).ToList()`.
+- Copy the loop variable (`int d = depth;`) before using it in the lambda, and stop when `depth` passes `maxDepth`.
+
+--- cards
+Breadth-first search :: Visit level by level with a queue; a seen set avoids loops.
+Fake implementation :: An interface lets tests and exercises replace the network with predictable data.
+SemaphoreSlim :: await gate.WaitAsync(); try { ... } finally { gate.Release(); } limits concurrency.
+Timeout :: new CancellationTokenSource(timeout) cancels its token after the delay.
+Classify failures :: Turn expected errors (404, timeout) into results instead of crashing the whole job.
+
+=== lesson cs-capstone-solo | Capstone 3: build it from a spec | 450
+The final capstone gives you a **specification** and a test harness, and nothing else: you design and write the types from scratch. The domain is a classic: **hotel bookings**, with dates, overlaps, pricing rules and cancellation fees.
+
+## The specification
+
+**Types** (names and members are fixed by the harness):
+
+- `enum RoomType { Single, Double, Suite }`;
+- `record Room(int Number, RoomType Type, decimal NightlyRate)`;
+- `record Booking(int Id, int RoomNumber, string Guest, DateOnly CheckIn, DateOnly CheckOut, decimal Price)` with a computed `int Nights`;
+- `class BookingException` (an `Exception` with a message);
+- `class Hotel` with the methods below.
+
+**Rules:**
+
+1. `AddRoom(room)` refuses a number that already exists: `room <n> already exists`.
+2. `Book(roomNumber, guest, checkIn, checkOut)` checks, in this order: unknown room → `unknown room <n>`; check-out not after check-in → `check-out must be after check-in`; more than 14 nights → `stays are limited to 14 nights`; the room is taken for any of those nights → `room <n> is not available from <yyyy-MM-dd> to <yyyy-MM-dd>` (the requested dates). Two stays overlap when each starts before the other ends, so one guest can check in on the day another checks out.
+3. **Price:** each night costs the room's rate, Friday and Saturday nights cost 25% more, stays of 7 nights or more get 10% off the total; round to 2 decimals (away from zero). Booking ids start at 1 and count up.
+4. `FindAvailable(type, checkIn, checkOut)` returns the numbers of free rooms of that type, ascending.
+5. `Cancel(bookingId, today)`: unknown id → `unknown booking <id>`; less than 1 day before check-in → `too late to cancel booking <id>`; otherwise removes the booking and returns the fee: nothing 7 or more days before check-in, half the price (rounded to 2 decimals) otherwise.
+6. `Occupancy(from, to)` returns the percentage of room-nights booked between `from` (included) and `to` (excluded) across all rooms, rounded to 1 decimal.
+7. `GuestReport()` returns one line per guest, in alphabetical order: `Ada: 2 bookings, 11 nights, 2328.75` (`1 booking` in the singular).
+
+## How to approach it
+
+1. Write the types and method signatures first, with placeholder bodies, so the harness compiles.
+2. `DateOnly` is ideal for dates without times: compare with `<`, step with `AddDays(1)`, and count nights with `DayNumber` differences.
+3. Write the overlap test once (a method on `Booking`) and reuse it in `Book` and `FindAvailable`.
+4. For occupancy, clip each booking to the period: the overlap of `[CheckIn, CheckOut)` and `[from, to)`.
+5. Run the harness and compare the output line by line.
+--- goals
+- design a set of types from a written specification
+- work with dates using DateOnly: ranges, overlaps and weekdays
+- implement pricing and fee rules exactly, with decimal rounding
+- keep refused operations free of side effects
+
+--- exercise code csharp
+::prompt
+Implement the hotel from the specification above. The harness (the top-level statements and `Try`) must print exactly the expected output; don't change it. All your types go below it.
+
+Expected output:
+
+```
+duplicate room: room 101 already exists
+#1 Ada room 102: 3 nights, 360.00
+#2 Bob room 102: 3 nights, 420.00
+#3 Ada room 201: 8 nights, 1968.75
+overlap: room 102 is not available from 2026-05-09 to 2026-05-12
+unknown room: unknown room 999
+bad dates: check-out must be after check-in
+too long: stays are limited to 14 nights
+doubles free 5-8 to 5-9: 103
+doubles free 5-10 to 5-12: 102, 103
+#4 Cy room 101: 3 nights, 260.00
+occupancy 5-1 to 5-11: 42.5%
+fee for #2 cancelled on 4-20: 0.00
+fee for #4 cancelled on 4-29: 130.00
+cancel again: unknown booking 4
+too late: too late to cancel booking 3
+#5 Bob room 103: 2 nights, 300.00
+occupancy 5-1 to 5-11: 32.5%
+Ada: 2 bookings, 11 nights, 2328.75
+Bob: 1 booking, 2 nights, 300.00
+```
+::starter
+var hotel = new Hotel();
+hotel.AddRoom(new Room(101, RoomType.Single, 80m));
+hotel.AddRoom(new Room(102, RoomType.Double, 120m));
+hotel.AddRoom(new Room(103, RoomType.Double, 120m));
+hotel.AddRoom(new Room(201, RoomType.Suite, 250m));
+Try("duplicate room", () => hotel.AddRoom(new Room(101, RoomType.Suite, 99m)));
+
+DateOnly D(int month, int day) => new(2026, month, day);
+
+Booking a = hotel.Book(102, "Ada", D(5, 4), D(5, 7));
+Console.WriteLine($"#{a.Id} {a.Guest} room {a.RoomNumber}: {a.Nights} nights, {a.Price:0.00}");
+Booking b = hotel.Book(102, "Bob", D(5, 7), D(5, 10));
+Console.WriteLine($"#{b.Id} {b.Guest} room {b.RoomNumber}: {b.Nights} nights, {b.Price:0.00}");
+Booking c = hotel.Book(201, "Ada", D(5, 1), D(5, 9));
+Console.WriteLine($"#{c.Id} {c.Guest} room {c.RoomNumber}: {c.Nights} nights, {c.Price:0.00}");
+Try("overlap", () => hotel.Book(102, "Cy", D(5, 9), D(5, 12)));
+Try("unknown room", () => hotel.Book(999, "Cy", D(5, 9), D(5, 12)));
+Try("bad dates", () => hotel.Book(101, "Cy", D(5, 9), D(5, 9)));
+Try("too long", () => hotel.Book(101, "Cy", D(6, 1), D(6, 20)));
+
+Console.WriteLine($"doubles free 5-8 to 5-9: {string.Join(", ", hotel.FindAvailable(RoomType.Double, D(5, 8), D(5, 9)))}");
+Console.WriteLine($"doubles free 5-10 to 5-12: {string.Join(", ", hotel.FindAvailable(RoomType.Double, D(5, 10), D(5, 12)))}");
+Booking d = hotel.Book(101, "Cy", D(5, 2), D(5, 5));
+Console.WriteLine($"#{d.Id} {d.Guest} room {d.RoomNumber}: {d.Nights} nights, {d.Price:0.00}");
+
+Console.WriteLine($"occupancy 5-1 to 5-11: {hotel.Occupancy(D(5, 1), D(5, 11)):0.0}%");
+Console.WriteLine($"fee for #2 cancelled on 4-20: {hotel.Cancel(2, D(4, 20)):0.00}");
+Console.WriteLine($"fee for #4 cancelled on 4-29: {hotel.Cancel(4, D(4, 29)):0.00}");
+Try("cancel again", () => hotel.Cancel(4, D(4, 29)));
+Try("too late", () => hotel.Cancel(3, D(5, 1)));
+Booking e = hotel.Book(103, "Bob", D(5, 8), D(5, 10));
+Console.WriteLine($"#{e.Id} {e.Guest} room {e.RoomNumber}: {e.Nights} nights, {e.Price:0.00}");
+Console.WriteLine($"occupancy 5-1 to 5-11: {hotel.Occupancy(D(5, 1), D(5, 11)):0.0}%");
+foreach (string line in hotel.GuestReport()) Console.WriteLine(line);
+
+static void Try(string label, Action action)
+{
+    try
+    {
+        action();
+        Console.WriteLine($"{label}: no error");
+    }
+    catch (BookingException e)
+    {
+        Console.WriteLine($"{label}: {e.Message}");
+    }
+}
+
+// Your types go here: RoomType, Room, Booking, BookingException and Hotel.
+::solution
+var hotel = new Hotel();
+hotel.AddRoom(new Room(101, RoomType.Single, 80m));
+hotel.AddRoom(new Room(102, RoomType.Double, 120m));
+hotel.AddRoom(new Room(103, RoomType.Double, 120m));
+hotel.AddRoom(new Room(201, RoomType.Suite, 250m));
+Try("duplicate room", () => hotel.AddRoom(new Room(101, RoomType.Suite, 99m)));
+
+DateOnly D(int month, int day) => new(2026, month, day);
+
+Booking a = hotel.Book(102, "Ada", D(5, 4), D(5, 7));
+Console.WriteLine($"#{a.Id} {a.Guest} room {a.RoomNumber}: {a.Nights} nights, {a.Price:0.00}");
+Booking b = hotel.Book(102, "Bob", D(5, 7), D(5, 10));
+Console.WriteLine($"#{b.Id} {b.Guest} room {b.RoomNumber}: {b.Nights} nights, {b.Price:0.00}");
+Booking c = hotel.Book(201, "Ada", D(5, 1), D(5, 9));
+Console.WriteLine($"#{c.Id} {c.Guest} room {c.RoomNumber}: {c.Nights} nights, {c.Price:0.00}");
+Try("overlap", () => hotel.Book(102, "Cy", D(5, 9), D(5, 12)));
+Try("unknown room", () => hotel.Book(999, "Cy", D(5, 9), D(5, 12)));
+Try("bad dates", () => hotel.Book(101, "Cy", D(5, 9), D(5, 9)));
+Try("too long", () => hotel.Book(101, "Cy", D(6, 1), D(6, 20)));
+
+Console.WriteLine($"doubles free 5-8 to 5-9: {string.Join(", ", hotel.FindAvailable(RoomType.Double, D(5, 8), D(5, 9)))}");
+Console.WriteLine($"doubles free 5-10 to 5-12: {string.Join(", ", hotel.FindAvailable(RoomType.Double, D(5, 10), D(5, 12)))}");
+Booking d = hotel.Book(101, "Cy", D(5, 2), D(5, 5));
+Console.WriteLine($"#{d.Id} {d.Guest} room {d.RoomNumber}: {d.Nights} nights, {d.Price:0.00}");
+
+Console.WriteLine($"occupancy 5-1 to 5-11: {hotel.Occupancy(D(5, 1), D(5, 11)):0.0}%");
+Console.WriteLine($"fee for #2 cancelled on 4-20: {hotel.Cancel(2, D(4, 20)):0.00}");
+Console.WriteLine($"fee for #4 cancelled on 4-29: {hotel.Cancel(4, D(4, 29)):0.00}");
+Try("cancel again", () => hotel.Cancel(4, D(4, 29)));
+Try("too late", () => hotel.Cancel(3, D(5, 1)));
+Booking e = hotel.Book(103, "Bob", D(5, 8), D(5, 10));
+Console.WriteLine($"#{e.Id} {e.Guest} room {e.RoomNumber}: {e.Nights} nights, {e.Price:0.00}");
+Console.WriteLine($"occupancy 5-1 to 5-11: {hotel.Occupancy(D(5, 1), D(5, 11)):0.0}%");
+foreach (string line in hotel.GuestReport()) Console.WriteLine(line);
+
+static void Try(string label, Action action)
+{
+    try
+    {
+        action();
+        Console.WriteLine($"{label}: no error");
+    }
+    catch (BookingException e)
+    {
+        Console.WriteLine($"{label}: {e.Message}");
+    }
+}
+
+enum RoomType { Single, Double, Suite }
+
+record Room(int Number, RoomType Type, decimal NightlyRate);
+
+record Booking(int Id, int RoomNumber, string Guest, DateOnly CheckIn, DateOnly CheckOut, decimal Price)
+{
+    public int Nights => CheckOut.DayNumber - CheckIn.DayNumber;
+    public bool Overlaps(DateOnly from, DateOnly to) => CheckIn < to && from < CheckOut;
+}
+
+class BookingException(string message) : Exception(message) { }
+
+class Hotel
+{
+    private readonly SortedDictionary<int, Room> _rooms = new();
+    private readonly Dictionary<int, Booking> _bookings = new();
+    private int _nextId = 1;
+
+    public void AddRoom(Room room)
+    {
+        if (!_rooms.TryAdd(room.Number, room)) throw new BookingException($"room {room.Number} already exists");
+    }
+
+    public Booking Book(int roomNumber, string guest, DateOnly checkIn, DateOnly checkOut)
+    {
+        if (!_rooms.TryGetValue(roomNumber, out Room? room)) throw new BookingException($"unknown room {roomNumber}");
+        if (checkOut <= checkIn) throw new BookingException("check-out must be after check-in");
+        if (checkOut.DayNumber - checkIn.DayNumber > 14) throw new BookingException("stays are limited to 14 nights");
+        if (!IsFree(roomNumber, checkIn, checkOut))
+            throw new BookingException($"room {roomNumber} is not available from {checkIn:yyyy-MM-dd} to {checkOut:yyyy-MM-dd}");
+        var booking = new Booking(_nextId++, roomNumber, guest, checkIn, checkOut, Price(room, checkIn, checkOut));
+        _bookings[booking.Id] = booking;
+        return booking;
+    }
+
+    public IEnumerable<int> FindAvailable(RoomType type, DateOnly checkIn, DateOnly checkOut) =>
+        _rooms.Values.Where(r => r.Type == type && IsFree(r.Number, checkIn, checkOut)).Select(r => r.Number);
+
+    public decimal Cancel(int bookingId, DateOnly today)
+    {
+        if (!_bookings.TryGetValue(bookingId, out Booking? booking)) throw new BookingException($"unknown booking {bookingId}");
+        int daysBefore = booking.CheckIn.DayNumber - today.DayNumber;
+        if (daysBefore < 1) throw new BookingException($"too late to cancel booking {bookingId}");
+        _bookings.Remove(bookingId);
+        return daysBefore >= 7 ? 0m : Math.Round(booking.Price / 2, 2, MidpointRounding.AwayFromZero);
+    }
+
+    public decimal Occupancy(DateOnly from, DateOnly to)
+    {
+        int nights = to.DayNumber - from.DayNumber;
+        int booked = 0;
+        foreach (Booking b in _bookings.Values)
+        {
+            int start = Math.Max(b.CheckIn.DayNumber, from.DayNumber);
+            int end = Math.Min(b.CheckOut.DayNumber, to.DayNumber);
+            if (end > start) booked += end - start;
+        }
+        return Math.Round(100m * booked / (nights * _rooms.Count), 1, MidpointRounding.AwayFromZero);
+    }
+
+    public IEnumerable<string> GuestReport() =>
+        _bookings.Values
+            .GroupBy(b => b.Guest)
+            .OrderBy(g => g.Key, StringComparer.Ordinal)
+            .Select(g => $"{g.Key}: {g.Count()} booking{(g.Count() == 1 ? "" : "s")}, {g.Sum(b => b.Nights)} nights, {g.Sum(b => b.Price):0.00}");
+
+    private bool IsFree(int roomNumber, DateOnly checkIn, DateOnly checkOut) =>
+        !_bookings.Values.Any(b => b.RoomNumber == roomNumber && b.Overlaps(checkIn, checkOut));
+
+    private static decimal Price(Room room, DateOnly checkIn, DateOnly checkOut)
+    {
+        decimal total = 0;
+        for (DateOnly night = checkIn; night < checkOut; night = night.AddDays(1))
+        {
+            bool weekend = night.DayOfWeek is DayOfWeek.Friday or DayOfWeek.Saturday;
+            total += weekend ? room.NightlyRate * 1.25m : room.NightlyRate;
+        }
+        if (checkOut.DayNumber - checkIn.DayNumber >= 7) total *= 0.9m;
+        return Math.Round(total, 2, MidpointRounding.AwayFromZero);
+    }
+}
+::expected
+duplicate room: room 101 already exists
+#1 Ada room 102: 3 nights, 360.00
+#2 Bob room 102: 3 nights, 420.00
+#3 Ada room 201: 8 nights, 1968.75
+overlap: room 102 is not available from 2026-05-09 to 2026-05-12
+unknown room: unknown room 999
+bad dates: check-out must be after check-in
+too long: stays are limited to 14 nights
+doubles free 5-8 to 5-9: 103
+doubles free 5-10 to 5-12: 102, 103
+#4 Cy room 101: 3 nights, 260.00
+occupancy 5-1 to 5-11: 42.5%
+fee for #2 cancelled on 4-20: 0.00
+fee for #4 cancelled on 4-29: 130.00
+cancel again: unknown booking 4
+too late: too late to cancel booking 3
+#5 Bob room 103: 2 nights, 300.00
+occupancy 5-1 to 5-11: 32.5%
+Ada: 2 bookings, 11 nights, 2328.75
+Bob: 1 booking, 2 nights, 300.00
+::hints
+- `public int Nights => CheckOut.DayNumber - CheckIn.DayNumber;`
+- Overlap: `CheckIn < to && from < CheckOut`.
+- A `SortedDictionary<int, Room>` keeps rooms in number order for `FindAvailable`.
+- `night.DayOfWeek is DayOfWeek.Friday or DayOfWeek.Saturday` finds weekend nights.
+
+--- cards
+Spec first :: Write types and signatures before logic, so the harness compiles and guides you.
+DateOnly :: A date without a time: comparisons, AddDays, DayOfWeek, DayNumber.
+Half-open ranges :: [start, end): the check-out day is free for the next guest; overlap = a.start < b.end && b.start < a.end.
+No partial failure :: Validate everything before changing state.
+
+=== lesson cs-whats-next | What's next after C# | 50
+## You've learned C#
+
+You can now write and run C# programs, use its type system precisely (value and reference types, nullable references, decimal), structure code with methods, classes, structs, records and interfaces, handle errors with exceptions and `using`, work with collections, generics, delegates, events and LINQ, write async and parallel code safely, read and write files and JSON, organise projects with namespaces and NuGet, use attributes and reflection, test your code, and explain how ASP.NET Core APIs work. That's the foundation every professional .NET developer builds on.
+
+## Where to go from here
+
+- **Web back ends:** ASP.NET Core with minimal APIs or controllers, Entity Framework Core with PostgreSQL or SQL Server (the SQL course helps), authentication, OpenAPI and Docker. Microsoft Learn's ASP.NET Core learning path is excellent and free.
+- **Games:** **Unity** uses C# for game logic (MonoBehaviour scripts, coroutines, the component model); **Godot** supports C# too.
+- **Desktop and mobile:** **.NET MAUI** (Windows, macOS, Android and iOS from one code base), **WPF** and **WinForms** for Windows tools, and **Avalonia** for cross-platform desktop apps.
+- **Cloud and services:** Azure Functions, worker services, gRPC, and **.NET Aspire** for distributed applications.
+- **Deepen your C#:** Jon Skeet's *C# in Depth*, Joseph Albahari's *C# in a Nutshell*, and the "What's new in C#" pages for each release (records, pattern matching and primary constructors all arrived recently). *Programming C#* (Jesse Liberty) shows where the language started, in C# 1.0.
+- **Other languages:** DevQuest teaches one language at a time. Next in the order is **Go**: a smaller language with a very different style (no classes, explicit errors, goroutines and channels), which will sharpen how you think about simplicity and concurrency.
+
+## Keep your skills alive
+
+- Build something end to end: a small web API with EF Core and tests, deployed in a container.
+- Turn on analyzers (`<AnalysisLevel>latest-recommended</AnalysisLevel>`) and treat warnings as errors; they teach idioms.
+- Read good code: the .NET runtime itself (github.com/dotnet/runtime) is open source.
+- Practise on Exercism's C# track, Advent of Code, or the DSA track in DevQuest.
+
+📚 **Go deeper:** Jon Skeet, *C# in Depth*; Joseph Albahari, *C# 12 in a Nutshell*; Microsoft Learn (learn.microsoft.com/dotnet); the .NET blog for each release.
+--- goals
+- review what the C# course covered
+- choose next steps: ASP.NET Core, Unity, MAUI or deeper C#
+- keep C# skills sharp with practice and good tools
+--- quiz
+? Which engine uses C# for game scripting?
++ Unity
+- Unreal Engine
+- Pygame
+- RPG Maker
+> Godot supports C# too; Unreal uses C++ and Blueprints.
+? Which framework builds web APIs in .NET?
++ ASP.NET Core
+- WinForms
+- MAUI
+- WPF
+> Minimal APIs or controllers.
+? What is .NET MAUI for?
++ Cross-platform apps for Windows, macOS, Android and iOS from one code base
+- Databases
+- Game physics
+- Unit testing
+> It's the successor of Xamarin.Forms.
+--- cards
+C# in one line :: A statically typed, object-oriented and functional language on .NET: garbage collected, with LINQ, async/await and pattern matching.
+Next steps :: ASP.NET Core and EF Core, Unity games, MAUI apps, C# in Depth; then Go in DevQuest.
