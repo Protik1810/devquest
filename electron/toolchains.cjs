@@ -235,8 +235,9 @@ async function runProgram(lang, code, stdin) {
   switch (lang) {
     case 'java':
       write('Main.java', code);
-      // UTF-8 output on every OS (Windows would otherwise use its legacy code page and print ? for ♠, é...)
-      steps.push([t.java, ['-Dstdout.encoding=UTF-8', '-Dstderr.encoding=UTF-8', 'Main.java'], {}, false]);
+      // UTF-8 output and an English locale on every OS (Windows would otherwise use its legacy code page and print ?
+      // for ♠, é..., and a German PC would format 2.50 as 2,50)
+      steps.push([t.java, ['-Dstdout.encoding=UTF-8', '-Dstderr.encoding=UTF-8', '-Duser.language=en', '-Duser.country=US', 'Main.java'], {}, false]);
       break;
     case 'go':
       write('main.go', code);
@@ -260,7 +261,7 @@ async function runProgram(lang, code, stdin) {
       break;
     case 'kotlin':
       write('main.kt', code);
-      steps.push([t.kotlinc, ['main.kt', '-include-runtime', '-d', 'main.jar', '-nowarn'], { timeoutMs: 120000 }, true], [t.java, ['-Dstdout.encoding=UTF-8', '-Dstderr.encoding=UTF-8', '-jar', 'main.jar'], {}, false]);
+      steps.push([t.kotlinc, ['main.kt', '-include-runtime', '-d', 'main.jar', '-nowarn'], { timeoutMs: 120000 }, true], [t.java, ['-Dstdout.encoding=UTF-8', '-Dstderr.encoding=UTF-8', '-Duser.language=en', '-Duser.country=US', '-jar', 'main.jar'], {}, false]);
       break;
     case 'swift':
       write('main.swift', code);
@@ -268,6 +269,10 @@ async function runProgram(lang, code, stdin) {
       break;
     case 'csharp':
       write('Program.cs', code);
+      // UTF-8 console on every OS (Windows would otherwise use its OEM code page and garble ♥, é...) and the invariant
+      // culture, so 2.50 prints the same on every computer (not 2,50 on a German one); a separate
+      // file, so the learner's line numbers in compiler errors stay the same
+      write('DevQuestConsole.cs', 'internal static class DevQuestConsole { [System.Runtime.CompilerServices.ModuleInitializer] internal static void Init() { System.Console.OutputEncoding = new System.Text.UTF8Encoding(false); System.Console.InputEncoding = new System.Text.UTF8Encoding(false); System.Globalization.CultureInfo.DefaultThreadCurrentCulture = System.Globalization.CultureInfo.InvariantCulture; System.Globalization.CultureInfo.CurrentCulture = System.Globalization.CultureInfo.InvariantCulture; } }');
       write('app.csproj', `<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net${d.sdkMajor}.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>disable</Nullable><TreatWarningsAsErrors>false</TreatWarningsAsErrors></PropertyGroup></Project>`);
       steps.push([t.dotnet, ['build', 'app.csproj', '-nologo', '-v', 'q', '-o', 'out'], { timeoutMs: 120000 }, true], [t.dotnet, [path.join('out', 'app.dll')], {}, false]);
       break;
@@ -307,6 +312,8 @@ async function runProgram(lang, code, stdin) {
       return { ok: false, output: '', error: `Unsupported language ${lang}` };
   }
 
+  // Messages show file names, not the temporary folder they were compiled in
+  const hideDir = (text) => text.split(dir + path.sep).join('');
   try {
     let output = '';
     for (const [cmd, args, opts, compile] of steps) {
@@ -315,14 +322,16 @@ async function runProgram(lang, code, stdin) {
       if (compile) {
         if (r.code !== 0) {
           // MSVC writes errors to stdout; drop its echo of the file name
-          const log = (r.stdout + r.stderr).split('\n').filter((l) => !/^\s*main\.(c|cpp)\s*$/.test(l)).join('\n').trim();
-          return { ok: false, output: '', error: `Compile error:\n${log}`, compileError: true };
+          let lines = (r.stdout + r.stderr).split('\n').filter((l) => !/^\s*main\.(c|cpp)\s*$/.test(l));
+          // dotnet build prints each error twice, with the project file appended, among build chatter
+          if (lang === 'csharp') lines = [...new Set(lines.filter((l) => /: error /.test(l)).map((l) => l.replace(/\s*\[[^\]]*\.csproj\]\s*$/, '')))];
+          return { ok: false, output: '', error: `Compile error:\n${hideDir(lines.join('\n').trim())}`, compileError: true };
         }
         if (lang === 'solidity') output = '✔ Compiled successfully with solc.\n';
         continue;
       }
       output += r.stdout;
-      if (r.code !== 0) return { ok: false, output, error: r.stderr.trim() || `Program exited with code ${r.code}` };
+      if (r.code !== 0) return { ok: false, output, error: hideDir(r.stderr.trim()) || `Program exited with code ${r.code}` };
     }
     return { ok: true, output, error: undefined };
   } finally {

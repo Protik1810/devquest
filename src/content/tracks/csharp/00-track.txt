@@ -1,0 +1,9 @@
++++ track
+id: csharp
+title: C#
+icon: 🟪
+tier: 1
+color: #9b4f96
+kind: language
+blurb: Microsoft's modern, cross-platform language for back ends, desktop apps, games (Unity) and cloud services, taught in C# 14 on .NET 10 from first principles to professional practice: types and control flow, methods and arrays, classes, properties, interfaces, structs and records, operator overloading, exceptions, collections, generics, delegates and events, LINQ, nullable reference types, async/await, concurrency, files and JSON, attributes and reflection, testing and ASP.NET Core. Programs run on the .NET SDK installed on your computer in the desktop app.
++++

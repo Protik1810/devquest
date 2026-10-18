@@ -1,0 +1,636 @@
+=== module Module 1 · Getting started
+
+=== lesson cs-why | What C# and .NET are | 50
+## A modern language on a big platform
+
+**C#** (pronounced "C sharp") was created at Microsoft by Anders Hejlsberg (who also designed Turbo Pascal, Delphi and later TypeScript) and released in 2002 together with the **.NET** platform. It began as Microsoft's answer to Java and has since grown into one of the most feature-rich mainstream languages, with a new version every year.
+
+```
+Program.cs  --C# compiler (Roslyn)-->  app.dll (IL bytecode)  --.NET runtime (CLR, JIT)-->  runs on Windows, Linux, macOS
+```
+
+Like Java, C# compiles to an intermediate language (**IL**) that the **CLR** (Common Language Runtime) turns into machine code with a JIT compiler, and memory is managed by a **garbage collector**. Since 2016, .NET is **open source and cross-platform**: the same program runs on Windows, Linux and macOS, in containers and in the cloud.
+
+Where C# is used:
+
+- **Back ends and cloud services**: ASP.NET Core is one of the fastest web frameworks, used by Microsoft, Stack Overflow and countless companies, especially with Azure.
+- **Games**: **Unity**, the most popular game engine, is scripted in C# (Hollow Knight, Cities: Skylines, Pokémon Go, Among Us...). Godot supports it too.
+- **Desktop applications**: Windows apps with WPF, WinForms and WinUI; cross-platform ones with .NET MAUI and Avalonia.
+- **Enterprise software**, finance, healthcare and government systems.
+
+## What makes C# C#
+
+- **Statically and strongly typed**, with type inference (`var`).
+- **Object-oriented** with classes, interfaces and inheritance, plus **value types** (`struct`), properties and events built into the language.
+- **Functional features**: lambdas, **LINQ** (queries over any data), pattern matching, records, immutability.
+- **Asynchronous programming** with `async`/`await` (C# introduced it in 2012; JavaScript, Python and others copied it).
+- **Safety and performance**: nullable reference types catch null errors at compile time, while `Span<T>` and structs allow low-level, allocation-free code when needed.
+
+If you know Java, C# will feel familiar (same syntax family, same ideas); this course points out the differences.
+
+## Versions
+
+.NET has a release every November; even-numbered ones are **Long-Term Support** (LTS): .NET 8 (2023) and **.NET 10** (2025). Each .NET version comes with a C# version: this course uses **C# 14 on .NET 10**. The old Windows-only ".NET Framework" (up to 4.8) still runs many legacy applications.
+
+## Running C# in DevQuest
+
+DevQuest runs your C# programs with the **.NET SDK installed on your computer**, in the desktop app (the next lesson shows how to install it). On the web and on Android, the AI tutor checks your code by tracing it, or you compare your answer with the solution. Building a C# program takes a few seconds, so be patient after pressing **▶ Run**:
+
+```csharp
+Console.WriteLine("Hello from .NET!");
+Console.WriteLine($"Runtime: .NET {Environment.Version.Major}");
+```
+
+Yes, that's a complete C# program: the next lessons explain why it doesn't need a class.
+
+~~~check
+? What does the C# compiler produce?
+- Machine code for one processor only
++ IL (intermediate language) in a .dll, run by the .NET runtime
+- JavaScript
+- Java bytecode
+> The CLR's JIT compiler turns IL into machine code at run time.
+~~~
+
+📚 **Go deeper:** Microsoft Learn, "A tour of the C# language" and "What is .NET?" (learn.microsoft.com/dotnet); Jesse Liberty, *Programming C#*, chapter 1 (C# and the .NET Framework); Joseph and Ben Albahari, *C# in a Nutshell*.
+--- goals
+- explain how C# code is compiled to IL and run by the .NET runtime
+- describe where C# is used: web back ends, games, desktop and cloud
+- name C#'s main features and how it compares with Java
+- know the .NET release and LTS cycle
+--- quiz
+? What is the CLR?
++ The Common Language Runtime that runs .NET programs (JIT, garbage collector)
+- A C# code editor
+- A database
+- A web framework
+> It plays the role of the JVM.
+? Which game engine uses C# for scripting?
++ Unity
+- Unreal Engine
+- id Tech
+- Source
+> Godot also supports C#.
+? Is modern .NET Windows-only?
+- Yes
++ No: it's open source and runs on Windows, Linux and macOS
+- Only with Mono
+- Only in containers
+> Since .NET Core (2016).
+? Which feature did C# popularise and other languages later copied?
++ async/await
+- Classes
+- Garbage collection
+- Semicolons
+> C# 5 (2012).
+--- exercise code csharp
+::prompt
+Change the program so that it prints exactly:
+
+```
+Hello, C#!
+IL runs on the CLR.
+```
+::starter
+Console.WriteLine("Hello, world!");
+::solution
+Console.WriteLine("Hello, C#!");
+Console.WriteLine("IL runs on the CLR.");
+::expected
+Hello, C#!
+IL runs on the CLR.
+::hints
+- Each `Console.WriteLine(...)` prints one line; statements end with `;`.
+--- cards
+C# :: A statically typed, object-oriented and functional language by Microsoft (2002), compiled to IL.
+.NET / CLR :: The platform and runtime: JIT compilation, garbage collection, a huge standard library; cross-platform since 2016.
+IL :: Intermediate language in .dll files, compiled to machine code at run time.
+LTS :: Even-numbered .NET releases (8, 10) get long-term support.
+Where C# runs :: ASP.NET Core back ends, Unity games, Windows/MAUI desktop apps, Azure cloud services.
+
+=== lesson cs-setup | Installing .NET and running programs | 55
+## Install the .NET SDK
+
+1. Download the **.NET SDK** (version 10 or later) from **dotnet.microsoft.com/download**, or on Linux use your package manager (`sudo apt install dotnet-sdk-10.0` on Ubuntu) or Microsoft's `dotnet-install` script. On macOS: `brew install --cask dotnet-sdk`.
+2. Check it:
+
+```
+dotnet --version
+dotnet --list-sdks
+```
+
+DevQuest's desktop app finds the SDK automatically (see **Languages** in the sidebar).
+
+## Projects and the dotnet CLI
+
+C# code normally lives in a **project**: a folder with a `.csproj` file describing how to build it. The `dotnet` command does everything:
+
+```
+dotnet new console -o Hello     # create a console app in the folder Hello
+cd Hello
+dotnet run                      # build and run
+dotnet build                    # build only (creates bin/Debug/net10.0/Hello.dll)
+dotnet add package Humanizer    # add a library from NuGet
+dotnet test                     # run tests
+dotnet publish -c Release       # package for deployment
+```
+
+A new console project contains two files:
+
+```
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+</Project>
+```
+
+and `Program.cs`. Since .NET 10 you can also run a single file directly, without a project: `dotnet run app.cs`.
+
+## Top-level statements
+
+Classic C# programs, like Java's, needed a class and a `Main` method:
+
+```csharp
+namespace Hello;
+
+class Program
+{
+    static void Main(string[] args)
+    {
+        Console.WriteLine("Hello the classic way");
+    }
+}
+```
+
+Since C# 9, a file can contain **top-level statements** instead: the compiler generates the class and `Main` for you, so a program can start with its first line of real code. One file per program may do this, and the statements must come **before** any type declarations in that file:
+
+```csharp
+string name = "Ada";
+Console.WriteLine(Greeter.Greet(name));
+
+class Greeter
+{
+    public static string Greet(string name) => $"Hello, {name}!";
+}
+```
+
+That's the convention in DevQuest: statements first, then your classes below them.
+
+## Implicit usings
+
+`using System;` at the top of a file lets you write `Console` instead of `System.Console`. With `<ImplicitUsings>enable</ImplicitUsings>` (the default), the common namespaces (`System`, `System.Collections.Generic`, `System.IO`, `System.Linq`, `System.Threading.Tasks`...) are imported automatically, so short programs need no `using` lines.
+
+## Editors and IDEs
+
+- **Visual Studio** (Windows; the free Community edition): the classic, full-featured C# IDE;
+- **JetBrains Rider** (all platforms, free for non-commercial use);
+- **VS Code** with the **C# Dev Kit** extension.
+
+For quick experiments, `dotnet run` on a single file, or online tools like SharpLab (which also shows the compiled IL).
+
+~~~check
+? Where must top-level statements go in a file that also declares classes?
++ Before the type declarations
+- After them
+- Inside a class
+- Anywhere
+> And only one file per program can have them.
+~~~
+
+📚 **Go deeper:** Microsoft Learn, ".NET CLI overview" and "Top-level statements"; *Programming C#*, chapter 2 (getting started); the `dotnet new` template list (`dotnet new list`).
+--- goals
+- install the .NET SDK and check it with the dotnet CLI
+- create, build and run console projects, and read a .csproj file
+- write programs with top-level statements and the classic Main method
+- explain implicit usings, and choose an IDE
+--- quiz
+? Which command builds and runs a console project?
++ dotnet run
+- dotnet start
+- csc run
+- dotnet exec Program.cs
+> dotnet build only builds.
+? What does `<ImplicitUsings>enable</ImplicitUsings>` do?
++ Imports common namespaces such as System and System.Linq automatically
+- Disables using directives
+- Enables nullable checks
+- Downloads packages
+> So Console works without using System.
+? Which is a valid complete C# 14 program?
++ `Console.WriteLine("Hi");`
+- `print("Hi")`
+- `System.out.println("Hi");`
+- `echo "Hi";`
+> Top-level statements.
+--- exercise code csharp
+::prompt
+Complete the class `Greeter` below the top-level statements so the program prints:
+
+```
+Hello, Ada!
+Hello, Linus!
+```
+
+`Greet` is a **static** method that **returns** the greeting.
+::starter
+Console.WriteLine(Greeter.Greet("Ada"));
+Console.WriteLine(Greeter.Greet("Linus"));
+
+class Greeter
+{
+    public static string Greet(string name)
+    {
+        return "";
+    }
+}
+::solution
+Console.WriteLine(Greeter.Greet("Ada"));
+Console.WriteLine(Greeter.Greet("Linus"));
+
+class Greeter
+{
+    public static string Greet(string name)
+    {
+        return "Hello, " + name + "!";
+    }
+}
+::expected
+Hello, Ada!
+Hello, Linus!
+::variants
+"Linus" => "Grace"
+::hints
+- Join strings with `+`, or use interpolation: `$"Hello, {name}!"`.
+--- cards
+dotnet CLI :: dotnet new console, dotnet run, dotnet build, dotnet add package, dotnet test, dotnet publish.
+.csproj :: Project file: OutputType, TargetFramework (net10.0), ImplicitUsings, Nullable.
+Top-level statements :: A program's code without a class/Main; one file per program, before type declarations.
+Classic entry point :: static void Main(string[] args) in a class.
+Implicit usings :: System, System.Linq, System.Collections.Generic... imported automatically.
+
+=== lesson cs-basics | Hello, C#: the structure of a program | 65
+## Statements, variables and types
+
+```csharp
+// A line comment
+string name = "Ada";
+int year = 1843;
+double version = 14.0;
+bool fun = true;
+
+Console.WriteLine(name + " wrote the first program in " + year);
+Console.WriteLine($"C# {version}, fun: {fun}");
+
+year = year + 183;
+Console.WriteLine($"Now it's {year}");
+```
+
+- Every statement ends with `;`, and blocks are grouped with braces `{ }`. C# is **case-sensitive** (`Console`, not `console`).
+- A variable has a **type** that never changes: `string`, `int`, `double`, `bool` are the everyday ones. Declare once with the type, then assign without it.
+- **`var`** lets the compiler infer the type from the value: `var count = 3;` is an `int` forever.
+- Comments: `//` for a line, `/* ... */` for a block, `///` for XML documentation comments.
+
+## String interpolation
+
+The **`$`** prefix makes a string **interpolated**: expressions in braces are evaluated and inserted. Format specifiers follow a colon:
+
+```csharp
+string item = "Coffee";
+int quantity = 3;
+decimal price = 2.5m;
+
+Console.WriteLine($"{item} x{quantity} = {quantity * price}");
+Console.WriteLine($"Total: {quantity * price:F2}");
+Console.WriteLine($"|{item,-8}|{quantity,5}|");
+Console.WriteLine($"{0.256:P1} of {1234567:N0} users");
+```
+
+| Format | Example | Result |
+|---|---|---|
+| `F2` | `{7.5:F2}` | `7.50` |
+| `N0` | `{1234567:N0}` | `1,234,567` |
+| `P1` | `{0.256:P1}` | `25.6 %` (culture-dependent) |
+| `,5` / `,-8` | `{x,5}` | right-/left-aligned in a width |
+| `D3` | `{7:D3}` | `007` |
+
+Number formatting normally depends on the computer's **culture**: a German PC writes `2,50` where an American one writes `2.50`. DevQuest runs programs with the **invariant culture** (English-style numbers), so everyone gets the same output; in your own programs, pass `CultureInfo.InvariantCulture` when text must be machine-readable (files, APIs), and the user's culture when it's shown to people.
+
+`Console.Write` prints without a line break; `Console.WriteLine()` with no argument prints an empty line.
+
+## Methods
+
+A program grows by splitting it into **methods**. With top-level statements, you can declare local functions right in the file:
+
+```csharp
+double CircleArea(double radius) => Math.PI * radius * radius;
+
+void PrintLine(string text)
+{
+    Console.WriteLine(new string('=', text.Length));
+    Console.WriteLine(text);
+    Console.WriteLine(new string('=', text.Length));
+}
+
+PrintLine($"Area: {CircleArea(2):F2}");
+```
+
+`=>` is an **expression body**: a one-expression method without braces and `return`. Module 3 covers methods in depth.
+
+~~~check
+? What does `$"{2 + 3}"` produce?
++ "5"
+- "2 + 3"
+- "{2 + 3}"
+- A compile error
+> Interpolation evaluates the expression.
+~~~
+
+📚 **Go deeper:** Microsoft Learn, "String interpolation" and "Standard numeric format strings"; *Programming C#*, chapter 3 "C# Language Fundamentals".
+--- goals
+- write statements, comments and typed variables, and use var
+- build output with string interpolation, format specifiers and alignment
+- print with Console.WriteLine and Console.Write
+- write simple local functions with expression bodies
+--- quiz
+? Which declares a variable with an inferred type?
++ `var total = 10;`
+- `let total = 10;`
+- `auto total = 10;`
+- `total := 10;`
+> The type is int and never changes.
+? What does `{price:F2}` do in an interpolated string?
++ Formats the number with 2 decimals
+- Prints the variable name
+- Multiplies by 2
+- Pads to 2 characters
+> F = fixed-point.
+? What's `Console.Write("A"); Console.Write("B");`'s output?
++ AB
+- A and B on two lines
+- A B
+- Nothing
+> Write adds no line break.
+--- exercise code csharp
+::prompt
+Store a product name (`"Keyboard"`), a quantity (`4`) and a unit price (`39.9`) in variables and print:
+
+```
+Product: Keyboard
+Quantity: 4
+Total: 159.60
+```
+
+Use string interpolation with the `F2` format for the total.
+::starter
+// declare the variables here
+::solution
+string product = "Keyboard";
+int quantity = 4;
+double unitPrice = 39.9;
+Console.WriteLine($"Product: {product}");
+Console.WriteLine($"Quantity: {quantity}");
+Console.WriteLine($"Total: {quantity * unitPrice:F2}");
+::expected
+Product: Keyboard
+Quantity: 4
+Total: 159.60
+::variants
+39.9 => 12.5
+::hints
+- `$"Total: {quantity * unitPrice:F2}"`.
+--- exercise code csharp
+::prompt
+Print a small receipt table, names left-aligned in 10 characters and prices right-aligned in 8 characters with 2 decimals, computing the total:
+
+```
+Tea           2.50
+Sandwich      6.75
+Total         9.25
+```
+::starter
+double tea = 2.5;
+double sandwich = 6.75;
+::solution
+double tea = 2.5;
+double sandwich = 6.75;
+Console.WriteLine($"{"Tea",-10}{tea,8:F2}");
+Console.WriteLine($"{"Sandwich",-10}{sandwich,8:F2}");
+Console.WriteLine($"{"Total",-10}{tea + sandwich,8:F2}");
+::expected
+Tea           2.50
+Sandwich      6.75
+Total         9.25
+::variants
+6.75 => 4.25
+::hints
+- Alignment and format combine: `{value,8:F2}`; text left-aligned: `{"Tea",-10}`.
+--- cards
+Statement / block :: Statements end with ; and are grouped with { }. Case-sensitive.
+var :: Type inferred from the value; fixed afterwards.
+Interpolation :: $"Hi {name}, {total:F2}, {x,5}" — expressions, formats and alignment.
+WriteLine / Write :: With / without a line break.
+Expression body :: double Area(double r) => Math.PI * r * r;
+
+=== lesson cs-errors | Reading compiler errors and exceptions | 55
+## Compile errors
+
+The C# compiler (Roslyn) checks the whole program before it runs. Errors have a **code**, a **position** and a message:
+
+```csharp
+// error: assigning text to an int
+int age = "thirty";
+Console.WriteLine(age);
+```
+
+```
+Program.cs(2,11): error CS0029: Cannot implicitly convert type 'string' to 'int'
+```
+
+`Program.cs(2,11)` is the file, **line** 2 and **column** 11. The **error code** (`CS0029`) can be searched: Microsoft documents every one. Common ones:
+
+| Code | Message | Usual cause |
+|---|---|---|
+| CS1002 | `; expected` | a missing semicolon |
+| CS0103 | `The name 'x' does not exist in the current context` | a typo, or a variable used outside its scope |
+| CS0029 | `Cannot implicitly convert type 'A' to 'B'` | a value of the wrong type |
+| CS0161 | `not all code paths return a value` | a method without a `return` on some path |
+| CS0165 | `Use of unassigned local variable 'x'` | reading a variable before giving it a value |
+| CS1061 | `'T' does not contain a definition for 'X'` | a misspelt method or property |
+| CS0117 | `'Console' does not contain a definition for 'Writeline'` | wrong capitalisation |
+
+```csharp
+// error: a misspelt method (C# is case-sensitive)
+Console.Writeline("Hello");
+```
+
+Fix the **first** error first: later ones are often consequences. **Warnings** (codes like `CS8600`) don't stop the build but deserve attention; many teams treat them as errors.
+
+## Exceptions
+
+Problems that only appear at run time throw an **exception**. Unhandled, it ends the program with a message and a **stack trace**:
+
+```csharp
+// error: compiles, then fails while running
+int[] scores = { 90, 85, 77 };
+Console.WriteLine($"First: {scores[0]}");
+Console.WriteLine($"Fourth: {scores[3]}");
+```
+
+```
+First: 90
+Unhandled exception. System.IndexOutOfRangeException: Index was outside the bounds of the array.
+   at Program.<Main>$(String[] args) in Program.cs:line 4
+```
+
+(`<Main>$` is the method the compiler generated for the top-level statements.) Common exceptions:
+
+| Exception | Means |
+|---|---|
+| `NullReferenceException` | using a variable that holds `null` |
+| `IndexOutOfRangeException` / `ArgumentOutOfRangeException` | an index outside an array / list |
+| `DivideByZeroException` | integer division by zero |
+| `FormatException` | `int.Parse("abc")` |
+| `InvalidCastException` | converting an object to a type it isn't |
+| `KeyNotFoundException` | a missing dictionary key |
+
+Module 5 shows how to catch and handle them.
+
+~~~check
+? `Program.cs(7,3): error CS1002: ; expected`. Where is the problem?
++ Around line 7, column 3: usually a missing semicolon at the end of the previous statement
+- In line 3
+- In another file
+- At the end of the file
+> Line, then column.
+~~~
+
+📚 **Go deeper:** Microsoft Learn, "C# compiler errors" (an entry for each CSxxxx code) and "Exceptions and exception handling"; *Programming C#*, chapter 11 (handling exceptions).
+--- goals
+- read a compiler error's file, line, column, code and message
+- recognise the most common C# compiler errors
+- read an unhandled exception's type, message and stack trace
+- know the common runtime exceptions
+--- quiz
+? What does `(2,11)` mean in `Program.cs(2,11): error CS0029`?
++ Line 2, column 11
+- Error 2 of 11
+- Lines 2 to 11
+- Column 2, line 11
+> Positions are (line, column).
+? Which exception does `int.Parse("abc")` throw?
++ FormatException
+- NullReferenceException
+- ArgumentException
+- ParseException
+> int.TryParse avoids it (Module 2).
+? Do warnings stop a program from building?
++ No (unless the project treats warnings as errors)
+- Yes, always
+- Only CS8xxx warnings
+- Only in Release builds
+> But they often point at real bugs.
+--- exercise code csharp
+::prompt
+This program has **three compile errors**. Fix them so it prints:
+
+```
+Total items: 7
+Average: 3.5
+```
+::starter
+int first = 3
+int second = 4;
+int total = first + secnd;
+double average = total / 2.0;
+console.WriteLine($"Total items: {total}");
+Console.WriteLine($"Average: {average}");
+::solution
+int first = 3;
+int second = 4;
+int total = first + second;
+double average = total / 2.0;
+Console.WriteLine($"Total items: {total}");
+Console.WriteLine($"Average: {average}");
+::expected
+Total items: 7
+Average: 3.5
+::hints
+- A semicolon is missing at the end of a line.
+- `secnd` is a typo, and `console` should be `Console`.
+--- cards
+Compiler error :: File(line,column): error CSxxxx: message — fix the first one first.
+Common CS errors :: CS1002 ; expected, CS0103 name doesn't exist, CS0029 conversion, CS0161 not all paths return.
+Unhandled exception :: Type and message, then "at Method in File:line N" frames.
+Common exceptions :: NullReferenceException, IndexOutOfRangeException, FormatException, DivideByZeroException, KeyNotFoundException.
+
+=== lesson cs-m1-test | Module 1 test | 120 | exam
+This test covers Module 1: C# and .NET, installing the SDK and running programs, top-level statements, variables, interpolation and formatting, and reading errors.
+
+Before you start, check that you can:
+
+- explain how C# is compiled and run;
+- write a program with top-level statements and a class below them;
+- format output with interpolation, format specifiers and alignment;
+- read and fix compile errors.
+--- goals
+- write and run small C# programs
+- read C#'s error messages confidently
+--- quiz
+? Which command creates a new console project?
++ dotnet new console
+- dotnet create app
+- csc new
+- dotnet init
+> Then dotnet run.
+? What does `$"{10 / 4}"` print?
++ 2
+- 2.5
+- 3
+- 10 / 4
+> Integer division (Module 2).
+? Which is the C# equivalent of Java's `System.out.println`?
++ Console.WriteLine
+- Console.Print
+- System.Print
+- echo
+> Console.Write for no line break.
+? What runs C#'s IL at run time?
++ The CLR (.NET runtime)
+- The JVM
+- The browser
+- The C# compiler
+> With JIT compilation.
+--- exercise code csharp
+::prompt
+Describe a book with variables (`title` = `"The C# Player's Guide"`, `author` = `"RB Whitaker"`, `pages` = `512`, `price` = `39.95`) and print:
+
+```
+"The C# Player's Guide" by RB Whitaker
+512 pages, $39.95
+Price per 100 pages: $7.80
+```
+
+The last line divides the price by the pages and multiplies by 100, with two decimals. (A double quote inside a normal string is written `\"`.)
+::starter
+// your program here
+::solution
+string title = "The C# Player's Guide";
+string author = "RB Whitaker";
+int pages = 512;
+double price = 39.95;
+Console.WriteLine($"\"{title}\" by {author}");
+Console.WriteLine($"{pages} pages, ${price:F2}");
+Console.WriteLine($"Price per 100 pages: ${price / pages * 100:F2}");
+::expected
+"The C# Player's Guide" by RB Whitaker
+512 pages, $39.95
+Price per 100 pages: $7.80
+::variants
+512 => 400
+::hints
+- `$"\"{title}\" by {author}"` prints the quotes.
+- A `$` before `{` is just text: `${price:F2}` prints a dollar sign then the formatted price.
