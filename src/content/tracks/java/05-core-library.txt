@@ -1,0 +1,1529 @@
+=== module Module 5 · The core library
+
+=== lesson java-exceptions | Exceptions | 75
+## Handling errors with try and catch
+
+When something goes wrong at run time, Java **throws** an exception object. If nothing **catches** it, the program stops with a stack trace. `try`/`catch` handles it:
+
+```java
+public class Main {
+    public static void main(String[] args) {
+        String[] inputs = {"42", "x7", "-3"};
+        for (String input : inputs) {
+            try {
+                int n = Integer.parseInt(input);
+                System.out.println("square root of " + n + " = " + safeSqrt(n));
+            } catch (NumberFormatException e) {
+                System.out.println("not a number: " + input);
+            } catch (IllegalArgumentException e) {
+                System.out.println("invalid: " + e.getMessage());
+            } finally {
+                System.out.println("-- done with " + input);
+            }
+        }
+    }
+
+    static double safeSqrt(int n) {
+        if (n < 0) throw new IllegalArgumentException("negative input " + n);
+        return Math.sqrt(n);
+    }
+}
+```
+
+- The `try` block runs until an exception is thrown; then the first `catch` whose type matches runs.
+- Order matters: more specific types first (`NumberFormatException` is a subclass of `IllegalArgumentException`, so it must come before it).
+- **`finally`** always runs, exception or not, which suits clean-up.
+- `throw new SomeException("message")` raises your own; `e.getMessage()` reads the message.
+- One `catch` can handle several unrelated types: `catch (IOException | SQLException e)`.
+
+## The exception hierarchy: checked and unchecked
+
+```
+Throwable
+├── Error                      (JVM problems: OutOfMemoryError, StackOverflowError) — don't catch
+└── Exception
+    ├── RuntimeException       (unchecked: bugs and bad arguments)
+    │   ├── NullPointerException, IllegalArgumentException, IllegalStateException,
+    │   │   IndexOutOfBoundsException, ArithmeticException, ClassCastException...
+    └── IOException, SQLException, ...   (checked)
+```
+
+Java is unusual in having **checked exceptions**: for anything that isn't a `RuntimeException` (like `IOException`), the compiler forces you to either catch it or **declare** it with `throws`:
+
+```java
+import java.io.IOException;
+
+public class Main {
+    static String readConfig(String name) throws IOException {
+        if (name.isBlank()) throw new IOException("no file name given");
+        return "debug=true";
+    }
+
+    public static void main(String[] args) {
+        try {
+            System.out.println(readConfig("app.properties"));
+            System.out.println(readConfig(""));
+        } catch (IOException e) {
+            System.out.println("Could not read config: " + e.getMessage());
+        }
+    }
+}
+```
+
+The idea: checked exceptions are for problems a caller can reasonably handle (a missing file, a network failure); unchecked ones signal bugs or invalid arguments. In practice, modern APIs and frameworks lean towards unchecked exceptions, and it's common to wrap a checked exception in an unchecked one when a layer can't do anything useful with it: `throw new UncheckedIOException(e)`.
+
+## Custom exceptions
+
+Define your own exception type when callers need to recognise a specific failure:
+
+```java
+public class Main {
+    public static void main(String[] args) {
+        Wallet w = new Wallet(30);
+        try {
+            w.pay(50);
+        } catch (InsufficientFundsException e) {
+            System.out.println(e.getMessage() + " (short by " + e.getShortBy() + ")");
+        }
+    }
+}
+
+class InsufficientFundsException extends RuntimeException {
+    private final double shortBy;
+
+    InsufficientFundsException(double shortBy) {
+        super("Insufficient funds");
+        this.shortBy = shortBy;
+    }
+
+    double getShortBy() { return shortBy; }
+}
+
+class Wallet {
+    private double balance;
+    Wallet(double balance) { this.balance = balance; }
+
+    void pay(double amount) {
+        if (amount > balance) throw new InsufficientFundsException(amount - balance);
+        balance -= amount;
+    }
+}
+```
+
+When you catch an exception and throw another, pass the original as the **cause** (`new ServiceException("...", e)`), so the stack trace keeps the whole story.
+
+## try-with-resources
+
+Files, network connections and database connections must be **closed** even when errors happen. `try (...)` closes anything that implements `AutoCloseable`, automatically and in reverse order:
+
+```java
+public class Main {
+    public static void main(String[] args) {
+        try (Resource db = new Resource("database"); Resource file = new Resource("log file")) {
+            System.out.println("working with both");
+            throw new IllegalStateException("something failed");
+        } catch (IllegalStateException e) {
+            System.out.println("caught: " + e.getMessage());
+        }
+    }
+}
+
+class Resource implements AutoCloseable {
+    private final String name;
+    Resource(String name) {
+        this.name = name;
+        System.out.println("open " + name);
+    }
+
+    @Override
+    public void close() {
+        System.out.println("close " + name);
+    }
+}
+```
+
+Always prefer try-with-resources over closing in `finally` by hand.
+
+## Good practice
+
+- **Don't swallow exceptions**: an empty `catch {}` hides bugs. At least log them.
+- Catch exceptions where you can **do something** about them (retry, use a default, show a message); otherwise let them propagate.
+- **Fail fast**: validate arguments at the start of a method (`Objects.requireNonNull(name)`, `throw new IllegalArgumentException(...)`).
+- Don't use exceptions for normal control flow (like ending a loop).
+
+~~~check
+? Which exceptions must be caught or declared with `throws`?
++ Checked exceptions (Exception subclasses that aren't RuntimeException)
+- All exceptions
+- RuntimeExceptions only
+- Errors
+> IOException is checked; IllegalArgumentException isn't.
+~~~
+
+📚 **Go deeper:** *Java: The Complete Reference*, chapter 10 "Exception Handling"; *Effective Java*, chapter 10 (items 69 to 77 on exceptions); dev.java, "Exceptions".
+--- goals
+- catch and handle exceptions with try, catch and finally, in the right order
+- distinguish checked from unchecked exceptions, and declare them with throws
+- write custom exception classes and keep causes
+- close resources with try-with-resources
+- follow good exception-handling practices
+--- quiz
+? Which block always runs, whether or not an exception occurred?
++ finally
+- catch
+- try
+- throws
+> Even after a return in try.
+? What must you do with a method that throws a checked IOException?
++ Catch it, or declare `throws IOException`
+- Nothing
+- Wrap it in a loop
+- Use finally
+> The compiler enforces it.
+? What does try-with-resources require of a resource?
++ It implements AutoCloseable
+- It's serializable
+- It's a record
+- It has a public constructor
+> close() is called automatically.
+? Why is `catch (Exception e) {}` (empty) a problem?
++ It silently hides failures, including bugs
+- It doesn't compile
+- It's slow
+- It rethrows the exception
+> Handle, log or let it propagate.
+--- exercise code java
+::prompt
+Write `static int parseAge(String text)` that:
+
+- throws `IllegalArgumentException("age is empty")` for null or blank text;
+- throws `IllegalArgumentException("not a number: <text>")` when it isn't an integer (catch the `NumberFormatException` and rethrow, with it as the cause);
+- throws `IllegalArgumentException("out of range: <n>")` outside 0 to 150;
+- returns the age otherwise.
+
+The program prints:
+
+```
+36 -> 36
+" 7 " -> 7
+"" -> error: age is empty
+abc -> error: not a number: abc
+200 -> error: out of range: 200
+cause kept: true
+```
+::starter
+public class Main {
+    static int parseAge(String text) {
+        return Integer.parseInt(text);
+    }
+
+    public static void main(String[] args) {
+        String[] inputs = {"36", " 7 ", "", "abc", "200"};
+        for (String in : inputs) {
+            String label = in.isBlank() || in.startsWith(" ") ? "\"" + in + "\"" : in;
+            try {
+                System.out.println(label + " -> " + parseAge(in));
+            } catch (IllegalArgumentException e) {
+                System.out.println(label + " -> error: " + e.getMessage());
+            }
+        }
+        try {
+            parseAge("x");
+        } catch (IllegalArgumentException e) {
+            System.out.println("cause kept: " + (e.getCause() instanceof NumberFormatException));
+        }
+    }
+}
+::solution
+public class Main {
+    static int parseAge(String text) {
+        if (text == null || text.isBlank()) throw new IllegalArgumentException("age is empty");
+        int n;
+        try {
+            n = Integer.parseInt(text.strip());
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("not a number: " + text, e);
+        }
+        if (n < 0 || n > 150) throw new IllegalArgumentException("out of range: " + n);
+        return n;
+    }
+
+    public static void main(String[] args) {
+        String[] inputs = {"36", " 7 ", "", "abc", "200"};
+        for (String in : inputs) {
+            String label = in.isBlank() || in.startsWith(" ") ? "\"" + in + "\"" : in;
+            try {
+                System.out.println(label + " -> " + parseAge(in));
+            } catch (IllegalArgumentException e) {
+                System.out.println(label + " -> error: " + e.getMessage());
+            }
+        }
+        try {
+            parseAge("x");
+        } catch (IllegalArgumentException e) {
+            System.out.println("cause kept: " + (e.getCause() instanceof NumberFormatException));
+        }
+    }
+}
+::expected
+36 -> 36
+" 7 " -> 7
+"" -> error: age is empty
+abc -> error: not a number: abc
+200 -> error: out of range: 200
+cause kept: true
+::hints
+- Check for blank input first, then parse inside `try`, rethrowing with `new IllegalArgumentException("not a number: " + text, e)`.
+- `strip()` the text before parsing so `" 7 "` works.
+--- exercise code java
+::prompt
+A `Connection` class prints `open <name>` when created and `close <name>` when closed. Make it usable in try-with-resources, and write `static void transfer(boolean fail)` that opens two connections, `source` and `target`, prints `transferring`, and throws `IllegalStateException("network down")` when `fail` is true. The program prints:
+
+```
+open source
+open target
+transferring
+close target
+close source
+ok
+open source
+open target
+transferring
+close target
+close source
+failed: network down
+```
+::starter
+public class Main {
+    static void transfer(boolean fail) {
+    }
+
+    public static void main(String[] args) {
+        for (boolean fail : new boolean[] {false, true}) {
+            try {
+                transfer(fail);
+                System.out.println("ok");
+            } catch (IllegalStateException e) {
+                System.out.println("failed: " + e.getMessage());
+            }
+        }
+    }
+}
+
+class Connection {
+    private final String name;
+
+    Connection(String name) {
+        this.name = name;
+        System.out.println("open " + name);
+    }
+}
+::solution
+public class Main {
+    static void transfer(boolean fail) {
+        try (Connection source = new Connection("source"); Connection target = new Connection("target")) {
+            System.out.println("transferring");
+            if (fail) throw new IllegalStateException("network down");
+        }
+    }
+
+    public static void main(String[] args) {
+        for (boolean fail : new boolean[] {false, true}) {
+            try {
+                transfer(fail);
+                System.out.println("ok");
+            } catch (IllegalStateException e) {
+                System.out.println("failed: " + e.getMessage());
+            }
+        }
+    }
+}
+
+class Connection implements AutoCloseable {
+    private final String name;
+
+    Connection(String name) {
+        this.name = name;
+        System.out.println("open " + name);
+    }
+
+    @Override
+    public void close() {
+        System.out.println("close " + name);
+    }
+}
+::expected
+open source
+open target
+transferring
+close target
+close source
+ok
+open source
+open target
+transferring
+close target
+close source
+failed: network down
+::hints
+- `class Connection implements AutoCloseable` with a `public void close()` that prints.
+- Declare both connections in one `try (...)`; they're closed in reverse order, even when an exception is thrown.
+--- cards
+try / catch / finally :: Catch specific types first; finally always runs.
+throw :: throw new IllegalArgumentException("message");
+Checked vs unchecked :: Checked (IOException...) must be caught or declared with throws; RuntimeExceptions needn't.
+Custom exception :: class MyException extends RuntimeException { MyException(String msg) { super(msg); } }
+Cause :: new ServiceException("msg", e) keeps the original exception.
+try-with-resources :: try (Res r = ...) { } — closes AutoCloseable resources automatically, in reverse order.
+
+=== lesson java-collections | Collections: lists, sets and maps | 85
+## The Collections Framework
+
+Arrays have a fixed size. The **Collections Framework** (`java.util`) provides growable, well-tested data structures behind a few interfaces:
+
+| Interface | Holds | Main implementations |
+|---|---|---|
+| `List<E>` | an ordered sequence, duplicates allowed | `ArrayList`, `LinkedList` |
+| `Set<E>` | unique elements | `HashSet` (fast, unordered), `LinkedHashSet` (insertion order), `TreeSet` (sorted) |
+| `Map<K, V>` | key → value pairs, unique keys | `HashMap`, `LinkedHashMap`, `TreeMap` |
+| `Queue<E>` / `Deque<E>` | elements processed in order | `ArrayDeque`, `PriorityQueue` |
+
+The `<E>` is a **type parameter** (generics, next lesson): `List<String>` holds only strings, checked by the compiler. Declare variables with the **interface** type and choose the implementation on the right: `List<String> names = new ArrayList<>();`.
+
+Collections hold **objects**, so primitives are stored as their wrapper classes: `List<Integer>`, not `List<int>`. Java converts automatically (**autoboxing**).
+
+## Lists
+
+```java
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+
+public class Main {
+    public static void main(String[] args) {
+        List<String> tasks = new ArrayList<>();
+        tasks.add("write tests");
+        tasks.add("fix bug");
+        tasks.add(0, "coffee");                 // insert at index 0
+        System.out.println(tasks + " size " + tasks.size());
+        System.out.println(tasks.get(1) + " " + tasks.contains("fix bug") + " " + tasks.indexOf("fix bug"));
+        tasks.set(2, "fix two bugs");
+        tasks.remove("coffee");
+        Collections.sort(tasks);
+        System.out.println(tasks);
+        for (String t : tasks) System.out.println("- " + t);
+
+        List<Integer> fixed = List.of(3, 1, 2);    // immutable list
+        System.out.println(fixed);
+    }
+}
+```
+
+`List.of(...)`, `Set.of(...)` and `Map.of(...)` create **immutable** collections (adding throws `UnsupportedOperationException`): ideal for constants and return values.
+
+Removing elements while looping with for-each throws `ConcurrentModificationException`; use `list.removeIf(x -> ...)` instead.
+
+## Sets
+
+```java
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.TreeSet;
+
+public class Main {
+    public static void main(String[] args) {
+        List<String> visits = List.of("home", "about", "home", "blog", "about", "home");
+        Set<String> unique = new HashSet<>(visits);
+        Set<String> sorted = new TreeSet<>(visits);
+        System.out.println(unique.size() + " unique pages, sorted: " + sorted);
+        System.out.println(unique.add("contact") + " " + unique.add("home"));   // add reports whether it was new
+
+        Set<String> a = new TreeSet<>(Set.of("java", "sql", "git"));
+        Set<String> b = Set.of("git", "docker");
+        a.retainAll(b);                        // intersection
+        System.out.println(a);
+    }
+}
+```
+
+Sets answer "have I seen this?" in constant time, which is far faster than searching a list. A `HashSet` relies on the elements' `equals` and `hashCode` (Module 4).
+
+## Maps
+
+```java
+import java.util.HashMap;
+import java.util.Map;
+import java.util.TreeMap;
+
+public class Main {
+    public static void main(String[] args) {
+        String text = "the cat and the hat and the bat";
+        Map<String, Integer> counts = new TreeMap<>();
+        for (String word : text.split(" ")) {
+            counts.merge(word, 1, Integer::sum);       // add 1, starting from 1 for new words
+        }
+        System.out.println(counts);
+
+        Map<String, String> capitals = new HashMap<>();
+        capitals.put("France", "Paris");
+        capitals.put("Japan", "Tokyo");
+        System.out.println(capitals.get("Japan") + " " + capitals.get("Peru"));
+        System.out.println(capitals.getOrDefault("Peru", "unknown"));
+        System.out.println(capitals.containsKey("France"));
+
+        for (Map.Entry<String, Integer> e : counts.entrySet()) {
+            if (e.getValue() > 1) System.out.println(e.getKey() + " x" + e.getValue());
+        }
+    }
+}
+```
+
+- `get` returns `null` for a missing key; `getOrDefault` gives a fallback.
+- `merge`, `computeIfAbsent` and `putIfAbsent` update maps in one step: `groups.computeIfAbsent(key, k -> new ArrayList<>()).add(item)` builds a map of lists.
+- `HashMap` has no order, `LinkedHashMap` keeps insertion order, `TreeMap` sorts by key.
+
+## Queues and stacks
+
+```java
+import java.util.ArrayDeque;
+import java.util.Deque;
+import java.util.PriorityQueue;
+
+public class Main {
+    public static void main(String[] args) {
+        Deque<String> stack = new ArrayDeque<>();
+        stack.push("a"); stack.push("b"); stack.push("c");
+        System.out.println(stack.pop() + stack.pop());       // last in, first out
+
+        Deque<String> queue = new ArrayDeque<>();
+        queue.offer("first"); queue.offer("second");
+        System.out.println(queue.poll());                     // first in, first out
+
+        PriorityQueue<Integer> pq = new PriorityQueue<>(java.util.List.of(5, 1, 4, 2));
+        System.out.println(pq.poll() + " " + pq.poll());      // smallest first
+    }
+}
+```
+
+`ArrayDeque` replaces the old `Stack` class. `PriorityQueue` always hands out the smallest element (or the largest, with a reversed comparator), which powers schedulers and algorithms like Dijkstra's.
+
+## Choosing a collection
+
+- Need order and index access? **`ArrayList`** (the default choice).
+- Need fast "contains" or uniqueness? **`HashSet`**.
+- Need lookups by key? **`HashMap`**.
+- Need sorted keys or ranges? **`TreeMap`** / **`TreeSet`**.
+- Need FIFO/LIFO? **`ArrayDeque`**; priorities? **`PriorityQueue`**.
+
+The DSA track explains the data structures behind them and their costs.
+
+~~~check
+? You need to count how many times each word appears. Which collection?
++ A Map<String, Integer>
+- A List<String>
+- A Set<String>
+- An int[]
+> Words as keys, counts as values.
+~~~
+
+📚 **Go deeper:** *Java: The Complete Reference*, chapter 17 "java.util Part 1: The Collections Framework"; dev.java, "The Collections Framework"; *Effective Java*, items 54 and 55 (return empty collections, not null).
+--- goals
+- choose between List, Set, Map, Queue and Deque, and their implementations
+- add, read, update and remove elements, and iterate over collections
+- use immutable collections created with List.of, Set.of and Map.of
+- count and group with Map.merge and computeIfAbsent
+- explain autoboxing in collections of numbers
+--- quiz
+? Which declaration follows good practice?
++ `List<String> names = new ArrayList<>();`
+- `ArrayList<String> names = new List<>();`
+- `List names = new ArrayList();`
+- `List<string> names = new ArrayList<>();`
+> Interface type on the left; diamond on the right.
+? What does `Set.add` return when the element was already there?
++ false
+- true
+- null
+- It throws
+> Sets ignore duplicates.
+? What does `map.get("missing")` return in a HashMap?
++ null
+- An empty string
+- It throws
+- 0
+> Use getOrDefault or containsKey.
+? Why can't you write `List<int>`?
++ Collections hold objects; use the wrapper type Integer
+- int isn't a type
+- Lists only hold strings
+- You can, since Java 21
+> Autoboxing converts between int and Integer.
+? Which map keeps keys sorted?
++ TreeMap
+- HashMap
+- LinkedHashMap
+- EnumMap
+> TreeMap is a red-black tree.
+--- exercise code java
+::prompt
+Given a list of orders as `customer:product` strings, print:
+
+1. the number of **distinct customers**;
+2. the products each customer ordered, customers in **alphabetical order**, products in the order they were bought, without duplicates;
+3. the **most ordered product** (the first alphabetically if tied).
+
+```
+Customers: 3
+ada: [book, lamp, pen]
+bob: [pen]
+cy: [lamp, book]
+Most ordered: book
+```
+::starter
+import java.util.List;
+
+public class Main {
+    public static void main(String[] args) {
+        List<String> orders = List.of("ada:book", "bob:pen", "ada:lamp", "cy:lamp", "ada:book", "cy:book", "ada:pen");
+    }
+}
+::solution
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.TreeMap;
+
+public class Main {
+    public static void main(String[] args) {
+        List<String> orders = List.of("ada:book", "bob:pen", "ada:lamp", "cy:lamp", "ada:book", "cy:book", "ada:pen");
+        Map<String, Set<String>> byCustomer = new TreeMap<>();
+        Map<String, Integer> productCounts = new TreeMap<>();
+        for (String order : orders) {
+            String[] parts = order.split(":");
+            byCustomer.computeIfAbsent(parts[0], k -> new LinkedHashSet<>()).add(parts[1]);
+            productCounts.merge(parts[1], 1, Integer::sum);
+        }
+        System.out.println("Customers: " + byCustomer.size());
+        for (Map.Entry<String, Set<String>> e : byCustomer.entrySet()) {
+            System.out.println(e.getKey() + ": " + e.getValue());
+        }
+        String best = null;
+        for (Map.Entry<String, Integer> e : productCounts.entrySet()) {
+            if (best == null || e.getValue() > productCounts.get(best)) best = e.getKey();
+        }
+        System.out.println("Most ordered: " + best);
+    }
+}
+::expected
+Customers: 3
+ada: [book, lamp, pen]
+bob: [pen]
+cy: [lamp, book]
+Most ordered: book
+::variants
+"cy:book" => "cy:pen"
+::hints
+- A `TreeMap<String, Set<String>>` sorts the customers; `LinkedHashSet` keeps each customer's products unique and in buying order.
+- `computeIfAbsent(customer, k -> new LinkedHashSet<>()).add(product)` creates each set on first use.
+- Count products with `merge(product, 1, Integer::sum)` in a `TreeMap`, so a strict `>` keeps the alphabetically first one on ties.
+--- exercise code java
+::prompt
+Check whether brackets are **balanced** with a stack (`ArrayDeque`): `()`, `[]` and `{}` must open and close in the right order; other characters are ignored. Print the result for each input:
+
+```
+(a[b]{c}) -> true
+(] -> false
+((()) -> false
+{[()()]} -> true
+ -> true
+```
+::starter
+import java.util.ArrayDeque;
+import java.util.Deque;
+
+public class Main {
+    static boolean balanced(String s) {
+        return false;
+    }
+
+    public static void main(String[] args) {
+        for (String s : new String[] {"(a[b]{c})", "(]", "((())", "{[()()]}", ""}) {
+            System.out.println(s + " -> " + balanced(s));
+        }
+    }
+}
+::solution
+import java.util.ArrayDeque;
+import java.util.Deque;
+
+public class Main {
+    static boolean balanced(String s) {
+        Deque<Character> stack = new ArrayDeque<>();
+        for (char c : s.toCharArray()) {
+            switch (c) {
+                case '(', '[', '{' -> stack.push(c);
+                case ')', ']', '}' -> {
+                    if (stack.isEmpty()) return false;
+                    char open = stack.pop();
+                    if ((c == ')' && open != '(') || (c == ']' && open != '[') || (c == '}' && open != '{')) return false;
+                }
+                default -> { }
+            }
+        }
+        return stack.isEmpty();
+    }
+
+    public static void main(String[] args) {
+        for (String s : new String[] {"(a[b]{c})", "(]", "((())", "{[()()]}", ""}) {
+            System.out.println(s + " -> " + balanced(s));
+        }
+    }
+}
+::expected
+(a[b]{c}) -> true
+(] -> false
+((()) -> false
+{[()()]} -> true
+ -> true
+::hints
+- Push opening brackets; on a closing bracket, pop and check that it matches.
+- Unbalanced if the stack is empty when closing, or not empty at the end.
+--- cards
+List :: Ordered, duplicates allowed: ArrayList (default). add, get, set, remove, contains, size.
+Set :: Unique elements: HashSet (fast), LinkedHashSet (insertion order), TreeSet (sorted).
+Map :: Key → value: HashMap, LinkedHashMap, TreeMap. get, put, getOrDefault, merge, computeIfAbsent, entrySet.
+Deque :: ArrayDeque as stack (push/pop) or queue (offer/poll); PriorityQueue gives the smallest first.
+Immutable collections :: List.of, Set.of, Map.of — modifying throws UnsupportedOperationException.
+Autoboxing :: Collections hold objects: List<Integer>; int ↔ Integer converts automatically.
+
+=== lesson java-generics | Generics | 75
+## Type parameters
+
+The Collections Framework is written once and works for every element type, thanks to **generics**. You can write your own generic classes and methods:
+
+```java
+public class Main {
+    public static void main(String[] args) {
+        Box<String> text = new Box<>("hello");
+        Box<Integer> number = new Box<>(42);
+        String s = text.get();          // no cast needed
+        int n = number.get() + 1;
+        System.out.println(s + " " + n);
+        Pair<String, Double> price = new Pair<>("coffee", 2.5);
+        System.out.println(price);
+    }
+}
+
+class Box<T> {
+    private final T value;
+    Box(T value) { this.value = value; }
+    T get() { return value; }
+}
+
+record Pair<A, B>(A first, B second) {}
+```
+
+`T` is a **type parameter**, replaced by a real type at each use (`Box<String>`). The compiler checks types at compile time, so a `Box<String>` can never contain an `Integer`, and reading from it needs no cast. Before generics (Java 5), collections held `Object` and every read needed a risky cast.
+
+## Generic methods
+
+```java
+import java.util.List;
+
+public class Main {
+    static <T> T firstOrDefault(List<T> list, T fallback) {
+        return list.isEmpty() ? fallback : list.get(0);
+    }
+
+    static <T extends Comparable<T>> T max(List<T> list) {
+        T best = list.get(0);
+        for (T item : list) {
+            if (item.compareTo(best) > 0) best = item;
+        }
+        return best;
+    }
+
+    public static void main(String[] args) {
+        System.out.println(firstOrDefault(List.of("a", "b"), "none"));
+        System.out.println(firstOrDefault(List.<String>of(), "none"));
+        System.out.println(max(List.of(3, 9, 4)) + " " + max(List.of("pear", "apple", "zucchini")));
+    }
+}
+```
+
+The `<T>` before the return type declares the method's type parameter; the compiler **infers** it from the arguments. **`<T extends Comparable<T>>`** is a **bounded** type parameter: `T` can be any type that can be compared, so `compareTo` is allowed inside.
+
+## Wildcards
+
+How do you write a method that sums any list of numbers, `List<Integer>` or `List<Double>`? `List<Number>` doesn't work, because a `List<Integer>` **isn't** a `List<Number>` (otherwise you could add a `Double` to a list of integers). **Wildcards** solve it:
+
+```java
+import java.util.ArrayList;
+import java.util.List;
+
+public class Main {
+    static double sum(List<? extends Number> numbers) {     // read from it: a producer
+        double total = 0;
+        for (Number n : numbers) total += n.doubleValue();
+        return total;
+    }
+
+    static void addDefaults(List<? super Integer> target) { // write into it: a consumer
+        target.add(0);
+        target.add(1);
+    }
+
+    public static void main(String[] args) {
+        System.out.println(sum(List.of(1, 2, 3)) + " " + sum(List.of(1.5, 2.5)));
+        List<Number> numbers = new ArrayList<>();
+        addDefaults(numbers);
+        System.out.println(numbers);
+    }
+}
+```
+
+The rule is **PECS**: *Producer Extends, Consumer Super*. Use `? extends T` when you only read `T`s from a structure, `? super T` when you only put `T`s into it. (`List<?>` means "a list of something": you can only read `Object`s.)
+
+## Type erasure
+
+Generics exist only at compile time: the compiler checks them, then **erases** them, so at run time a `List<String>` is just a `List`. Consequences: you can't write `new T()`, `T[]` creation or `instanceof List<String>`, and primitives can't be type arguments (`List<int>`). Usually you don't notice; when you do, pass a `Class<T>` or a factory (`Supplier<T>`) explicitly.
+
+~~~check
+? Why isn't a `List<Integer>` a `List<Number>`?
++ Otherwise you could add a Double to a list that must only hold Integers
+- Integer doesn't extend Number
+- Generics don't support numbers
+- It is, since Java 8
+> Use List<? extends Number> to accept both for reading.
+~~~
+
+📚 **Go deeper:** *Java: The Complete Reference*, chapter 14 "Generics"; *Effective Java*, chapter 5 (items 26 to 33, including PECS in item 31); dev.java, "Generics".
+--- goals
+- write generic classes, records and methods with type parameters
+- bound type parameters with extends
+- use wildcards with the PECS rule
+- explain type erasure and its limits
+--- quiz
+? What does `class Box<T>` declare?
++ A class with a type parameter T, chosen at each use
+- A box of text only
+- A class extending T
+- A raw type
+> Box<String>, Box<Integer>...
+? What does `<T extends Comparable<T>>` allow inside the method?
++ Calling compareTo on T values
+- Creating new T()
+- Using T as a primitive
+- Nothing extra
+> The bound guarantees the method exists.
+? Which parameter accepts `List<Integer>` and `List<Double>` for reading numbers?
++ `List<? extends Number>`
+- `List<Number>`
+- `List<? super Number>`
+- `List<Object>`
+> Producer extends.
+? Why can't you write `new T()` in a generic class?
++ Type erasure: T is unknown at run time
+- T is always abstract
+- Constructors can't be generic
+- It's allowed
+> Pass a Supplier<T> instead.
+--- exercise code java
+::prompt
+Write a generic class `Stats<T extends Comparable<T>>` that collects items and reports the minimum, maximum and count, plus a generic static method `static <T> List<T> lastN(List<T> items, int n)` returning the last `n` items (all of them if there are fewer). The program prints:
+
+```
+numbers: min=2 max=31 count=5
+words: min=apple max=pear count=3
+last 2: [16, 2]
+last 9: [7, 31, 9, 16, 2]
+```
+::starter
+import java.util.List;
+
+public class Main {
+    public static void main(String[] args) {
+        List<Integer> numbers = List.of(7, 31, 9, 16, 2);
+        Stats<Integer> ns = new Stats<>();
+        for (int n : numbers) ns.add(n);
+        Stats<String> ws = new Stats<>();
+        for (String w : List.of("kiwi", "pear", "apple")) ws.add(w);
+        System.out.println("numbers: " + ns);
+        System.out.println("words: " + ws);
+        System.out.println("last 2: " + lastN(numbers, 2));
+        System.out.println("last 9: " + lastN(numbers, 9));
+    }
+}
+
+class Stats<T extends Comparable<T>> {
+}
+::solution
+import java.util.List;
+
+public class Main {
+    static <T> List<T> lastN(List<T> items, int n) {
+        return items.subList(Math.max(0, items.size() - n), items.size());
+    }
+
+    public static void main(String[] args) {
+        List<Integer> numbers = List.of(7, 31, 9, 16, 2);
+        Stats<Integer> ns = new Stats<>();
+        for (int n : numbers) ns.add(n);
+        Stats<String> ws = new Stats<>();
+        for (String w : List.of("kiwi", "pear", "apple")) ws.add(w);
+        System.out.println("numbers: " + ns);
+        System.out.println("words: " + ws);
+        System.out.println("last 2: " + lastN(numbers, 2));
+        System.out.println("last 9: " + lastN(numbers, 9));
+    }
+}
+
+class Stats<T extends Comparable<T>> {
+    private T min;
+    private T max;
+    private int count;
+
+    void add(T item) {
+        if (count == 0 || item.compareTo(min) < 0) min = item;
+        if (count == 0 || item.compareTo(max) > 0) max = item;
+        count++;
+    }
+
+    @Override
+    public String toString() {
+        return "min=" + min + " max=" + max + " count=" + count;
+    }
+}
+::expected
+numbers: min=2 max=31 count=5
+words: min=apple max=pear count=3
+last 2: [16, 2]
+last 9: [7, 31, 9, 16, 2]
+::variants
+List.of(7, 31, 9, 16, 2) => List.of(7, 3, 99, 16, 12)
+::hints
+- Keep `min` and `max` fields of type `T`, updated with `compareTo` in `add`.
+- `items.subList(Math.max(0, items.size() - n), items.size())` gives the last n.
+--- cards
+Generic class :: class Box<T> { T value; } — Box<String> is checked at compile time; no casts.
+Generic method :: static <T> T first(List<T> xs) — T inferred from the arguments.
+Bounded type :: <T extends Comparable<T>> — T must support compareTo.
+Wildcards / PECS :: ? extends T to read (producer), ? super T to write (consumer).
+Type erasure :: Generic types are removed after compilation: no new T(), no List<int>.
+
+=== lesson java-streams | Lambdas and streams | 85
+## Functions as values: lambdas
+
+A **lambda** is a short anonymous function: `(a, b) -> a + b`. It implements a **functional interface** (one abstract method, Module 4). The standard ones live in `java.util.function`:
+
+| Interface | Shape | Example |
+|---|---|---|
+| `Function<T, R>` | T → R | `s -> s.length()` |
+| `Predicate<T>` | T → boolean | `n -> n % 2 == 0` |
+| `Consumer<T>` | T → nothing | `s -> System.out.println(s)` |
+| `Supplier<T>` | nothing → T | `() -> new ArrayList<>()` |
+| `BiFunction<T, U, R>` | (T, U) → R | `(a, b) -> a * b` |
+| `UnaryOperator<T>`, `BinaryOperator<T>` | T → T, (T, T) → T | `x -> x * 2` |
+
+```java
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+import java.util.function.Function;
+import java.util.function.Predicate;
+
+public class Main {
+    public static void main(String[] args) {
+        Predicate<String> isLong = s -> s.length() > 4;
+        Function<String, String> shout = s -> s.toUpperCase() + "!";
+        System.out.println(isLong.test("Java") + " " + shout.apply("hi"));
+
+        List<String> names = new ArrayList<>(List.of("Grace", "Ada", "Linus", "Barbara"));
+        names.sort(Comparator.comparing(String::length).thenComparing(Comparator.naturalOrder()));
+        System.out.println(names);
+        names.removeIf(n -> n.startsWith("L"));
+        names.forEach(n -> System.out.print(n + " "));
+        System.out.println();
+    }
+}
+```
+
+A **method reference** (`String::length`, `System.out::println`, `Integer::sum`) is shorthand for a lambda that just calls one method. `Comparator.comparing(...)` builds comparators from a key, chainable with `thenComparing` and `reversed()`.
+
+Lambdas can use local variables from the enclosing method only if they're **effectively final** (never reassigned).
+
+## Streams: pipelines over collections
+
+A **stream** processes a sequence of elements through a pipeline of operations, in a declarative style similar to SQL or JavaScript's array methods:
+
+```java
+import java.util.List;
+
+public class Main {
+    record Order(String customer, String product, int quantity, double price) {
+        double total() { return quantity * price; }
+    }
+
+    public static void main(String[] args) {
+        List<Order> orders = List.of(
+            new Order("ada", "book", 2, 12.5),
+            new Order("bob", "pen", 10, 1.2),
+            new Order("ada", "lamp", 1, 35.0),
+            new Order("cy", "book", 1, 12.5));
+
+        List<String> bigOrders = orders.stream()
+            .filter(o -> o.total() > 20)              // keep some
+            .map(o -> o.customer() + ":" + o.product())  // transform each
+            .toList();                                 // collect the result
+        System.out.println(bigOrders);
+
+        double revenue = orders.stream().mapToDouble(Order::total).sum();
+        long bookOrders = orders.stream().filter(o -> o.product().equals("book")).count();
+        System.out.println(revenue + " " + bookOrders);
+    }
+}
+```
+
+A pipeline has three parts:
+
+1. a **source**: `list.stream()`, `Arrays.stream(array)`, `Stream.of(...)`, `IntStream.range(0, 10)`;
+2. **intermediate operations**, which return a new stream and are **lazy** (nothing runs yet): `filter`, `map`, `flatMap`, `sorted`, `distinct`, `limit`, `skip`, `peek`;
+3. a **terminal operation**, which runs the pipeline and produces a result: `toList`, `collect`, `forEach`, `count`, `sum`, `min`, `max`, `reduce`, `anyMatch`, `allMatch`, `findFirst`.
+
+Streams don't modify their source, and can be used only once.
+
+## Collectors: grouping and summarising
+
+`collect(Collectors...)` builds maps, joined strings and statistics, like SQL's `GROUP BY`:
+
+```java
+import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
+import java.util.stream.Collectors;
+
+public class Main {
+    record Sale(String region, String product, double amount) {}
+
+    public static void main(String[] args) {
+        List<Sale> sales = List.of(
+            new Sale("north", "tea", 120), new Sale("south", "coffee", 300),
+            new Sale("north", "coffee", 80), new Sale("south", "tea", 50), new Sale("north", "tea", 30));
+
+        Map<String, Double> byRegion = sales.stream()
+            .collect(Collectors.groupingBy(Sale::region, TreeMap::new, Collectors.summingDouble(Sale::amount)));
+        System.out.println(byRegion);
+
+        Map<String, Long> countByProduct = sales.stream()
+            .collect(Collectors.groupingBy(Sale::product, TreeMap::new, Collectors.counting()));
+        System.out.println(countByProduct);
+
+        String products = sales.stream().map(Sale::product).distinct().sorted().collect(Collectors.joining(", ", "[", "]"));
+        System.out.println(products);
+
+        var stats = sales.stream().mapToDouble(Sale::amount).summaryStatistics();
+        System.out.printf("min %.0f max %.0f avg %.1f%n", stats.getMin(), stats.getMax(), stats.getAverage());
+    }
+}
+```
+
+## Streams or loops?
+
+Streams make data transformations short and readable, especially filter-map-group pipelines. Plain loops are clearer when there's complex control flow, early exits with side effects, or performance-critical code with primitive arrays. Use whichever reads better; don't force every loop into a stream. (`parallelStream()` can use several cores for big CPU-heavy workloads, but rarely helps for small collections.)
+
+~~~check
+? When does `list.stream().filter(...).map(...)` actually run the filter?
++ When a terminal operation (like toList or count) is called
+- Immediately
+- Never
+- When the list changes
+> Intermediate operations are lazy.
+~~~
+
+📚 **Go deeper:** *Java: The Complete Reference* (later editions: "Lambda Expressions" and "The Stream API"); *Effective Java*, chapter 7 (items 42 to 48 on lambdas and streams); dev.java, "The Stream API".
+--- goals
+- write lambdas and method references for the standard functional interfaces
+- build comparators with Comparator.comparing, thenComparing and reversed
+- write stream pipelines with filter, map, sorted and terminal operations
+- group and summarise data with Collectors
+- choose between streams and loops
+--- quiz
+? Which functional interface takes a value and returns a boolean?
++ Predicate<T>
+- Function<T, R>
+- Supplier<T>
+- Consumer<T>
+> test(T) returns boolean.
+? What does `String::length` mean?
++ A method reference equivalent to s -> s.length()
+- A static field
+- A string literal
+- A constructor call
+> Shorthand for a lambda calling one method.
+? Which is a terminal operation?
++ count()
+- filter()
+- map()
+- sorted()
+> Terminal operations run the pipeline.
+? What's the stream equivalent of SQL's GROUP BY?
++ collect(Collectors.groupingBy(...))
+- sorted()
+- distinct()
+- reduce()
+> With downstream collectors like counting() or summingDouble().
+--- exercise code java
+::prompt
+Using **streams only** (no explicit loops), analyse a list of employees and print:
+
+```
+Engineers: [Ada, Linus]
+Average salary: 5250.0
+Highest paid: Grace (7000.0)
+By department: {Engineering=2, Management=1, Sales=1}
+Names: ADA, BOB, GRACE, LINUS
+Anyone below 3500: true
+```
+
+The department map must be sorted by department name.
+::starter
+import java.util.List;
+
+public class Main {
+    record Employee(String name, String department, double salary) {}
+
+    public static void main(String[] args) {
+        List<Employee> staff = List.of(
+            new Employee("Ada", "Engineering", 6000),
+            new Employee("Bob", "Sales", 3000),
+            new Employee("Grace", "Management", 7000),
+            new Employee("Linus", "Engineering", 5000));
+    }
+}
+::solution
+import java.util.Comparator;
+import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
+import java.util.stream.Collectors;
+
+public class Main {
+    record Employee(String name, String department, double salary) {}
+
+    public static void main(String[] args) {
+        List<Employee> staff = List.of(
+            new Employee("Ada", "Engineering", 6000),
+            new Employee("Bob", "Sales", 3000),
+            new Employee("Grace", "Management", 7000),
+            new Employee("Linus", "Engineering", 5000));
+
+        List<String> engineers = staff.stream().filter(e -> e.department().equals("Engineering")).map(Employee::name).toList();
+        System.out.println("Engineers: " + engineers);
+        double average = staff.stream().mapToDouble(Employee::salary).average().orElse(0);
+        System.out.println("Average salary: " + average);
+        Employee top = staff.stream().max(Comparator.comparingDouble(Employee::salary)).orElseThrow();
+        System.out.println("Highest paid: " + top.name() + " (" + top.salary() + ")");
+        Map<String, Long> byDept = staff.stream().collect(Collectors.groupingBy(Employee::department, TreeMap::new, Collectors.counting()));
+        System.out.println("By department: " + byDept);
+        System.out.println("Names: " + staff.stream().map(e -> e.name().toUpperCase()).collect(Collectors.joining(", ")));
+        System.out.println("Anyone below 3500: " + staff.stream().anyMatch(e -> e.salary() < 3500));
+    }
+}
+::expected
+Engineers: [Ada, Linus]
+Average salary: 5250.0
+Highest paid: Grace (7000.0)
+By department: {Engineering=2, Management=1, Sales=1}
+Names: ADA, BOB, GRACE, LINUS
+Anyone below 3500: true
+::variants
+"Bob", "Sales", 3000 => "Bob", "Sales", 4000
+::hints
+- `mapToDouble(Employee::salary).average()` returns an `OptionalDouble`: use `orElse(0)`.
+- `max(Comparator.comparingDouble(Employee::salary))` returns an `Optional<Employee>`.
+- `Collectors.groupingBy(Employee::department, TreeMap::new, Collectors.counting())` sorts the keys.
+--- cards
+Lambda :: (params) -> expression or { block }; implements a functional interface.
+Functional interfaces :: Function, Predicate, Consumer, Supplier, BiFunction, UnaryOperator, BinaryOperator.
+Method reference :: String::length, System.out::println, Integer::sum, ArrayList::new.
+Comparator :: Comparator.comparing(key).thenComparing(...).reversed()
+Stream pipeline :: source → lazy intermediate ops (filter, map, sorted...) → terminal op (toList, count, collect...).
+Collectors :: groupingBy, counting, summingDouble, joining, toMap, partitioningBy.
+
+=== lesson java-library | Optional, numbers and dates | 70
+## Optional: a value that may be absent
+
+Returning `null` for "nothing found" invites `NullPointerException`s. **`Optional<T>`** makes absence explicit in the type:
+
+```java
+import java.util.List;
+import java.util.Optional;
+
+public class Main {
+    static Optional<String> findEmail(String user) {
+        return switch (user) {
+            case "ada" -> Optional.of("ada@example.com");
+            default -> Optional.empty();
+        };
+    }
+
+    public static void main(String[] args) {
+        System.out.println(findEmail("ada").orElse("no email"));
+        System.out.println(findEmail("bob").orElse("no email"));
+        System.out.println(findEmail("ada").map(String::toUpperCase).orElse("-"));
+        findEmail("ada").ifPresent(e -> System.out.println("sending to " + e));
+        System.out.println(findEmail("bob").isPresent());
+        Optional<Integer> firstEven = List.of(3, 5, 8, 10).stream().filter(n -> n % 2 == 0).findFirst();
+        System.out.println(firstEven.orElseThrow());
+    }
+}
+```
+
+Use `Optional` as a **return type** for "maybe a value"; read it with `orElse`, `orElseGet`, `orElseThrow`, `map`, `ifPresent`. Don't use it for fields or parameters, and never call `get()` without checking.
+
+## Wrapper classes and autoboxing
+
+Each primitive has a wrapper class: `Integer`, `Long`, `Double`, `Boolean`, `Character`... They're needed for collections and generics, and hold useful static methods (`Integer.parseInt`, `Integer.MAX_VALUE`, `Character.isDigit`). Java converts automatically (**autoboxing** / **unboxing**), with two traps:
+
+```java
+import java.util.HashMap;
+import java.util.Map;
+
+public class Main {
+    public static void main(String[] args) {
+        Integer a = 127, b = 127, c = 1000, d = 1000;
+        System.out.println((a == b) + " " + (c == d) + " " + c.equals(d));
+
+        Map<String, Integer> stock = new HashMap<>();
+        Integer pens = stock.get("pens");          // null: no such key
+        System.out.println(pens);
+        // int p = stock.get("pens");              // would throw NullPointerException while unboxing
+    }
+}
+```
+
+1. `==` on wrappers compares **references**: it happens to work for small values (Java caches -128 to 127) and fails for others. Use `equals`, or unbox first.
+2. Unboxing `null` throws `NullPointerException`.
+
+## Math and exact decimals
+
+`Math` has `abs`, `pow`, `sqrt`, `max`, `min`, `round`, `floor`, `ceil`, `hypot`, `random`, and the overflow-checking `addExact`/`multiplyExact`. For **money**, `double` is wrong (0.1 + 0.2 ≠ 0.3); use **`BigDecimal`**:
+
+```java
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+
+public class Main {
+    public static void main(String[] args) {
+        System.out.println(0.1 + 0.2);
+        BigDecimal price = new BigDecimal("19.99");
+        BigDecimal quantity = new BigDecimal("3");
+        BigDecimal subtotal = price.multiply(quantity);
+        BigDecimal vat = subtotal.multiply(new BigDecimal("0.20")).setScale(2, RoundingMode.HALF_UP);
+        System.out.println(subtotal + " + " + vat + " = " + subtotal.add(vat));
+        System.out.println(new BigDecimal("10").divide(new BigDecimal("3"), 4, RoundingMode.HALF_EVEN));
+    }
+}
+```
+
+Create `BigDecimal`s from **strings** (`new BigDecimal("0.1")`, not `new BigDecimal(0.1)`), compare with `compareTo` (not `equals`, which also compares the scale: `2.0` vs `2.00`), and always specify the rounding when dividing.
+
+## Dates and times: java.time
+
+The `java.time` package (Java 8+) replaced the old, error-prone `Date` and `Calendar` classes. Its types are immutable:
+
+| Type | Represents |
+|---|---|
+| `LocalDate` | a date without time: 2026-03-15 |
+| `LocalTime` | a time of day: 14:30 |
+| `LocalDateTime` | date and time, no time zone |
+| `ZonedDateTime` | date and time in a zone (Europe/Paris) |
+| `Instant` | a moment on the global timeline (UTC), for timestamps |
+| `Duration` / `Period` | a time-based / date-based amount |
+
+```java
+import java.time.DayOfWeek;
+import java.time.Duration;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.Period;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
+
+public class Main {
+    public static void main(String[] args) {
+        LocalDate release = LocalDate.of(2026, 3, 15);
+        LocalDate deadline = release.plusWeeks(6);
+        System.out.println(deadline + " " + deadline.getDayOfWeek());
+        System.out.println(ChronoUnit.DAYS.between(release, deadline) + " days");
+        System.out.println(Period.between(LocalDate.of(1990, 6, 1), release));
+        System.out.println(release.isLeapYear() + " " + release.with(DayOfWeek.MONDAY));
+
+        LocalDateTime meeting = LocalDateTime.of(2026, 3, 15, 16, 0);
+        System.out.println(meeting.atZone(ZoneId.of("Europe/London")).withZoneSameInstant(ZoneId.of("Asia/Tokyo")).toLocalDateTime());
+        System.out.println(Duration.ofMinutes(135));
+        System.out.println(meeting.format(DateTimeFormatter.ofPattern("dd MMM yyyy, HH:mm")));
+        System.out.println(LocalDate.parse("2026-12-25").getDayOfYear());
+    }
+}
+```
+
+Store timestamps as `Instant` (UTC), convert to a `ZonedDateTime` only to show them to people. `LocalDate.now()` and `Instant.now()` read the clock; in testable code, pass a `Clock` instead of calling `now()` directly.
+
+~~~check
+? Why is `Integer x = 1000, y = 1000; x == y` false?
++ == compares references, and only -128 to 127 are cached
+- 1000 overflows Integer
+- Integers can't be compared
+- It's true
+> Use equals for wrapper objects.
+~~~
+
+📚 **Go deeper:** *Java: The Complete Reference*, chapters 12 (autoboxing), 16 "Exploring java.lang" and 18 (more utility classes); *Effective Java*, items 55 (Optional), 60 (avoid float and double for exact answers), 61 (prefer primitives to boxed primitives); dev.java, "The Date Time API".
+--- goals
+- return and consume Optional values safely
+- avoid the == and null-unboxing traps of wrapper classes
+- compute exactly with BigDecimal and its rounding modes
+- work with dates, times, zones, durations and formatting in java.time
+--- quiz
+? What should a method return when a search finds nothing?
++ Optional.empty() (when the return type is Optional<T>)
+- null always
+- An exception always
+- -1
+> Optional makes absence part of the type.
+? How should you create a BigDecimal for 0.1?
++ `new BigDecimal("0.1")`
+- `new BigDecimal(0.1)`
+- `BigDecimal.of(0.1f)`
+- `(BigDecimal) 0.1`
+> The double 0.1 isn't exactly 0.1.
+? Which type is best for a server log timestamp?
++ Instant
+- LocalDate
+- LocalTime
+- String
+> A point on the UTC timeline.
+? What does `int n = map.get("missing");` do when the map is a Map<String, Integer>?
++ Throws NullPointerException while unboxing
+- Sets n to 0
+- Compile error
+- Sets n to -1
+> get returns null, which can't become an int.
+--- exercise code java
+::prompt
+Write an invoice calculator with `BigDecimal` and `java.time`:
+
+- each line is a `record Line(String item, BigDecimal unitPrice, int quantity)`;
+- the subtotal is the sum of `unitPrice × quantity`; VAT is 20% of the subtotal rounded **half up** to 2 decimals; the total is subtotal + VAT;
+- the invoice date is `2026-01-31`; payment is due **30 days** later, but if that falls on a Saturday or Sunday, it moves to the following **Monday**.
+
+The program prints:
+
+```
+Subtotal: 61.94
+VAT: 12.39
+Total: 74.33
+Due: 2026-03-02 (MONDAY)
+```
+::starter
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.util.List;
+
+public class Main {
+    record Line(String item, BigDecimal unitPrice, int quantity) {}
+
+    public static void main(String[] args) {
+        List<Line> lines = List.of(
+            new Line("Notebook", new BigDecimal("3.49"), 5),
+            new Line("Pen pack", new BigDecimal("4.25"), 2),
+            new Line("Desk lamp", new BigDecimal("35.99"), 1));
+        LocalDate invoiceDate = LocalDate.of(2026, 1, 31);
+    }
+}
+::solution
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.DayOfWeek;
+import java.time.LocalDate;
+import java.util.List;
+
+public class Main {
+    record Line(String item, BigDecimal unitPrice, int quantity) {
+        BigDecimal total() {
+            return unitPrice.multiply(BigDecimal.valueOf(quantity));
+        }
+    }
+
+    public static void main(String[] args) {
+        List<Line> lines = List.of(
+            new Line("Notebook", new BigDecimal("3.49"), 5),
+            new Line("Pen pack", new BigDecimal("4.25"), 2),
+            new Line("Desk lamp", new BigDecimal("35.99"), 1));
+        LocalDate invoiceDate = LocalDate.of(2026, 1, 31);
+
+        BigDecimal subtotal = lines.stream().map(Line::total).reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal vat = subtotal.multiply(new BigDecimal("0.20")).setScale(2, RoundingMode.HALF_UP);
+        System.out.println("Subtotal: " + subtotal);
+        System.out.println("VAT: " + vat);
+        System.out.println("Total: " + subtotal.add(vat));
+
+        LocalDate due = invoiceDate.plusDays(30);
+        if (due.getDayOfWeek() == DayOfWeek.SATURDAY) due = due.plusDays(2);
+        else if (due.getDayOfWeek() == DayOfWeek.SUNDAY) due = due.plusDays(1);
+        System.out.println("Due: " + due + " (" + due.getDayOfWeek() + ")");
+    }
+}
+::expected
+Subtotal: 61.94
+VAT: 12.39
+Total: 74.33
+Due: 2026-03-02 (MONDAY)
+::variants
+LocalDate.of(2026, 1, 31) => LocalDate.of(2026, 2, 2)
+::hints
+- `unitPrice.multiply(BigDecimal.valueOf(quantity))`, then sum with `reduce(BigDecimal.ZERO, BigDecimal::add)`.
+- `setScale(2, RoundingMode.HALF_UP)` rounds the VAT.
+- `invoiceDate.plusDays(30)`, then check `getDayOfWeek()` against `DayOfWeek.SATURDAY` and `SUNDAY`.
+--- cards
+Optional :: Optional.of / empty; orElse, orElseGet, orElseThrow, map, ifPresent. A return type, not a field.
+Wrappers :: Integer, Double...; compare with equals; unboxing null throws NPE; small values are cached.
+BigDecimal :: Exact decimals: new BigDecimal("0.10"); add, multiply, setScale(2, HALF_UP); compareTo.
+java.time :: LocalDate, LocalDateTime, ZonedDateTime, Instant, Duration, Period — immutable.
+Formatting dates :: DateTimeFormatter.ofPattern("dd MMM yyyy"); LocalDate.parse("2026-12-25").
+
+=== lesson java-m5-test | Module 5 test | 150 | exam
+This test covers Module 5: exceptions, collections, generics, lambdas and streams, Optional, BigDecimal and java.time.
+
+Before you start, check that you can:
+
+- handle and design exceptions, and close resources safely;
+- choose the right collection and use maps for counting and grouping;
+- write generic methods and use wildcards;
+- transform and summarise data with streams and collectors;
+- use Optional, BigDecimal and java.time correctly.
+--- goals
+- use Java's standard library like a professional
+--- quiz
+? Which collection removes duplicates and keeps elements sorted?
++ TreeSet
+- ArrayList
+- HashSet
+- ArrayDeque
+> TreeSet is sorted and unique.
+? What does `Stream.of(1, 2, 3).map(x -> x * 2).toList()` return?
++ [2, 4, 6]
+- [1, 2, 3]
+- 12
+- A stream
+> map transforms each element.
+? Which exception type must be declared or caught?
++ IOException
+- NullPointerException
+- IllegalArgumentException
+- ArithmeticException
+> It's checked.
+? Which is right for adding money amounts?
++ BigDecimal.add
+- double +
+- float +
+- Math.addExact on doubles
+> Exact decimal arithmetic.
+--- exercise code java
+::prompt
+**Log analyser.** Each log line looks like `2026-03-15T10:02:11 ERROR payment timeout`. Parse the lines into a `record LogEntry(LocalDateTime time, String level, String message)` (lines that don't parse, including bad dates, are counted as malformed and skipped), then print with streams and collections:
+
+```
+Malformed lines: 2
+Levels: {ERROR=3, INFO=2, WARN=1}
+First error: 10:02:11 payment timeout
+Errors per hour: {10=2, 11=1}
+Most common error: payment timeout (2)
+```
+
+Levels are sorted by name; hours are sorted. Ties for the most common error go to the alphabetically first message.
+::starter
+import java.util.List;
+
+public class Main {
+    public static void main(String[] args) {
+        List<String> lines = List.of(
+            "2026-03-15T09:58:00 INFO service started",
+            "2026-03-15T10:02:11 ERROR payment timeout",
+            "garbage line",
+            "2026-03-15T10:15:40 WARN slow query",
+            "2026-03-15T10:47:03 ERROR payment timeout",
+            "2026-13-40T10:00:00 ERROR bad date",
+            "2026-03-15T11:05:59 ERROR disk full",
+            "2026-03-15T11:30:00 INFO backup done");
+    }
+}
+::solution
+import java.time.LocalDateTime;
+import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.TreeMap;
+import java.util.stream.Collectors;
+
+public class Main {
+    record LogEntry(LocalDateTime time, String level, String message) {}
+
+    static Optional<LogEntry> parse(String line) {
+        String[] parts = line.split(" ", 3);
+        if (parts.length < 3) return Optional.empty();
+        try {
+            return Optional.of(new LogEntry(LocalDateTime.parse(parts[0]), parts[1], parts[2]));
+        } catch (DateTimeParseException e) {
+            return Optional.empty();
+        }
+    }
+
+    public static void main(String[] args) {
+        List<String> lines = List.of(
+            "2026-03-15T09:58:00 INFO service started",
+            "2026-03-15T10:02:11 ERROR payment timeout",
+            "garbage line",
+            "2026-03-15T10:15:40 WARN slow query",
+            "2026-03-15T10:47:03 ERROR payment timeout",
+            "2026-13-40T10:00:00 ERROR bad date",
+            "2026-03-15T11:05:59 ERROR disk full",
+            "2026-03-15T11:30:00 INFO backup done");
+
+        List<LogEntry> entries = new ArrayList<>();
+        int malformed = 0;
+        for (String line : lines) {
+            Optional<LogEntry> e = parse(line);
+            if (e.isPresent()) entries.add(e.get());
+            else malformed++;
+        }
+        System.out.println("Malformed lines: " + malformed);
+        System.out.println("Levels: " + entries.stream().collect(Collectors.groupingBy(LogEntry::level, TreeMap::new, Collectors.counting())));
+        List<LogEntry> errors = entries.stream().filter(e -> e.level().equals("ERROR")).toList();
+        LogEntry first = errors.stream().min(Comparator.comparing(LogEntry::time)).orElseThrow();
+        System.out.println("First error: " + first.time().toLocalTime() + " " + first.message());
+        System.out.println("Errors per hour: " + errors.stream().collect(Collectors.groupingBy(e -> e.time().getHour(), TreeMap::new, Collectors.counting())));
+        Map<String, Long> byMessage = errors.stream().collect(Collectors.groupingBy(LogEntry::message, TreeMap::new, Collectors.counting()));
+        Map.Entry<String, Long> top = byMessage.entrySet().stream()
+            .max(Comparator.comparing((Map.Entry<String, Long> e) -> e.getValue()).thenComparing(Map.Entry::getKey, Comparator.reverseOrder()))
+            .orElseThrow();
+        System.out.println("Most common error: " + top.getKey() + " (" + top.getValue() + ")");
+    }
+}
+::expected
+Malformed lines: 2
+Levels: {ERROR=3, INFO=2, WARN=1}
+First error: 10:02:11 payment timeout
+Errors per hour: {10=2, 11=1}
+Most common error: payment timeout (2)
+::hints
+- `line.split(" ", 3)` splits into at most 3 parts, so the message keeps its spaces.
+- `LocalDateTime.parse` throws `DateTimeParseException` for invalid dates: return `Optional.empty()` then.
+- `Collectors.groupingBy(key, TreeMap::new, Collectors.counting())` gives sorted counts.
