@@ -1,0 +1,1658 @@
+=== module Capstone projects
+
+=== lesson java-project | Capstone 1: a library management system | 400
+This capstone builds the core of a library system in three steps, the way a feature grows in a real codebase: first a **domain model**, then **business rules** with exceptions and dates, then **reporting** with streams and file import. Each step's starter contains the previous step's solution, so you can continue even if a step gave you trouble.
+
+## How a task like this is approached
+
+1. **Model the domain** before writing logic: what are the things (books, members, loans), which are values (records) and which hold changing state (the library)?
+2. **Protect invariants in one place**: a book can't have an invalid year, a copy can't be lent twice, a member can't exceed the loan limit. Validation lives in constructors and in the methods that change state, and violations become exceptions with clear messages.
+3. **Keep the API small**: the `main` method (your "client") only uses a handful of public methods; the maps behind them are private.
+4. **Report with streams**: once the data is right, questions are short pipelines.
+
+Each step's `main` method is the specification: it calls your classes and its printed output must match exactly. Don't change `main`.
+--- goals
+- design a domain model with records, a stateful class and custom exceptions
+- enforce business rules and compute fines with java.time and BigDecimal
+- import data from a CSV file, rejecting invalid lines
+- write reports with streams and collectors
+--- exercise code java
+::prompt
+**Step 1: the catalogue.** Complete `Book` and `Library`:
+
+- `record Book(String isbn, String title, String author, int year)`: its compact constructor rejects a blank ISBN or title (`IllegalArgumentException("ISBN is required")` / `"title is required"`) and a year outside 1450 to 2100 (`"invalid year <year>"`); `toString()` returns `Title (Author, year)`;
+- `Library` stores books by ISBN: `addBook` returns `false` for a duplicate ISBN; `size()`; `findByIsbn` returns an `Optional<Book>`; `search(text)` returns books whose title **or** author contains the text, ignoring case, sorted by title; `titlesBefore(year)` returns the titles of books published before that year, oldest first (then by title).
+::starter
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+
+public class Main {
+    public static void main(String[] args) {
+        Library lib = new Library();
+        lib.addBook(new Book("978-0134685991", "Effective Java", "Joshua Bloch", 2018));
+        lib.addBook(new Book("978-0596009205", "Head First Java", "Kathy Sierra", 2005));
+        lib.addBook(new Book("978-0321349606", "Java Concurrency in Practice", "Brian Goetz", 2006));
+        lib.addBook(new Book("978-0132350884", "Clean Code", "Robert C. Martin", 2008));
+        lib.addBook(new Book("978-0201633610", "Design Patterns", "Erich Gamma", 1994));
+        System.out.println("duplicate added: " + lib.addBook(new Book("978-0134685991", "Effective Java", "Joshua Bloch", 2018)));
+        System.out.println("books: " + lib.size());
+        System.out.println("search 'java':");
+        lib.search("java").forEach(b -> System.out.println("  " + b));
+        System.out.println("search 'MARTIN': " + lib.search("MARTIN"));
+        System.out.println("978-0132350884: " + lib.findByIsbn("978-0132350884").map(Book::title).orElse("not found"));
+        System.out.println("000: " + lib.findByIsbn("000").map(Book::title).orElse("not found"));
+        System.out.println("before 2006: " + lib.titlesBefore(2006));
+        try {
+            new Book("978-1", "Gutenberg Bible", "Unknown", 1300);
+        } catch (IllegalArgumentException e) {
+            System.out.println("rejected: " + e.getMessage());
+        }
+    }
+}
+
+record Book(String isbn, String title, String author, int year) {
+}
+
+class Library {
+    boolean addBook(Book book) {
+        return false;
+    }
+
+    int size() {
+        return 0;
+    }
+
+    Optional<Book> findByIsbn(String isbn) {
+        return Optional.empty();
+    }
+
+    List<Book> search(String text) {
+        return List.of();
+    }
+
+    List<String> titlesBefore(int year) {
+        return List.of();
+    }
+}
+::solution
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+
+public class Main {
+    public static void main(String[] args) {
+        Library lib = new Library();
+        lib.addBook(new Book("978-0134685991", "Effective Java", "Joshua Bloch", 2018));
+        lib.addBook(new Book("978-0596009205", "Head First Java", "Kathy Sierra", 2005));
+        lib.addBook(new Book("978-0321349606", "Java Concurrency in Practice", "Brian Goetz", 2006));
+        lib.addBook(new Book("978-0132350884", "Clean Code", "Robert C. Martin", 2008));
+        lib.addBook(new Book("978-0201633610", "Design Patterns", "Erich Gamma", 1994));
+        System.out.println("duplicate added: " + lib.addBook(new Book("978-0134685991", "Effective Java", "Joshua Bloch", 2018)));
+        System.out.println("books: " + lib.size());
+        System.out.println("search 'java':");
+        lib.search("java").forEach(b -> System.out.println("  " + b));
+        System.out.println("search 'MARTIN': " + lib.search("MARTIN"));
+        System.out.println("978-0132350884: " + lib.findByIsbn("978-0132350884").map(Book::title).orElse("not found"));
+        System.out.println("000: " + lib.findByIsbn("000").map(Book::title).orElse("not found"));
+        System.out.println("before 2006: " + lib.titlesBefore(2006));
+        try {
+            new Book("978-1", "Gutenberg Bible", "Unknown", 1300);
+        } catch (IllegalArgumentException e) {
+            System.out.println("rejected: " + e.getMessage());
+        }
+    }
+}
+
+record Book(String isbn, String title, String author, int year) {
+    Book {
+        if (isbn == null || isbn.isBlank()) throw new IllegalArgumentException("ISBN is required");
+        if (title == null || title.isBlank()) throw new IllegalArgumentException("title is required");
+        if (year < 1450 || year > 2100) throw new IllegalArgumentException("invalid year " + year);
+    }
+
+    @Override
+    public String toString() {
+        return title + " (" + author + ", " + year + ")";
+    }
+}
+
+class Library {
+    private final Map<String, Book> books = new HashMap<>();
+
+    boolean addBook(Book book) {
+        return books.putIfAbsent(book.isbn(), book) == null;
+    }
+
+    int size() {
+        return books.size();
+    }
+
+    Optional<Book> findByIsbn(String isbn) {
+        return Optional.ofNullable(books.get(isbn));
+    }
+
+    List<Book> search(String text) {
+        String needle = text.toLowerCase();
+        return books.values().stream()
+            .filter(b -> b.title().toLowerCase().contains(needle) || b.author().toLowerCase().contains(needle))
+            .sorted(Comparator.comparing(Book::title))
+            .toList();
+    }
+
+    List<String> titlesBefore(int year) {
+        return books.values().stream()
+            .filter(b -> b.year() < year)
+            .sorted(Comparator.comparing(Book::year).thenComparing(Book::title))
+            .map(Book::title)
+            .toList();
+    }
+}
+::expected
+duplicate added: false
+books: 5
+search 'java':
+  Effective Java (Joshua Bloch, 2018)
+  Head First Java (Kathy Sierra, 2005)
+  Java Concurrency in Practice (Brian Goetz, 2006)
+search 'MARTIN': [Clean Code (Robert C. Martin, 2008)]
+978-0132350884: Clean Code
+000: not found
+before 2006: [Design Patterns, Head First Java]
+rejected: invalid year 1300
+::hints
+- `books.putIfAbsent(isbn, book) == null` adds only new ISBNs and tells you whether it did.
+- `Optional.ofNullable(books.get(isbn))` turns a missing key into an empty Optional.
+- Streams: `filter`, `sorted(Comparator.comparing(Book::title))`, `toList()`.
+--- exercise code java
+::prompt
+**Step 2: loans.** Add members and loans:
+
+- `record Member(int id, String name)`, `record Loan(Book book, Member member, LocalDate borrowedOn, LocalDate dueOn)` and `class LibraryException extends RuntimeException` (already declared);
+- `addMember(Member)`;
+- `borrow(isbn, memberId, date)` returns the new loan, due **14 days** later. It throws `LibraryException` with these messages, checked in this order: `unknown book <isbn>`, `unknown member <id>`, `<title> is already on loan` (the library owns one copy of each book), `<name> already has 3 loans`;
+- `giveBack(isbn, date)` ends the loan and returns the fine as a `BigDecimal`: **0.25 per day** after the due date (0.00 when on time). Giving back a book that isn't on loan throws `<isbn> is not on loan`;
+- `loansOf(memberId)` returns the member's active loans sorted by due date (then title).
+::starter
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+
+public class Main {
+    static void attempt(Runnable action) {
+        try {
+            action.run();
+        } catch (LibraryException e) {
+            System.out.println("refused: " + e.getMessage());
+        }
+    }
+
+    public static void main(String[] args) {
+        Library lib = new Library();
+        lib.addBook(new Book("978-0134685991", "Effective Java", "Joshua Bloch", 2018));
+        lib.addBook(new Book("978-0596009205", "Head First Java", "Kathy Sierra", 2005));
+        lib.addBook(new Book("978-0321349606", "Java Concurrency in Practice", "Brian Goetz", 2006));
+        lib.addBook(new Book("978-0132350884", "Clean Code", "Robert C. Martin", 2008));
+        lib.addMember(new Member(1, "Ada"));
+        lib.addMember(new Member(2, "Bob"));
+        LocalDate day = LocalDate.of(2026, 3, 1);
+
+        Loan first = lib.borrow("978-0134685991", 1, day);
+        System.out.println(first.member().name() + " borrowed " + first.book().title() + ", due " + first.dueOn());
+        attempt(() -> lib.borrow("978-0134685991", 2, day));
+        attempt(() -> lib.borrow("978-999", 2, day));
+        attempt(() -> lib.borrow("978-0132350884", 9, day));
+        lib.borrow("978-0596009205", 1, day.plusDays(1));
+        lib.borrow("978-0321349606", 1, day.plusDays(2));
+        attempt(() -> lib.borrow("978-0132350884", 1, day.plusDays(3)));
+        System.out.println("Ada's loans:");
+        lib.loansOf(1).forEach(l -> System.out.println("  " + l.book().title() + " due " + l.dueOn()));
+
+        System.out.println("fine on time: " + lib.giveBack("978-0596009205", LocalDate.of(2026, 3, 10)));
+        System.out.println("fine 6 days late: " + lib.giveBack("978-0134685991", LocalDate.of(2026, 3, 21)));
+        attempt(() -> lib.giveBack("978-0134685991", day));
+        lib.borrow("978-0132350884", 1, day.plusDays(3));
+        System.out.println("Ada now has " + lib.loansOf(1).size() + " loans");
+    }
+}
+
+record Book(String isbn, String title, String author, int year) {
+    Book {
+        if (isbn == null || isbn.isBlank()) throw new IllegalArgumentException("ISBN is required");
+        if (title == null || title.isBlank()) throw new IllegalArgumentException("title is required");
+        if (year < 1450 || year > 2100) throw new IllegalArgumentException("invalid year " + year);
+    }
+
+    @Override
+    public String toString() {
+        return title + " (" + author + ", " + year + ")";
+    }
+}
+
+record Member(int id, String name) {}
+
+record Loan(Book book, Member member, LocalDate borrowedOn, LocalDate dueOn) {}
+
+class LibraryException extends RuntimeException {
+    LibraryException(String message) {
+        super(message);
+    }
+}
+
+class Library {
+    private final Map<String, Book> books = new HashMap<>();
+
+    boolean addBook(Book book) {
+        return books.putIfAbsent(book.isbn(), book) == null;
+    }
+
+    int size() {
+        return books.size();
+    }
+
+    Optional<Book> findByIsbn(String isbn) {
+        return Optional.ofNullable(books.get(isbn));
+    }
+
+    List<Book> search(String text) {
+        String needle = text.toLowerCase();
+        return books.values().stream()
+            .filter(b -> b.title().toLowerCase().contains(needle) || b.author().toLowerCase().contains(needle))
+            .sorted(Comparator.comparing(Book::title))
+            .toList();
+    }
+
+    List<String> titlesBefore(int year) {
+        return books.values().stream()
+            .filter(b -> b.year() < year)
+            .sorted(Comparator.comparing(Book::year).thenComparing(Book::title))
+            .map(Book::title)
+            .toList();
+    }
+
+    void addMember(Member member) {
+    }
+
+    Loan borrow(String isbn, int memberId, LocalDate date) {
+        throw new LibraryException("not implemented");
+    }
+
+    BigDecimal giveBack(String isbn, LocalDate date) {
+        return BigDecimal.ZERO;
+    }
+
+    List<Loan> loansOf(int memberId) {
+        return List.of();
+    }
+}
+::solution
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+
+public class Main {
+    static void attempt(Runnable action) {
+        try {
+            action.run();
+        } catch (LibraryException e) {
+            System.out.println("refused: " + e.getMessage());
+        }
+    }
+
+    public static void main(String[] args) {
+        Library lib = new Library();
+        lib.addBook(new Book("978-0134685991", "Effective Java", "Joshua Bloch", 2018));
+        lib.addBook(new Book("978-0596009205", "Head First Java", "Kathy Sierra", 2005));
+        lib.addBook(new Book("978-0321349606", "Java Concurrency in Practice", "Brian Goetz", 2006));
+        lib.addBook(new Book("978-0132350884", "Clean Code", "Robert C. Martin", 2008));
+        lib.addMember(new Member(1, "Ada"));
+        lib.addMember(new Member(2, "Bob"));
+        LocalDate day = LocalDate.of(2026, 3, 1);
+
+        Loan first = lib.borrow("978-0134685991", 1, day);
+        System.out.println(first.member().name() + " borrowed " + first.book().title() + ", due " + first.dueOn());
+        attempt(() -> lib.borrow("978-0134685991", 2, day));
+        attempt(() -> lib.borrow("978-999", 2, day));
+        attempt(() -> lib.borrow("978-0132350884", 9, day));
+        lib.borrow("978-0596009205", 1, day.plusDays(1));
+        lib.borrow("978-0321349606", 1, day.plusDays(2));
+        attempt(() -> lib.borrow("978-0132350884", 1, day.plusDays(3)));
+        System.out.println("Ada's loans:");
+        lib.loansOf(1).forEach(l -> System.out.println("  " + l.book().title() + " due " + l.dueOn()));
+
+        System.out.println("fine on time: " + lib.giveBack("978-0596009205", LocalDate.of(2026, 3, 10)));
+        System.out.println("fine 6 days late: " + lib.giveBack("978-0134685991", LocalDate.of(2026, 3, 21)));
+        attempt(() -> lib.giveBack("978-0134685991", day));
+        lib.borrow("978-0132350884", 1, day.plusDays(3));
+        System.out.println("Ada now has " + lib.loansOf(1).size() + " loans");
+    }
+}
+
+record Book(String isbn, String title, String author, int year) {
+    Book {
+        if (isbn == null || isbn.isBlank()) throw new IllegalArgumentException("ISBN is required");
+        if (title == null || title.isBlank()) throw new IllegalArgumentException("title is required");
+        if (year < 1450 || year > 2100) throw new IllegalArgumentException("invalid year " + year);
+    }
+
+    @Override
+    public String toString() {
+        return title + " (" + author + ", " + year + ")";
+    }
+}
+
+record Member(int id, String name) {}
+
+record Loan(Book book, Member member, LocalDate borrowedOn, LocalDate dueOn) {}
+
+class LibraryException extends RuntimeException {
+    LibraryException(String message) {
+        super(message);
+    }
+}
+
+class Library {
+    static final int MAX_LOANS = 3;
+    static final int LOAN_DAYS = 14;
+    static final BigDecimal FINE_PER_DAY = new BigDecimal("0.25");
+
+    private final Map<String, Book> books = new HashMap<>();
+    private final Map<Integer, Member> members = new HashMap<>();
+    private final Map<String, Loan> activeLoans = new HashMap<>();
+
+    boolean addBook(Book book) {
+        return books.putIfAbsent(book.isbn(), book) == null;
+    }
+
+    void addMember(Member member) {
+        members.put(member.id(), member);
+    }
+
+    int size() {
+        return books.size();
+    }
+
+    Optional<Book> findByIsbn(String isbn) {
+        return Optional.ofNullable(books.get(isbn));
+    }
+
+    List<Book> search(String text) {
+        String needle = text.toLowerCase();
+        return books.values().stream()
+            .filter(b -> b.title().toLowerCase().contains(needle) || b.author().toLowerCase().contains(needle))
+            .sorted(Comparator.comparing(Book::title))
+            .toList();
+    }
+
+    List<String> titlesBefore(int year) {
+        return books.values().stream()
+            .filter(b -> b.year() < year)
+            .sorted(Comparator.comparing(Book::year).thenComparing(Book::title))
+            .map(Book::title)
+            .toList();
+    }
+
+    Loan borrow(String isbn, int memberId, LocalDate date) {
+        Book book = findByIsbn(isbn).orElseThrow(() -> new LibraryException("unknown book " + isbn));
+        Member member = members.get(memberId);
+        if (member == null) throw new LibraryException("unknown member " + memberId);
+        if (activeLoans.containsKey(isbn)) throw new LibraryException(book.title() + " is already on loan");
+        long count = activeLoans.values().stream().filter(l -> l.member().equals(member)).count();
+        if (count >= MAX_LOANS) throw new LibraryException(member.name() + " already has " + MAX_LOANS + " loans");
+        Loan loan = new Loan(book, member, date, date.plusDays(LOAN_DAYS));
+        activeLoans.put(isbn, loan);
+        return loan;
+    }
+
+    BigDecimal giveBack(String isbn, LocalDate date) {
+        Loan loan = activeLoans.remove(isbn);
+        if (loan == null) throw new LibraryException(isbn + " is not on loan");
+        long late = Math.max(0, ChronoUnit.DAYS.between(loan.dueOn(), date));
+        return FINE_PER_DAY.multiply(BigDecimal.valueOf(late));
+    }
+
+    List<Loan> loansOf(int memberId) {
+        return activeLoans.values().stream()
+            .filter(l -> l.member().id() == memberId)
+            .sorted(Comparator.comparing(Loan::dueOn).thenComparing(l -> l.book().title()))
+            .toList();
+    }
+}
+::expected
+Ada borrowed Effective Java, due 2026-03-15
+refused: Effective Java is already on loan
+refused: unknown book 978-999
+refused: unknown member 9
+refused: Ada already has 3 loans
+Ada's loans:
+  Effective Java due 2026-03-15
+  Head First Java due 2026-03-16
+  Java Concurrency in Practice due 2026-03-17
+fine on time: 0.00
+fine 6 days late: 1.50
+refused: 978-0134685991 is not on loan
+Ada now has 2 loans
+::hints
+- Keep active loans in a `Map<String, Loan>` keyed by ISBN: `containsKey` answers "already on loan", and `remove` ends a loan.
+- `ChronoUnit.DAYS.between(loan.dueOn(), date)` counts days late (clamp to 0 with `Math.max`).
+- `new BigDecimal("0.25").multiply(BigDecimal.valueOf(days))` gives `0.00` for zero days, keeping two decimals.
+--- exercise code java
+::prompt
+**Step 3: import and reports.** Add:
+
+- `int importCsv(Path file)`: reads lines `isbn;title;author;year` (the first line is a header, blank lines are skipped) and adds each book; returns how many lines were **rejected** (wrong number of fields, invalid values such as a bad year, or a duplicate ISBN);
+- a history of every loan ever made, and the total of fines collected (`finesCollected()`);
+- `mostBorrowed(n)`: the `n` most borrowed titles as `Title: count`, most first, ties by title;
+- `overdue(today)`: active loans whose due date is before `today`, as `Title - Member (N days)`, most overdue first (then title).
+::starter
+import java.io.IOException;
+import java.math.BigDecimal;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.stream.Collectors;
+
+public class Main {
+    public static void main(String[] args) throws IOException {
+        Path csv = Files.createTempFile("catalogue", ".csv");
+        Files.write(csv, List.of(
+            "isbn;title;author;year",
+            "978-0134685991;Effective Java;Joshua Bloch;2018",
+            "978-0596009205;Head First Java;Kathy Sierra;2005",
+            "978-0321349606;Java Concurrency in Practice;Brian Goetz;2006",
+            "978-0132350884;Clean Code;Robert C. Martin;2008",
+            "978-0201633610;Design Patterns;Erich Gamma;1994",
+            "broken line without fields",
+            "978-0000000000;Old Scroll;Anonymous;1200",
+            "978-0134685991;Effective Java;Joshua Bloch;2018",
+            ""));
+        Library lib = new Library();
+        int rejected = lib.importCsv(csv);
+        Files.delete(csv);
+        System.out.println("imported " + lib.size() + " books, rejected " + rejected + " lines");
+
+        lib.addMember(new Member(1, "Ada"));
+        lib.addMember(new Member(2, "Bob"));
+        LocalDate march1 = LocalDate.of(2026, 3, 1);
+        lib.borrow("978-0134685991", 1, march1);
+        lib.giveBack("978-0134685991", LocalDate.of(2026, 3, 20));
+        lib.borrow("978-0134685991", 2, LocalDate.of(2026, 3, 21));
+        lib.borrow("978-0132350884", 1, march1.plusDays(5));
+        lib.giveBack("978-0132350884", LocalDate.of(2026, 3, 30));
+        lib.borrow("978-0132350884", 2, LocalDate.of(2026, 4, 1));
+        lib.borrow("978-0201633610", 1, march1.plusDays(10));
+
+        System.out.println("most borrowed: " + lib.mostBorrowed(2));
+        System.out.println("overdue on 2026-04-20:");
+        lib.overdue(LocalDate.of(2026, 4, 20)).forEach(line -> System.out.println("  " + line));
+        System.out.println("fines collected: " + lib.finesCollected());
+    }
+}
+
+record Book(String isbn, String title, String author, int year) {
+    Book {
+        if (isbn == null || isbn.isBlank()) throw new IllegalArgumentException("ISBN is required");
+        if (title == null || title.isBlank()) throw new IllegalArgumentException("title is required");
+        if (year < 1450 || year > 2100) throw new IllegalArgumentException("invalid year " + year);
+    }
+
+    @Override
+    public String toString() {
+        return title + " (" + author + ", " + year + ")";
+    }
+}
+
+record Member(int id, String name) {}
+
+record Loan(Book book, Member member, LocalDate borrowedOn, LocalDate dueOn) {}
+
+class LibraryException extends RuntimeException {
+    LibraryException(String message) {
+        super(message);
+    }
+}
+
+class Library {
+    static final int MAX_LOANS = 3;
+    static final int LOAN_DAYS = 14;
+    static final BigDecimal FINE_PER_DAY = new BigDecimal("0.25");
+
+    private final Map<String, Book> books = new HashMap<>();
+    private final Map<Integer, Member> members = new HashMap<>();
+    private final Map<String, Loan> activeLoans = new HashMap<>();
+
+    boolean addBook(Book book) {
+        return books.putIfAbsent(book.isbn(), book) == null;
+    }
+
+    void addMember(Member member) {
+        members.put(member.id(), member);
+    }
+
+    int size() {
+        return books.size();
+    }
+
+    Optional<Book> findByIsbn(String isbn) {
+        return Optional.ofNullable(books.get(isbn));
+    }
+
+    List<Book> search(String text) {
+        String needle = text.toLowerCase();
+        return books.values().stream()
+            .filter(b -> b.title().toLowerCase().contains(needle) || b.author().toLowerCase().contains(needle))
+            .sorted(Comparator.comparing(Book::title))
+            .toList();
+    }
+
+    List<String> titlesBefore(int year) {
+        return books.values().stream()
+            .filter(b -> b.year() < year)
+            .sorted(Comparator.comparing(Book::year).thenComparing(Book::title))
+            .map(Book::title)
+            .toList();
+    }
+
+    Loan borrow(String isbn, int memberId, LocalDate date) {
+        Book book = findByIsbn(isbn).orElseThrow(() -> new LibraryException("unknown book " + isbn));
+        Member member = members.get(memberId);
+        if (member == null) throw new LibraryException("unknown member " + memberId);
+        if (activeLoans.containsKey(isbn)) throw new LibraryException(book.title() + " is already on loan");
+        long count = activeLoans.values().stream().filter(l -> l.member().equals(member)).count();
+        if (count >= MAX_LOANS) throw new LibraryException(member.name() + " already has " + MAX_LOANS + " loans");
+        Loan loan = new Loan(book, member, date, date.plusDays(LOAN_DAYS));
+        activeLoans.put(isbn, loan);
+        return loan;
+    }
+
+    BigDecimal giveBack(String isbn, LocalDate date) {
+        Loan loan = activeLoans.remove(isbn);
+        if (loan == null) throw new LibraryException(isbn + " is not on loan");
+        long late = Math.max(0, ChronoUnit.DAYS.between(loan.dueOn(), date));
+        return FINE_PER_DAY.multiply(BigDecimal.valueOf(late));
+    }
+
+    List<Loan> loansOf(int memberId) {
+        return activeLoans.values().stream()
+            .filter(l -> l.member().id() == memberId)
+            .sorted(Comparator.comparing(Loan::dueOn).thenComparing(l -> l.book().title()))
+            .toList();
+    }
+
+    int importCsv(Path file) throws IOException {
+        return 0;
+    }
+
+    List<String> mostBorrowed(int n) {
+        return List.of();
+    }
+
+    List<String> overdue(LocalDate today) {
+        return List.of();
+    }
+
+    BigDecimal finesCollected() {
+        return BigDecimal.ZERO;
+    }
+}
+::solution
+import java.io.IOException;
+import java.math.BigDecimal;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.stream.Collectors;
+
+public class Main {
+    public static void main(String[] args) throws IOException {
+        Path csv = Files.createTempFile("catalogue", ".csv");
+        Files.write(csv, List.of(
+            "isbn;title;author;year",
+            "978-0134685991;Effective Java;Joshua Bloch;2018",
+            "978-0596009205;Head First Java;Kathy Sierra;2005",
+            "978-0321349606;Java Concurrency in Practice;Brian Goetz;2006",
+            "978-0132350884;Clean Code;Robert C. Martin;2008",
+            "978-0201633610;Design Patterns;Erich Gamma;1994",
+            "broken line without fields",
+            "978-0000000000;Old Scroll;Anonymous;1200",
+            "978-0134685991;Effective Java;Joshua Bloch;2018",
+            ""));
+        Library lib = new Library();
+        int rejected = lib.importCsv(csv);
+        Files.delete(csv);
+        System.out.println("imported " + lib.size() + " books, rejected " + rejected + " lines");
+
+        lib.addMember(new Member(1, "Ada"));
+        lib.addMember(new Member(2, "Bob"));
+        LocalDate march1 = LocalDate.of(2026, 3, 1);
+        lib.borrow("978-0134685991", 1, march1);
+        lib.giveBack("978-0134685991", LocalDate.of(2026, 3, 20));
+        lib.borrow("978-0134685991", 2, LocalDate.of(2026, 3, 21));
+        lib.borrow("978-0132350884", 1, march1.plusDays(5));
+        lib.giveBack("978-0132350884", LocalDate.of(2026, 3, 30));
+        lib.borrow("978-0132350884", 2, LocalDate.of(2026, 4, 1));
+        lib.borrow("978-0201633610", 1, march1.plusDays(10));
+
+        System.out.println("most borrowed: " + lib.mostBorrowed(2));
+        System.out.println("overdue on 2026-04-20:");
+        lib.overdue(LocalDate.of(2026, 4, 20)).forEach(line -> System.out.println("  " + line));
+        System.out.println("fines collected: " + lib.finesCollected());
+    }
+}
+
+record Book(String isbn, String title, String author, int year) {
+    Book {
+        if (isbn == null || isbn.isBlank()) throw new IllegalArgumentException("ISBN is required");
+        if (title == null || title.isBlank()) throw new IllegalArgumentException("title is required");
+        if (year < 1450 || year > 2100) throw new IllegalArgumentException("invalid year " + year);
+    }
+
+    @Override
+    public String toString() {
+        return title + " (" + author + ", " + year + ")";
+    }
+}
+
+record Member(int id, String name) {}
+
+record Loan(Book book, Member member, LocalDate borrowedOn, LocalDate dueOn) {}
+
+class LibraryException extends RuntimeException {
+    LibraryException(String message) {
+        super(message);
+    }
+}
+
+class Library {
+    static final int MAX_LOANS = 3;
+    static final int LOAN_DAYS = 14;
+    static final BigDecimal FINE_PER_DAY = new BigDecimal("0.25");
+
+    private final Map<String, Book> books = new HashMap<>();
+    private final Map<Integer, Member> members = new HashMap<>();
+    private final Map<String, Loan> activeLoans = new HashMap<>();
+    private final List<Loan> history = new ArrayList<>();
+    private BigDecimal finesCollected = BigDecimal.ZERO;
+
+    boolean addBook(Book book) {
+        return books.putIfAbsent(book.isbn(), book) == null;
+    }
+
+    void addMember(Member member) {
+        members.put(member.id(), member);
+    }
+
+    int size() {
+        return books.size();
+    }
+
+    Optional<Book> findByIsbn(String isbn) {
+        return Optional.ofNullable(books.get(isbn));
+    }
+
+    List<Book> search(String text) {
+        String needle = text.toLowerCase();
+        return books.values().stream()
+            .filter(b -> b.title().toLowerCase().contains(needle) || b.author().toLowerCase().contains(needle))
+            .sorted(Comparator.comparing(Book::title))
+            .toList();
+    }
+
+    List<String> titlesBefore(int year) {
+        return books.values().stream()
+            .filter(b -> b.year() < year)
+            .sorted(Comparator.comparing(Book::year).thenComparing(Book::title))
+            .map(Book::title)
+            .toList();
+    }
+
+    Loan borrow(String isbn, int memberId, LocalDate date) {
+        Book book = findByIsbn(isbn).orElseThrow(() -> new LibraryException("unknown book " + isbn));
+        Member member = members.get(memberId);
+        if (member == null) throw new LibraryException("unknown member " + memberId);
+        if (activeLoans.containsKey(isbn)) throw new LibraryException(book.title() + " is already on loan");
+        long count = activeLoans.values().stream().filter(l -> l.member().equals(member)).count();
+        if (count >= MAX_LOANS) throw new LibraryException(member.name() + " already has " + MAX_LOANS + " loans");
+        Loan loan = new Loan(book, member, date, date.plusDays(LOAN_DAYS));
+        activeLoans.put(isbn, loan);
+        history.add(loan);
+        return loan;
+    }
+
+    BigDecimal giveBack(String isbn, LocalDate date) {
+        Loan loan = activeLoans.remove(isbn);
+        if (loan == null) throw new LibraryException(isbn + " is not on loan");
+        long late = Math.max(0, ChronoUnit.DAYS.between(loan.dueOn(), date));
+        BigDecimal fine = FINE_PER_DAY.multiply(BigDecimal.valueOf(late));
+        finesCollected = finesCollected.add(fine);
+        return fine;
+    }
+
+    List<Loan> loansOf(int memberId) {
+        return activeLoans.values().stream()
+            .filter(l -> l.member().id() == memberId)
+            .sorted(Comparator.comparing(Loan::dueOn).thenComparing(l -> l.book().title()))
+            .toList();
+    }
+
+    /** Adds the books in a "isbn;title;author;year" file (header first); returns how many lines were rejected. */
+    int importCsv(Path file) throws IOException {
+        int rejected = 0;
+        List<String> lines = Files.readAllLines(file);
+        for (String line : lines.subList(1, lines.size())) {
+            if (line.isBlank()) continue;
+            String[] parts = line.split(";");
+            try {
+                if (parts.length != 4) throw new IllegalArgumentException("expected 4 fields");
+                if (!addBook(new Book(parts[0].strip(), parts[1].strip(), parts[2].strip(), Integer.parseInt(parts[3].strip())))) rejected++;
+            } catch (IllegalArgumentException e) {
+                rejected++;
+            }
+        }
+        return rejected;
+    }
+
+    List<String> mostBorrowed(int n) {
+        Map<String, Long> counts = history.stream().collect(Collectors.groupingBy(l -> l.book().title(), Collectors.counting()));
+        return counts.entrySet().stream()
+            .sorted(Comparator.comparing((Map.Entry<String, Long> e) -> -e.getValue()).thenComparing(Map.Entry::getKey))
+            .limit(n)
+            .map(e -> e.getKey() + ": " + e.getValue())
+            .toList();
+    }
+
+    List<String> overdue(LocalDate today) {
+        return activeLoans.values().stream()
+            .filter(l -> l.dueOn().isBefore(today))
+            .sorted(Comparator.comparing(Loan::dueOn).thenComparing(l -> l.book().title()))
+            .map(l -> l.book().title() + " - " + l.member().name() + " (" + ChronoUnit.DAYS.between(l.dueOn(), today) + " days)")
+            .toList();
+    }
+
+    BigDecimal finesCollected() {
+        return finesCollected;
+    }
+}
+::expected
+imported 5 books, rejected 3 lines
+most borrowed: [Clean Code: 2, Effective Java: 2]
+overdue on 2026-04-20:
+  Design Patterns - Ada (26 days)
+  Effective Java - Bob (16 days)
+  Clean Code - Bob (5 days)
+fines collected: 3.75
+::hints
+- Catch `IllegalArgumentException` (which also covers `NumberFormatException`) around each line's parsing, and count `addBook` returning false as rejected.
+- Record each new loan in a `List<Loan> history` inside `borrow`, and add each fine to a running `BigDecimal` total in `giveBack`.
+- `Collectors.groupingBy(l -> l.book().title(), Collectors.counting())`, then sort the entries by count descending and title.
+--- cards
+Domain model :: Values as records (Book, Member, Loan); state in a class with a small API (Library).
+Invariants :: Validated in constructors and state-changing methods; violations are exceptions with clear messages.
+Map by key :: Map<String, Loan> keyed by ISBN makes "is it on loan?" and returns O(1).
+Money and dates :: BigDecimal for fines; LocalDate and ChronoUnit.DAYS.between for due dates.
+
+=== lesson java-capstone-bank | Capstone 2: a bank that survives concurrency | 450
+Money must never appear or disappear. In this capstone you build a small bank whose transfers are correct first in one thread, then under heavy **concurrency**: twenty thousand transfers running at the same time on virtual threads. It's the kind of problem behind payment systems, inventory counts and ticket sales.
+
+## How a task like this is approached
+
+1. **Get it right single-threaded**: clear rules, validated inputs, exceptions with useful messages, integer cents instead of floating-point money.
+2. **Find the shared mutable state**: here, account balances and the transfer history.
+3. **Protect it**: each account gets its own lock; a transfer needs **two** locks, and taking them in different orders in different threads causes **deadlocks**, so locks are always taken in a fixed global order (by account id).
+4. **Check invariants after the storm**: the total amount of money must be exactly what was deposited, no balance may be negative, and every transfer must be either recorded or refused.
+--- goals
+- implement business rules with exceptions and integer money
+- identify shared mutable state and protect it with locks
+- avoid deadlocks with a global lock order
+- verify concurrent code with invariants
+--- exercise code java
+::prompt
+**Step 1: the rules.** Complete `Bank` (the account, transfer and exception types are declared for you):
+
+- `open(id, owner, cents)` opens an account (`account <id> already exists` for a duplicate);
+- `transfer(from, to, cents)` checks, in this order: amount positive (`amount must be positive`), not the same account (`cannot transfer to the same account`), both accounts exist (`unknown account <id>`), enough money (`<owner> has insufficient funds`); then moves the money and records a `Transfer` in the history;
+- `balance(id)`, `total()`, and `statement(id)`: the account's transfers in order, as `+30.00 from Ada` or `-79.99 to Linus`.
+
+Amounts are **cents** in `long` values; `Bank.format` (provided) prints them as euros.
+::starter
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+public class Main {
+    static void attempt(Runnable action) {
+        try {
+            action.run();
+            System.out.println("ok");
+        } catch (BankException e) {
+            System.out.println("refused: " + e.getMessage());
+        }
+    }
+
+    public static void main(String[] args) {
+        Bank bank = new Bank();
+        bank.open(1, "Ada", 100_00);
+        bank.open(2, "Grace", 50_00);
+        bank.open(3, "Linus", 0);
+        attempt(() -> bank.open(1, "Copy", 10));
+        attempt(() -> bank.transfer(1, 2, 30_00));
+        attempt(() -> bank.transfer(2, 3, 79_99));
+        attempt(() -> bank.transfer(3, 1, 1));
+        attempt(() -> bank.transfer(2, 9, 1_00));
+        attempt(() -> bank.transfer(1, 1, 5_00));
+        attempt(() -> bank.transfer(1, 3, -5));
+        attempt(() -> bank.transfer(2, 3, 80_00));
+        System.out.println("balances: " + Bank.format(bank.balance(1)) + " " + Bank.format(bank.balance(2)) + " " + Bank.format(bank.balance(3)));
+        System.out.println("total: " + Bank.format(bank.total()));
+        System.out.println("Grace's statement: " + bank.statement(2));
+    }
+}
+
+record Transfer(int from, int to, long cents) {}
+
+class BankException extends RuntimeException {
+    BankException(String message) {
+        super(message);
+    }
+}
+
+class Account {
+    final int id;
+    final String owner;
+    long balanceCents;
+
+    Account(int id, String owner, long balanceCents) {
+        this.id = id;
+        this.owner = owner;
+        this.balanceCents = balanceCents;
+    }
+}
+
+class Bank {
+    private final Map<Integer, Account> accounts = new HashMap<>();
+    private final List<Transfer> history = new ArrayList<>();
+
+    void open(int id, String owner, long cents) {
+        if (accounts.containsKey(id)) throw new BankException("account " + id + " already exists");
+        accounts.put(id, new Account(id, owner, cents));
+    }
+
+    private Account get(int id) {
+        Account a = accounts.get(id);
+        if (a == null) throw new BankException("unknown account " + id);
+        return a;
+    }
+
+    void transfer(int fromId, int toId, long cents) {
+        throw new BankException("not implemented");
+    }
+
+    long balance(int id) {
+        return get(id).balanceCents;
+    }
+
+    long total() {
+        return accounts.values().stream().mapToLong(a -> a.balanceCents).sum();
+    }
+
+    List<String> statement(int id) {
+        return List.of();
+    }
+
+    static String format(long cents) {
+        return String.format("%d.%02d", cents / 100, cents % 100);
+    }
+}
+::solution
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+public class Main {
+    static void attempt(Runnable action) {
+        try {
+            action.run();
+            System.out.println("ok");
+        } catch (BankException e) {
+            System.out.println("refused: " + e.getMessage());
+        }
+    }
+
+    public static void main(String[] args) {
+        Bank bank = new Bank();
+        bank.open(1, "Ada", 100_00);
+        bank.open(2, "Grace", 50_00);
+        bank.open(3, "Linus", 0);
+        attempt(() -> bank.open(1, "Copy", 10));
+        attempt(() -> bank.transfer(1, 2, 30_00));
+        attempt(() -> bank.transfer(2, 3, 79_99));
+        attempt(() -> bank.transfer(3, 1, 1));
+        attempt(() -> bank.transfer(2, 9, 1_00));
+        attempt(() -> bank.transfer(1, 1, 5_00));
+        attempt(() -> bank.transfer(1, 3, -5));
+        attempt(() -> bank.transfer(2, 3, 80_00));
+        System.out.println("balances: " + Bank.format(bank.balance(1)) + " " + Bank.format(bank.balance(2)) + " " + Bank.format(bank.balance(3)));
+        System.out.println("total: " + Bank.format(bank.total()));
+        System.out.println("Grace's statement: " + bank.statement(2));
+    }
+}
+
+record Transfer(int from, int to, long cents) {}
+
+class BankException extends RuntimeException {
+    BankException(String message) {
+        super(message);
+    }
+}
+
+class Account {
+    final int id;
+    final String owner;
+    long balanceCents;
+
+    Account(int id, String owner, long balanceCents) {
+        this.id = id;
+        this.owner = owner;
+        this.balanceCents = balanceCents;
+    }
+}
+
+class Bank {
+    private final Map<Integer, Account> accounts = new HashMap<>();
+    private final List<Transfer> history = new ArrayList<>();
+
+    void open(int id, String owner, long cents) {
+        if (accounts.containsKey(id)) throw new BankException("account " + id + " already exists");
+        accounts.put(id, new Account(id, owner, cents));
+    }
+
+    private Account get(int id) {
+        Account a = accounts.get(id);
+        if (a == null) throw new BankException("unknown account " + id);
+        return a;
+    }
+
+    void transfer(int fromId, int toId, long cents) {
+        if (cents <= 0) throw new BankException("amount must be positive");
+        if (fromId == toId) throw new BankException("cannot transfer to the same account");
+        Account from = get(fromId);
+        Account to = get(toId);
+        if (from.balanceCents < cents) throw new BankException(from.owner + " has insufficient funds");
+        from.balanceCents -= cents;
+        to.balanceCents += cents;
+        history.add(new Transfer(fromId, toId, cents));
+    }
+
+    long balance(int id) {
+        return get(id).balanceCents;
+    }
+
+    long total() {
+        return accounts.values().stream().mapToLong(a -> a.balanceCents).sum();
+    }
+
+    List<String> statement(int id) {
+        Account a = get(id);
+        return history.stream()
+            .filter(t -> t.from() == id || t.to() == id)
+            .map(t -> (t.from() == id ? "-" : "+") + format(t.cents()) + (t.from() == id ? " to " + accounts.get(t.to()).owner : " from " + accounts.get(t.from()).owner))
+            .toList();
+    }
+
+    static String format(long cents) {
+        return String.format("%d.%02d", cents / 100, cents % 100);
+    }
+}
+::expected
+refused: account 1 already exists
+ok
+ok
+ok
+refused: unknown account 9
+refused: cannot transfer to the same account
+refused: amount must be positive
+refused: Grace has insufficient funds
+balances: 70.01 0.01 79.98
+total: 150.00
+Grace's statement: [+30.00 from Ada, -79.99 to Linus]
+::hints
+- Validate in the order given, throwing `new BankException(...)`; only then change balances.
+- `statement` filters the history for transfers where the account is the sender or the receiver, and maps each to text.
+--- exercise code java
+::prompt
+**Step 2: make it thread-safe.** The new `main` opens 50 accounts and runs **20,000 random transfers concurrently** on virtual threads. Run the starter first: the unprotected bank from step 1 loses (or creates) money, because `balance -= cents` races between threads.
+
+Make the bank safe:
+
+- accounts in a `ConcurrentHashMap`, the history in a thread-safe collection (`ConcurrentLinkedQueue`);
+- each `Account` has its own `ReentrantLock`; `transfer` locks **both** accounts, always the **lower id first** (otherwise two opposite transfers can deadlock), checks the funds and moves the money while holding the locks, and releases them in `finally`;
+- `balance(id)` reads under the account's lock;
+- keep the opening total (an `AtomicLong`), and write `audit()`, returning `audit ok` when the total equals the opening total and no balance is negative, else `audit FAILED`.
+::starter
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Queue;
+import java.util.Random;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.locks.ReentrantLock;
+
+public class Main {
+    public static void main(String[] args) {
+        Bank bank = new Bank();
+        for (int id = 1; id <= 50; id++) bank.open(id, "owner" + id, 1_000_00);
+        System.out.println("before: total " + Bank.format(bank.total()) + ", " + bank.audit());
+
+        int attempts = 20_000;
+        AtomicInteger refused = new AtomicInteger();
+        try (ExecutorService pool = Executors.newVirtualThreadPerTaskExecutor()) {
+            for (int i = 0; i < attempts; i++) {
+                long seed = i;
+                pool.submit(() -> {
+                    Random random = new Random(seed);
+                    int from = 1 + random.nextInt(50);
+                    int to = 1 + random.nextInt(50);
+                    long cents = 1 + random.nextInt(500_00);
+                    try {
+                        bank.transfer(from, to, cents);
+                    } catch (BankException e) {
+                        refused.incrementAndGet();
+                    }
+                });
+            }
+        }
+
+        System.out.println("after: total " + Bank.format(bank.total()) + ", " + bank.audit());
+        System.out.println("every attempt accounted for: " + (bank.transfersCompleted() + refused.get() == attempts));
+        System.out.println("some transfers refused (same account or funds): " + (refused.get() > 0));
+    }
+}
+
+record Transfer(int from, int to, long cents) {}
+
+class BankException extends RuntimeException {
+    BankException(String message) {
+        super(message);
+    }
+}
+
+class Account {
+    final int id;
+    final String owner;
+    long balanceCents;
+
+    Account(int id, String owner, long balanceCents) {
+        this.id = id;
+        this.owner = owner;
+        this.balanceCents = balanceCents;
+    }
+}
+
+class Bank {
+    private final Map<Integer, Account> accounts = new HashMap<>();
+    private final List<Transfer> history = new ArrayList<>();
+
+    void open(int id, String owner, long cents) {
+        if (accounts.containsKey(id)) throw new BankException("account " + id + " already exists");
+        accounts.put(id, new Account(id, owner, cents));
+    }
+
+    private Account get(int id) {
+        Account a = accounts.get(id);
+        if (a == null) throw new BankException("unknown account " + id);
+        return a;
+    }
+
+    void transfer(int fromId, int toId, long cents) {
+        if (cents <= 0) throw new BankException("amount must be positive");
+        if (fromId == toId) throw new BankException("cannot transfer to the same account");
+        Account from = get(fromId);
+        Account to = get(toId);
+        if (from.balanceCents < cents) throw new BankException(from.owner + " has insufficient funds");
+        from.balanceCents -= cents;
+        to.balanceCents += cents;
+        history.add(new Transfer(fromId, toId, cents));
+    }
+
+    long balance(int id) {
+        return get(id).balanceCents;
+    }
+
+    long total() {
+        return accounts.values().stream().mapToLong(a -> a.balanceCents).sum();
+    }
+
+    List<String> statement(int id) {
+        Account a = get(id);
+        return history.stream()
+            .filter(t -> t.from() == id || t.to() == id)
+            .map(t -> (t.from() == id ? "-" : "+") + format(t.cents()) + (t.from() == id ? " to " + accounts.get(t.to()).owner : " from " + accounts.get(t.from()).owner))
+            .toList();
+    }
+
+    static String format(long cents) {
+        return String.format("%d.%02d", cents / 100, cents % 100);
+    }
+
+    int transfersCompleted() {
+        return history.size();
+    }
+
+    String audit() {
+        return "not implemented";
+    }
+}
+::solution
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Queue;
+import java.util.Random;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.locks.ReentrantLock;
+
+public class Main {
+    public static void main(String[] args) {
+        Bank bank = new Bank();
+        for (int id = 1; id <= 50; id++) bank.open(id, "owner" + id, 1_000_00);
+        System.out.println("before: total " + Bank.format(bank.total()) + ", " + bank.audit());
+
+        int attempts = 20_000;
+        AtomicInteger refused = new AtomicInteger();
+        try (ExecutorService pool = Executors.newVirtualThreadPerTaskExecutor()) {
+            for (int i = 0; i < attempts; i++) {
+                long seed = i;
+                pool.submit(() -> {
+                    Random random = new Random(seed);
+                    int from = 1 + random.nextInt(50);
+                    int to = 1 + random.nextInt(50);
+                    long cents = 1 + random.nextInt(500_00);
+                    try {
+                        bank.transfer(from, to, cents);
+                    } catch (BankException e) {
+                        refused.incrementAndGet();
+                    }
+                });
+            }
+        }
+
+        System.out.println("after: total " + Bank.format(bank.total()) + ", " + bank.audit());
+        System.out.println("every attempt accounted for: " + (bank.transfersCompleted() + refused.get() == attempts));
+        System.out.println("some transfers refused (same account or funds): " + (refused.get() > 0));
+    }
+}
+
+record Transfer(int from, int to, long cents) {}
+
+class BankException extends RuntimeException {
+    BankException(String message) {
+        super(message);
+    }
+}
+
+class Account {
+    final int id;
+    final String owner;
+    final ReentrantLock lock = new ReentrantLock();
+    long balanceCents;              // guarded by lock
+
+    Account(int id, String owner, long balanceCents) {
+        this.id = id;
+        this.owner = owner;
+        this.balanceCents = balanceCents;
+    }
+}
+
+class Bank {
+    private final Map<Integer, Account> accounts = new ConcurrentHashMap<>();
+    private final Queue<Transfer> history = new ConcurrentLinkedQueue<>();
+    private final AtomicLong openingTotal = new AtomicLong();
+
+    void open(int id, String owner, long cents) {
+        if (accounts.putIfAbsent(id, new Account(id, owner, cents)) != null) throw new BankException("account " + id + " already exists");
+        openingTotal.addAndGet(cents);
+    }
+
+    private Account get(int id) {
+        Account a = accounts.get(id);
+        if (a == null) throw new BankException("unknown account " + id);
+        return a;
+    }
+
+    void transfer(int fromId, int toId, long cents) {
+        if (cents <= 0) throw new BankException("amount must be positive");
+        if (fromId == toId) throw new BankException("cannot transfer to the same account");
+        Account from = get(fromId);
+        Account to = get(toId);
+        // Always lock the lower id first: two opposite transfers can then never wait for each other (no deadlock)
+        Account first = fromId < toId ? from : to;
+        Account second = fromId < toId ? to : from;
+        first.lock.lock();
+        try {
+            second.lock.lock();
+            try {
+                if (from.balanceCents < cents) throw new BankException(from.owner + " has insufficient funds");
+                from.balanceCents -= cents;
+                to.balanceCents += cents;
+                history.add(new Transfer(fromId, toId, cents));
+            } finally {
+                second.lock.unlock();
+            }
+        } finally {
+            first.lock.unlock();
+        }
+    }
+
+    long balance(int id) {
+        Account a = get(id);
+        a.lock.lock();
+        try {
+            return a.balanceCents;
+        } finally {
+            a.lock.unlock();
+        }
+    }
+
+    long total() {
+        return accounts.keySet().stream().mapToLong(this::balance).sum();
+    }
+
+    int transfersCompleted() {
+        return history.size();
+    }
+
+    String audit() {
+        boolean negative = accounts.keySet().stream().anyMatch(id -> balance(id) < 0);
+        return total() == openingTotal.get() && !negative ? "audit ok" : "audit FAILED";
+    }
+
+    static String format(long cents) {
+        return String.format("%d.%02d", cents / 100, cents % 100);
+    }
+}
+::expected
+before: total 50000.00, audit ok
+after: total 50000.00, audit ok
+every attempt accounted for: true
+some transfers refused (same account or funds): true
+::hints
+- `Account first = fromId < toId ? from : to;` then lock `first`, then `second`, each with `try { ... } finally { unlock(); }`.
+- The funds check must happen **inside** the locks: checking before locking lets two threads both see enough money.
+- `ConcurrentHashMap.putIfAbsent` makes `open` safe too.
+--- cards
+Integer money :: Store cents in long; format only for display.
+Shared mutable state :: The root of race conditions: find it, then confine, make immutable, or lock it.
+Lock ordering :: Acquire several locks in one global order (e.g. by id) to prevent deadlocks.
+Check-then-act :: The check (enough funds?) and the act (withdraw) must happen under the same lock.
+Invariant testing :: After concurrent work, assert totals, non-negative balances and accounted-for operations.
+
+=== lesson java-capstone-solo | Capstone 3: build it from a spec | 450
+The final capstone gives you a **specification** and a test harness, and nothing else: you design the types and write them from scratch. A classic object-oriented design exercise (and a popular interview question): a **vending machine**.
+
+## The specification
+
+**Types** (names and methods are fixed by the harness):
+
+- `enum Coin` with the values `FIVE`, `TEN`, `TWENTY`, `FIFTY`, `ONE_EURO`, `TWO_EUROS` (worth 5, 10, 20, 50, 100 and 200 cents) and a method `int cents()`;
+- `record Product(String code, String name, int priceCents)`;
+- `record Purchase(Product product, List<Coin> change)`;
+- `class VendingException extends RuntimeException`;
+- `class VendingMachine` with the methods below, and a `static String euros(int cents)` that formats cents like `1.50`.
+
+**Rules:**
+
+1. `load(product, quantity)` adds stock for the product's code; loading a code again replaces the product's details (name, price) and adds to its stock.
+2. `addChange(coin, count)` puts coins into the machine's coin store.
+3. `insert(coin)` adds the coin to the current credit **and** to the coin store. `credit()` returns the current credit in cents.
+4. `buy(code)` checks, in this order: unknown code → `unknown product <code>`; no stock → `<name> is sold out`; credit below the price → `insert <missing> more` (formatted like `0.50`); change impossible → `cannot make change`. A refused purchase changes nothing (the credit stays).
+5. Change is computed **greedily**: repeatedly take the largest coin that fits the remaining amount and is still in the coin store. If that doesn't reach exactly zero, the change is impossible.
+6. A successful purchase removes the change coins from the store, reduces the stock by one, records the sale, sets the credit to zero, and returns the product and the change (largest coins first).
+7. `cancel()` returns the coins inserted since the last purchase, in insertion order, removes them from the coin store and sets the credit to zero.
+8. `salesReport()` returns one line per product sold, by code, as `A1 Cola x2 = 3.00` (using the product's current name and the total of its sales), then `total 4.90`; every line ends with a line break.
+
+## How to approach it
+
+1. Write the types and method signatures first, with placeholder bodies, so the harness compiles.
+2. Choose the state: maps from code to product, to stock and to sales; an `EnumMap<Coin, Integer>` for the coin store; a list of inserted coins.
+3. Write the change-making as its own private method that works on a **copy** of the coin store, so a failed attempt changes nothing.
+4. Run the harness and compare its output line by line with the expected output.
+--- goals
+- design a set of types from a written specification
+- choose data structures for state: maps, EnumMap and lists
+- implement an algorithm (greedy change-making) that fails without side effects
+- keep refused operations free of partial changes
+--- exercise code java
+::prompt
+Implement the vending machine from the specification above. The harness `Main` (don't change it) must print exactly the expected output. All your types go below `Main`.
+::starter
+import java.util.ArrayList;
+import java.util.EnumMap;
+import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
+
+public class Main {
+    static void attempt(String label, Runnable action) {
+        try {
+            action.run();
+        } catch (VendingException e) {
+            System.out.println(label + " -> refused: " + e.getMessage());
+        }
+    }
+
+    public static void main(String[] args) {
+        VendingMachine vm = new VendingMachine();
+        vm.load(new Product("A1", "Cola", 150), 2);
+        vm.load(new Product("A2", "Water", 95), 1);
+        vm.load(new Product("B1", "Crisps", 120), 5);
+        vm.addChange(Coin.TEN, 3);
+        vm.addChange(Coin.TWENTY, 1);
+
+        attempt("buy C9", () -> vm.buy("C9"));
+        vm.insert(Coin.ONE_EURO);
+        attempt("buy A1 with 1.00", () -> vm.buy("A1"));
+        vm.insert(Coin.FIFTY);
+        System.out.println("credit: " + VendingMachine.euros(vm.credit()));
+        Purchase p1 = vm.buy("A1");
+        System.out.println("bought " + p1.product().name() + ", change " + p1.change());
+
+        vm.insert(Coin.TWO_EUROS);
+        Purchase p2 = vm.buy("A1");
+        System.out.println("bought " + p2.product().name() + ", change " + p2.change());
+        attempt("buy A1 again", () -> {
+            vm.insert(Coin.TWO_EUROS);
+            vm.buy("A1");
+        });
+        System.out.println("cancel returns " + vm.cancel() + ", credit " + VendingMachine.euros(vm.credit()));
+
+        vm.insert(Coin.TWO_EUROS);
+        attempt("buy A2 with 2.00", () -> vm.buy("A2"));
+        System.out.println("credit kept: " + VendingMachine.euros(vm.credit()));
+        vm.addChange(Coin.FIVE, 2);
+        Purchase p3 = vm.buy("A2");
+        System.out.println("bought " + p3.product().name() + ", change " + p3.change());
+
+        vm.load(new Product("A2", "Sparkling water", 95), 2);
+        vm.insert(Coin.ONE_EURO);
+        Purchase p4 = vm.buy("A2");
+        System.out.println("bought " + p4.product().name() + ", change " + p4.change());
+        System.out.print(vm.salesReport());
+    }
+}
+
+// Your types go here: Coin, Product, Purchase, VendingException and VendingMachine.
+::solution
+import java.util.ArrayList;
+import java.util.EnumMap;
+import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
+
+public class Main {
+    static void attempt(String label, Runnable action) {
+        try {
+            action.run();
+        } catch (VendingException e) {
+            System.out.println(label + " -> refused: " + e.getMessage());
+        }
+    }
+
+    public static void main(String[] args) {
+        VendingMachine vm = new VendingMachine();
+        vm.load(new Product("A1", "Cola", 150), 2);
+        vm.load(new Product("A2", "Water", 95), 1);
+        vm.load(new Product("B1", "Crisps", 120), 5);
+        vm.addChange(Coin.TEN, 3);
+        vm.addChange(Coin.TWENTY, 1);
+
+        attempt("buy C9", () -> vm.buy("C9"));
+        vm.insert(Coin.ONE_EURO);
+        attempt("buy A1 with 1.00", () -> vm.buy("A1"));
+        vm.insert(Coin.FIFTY);
+        System.out.println("credit: " + VendingMachine.euros(vm.credit()));
+        Purchase p1 = vm.buy("A1");
+        System.out.println("bought " + p1.product().name() + ", change " + p1.change());
+
+        vm.insert(Coin.TWO_EUROS);
+        Purchase p2 = vm.buy("A1");
+        System.out.println("bought " + p2.product().name() + ", change " + p2.change());
+        attempt("buy A1 again", () -> {
+            vm.insert(Coin.TWO_EUROS);
+            vm.buy("A1");
+        });
+        System.out.println("cancel returns " + vm.cancel() + ", credit " + VendingMachine.euros(vm.credit()));
+
+        vm.insert(Coin.TWO_EUROS);
+        attempt("buy A2 with 2.00", () -> vm.buy("A2"));
+        System.out.println("credit kept: " + VendingMachine.euros(vm.credit()));
+        vm.addChange(Coin.FIVE, 2);
+        Purchase p3 = vm.buy("A2");
+        System.out.println("bought " + p3.product().name() + ", change " + p3.change());
+
+        vm.load(new Product("A2", "Sparkling water", 95), 2);
+        vm.insert(Coin.ONE_EURO);
+        Purchase p4 = vm.buy("A2");
+        System.out.println("bought " + p4.product().name() + ", change " + p4.change());
+        System.out.print(vm.salesReport());
+    }
+}
+
+enum Coin {
+    FIVE(5), TEN(10), TWENTY(20), FIFTY(50), ONE_EURO(100), TWO_EUROS(200);
+
+    private final int cents;
+
+    Coin(int cents) {
+        this.cents = cents;
+    }
+
+    int cents() {
+        return cents;
+    }
+}
+
+record Product(String code, String name, int priceCents) {}
+
+record Purchase(Product product, List<Coin> change) {}
+
+class VendingException extends RuntimeException {
+    VendingException(String message) {
+        super(message);
+    }
+}
+
+class VendingMachine {
+    private final Map<String, Product> products = new TreeMap<>();
+    private final Map<String, Integer> stock = new TreeMap<>();
+    private final Map<String, Integer> sold = new TreeMap<>();
+    private final Map<String, Integer> revenue = new TreeMap<>();
+    private final Map<Coin, Integer> coins = new EnumMap<>(Coin.class);
+    private final List<Coin> inserted = new ArrayList<>();
+
+    static String euros(int cents) {
+        return String.format("%d.%02d", cents / 100, cents % 100);
+    }
+
+    void load(Product product, int quantity) {
+        products.put(product.code(), product);
+        stock.merge(product.code(), quantity, Integer::sum);
+    }
+
+    void addChange(Coin coin, int count) {
+        coins.merge(coin, count, Integer::sum);
+    }
+
+    void insert(Coin coin) {
+        inserted.add(coin);
+        coins.merge(coin, 1, Integer::sum);
+    }
+
+    int credit() {
+        return inserted.stream().mapToInt(Coin::cents).sum();
+    }
+
+    Purchase buy(String code) {
+        Product product = products.get(code);
+        if (product == null) throw new VendingException("unknown product " + code);
+        if (stock.getOrDefault(code, 0) == 0) throw new VendingException(product.name() + " is sold out");
+        int credit = credit();
+        if (credit < product.priceCents()) throw new VendingException("insert " + euros(product.priceCents() - credit) + " more");
+        List<Coin> change = makeChange(credit - product.priceCents());
+        if (change == null) throw new VendingException("cannot make change");
+        for (Coin c : change) coins.merge(c, -1, Integer::sum);
+        stock.merge(code, -1, Integer::sum);
+        sold.merge(code, 1, Integer::sum);
+        revenue.merge(code, product.priceCents(), Integer::sum);
+        inserted.clear();
+        return new Purchase(product, change);
+    }
+
+    /** Greedy: the largest coin that fits and is available, until nothing is left; null if impossible. */
+    private List<Coin> makeChange(int amount) {
+        Map<Coin, Integer> available = new EnumMap<>(coins);
+        List<Coin> change = new ArrayList<>();
+        Coin[] values = Coin.values();
+        for (int i = values.length - 1; i >= 0 && amount > 0; i--) {
+            Coin c = values[i];
+            while (amount >= c.cents() && available.getOrDefault(c, 0) > 0) {
+                amount -= c.cents();
+                available.merge(c, -1, Integer::sum);
+                change.add(c);
+            }
+        }
+        return amount == 0 ? change : null;
+    }
+
+    List<Coin> cancel() {
+        List<Coin> back = new ArrayList<>(inserted);
+        for (Coin c : back) coins.merge(c, -1, Integer::sum);
+        inserted.clear();
+        return back;
+    }
+
+    String salesReport() {
+        StringBuilder sb = new StringBuilder();
+        int total = 0;
+        for (Map.Entry<String, Integer> e : sold.entrySet()) {
+            sb.append(e.getKey()).append(' ').append(products.get(e.getKey()).name())
+                .append(" x").append(e.getValue()).append(" = ").append(euros(revenue.get(e.getKey()))).append('\n');
+            total += revenue.get(e.getKey());
+        }
+        return sb.append("total ").append(euros(total)).append('\n').toString();
+    }
+}
+::expected
+buy C9 -> refused: unknown product C9
+buy A1 with 1.00 -> refused: insert 0.50 more
+credit: 1.50
+bought Cola, change []
+bought Cola, change [FIFTY]
+buy A1 again -> refused: Cola is sold out
+cancel returns [TWO_EUROS], credit 0.00
+buy A2 with 2.00 -> refused: cannot make change
+credit kept: 2.00
+bought Water, change [ONE_EURO, FIVE]
+bought Sparkling water, change [FIVE]
+A1 Cola x2 = 3.00
+A2 Sparkling water x2 = 1.90
+total 4.90
+::hints
+- An `EnumMap<Coin, Integer>` holds coin counts; `merge(coin, 1, Integer::sum)` adds one.
+- Greedy change: loop over `Coin.values()` from the largest, taking coins while they fit and are available in a copy of the store.
+- Throw the exceptions before changing any state, so a refused purchase leaves everything as it was.
+--- cards
+Spec first :: Write types and signatures before logic, so the harness compiles and guides you.
+EnumMap :: A fast, ordered map keyed by an enum: new EnumMap<>(Coin.class).
+Greedy algorithm :: Take the best local choice repeatedly; works for standard coin systems, can fail with limited coins.
+No partial failure :: Compute on copies and validate first; only change state when the whole operation will succeed.
+
+=== lesson java-whats-next | What's next after Java | 50
+## You've learned Java
+
+You can now write and run Java programs, use the type system and operators precisely, structure code with methods and classes, design with encapsulation, inheritance, interfaces, records, enums and sealed types, handle errors with exceptions, process data with collections, generics, lambdas and streams, work with files, dates and exact decimals, build and test projects with Maven, Gradle and JUnit, write safe concurrent code with virtual threads, and explain how the JVM runs it all. That's the foundation every professional Java developer works on.
+
+## Where to go from here
+
+- **Back-end development**: **Spring Boot** is the dominant Java framework: REST APIs (`@RestController`), data access with Spring Data JPA (and the SQL course you've done), security, testing. Quarkus and Micronaut are lighter alternatives with fast start-up.
+- **Android**: Android Studio with Kotlin, which runs on the JVM and interoperates with Java: DevQuest's Kotlin course builds on this one.
+- **Big data and streaming**: Apache Kafka, Spark and Flink are Java/JVM technologies.
+- **Desktop applications**: **JavaFX** builds modern desktop interfaces; the older **Swing** and **AWT** toolkits (and long-gone browser **applets**) still run many internal enterprise tools, and IntelliJ IDEA itself is built on Swing.
+- **Deepen your Java**: *Effective Java* (Joshua Bloch) is the essential next book; *Java Concurrency in Practice* for concurrency; the release notes of each new Java version (records, patterns and virtual threads all arrived recently).
+- **Other languages**: DevQuest teaches one language at a time. Next in the order is **C#**, which will feel very familiar: same syntax family, garbage collection, generics, LINQ (like streams), async/await.
+
+## Keep your skills alive
+
+- Build something end to end: a REST API with Spring Boot and PostgreSQL, with tests and a Dockerfile.
+- Read good code: the JDK's own sources (`java.util.ArrayList`, `java.time`) are excellent examples.
+- Use an IDE's inspections and a static analysis tool (SpotBugs, Error Prone, SonarLint): they teach you idioms.
+- Practise on Exercism's Java track, Advent of Code, or the DSA track in DevQuest.
+
+📚 **Go deeper:** Joshua Bloch, *Effective Java* (3rd edition); Herbert Schildt, *Java: The Complete Reference*; dev.java (official tutorials); spring.io/guides.
+--- goals
+- review what the Java course covered
+- choose next steps: Spring Boot, Android with Kotlin, data engineering or deeper Java
+- keep Java skills sharp with practice and good tools
+--- quiz
+? Which framework dominates Java back-end development?
++ Spring Boot
+- Swing
+- JavaFX
+- Applets
+> Quarkus and Micronaut are lighter alternatives.
+? Which language is preferred for new Android apps and runs on the JVM?
++ Kotlin
+- C#
+- Swift
+- Dart
+> It interoperates fully with Java.
+? What's the essential next book after a first Java course?
++ Effective Java
+- The Java Language Specification, cover to cover
+- A book on applets
+- None: books are outdated
+> 90 items of practical advice.
+--- cards
+Java in one line :: A statically typed, object-oriented, garbage-collected language whose bytecode runs on the JVM everywhere.
+Next steps :: Spring Boot back ends, Kotlin for Android, Kafka/Spark for data, Effective Java for depth; then C# in DevQuest.

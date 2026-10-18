@@ -1335,8 +1335,234 @@ Garbage collection :: Frees unreachable objects; generational; G1 default, ZGC/S
 Memory leak in Java :: Objects kept reachable by mistake: unbounded caches, static collections, listeners.
 JVM tools :: -Xmx, jcmd, jstack, JFR/Mission Control, javap; GraalVM native image for fast start-up.
 
+=== lesson java-networking | Networking and HTTP | 70
+## Java on the network
+
+Networking has been part of Java since 1995 (sockets in `java.net`), and most Java code today runs as **web services**: programs that receive HTTP requests and send responses, and that call other services over HTTP.
+
+- **Sockets** (`Socket`, `ServerSocket`) are the low level: a two-way stream of bytes between two programs over TCP. Protocols such as HTTP are built on top of them.
+- The **HTTP client** (`java.net.http.HttpClient`, Java 11+) calls web APIs, with HTTP/2, timeouts and asynchronous requests.
+- The JDK includes a small **HTTP server** (`com.sun.net.httpserver`), enough for tools, tests and learning. Production services use a framework: **Spring Boot** (with an embedded Tomcat or Netty server), Quarkus, Micronaut or Javalin. The classic standard underneath is the **Servlet** API (Jakarta EE), which Spring MVC is built on.
+
+This example starts a server on a free local port, then calls it with the client, all inside one program, so it runs without internet access:
+
+```java
+import com.sun.net.httpserver.HttpServer;
+import java.net.InetSocketAddress;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
+
+public class Main {
+    public static void main(String[] args) throws Exception {
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);   // port 0: any free port
+        server.createContext("/hello", exchange -> {
+            String query = exchange.getRequestURI().getQuery();
+            String name = query != null && query.startsWith("name=") ? query.substring(5) : "world";
+            byte[] body = ("{\"greeting\": \"Hello, " + name + "!\"}").getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().set("Content-Type", "application/json");
+            exchange.sendResponseHeaders(200, body.length);
+            exchange.getResponseBody().write(body);
+            exchange.close();
+        });
+        server.start();
+        int port = server.getAddress().getPort();
+
+        HttpClient client = HttpClient.newHttpClient();
+        HttpRequest request = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/hello?name=Ada")).GET().build();
+        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+        System.out.println(response.statusCode() + " " + response.headers().firstValue("Content-Type").orElse("?"));
+        System.out.println(response.body());
+
+        HttpResponse<String> missing = client.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/nope")).build(), HttpResponse.BodyHandlers.ofString());
+        System.out.println(missing.statusCode());
+        server.stop(0);
+    }
+}
+```
+
+The pieces of an HTTP exchange, from either side:
+
+| Part | Request (client) | Response (server) |
+|---|---|---|
+| start | method + path: `GET /hello?name=Ada` | status code: `200`, `404`, `500`... |
+| headers | `Accept`, `Authorization`, `Content-Type` | `Content-Type`, `Cache-Control`, `Location` |
+| body | JSON for `POST`/`PUT` | the resource, usually JSON |
+
+The **client** builds an immutable `HttpRequest` (a builder: method, URI, headers, body, timeout), sends it with `send` (blocking: ideal with virtual threads) or `sendAsync` (returns a `CompletableFuture`), and reads the body with a `BodyHandler` (`ofString`, `ofFile`, `ofLines`...). Always set a **timeout** on real network calls (`.timeout(Duration.ofSeconds(5))`), because remote services can hang.
+
+## JSON
+
+The JDK has no JSON library: real projects use **Jackson** (Spring's default) or **Gson** to turn records into JSON and back (`objectMapper.readValue(body, Order.class)`). For the small exercises here, building and reading strings by hand is enough.
+
+## From this to Spring Boot
+
+The same endpoint in Spring Boot, for comparison (not runnable here, as it needs the framework):
+
+```
+@RestController
+class HelloController {
+    @GetMapping("/hello")
+    Map<String, String> hello(@RequestParam(defaultValue = "world") String name) {
+        return Map.of("greeting", "Hello, " + name + "!");
+    }
+}
+```
+
+The framework handles the server, routing, parameter parsing, JSON conversion, errors and threading; you write the logic. Knowing what happens underneath (this lesson) makes frameworks far less magical.
+
+~~~check
+? What does `HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0)` do with port 0?
++ Lets the operating system pick any free port
+- Uses port 80
+- Disables the server
+- Uses port 8080
+> getAddress().getPort() then tells you which.
+~~~
+
+📚 **Go deeper:** *Java: The Complete Reference*, chapter 20 "Networking"; dev.java, "The Java HTTP Client"; the `com.sun.net.httpserver` API documentation; spring.io/guides ("Building a RESTful Web Service").
+--- goals
+- describe sockets, HTTP clients and servers, and where servlets and frameworks fit
+- call HTTP endpoints with HttpClient, reading status, headers and bodies
+- write a small HTTP endpoint with the JDK's HttpServer
+- set timeouts, and know the role of JSON libraries and Spring Boot
+--- quiz
+? Which class sends HTTP requests in modern Java?
++ java.net.http.HttpClient
+- java.net.URLConnection only
+- java.io.File
+- javax.swing.JFrame
+> Java 11+, with HTTP/2 and async support.
+? What status code means "not found"?
++ 404
+- 200
+- 500
+- 302
+> 5xx codes are server errors.
+? Why set a timeout on network calls?
++ A remote service can hang, blocking your thread indefinitely
+- Timeouts make requests faster
+- HTTP requires it
+- To retry automatically
+> Fail fast and handle the error.
+--- exercise code java
+::prompt
+Write a tiny **calculator API** with the JDK's `HttpServer` and call it with `HttpClient`, in one program:
+
+- `GET /add?a=2&b=40` responds `200` with the body `42`;
+- invalid or missing numbers respond `400` with `bad request`;
+- the client part (provided) calls three URLs and prints each status and body.
+
+Implement the handler. The program prints:
+
+```
+200 42
+400 bad request
+200 -7
+```
+::starter
+import com.sun.net.httpserver.HttpExchange;
+import com.sun.net.httpserver.HttpServer;
+import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
+
+public class Main {
+    static void handleAdd(HttpExchange exchange) throws IOException {
+        exchange.sendResponseHeaders(500, -1);
+        exchange.close();
+    }
+
+    public static void main(String[] args) throws Exception {
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/add", Main::handleAdd);
+        server.start();
+        String base = "http://127.0.0.1:" + server.getAddress().getPort();
+        HttpClient client = HttpClient.newHttpClient();
+        for (String path : new String[] {"/add?a=2&b=40", "/add?a=2&b=x", "/add?a=-10&b=3"}) {
+            HttpResponse<String> r = client.send(HttpRequest.newBuilder(URI.create(base + path)).build(), HttpResponse.BodyHandlers.ofString());
+            System.out.println(r.statusCode() + " " + r.body());
+        }
+        server.stop(0);
+    }
+}
+::solution
+import com.sun.net.httpserver.HttpExchange;
+import com.sun.net.httpserver.HttpServer;
+import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
+import java.util.Map;
+
+public class Main {
+    static Map<String, String> params(String query) {
+        Map<String, String> map = new HashMap<>();
+        if (query == null) return map;
+        for (String pair : query.split("&")) {
+            String[] kv = pair.split("=", 2);
+            if (kv.length == 2) map.put(kv[0], kv[1]);
+        }
+        return map;
+    }
+
+    static void send(HttpExchange exchange, int status, String text) throws IOException {
+        byte[] body = text.getBytes(StandardCharsets.UTF_8);
+        exchange.sendResponseHeaders(status, body.length);
+        exchange.getResponseBody().write(body);
+        exchange.close();
+    }
+
+    static void handleAdd(HttpExchange exchange) throws IOException {
+        Map<String, String> p = params(exchange.getRequestURI().getQuery());
+        try {
+            long a = Long.parseLong(p.get("a"));
+            long b = Long.parseLong(p.get("b"));
+            send(exchange, 200, String.valueOf(a + b));
+        } catch (NumberFormatException e) {
+            send(exchange, 400, "bad request");
+        }
+    }
+
+    public static void main(String[] args) throws Exception {
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/add", Main::handleAdd);
+        server.start();
+        String base = "http://127.0.0.1:" + server.getAddress().getPort();
+        HttpClient client = HttpClient.newHttpClient();
+        for (String path : new String[] {"/add?a=2&b=40", "/add?a=2&b=x", "/add?a=-10&b=3"}) {
+            HttpResponse<String> r = client.send(HttpRequest.newBuilder(URI.create(base + path)).build(), HttpResponse.BodyHandlers.ofString());
+            System.out.println(r.statusCode() + " " + r.body());
+        }
+        server.stop(0);
+    }
+}
+::expected
+200 42
+400 bad request
+200 -7
+::hints
+- `exchange.getRequestURI().getQuery()` gives `a=2&b=40`: split on `&`, then on `=`.
+- `Long.parseLong(null)` and `Long.parseLong("x")` both throw `NumberFormatException`: catch it and answer 400.
+- Send a body: `sendResponseHeaders(status, bytes.length)`, write the bytes, then `close()`.
+--- cards
+HttpClient :: HttpClient.newHttpClient(); HttpRequest.newBuilder(URI).GET()/POST(...).timeout(...).build(); send(req, BodyHandlers.ofString()).
+HttpServer :: com.sun.net.httpserver: createContext(path, handler); sendResponseHeaders(status, length); write body; close().
+HTTP basics :: Method + path + headers + body; status codes 2xx ok, 4xx client error, 5xx server error.
+Frameworks :: Servlets (Jakarta EE) underneath; Spring Boot, Quarkus, Micronaut handle routing, JSON and errors.
+
 === lesson java-m6-test | Module 6 test | 150 | exam
-This test covers Module 6: packages, modules and JARs, Maven and Gradle, JUnit testing, files, concurrency, pattern matching and design patterns, and the JVM.
+This test covers Module 6: packages, modules and JARs, Maven and Gradle, JUnit testing, files, concurrency, networking, pattern matching and design patterns, and the JVM.
 
 Before you start, check that you can:
 
