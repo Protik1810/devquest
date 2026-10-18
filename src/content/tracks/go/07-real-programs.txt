@@ -1,0 +1,1644 @@
+=== module Module 7 · Real programs
+
+=== lesson go-packages | Packages, modules and project layout | 60
+## From one file to a project
+
+Real Go programs are split into **packages**: a package is a **folder** of `.go` files that all start with the same `package name` line. A **module** (the folder with `go.mod`) is a collection of packages released together. A typical layout:
+
+```
+shop/
+├── go.mod                  module github.com/ada/shop
+├── cmd/
+│   └── shopd/
+│       └── main.go         package main (the executable)
+├── internal/
+│   └── storage/
+│       └── storage.go      package storage (only importable inside this module)
+└── catalog/
+    ├── catalog.go          package catalog
+    └── catalog_test.go     tests for package catalog
+```
+
+`main.go` imports the other packages by their **module path plus folder**:
+
+```
+package main
+
+import (
+	"fmt"
+
+	"github.com/ada/shop/catalog"
+	"github.com/ada/shop/internal/storage"
+)
+
+func main() {
+	store := storage.NewMemory()
+	c := catalog.New(store)
+	fmt.Println(c.Count())
+}
+```
+
+Rules to know:
+
+- A package name is short, lower-case, one word, and usually matches its folder (`strings`, `http`, `catalog`); avoid names like `util` or `common`.
+- **Exported** names (capitalised) form the package's API; everything else is private to the package, even from other packages in the same module.
+- A folder named **`internal`** can only be imported by code inside its parent folder: the compiler enforces it. Use it for code you don't want other modules to depend on.
+- Import cycles are forbidden: if `catalog` imports `storage`, `storage` can't import `catalog`. That forces a clean dependency direction.
+- `func init()` runs automatically when a package is loaded; keep it rare.
+
+## Dependencies
+
+```
+go get github.com/google/uuid@latest     # add or upgrade a dependency
+go mod tidy                              # add missing, remove unused
+go list -m all                           # list every module in the build
+go doc github.com/google/uuid.New        # read its documentation
+```
+
+`go.mod` records the required versions (Go uses **minimal version selection**: the oldest version that satisfies every requirement, so builds are reproducible), and `go.sum` stores checksums verified against the public checksum database. Third-party code is browsed on **pkg.go.dev**. Go's standard library is large, so many programs need few or no dependencies: think twice before adding one.
+
+## Designing a package API: functional options
+
+A package's constructor often needs many optional settings. Instead of a giant parameter list, Go code commonly uses **functional options**: variadic functions that each change one setting:
+
+```go
+package main
+
+import (
+	"fmt"
+	"time"
+)
+
+type Server struct {
+	addr     string
+	timeout  time.Duration
+	maxConns int
+	logging  bool
+}
+
+type Option func(*Server)
+
+func WithTimeout(d time.Duration) Option { return func(s *Server) { s.timeout = d } }
+func WithMaxConns(n int) Option        { return func(s *Server) { s.maxConns = n } }
+func WithLogging() Option              { return func(s *Server) { s.logging = true } }
+
+func NewServer(addr string, opts ...Option) *Server {
+	s := &Server{addr: addr, timeout: 30 * time.Second, maxConns: 100} // defaults
+	for _, opt := range opts {
+		opt(s)
+	}
+	return s
+}
+
+func main() {
+	fmt.Printf("%+v\n", *NewServer(":8080"))
+	fmt.Printf("%+v\n", *NewServer(":9090", WithTimeout(5*time.Second), WithLogging()))
+}
+```
+
+Callers only mention what they change, defaults live in one place, and new options can be added without breaking anyone.
+
+~~~check
+? Who can import github.com/ada/shop/internal/storage?
++ Only packages inside github.com/ada/shop
+- Any module
+- Only package main
+- Nobody
+> The internal rule is enforced by the compiler.
+~~~
+
+📚 **Go deeper:** go.dev/doc/modules/layout ("Organizing a Go module"); "How to Write Go Code"; Dave Cheney, "Functional options for friendly APIs"; *The Go Programming Language*, chapter 10 (Packages and the Go Tool).
+--- goals
+- organise a module into packages and folders
+- explain exported names, internal packages and why import cycles are forbidden
+- manage dependencies with go get and go mod tidy
+- design constructors with functional options
+--- quiz
+? What is a Go package, physically?
++ A folder of .go files with the same package clause
+- A single file
+- A .zip archive
+- A go.mod file
+> A module is a tree of packages.
+? What does `go mod tidy` do?
++ Adds missing and removes unused dependencies in go.mod and go.sum
+- Formats the code
+- Deletes the module cache
+- Upgrades every dependency
+> Run it before committing.
+? Why does Go forbid import cycles?
++ To keep dependencies one-directional and builds fast
+- Because of garbage collection
+- It doesn't
+- Only for internal packages
+> Restructure, or introduce an interface.
+--- exercise code go
+::prompt
+Design a **retry client** with functional options. `type Client struct` has `retries` (default 3), `backoff` (default 100ms), `userAgent` (default `"devquest/1.0"`) and `verbose` (default false). Write `type Option func(*Client)`, the options `WithRetries(n)`, `WithBackoff(d)`, `WithUserAgent(s)` and `Verbose()`, and `func NewClient(opts ...Option) *Client`. `WithRetries` ignores negative values. Add a method `String()` that prints the settings as shown. `main` is given:
+
+```
+retries=3 backoff=100ms agent="devquest/1.0" verbose=false
+retries=5 backoff=2s agent="devquest/1.0" verbose=true
+retries=3 backoff=100ms agent="bot" verbose=false
+```
+::starter
+package main
+
+import (
+	"fmt"
+	"time"
+)
+
+type Client struct {
+	retries   int
+	backoff   time.Duration
+	userAgent string
+	verbose   bool
+}
+
+func main() {
+	fmt.Println(NewClient())
+	fmt.Println(NewClient(WithRetries(5), WithBackoff(2*time.Second), Verbose()))
+	fmt.Println(NewClient(WithRetries(-1), WithUserAgent("bot")))
+}
+::solution
+package main
+
+import (
+	"fmt"
+	"time"
+)
+
+type Client struct {
+	retries   int
+	backoff   time.Duration
+	userAgent string
+	verbose   bool
+}
+
+type Option func(*Client)
+
+func WithRetries(n int) Option {
+	return func(c *Client) {
+		if n >= 0 {
+			c.retries = n
+		}
+	}
+}
+
+func WithBackoff(d time.Duration) Option { return func(c *Client) { c.backoff = d } }
+func WithUserAgent(s string) Option      { return func(c *Client) { c.userAgent = s } }
+func Verbose() Option                    { return func(c *Client) { c.verbose = true } }
+
+func NewClient(opts ...Option) *Client {
+	c := &Client{retries: 3, backoff: 100 * time.Millisecond, userAgent: "devquest/1.0"}
+	for _, opt := range opts {
+		opt(c)
+	}
+	return c
+}
+
+func (c *Client) String() string {
+	return fmt.Sprintf("retries=%d backoff=%v agent=%q verbose=%t", c.retries, c.backoff, c.userAgent, c.verbose)
+}
+
+func main() {
+	fmt.Println(NewClient())
+	fmt.Println(NewClient(WithRetries(5), WithBackoff(2*time.Second), Verbose()))
+	fmt.Println(NewClient(WithRetries(-1), WithUserAgent("bot")))
+}
+::expected
+retries=3 backoff=100ms agent="devquest/1.0" verbose=false
+retries=5 backoff=2s agent="devquest/1.0" verbose=true
+retries=3 backoff=100ms agent="bot" verbose=false
+::hints
+- Each option returns a closure: `func WithBackoff(d time.Duration) Option { return func(c *Client) { c.backoff = d } }`.
+- `NewClient` sets the defaults first, then applies the options in order.
+- `fmt.Println` calls `String()` on a `*Client` if the method has a pointer receiver.
+--- cards
+Package :: A folder of files sharing a package clause; the unit of compilation and encapsulation.
+Module :: go.mod + packages, versioned together; imports use module path + folder.
+internal/ :: Importable only from inside its parent tree.
+go get / go mod tidy :: Add or upgrade dependencies / clean go.mod and go.sum.
+Functional options :: NewThing(required, opts ...Option) with type Option func(*Thing).
+
+=== lesson go-files | Files, directories and JSON | 75
+## Reading and writing files
+
+The `os` package covers files and directories; `path/filepath` builds paths with the right separator for the system:
+
+```go
+package main
+
+import (
+	"bufio"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+)
+
+func main() {
+	dir, err := os.MkdirTemp("", "devquest-*") // a fresh temporary folder
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	defer os.RemoveAll(dir) // clean up, whatever happens
+
+	path := filepath.Join(dir, "todo.txt")
+	if err := os.WriteFile(path, []byte("buy milk\nwrite report\n"), 0o644); err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o644) // open for appending
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	fmt.Fprintln(f, "call Ada")
+	f.Close()
+
+	data, _ := os.ReadFile(path) // the whole file at once
+	fmt.Printf("%d bytes, %d lines\n", len(data), strings.Count(string(data), "\n"))
+
+	f, _ = os.Open(path) // read line by line: works for huge files
+	defer f.Close()
+	sc := bufio.NewScanner(f)
+	for n := 1; sc.Scan(); n++ {
+		fmt.Println(n, sc.Text())
+	}
+
+	_, err = os.ReadFile(filepath.Join(dir, "missing.txt"))
+	fmt.Println("missing file is ErrNotExist:", os.IsNotExist(err))
+	fmt.Println(filepath.Base(path), filepath.Ext(path))
+}
+```
+
+- `0o644` is the Unix permission (owner read/write, others read); Windows mostly ignores it.
+- Always **check errors** and **close** what you open (`defer f.Close()` right after a successful open). For files you write, check `Close`'s error too: it can report a failed final write.
+- `filepath.WalkDir(root, fn)` visits a whole directory tree; `os.ReadDir` lists one folder.
+
+## JSON with encoding/json
+
+`json.Marshal` turns Go values into JSON and `json.Unmarshal` fills Go values from JSON. Only **exported** fields are included; **struct tags** choose the JSON names and options:
+
+```go
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"strings"
+)
+
+type Address struct {
+	City    string `json:"city"`
+	Country string `json:"country"`
+}
+
+type User struct {
+	ID       int               `json:"id"`
+	Name     string            `json:"name"`
+	Email    string            `json:"email,omitempty"` // left out when empty
+	Roles    []string          `json:"roles"`
+	Address  *Address          `json:"address,omitempty"`
+	Password string            `json:"-"` // never serialized
+	Extra    map[string]string `json:"extra,omitempty"`
+}
+
+func main() {
+	u := User{ID: 1, Name: "Ada", Roles: []string{"admin"}, Address: &Address{"London", "UK"}, Password: "secret"}
+	data, err := json.Marshal(u)
+	fmt.Println(string(data), err)
+
+	pretty, _ := json.MarshalIndent(u, "", "  ")
+	fmt.Println(string(pretty))
+
+	var back User
+	err = json.Unmarshal([]byte(`{"id":2,"name":"Grace","roles":["dev"],"unknown":true}`), &back)
+	fmt.Printf("%+v %v\n", back, err)
+
+	err = json.Unmarshal([]byte(`{"id":"two"}`), &back)
+	fmt.Println(err)
+
+	var anything map[string]any // unknown shape: maps, []any, float64, string, bool, nil
+	json.NewDecoder(strings.NewReader(`{"temp": 21.5, "tags": ["a", "b"]}`)).Decode(&anything)
+	fmt.Println(anything["temp"], anything["tags"])
+}
+```
+
+- Pass a **pointer** to `Unmarshal` so it can fill the value. Unknown JSON fields are ignored; missing ones keep their zero values.
+- JSON numbers decoded into `any` become `float64`.
+- `json.NewEncoder(w)` and `json.NewDecoder(r)` stream JSON to and from any `io.Writer` / `io.Reader` (files, HTTP bodies).
+- Other formats in the standard library: `encoding/csv`, `encoding/xml`, `encoding/binary`, `encoding/base64`.
+
+~~~check
+? Why isn't a struct field `name string` included by json.Marshal?
++ It's unexported (lower-case), so encoding/json can't see it
+- It needs a tag
+- Strings aren't supported
+- It is included
+> Export it and add `json:"name"`.
+~~~
+
+📚 **Go deeper:** the os, path/filepath and encoding/json package docs; The Go Blog, "JSON and Go"; *The Go Programming Language*, section 4.5 (JSON).
+--- goals
+- create, write, append to and read files with os, and clean up with defer
+- build paths with path/filepath and use temporary directories
+- read large files line by line with bufio.Scanner
+- encode and decode JSON with struct tags, omitempty and "-"
+- decode JSON of unknown shape into map[string]any
+--- quiz
+? What does `json:"email,omitempty"` do?
++ Names the field "email" and leaves it out when it's empty
+- Makes the field required
+- Hides the field always
+- Validates the email address
+> json:"-" always hides it.
+? Why pass `&user` to json.Unmarshal?
++ Unmarshal needs a pointer to fill the value
+- To make a copy
+- It's optional
+- To get the JSON back
+> A non-pointer would be filled and thrown away.
+? Which builds a path correctly on every OS?
++ filepath.Join(dir, "data", "file.txt")
+- dir + "/data/file.txt"
+- dir + "\\data\\file.txt"
+- path.Join on Windows
+> path is for URL-style paths; filepath for files.
+--- exercise code go
+::prompt
+Write a **JSON-backed task store**. `type Task struct` has `ID int`, `Title string`, `Done bool` and `Tags []string`, serialized as `id`, `title`, `done` and `tags` (`tags` omitted when empty). `type Store struct{ path string }` with:
+
+- `Load() ([]Task, error)`: reads the file and decodes it; a missing file means **no tasks and no error** (check with `errors.Is(err, fs.ErrNotExist)`);
+- `Save(tasks []Task) error`: writes indented JSON (`json.MarshalIndent` with two spaces);
+- `Add(title string, tags ...string) (Task, error)`: loads, appends a task with the next ID (max ID + 1), saves, and returns it.
+
+`main` is given (it works in a temporary folder):
+
+```
+before: 0 tasks
+added 1 write report
+added 2 buy milk
+[
+  {
+    "id": 1,
+    "title": "write report",
+    "done": false,
+    "tags": [
+      "work"
+    ]
+  },
+  {
+    "id": 2,
+    "title": "buy milk",
+    "done": false
+  }
+]
+after reload: 2 tasks, first tag work
+```
+::starter
+package main
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+)
+
+type Task struct {
+	ID    int
+	Title string
+	Done  bool
+	Tags  []string
+}
+
+type Store struct{ path string }
+
+func (s Store) Load() ([]Task, error) { return nil, nil }
+
+func (s Store) Save(tasks []Task) error { return nil }
+
+func (s Store) Add(title string, tags ...string) (Task, error) { return Task{}, nil }
+
+func main() {
+	dir, _ := os.MkdirTemp("", "tasks-*")
+	defer os.RemoveAll(dir)
+	store := Store{filepath.Join(dir, "tasks.json")}
+	tasks, err := store.Load()
+	fmt.Println("before:", len(tasks), "tasks", errString(err))
+	for _, t := range []struct {
+		title string
+		tags  []string
+	}{{"write report", []string{"work"}}, {"buy milk", nil}} {
+		task, err := store.Add(t.title, t.tags...)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		fmt.Println("added", task.ID, task.Title)
+	}
+	data, _ := os.ReadFile(store.path)
+	fmt.Println(string(data))
+	tasks, _ = store.Load()
+	fmt.Println("after reload:", len(tasks), "tasks, first tag", tasks[0].Tags[0])
+}
+
+func errString(err error) string {
+	if err != nil {
+		return err.Error()
+	}
+	return ""
+}
+::solution
+package main
+
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io/fs"
+	"os"
+	"path/filepath"
+)
+
+type Task struct {
+	ID    int      `json:"id"`
+	Title string   `json:"title"`
+	Done  bool     `json:"done"`
+	Tags  []string `json:"tags,omitempty"`
+}
+
+type Store struct{ path string }
+
+func (s Store) Load() ([]Task, error) {
+	data, err := os.ReadFile(s.path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var tasks []Task
+	if err := json.Unmarshal(data, &tasks); err != nil {
+		return nil, fmt.Errorf("decode %s: %w", s.path, err)
+	}
+	return tasks, nil
+}
+
+func (s Store) Save(tasks []Task) error {
+	data, err := json.MarshalIndent(tasks, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(s.path, data, 0o644)
+}
+
+func (s Store) Add(title string, tags ...string) (Task, error) {
+	tasks, err := s.Load()
+	if err != nil {
+		return Task{}, err
+	}
+	next := 1
+	for _, t := range tasks {
+		next = max(next, t.ID+1)
+	}
+	task := Task{ID: next, Title: title, Tags: tags}
+	if err := s.Save(append(tasks, task)); err != nil {
+		return Task{}, err
+	}
+	return task, nil
+}
+
+func main() {
+	dir, _ := os.MkdirTemp("", "tasks-*")
+	defer os.RemoveAll(dir)
+	store := Store{filepath.Join(dir, "tasks.json")}
+	tasks, err := store.Load()
+	fmt.Println("before:", len(tasks), "tasks", errString(err))
+	for _, t := range []struct {
+		title string
+		tags  []string
+	}{{"write report", []string{"work"}}, {"buy milk", nil}} {
+		task, err := store.Add(t.title, t.tags...)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		fmt.Println("added", task.ID, task.Title)
+	}
+	data, _ := os.ReadFile(store.path)
+	fmt.Println(string(data))
+	tasks, _ = store.Load()
+	fmt.Println("after reload:", len(tasks), "tasks, first tag", tasks[0].Tags[0])
+}
+
+func errString(err error) string {
+	if err != nil {
+		return err.Error()
+	}
+	return ""
+}
+::expected
+before: 0 tasks
+added 1 write report
+added 2 buy milk
+[
+  {
+    "id": 1,
+    "title": "write report",
+    "done": false,
+    "tags": [
+      "work"
+    ]
+  },
+  {
+    "id": 2,
+    "title": "buy milk",
+    "done": false
+  }
+]
+after reload: 2 tasks, first tag work
+::hints
+- Tags: `json:"tags,omitempty"` leaves out nil or empty slices.
+- `errors.Is(err, fs.ErrNotExist)` recognises a missing file.
+- The next ID: start at 1 and take `max(next, t.ID+1)` over the existing tasks.
+--- cards
+os.ReadFile / WriteFile :: Whole-file read / write (perm like 0o644).
+os.Open / OpenFile + defer Close :: Streaming access; check errors.
+filepath.Join :: OS-correct paths; os.MkdirTemp for scratch folders.
+json.Marshal / Unmarshal(&v) :: Go ↔ JSON for exported fields.
+Struct tags :: `json:"name,omitempty"`, `json:"-"`.
+fs.ErrNotExist :: errors.Is(err, fs.ErrNotExist) for missing files.
+
+=== lesson go-testing | Testing | 75
+## Tests are part of the language toolchain
+
+Go has testing built in: no framework to install. Tests live next to the code in files ending in **`_test.go`**, in functions named **`TestXxx(t *testing.T)`**, and `go test ./...` runs them:
+
+```
+// price.go
+package shop
+
+func Discount(cents, percent int) int {
+	return cents - cents*percent/100
+}
+```
+
+```
+// price_test.go
+package shop
+
+import "testing"
+
+func TestDiscount(t *testing.T) {
+	got := Discount(1000, 15)
+	if got != 850 {
+		t.Errorf("Discount(1000, 15) = %d, want 850", got)
+	}
+}
+```
+
+`t.Errorf` reports a failure and continues; `t.Fatalf` stops this test. The message pattern **`got X, want Y`** is the Go convention. There are no assertion helpers in the standard library on purpose (third-party ones such as `testify` exist).
+
+## Table-driven tests
+
+The most common Go testing style lists cases in a **table** and loops over them, with **`t.Run`** giving each case its own name (and `go test -run TestDiscount/zero` runs one):
+
+```
+func TestDiscount(t *testing.T) {
+	tests := []struct {
+		name           string
+		cents, percent int
+		want           int
+	}{
+		{"normal", 1000, 15, 850},
+		{"zero percent", 1000, 0, 1000},
+		{"full price off", 999, 100, 0},
+		{"rounds down", 999, 10, 900},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := Discount(tt.cents, tt.percent); got != tt.want {
+				t.Errorf("Discount(%d, %d) = %d, want %d", tt.cents, tt.percent, got, tt.want)
+			}
+		})
+	}
+}
+```
+
+Adding a case is one line. Here is the same idea as a runnable program, with a tiny runner standing in for `go test` (the bug it finds is real):
+
+```go
+package main
+
+import (
+	"fmt"
+	"strings"
+)
+
+// Slugify turns a title into a URL part: "Hello, World!" -> "hello-world"
+func Slugify(title string) string {
+	var sb strings.Builder
+	for _, r := range strings.ToLower(title) {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
+			sb.WriteRune(r)
+		case r == ' ':
+			sb.WriteRune('-')
+		}
+	}
+	return sb.String()
+}
+
+func main() {
+	tests := []struct{ name, in, want string }{
+		{"simple", "Hello World", "hello-world"},
+		{"punctuation", "Hello, World!", "hello-world"},
+		{"digits", "Go 1.23 Released", "go-123-released"},
+		{"double spaces", "a  b", "a-b"},
+	}
+	failed := 0
+	for _, tt := range tests {
+		if got := Slugify(tt.in); got != tt.want {
+			fmt.Printf("--- FAIL: %s: Slugify(%q) = %q, want %q\n", tt.name, tt.in, got, tt.want)
+			failed++
+		} else {
+			fmt.Printf("--- PASS: %s\n", tt.name)
+		}
+	}
+	fmt.Println(len(tests)-failed, "passed,", failed, "failed")
+}
+```
+
+## More from the testing package
+
+- **Benchmarks**: `func BenchmarkX(b *testing.B) { for b.Loop() { X() } }`, run with `go test -bench=. -benchmem` to see time and allocations per operation.
+- **Fuzzing**: `func FuzzX(f *testing.F)` generates random inputs to find crashes (`go test -fuzz=FuzzX`).
+- **Examples**: `func ExampleSlugify()` with an `// Output:` comment is compiled, run and shown in the documentation.
+- **Coverage**: `go test -cover` (and `-coverprofile` for an HTML report).
+- **`t.Helper()`**, **`t.Cleanup(f)`**, **`t.TempDir()`** and **`t.Parallel()`** keep tests short and independent.
+- **`net/http/httptest`** tests HTTP handlers without a network (next lesson).
+- Test **behaviour through the package's API**; to replace a dependency (a clock, a database, an HTTP service), accept an **interface** and pass a fake in the test.
+
+~~~check
+? Which function is a test that `go test` runs?
++ func TestParse(t *testing.T) in parse_test.go
+- func testParse() in parse.go
+- func ParseTest(t *testing.T) in parse.go
+- func Test_parse() in main.go
+> Name, signature and file name all matter.
+~~~
+
+📚 **Go deeper:** the testing package docs; go.dev/doc/tutorial/add-a-test; Dave Cheney, "Prefer table driven tests"; *The Go Programming Language*, chapter 11 (Testing).
+--- goals
+- write tests in _test.go files with t.Errorf and the got/want convention
+- write table-driven tests with t.Run subtests
+- know benchmarks, fuzzing, examples and coverage
+- replace dependencies with interfaces and fakes
+--- quiz
+? What's the difference between t.Errorf and t.Fatalf?
++ Errorf marks the test failed and continues; Fatalf also stops the test
+- Errorf only prints
+- Fatalf stops all tests in the package
+- There's none
+> Use Fatalf when continuing makes no sense.
+? What does `t.Run(name, func(t *testing.T) {...})` create?
++ A named subtest that can be run on its own with -run
+- A goroutine
+- A benchmark
+- A new package
+> go test -run TestX/name.
+? Which command shows how much code the tests execute?
++ go test -cover
+- go vet
+- go test -bench=.
+- go build -cover-only
+> -coverprofile=c.out then go tool cover -html=c.out.
+--- exercise code go
+::prompt
+Write a table-driven test runner for `ParseDuration`, a function that turns strings like `1h30m`, `45s` or `2h` into seconds (it's given, and it has a bug). Fill the `tests` table with these cases (name, input, want seconds, want error):
+
+| name | input | want | error? |
+|---|---|---|---|
+| hours and minutes | `1h30m` | 5400 | no |
+| seconds | `45s` | 45 | no |
+| all units | `2h5m10s` | 7510 | no |
+| empty | `` | 0 | yes |
+| bad unit | `5x` | 0 | yes |
+| missing number | `h` | 0 | yes |
+
+and write the loop: for each case print `PASS <name>`, or `FAIL <name>: got <secs>, <err>; want <want>, error <bool>`. Finally print the counts. Don't fix the bug: the test should find it.
+
+```
+PASS hours and minutes
+PASS seconds
+PASS all units
+PASS empty
+PASS bad unit
+FAIL missing number: got 0, <nil>; want 0, error true
+5 passed, 1 failed
+```
+::starter
+package main
+
+import (
+	"errors"
+	"fmt"
+	"strconv"
+)
+
+func ParseDuration(s string) (int, error) {
+	if s == "" {
+		return 0, errors.New("empty duration")
+	}
+	total, num := 0, ""
+	for _, r := range s {
+		switch {
+		case r >= '0' && r <= '9':
+			num += string(r)
+		case r == 'h' || r == 'm' || r == 's':
+			n, _ := strconv.Atoi(num)
+			total += n * map[rune]int{'h': 3600, 'm': 60, 's': 1}[r]
+			num = ""
+		default:
+			return 0, fmt.Errorf("bad unit %q", r)
+		}
+	}
+	return total, nil
+}
+
+func main() {
+	tests := []struct {
+		name    string
+		in      string
+		want    int
+		wantErr bool
+	}{}
+	fmt.Println(len(tests), "tests")
+}
+::solution
+package main
+
+import (
+	"errors"
+	"fmt"
+	"strconv"
+)
+
+func ParseDuration(s string) (int, error) {
+	if s == "" {
+		return 0, errors.New("empty duration")
+	}
+	total, num := 0, ""
+	for _, r := range s {
+		switch {
+		case r >= '0' && r <= '9':
+			num += string(r)
+		case r == 'h' || r == 'm' || r == 's':
+			n, _ := strconv.Atoi(num)
+			total += n * map[rune]int{'h': 3600, 'm': 60, 's': 1}[r]
+			num = ""
+		default:
+			return 0, fmt.Errorf("bad unit %q", r)
+		}
+	}
+	return total, nil
+}
+
+func main() {
+	tests := []struct {
+		name    string
+		in      string
+		want    int
+		wantErr bool
+	}{
+		{"hours and minutes", "1h30m", 5400, false},
+		{"seconds", "45s", 45, false},
+		{"all units", "2h5m10s", 7510, false},
+		{"empty", "", 0, true},
+		{"bad unit", "5x", 0, true},
+		{"missing number", "h", 0, true},
+	}
+	passed, failed := 0, 0
+	for _, tt := range tests {
+		got, err := ParseDuration(tt.in)
+		if got != tt.want || (err != nil) != tt.wantErr {
+			fmt.Printf("FAIL %s: got %d, %v; want %d, error %t\n", tt.name, got, err, tt.want, tt.wantErr)
+			failed++
+			continue
+		}
+		fmt.Println("PASS", tt.name)
+		passed++
+	}
+	fmt.Println(passed, "passed,", failed, "failed")
+}
+::expected
+PASS hours and minutes
+PASS seconds
+PASS all units
+PASS empty
+PASS bad unit
+FAIL missing number: got 0, <nil>; want 0, error true
+5 passed, 1 failed
+::hints
+- One struct literal per row: `{"seconds", "45s", 45, false}`.
+- Compare the error by whether it exists: `(err != nil) != tt.wantErr`.
+- `%v` prints a nil error as `<nil>`.
+--- cards
+_test.go + TestXxx(t *testing.T) :: How go test finds tests.
+t.Errorf / t.Fatalf :: Fail and continue / fail and stop; message "got X, want Y".
+Table-driven test :: A slice of cases + loop + t.Run(name, ...).
+Benchmark / Fuzz / Example :: BenchmarkX(b *testing.B), FuzzX(f *testing.F), ExampleX with // Output:.
+go test flags :: -run, -v, -cover, -bench, -race, -fuzz.
+
+=== lesson go-http | HTTP servers and clients | 80
+## A web server in the standard library
+
+`net/http` is production-quality: many companies run it directly, without a framework. Since Go 1.22, the router (**`http.ServeMux`**) understands methods and path parameters:
+
+```
+package main
+
+import (
+	"encoding/json"
+	"log"
+	"net/http"
+)
+
+type Todo struct {
+	ID    int    `json:"id"`
+	Title string `json:"title"`
+}
+
+func main() {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /hello", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("hello, " + r.URL.Query().Get("name")))
+	})
+	mux.HandleFunc("GET /todos/{id}", func(w http.ResponseWriter, r *http.Request) {
+		id := r.PathValue("id")
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(Todo{ID: 1, Title: "todo " + id})
+	})
+	log.Fatal(http.ListenAndServe(":8080", mux))
+}
+```
+
+- A **handler** receives the **`http.ResponseWriter`** (an `io.Writer` for the body, plus headers and status) and the **`*http.Request`** (method, URL, headers, body).
+- Patterns: `"GET /todos/{id}"` matches the method and captures `{id}` (read with `r.PathValue`); `"/static/"` matches everything below; the most specific pattern wins.
+- `http.Error(w, "not found", http.StatusNotFound)` sends an error; `w.WriteHeader(201)` sets another status (call it before writing the body).
+- Every request runs in **its own goroutine**: handlers must be safe for concurrent use (protect shared data with a mutex).
+
+## A complete server and client you can run
+
+`httptest.NewServer` starts a real server on a free local port, which makes this runnable here. The client is `http.Get` / `http.Client`:
+
+```go
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"sync"
+)
+
+type Note struct {
+	ID   int    `json:"id"`
+	Text string `json:"text"`
+}
+
+type NoteServer struct {
+	mu    sync.Mutex
+	notes []Note
+}
+
+func (s *NoteServer) routes() http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /notes", func(w http.ResponseWriter, r *http.Request) {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(s.notes)
+	})
+	mux.HandleFunc("POST /notes", func(w http.ResponseWriter, r *http.Request) {
+		var n Note
+		if err := json.NewDecoder(r.Body).Decode(&n); err != nil || n.Text == "" {
+			http.Error(w, "invalid note", http.StatusBadRequest)
+			return
+		}
+		s.mu.Lock()
+		n.ID = len(s.notes) + 1
+		s.notes = append(s.notes, n)
+		s.mu.Unlock()
+		w.WriteHeader(http.StatusCreated)
+		json.NewEncoder(w).Encode(n)
+	})
+	return mux
+}
+
+func main() {
+	srv := httptest.NewServer((&NoteServer{}).routes())
+	defer srv.Close()
+
+	for _, body := range []string{`{"text":"buy milk"}`, `{"text":""}`, `{"text":"call Ada"}`} {
+		resp, err := http.Post(srv.URL+"/notes", "application/json", strings.NewReader(body))
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		data, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		fmt.Print(resp.StatusCode, " ", string(data))
+	}
+
+	resp, _ := http.Get(srv.URL + "/notes")
+	defer resp.Body.Close()
+	var notes []Note
+	json.NewDecoder(resp.Body).Decode(&notes)
+	fmt.Println(resp.StatusCode, resp.Header.Get("Content-Type"), notes)
+}
+```
+
+Client rules: always **close the response body**; check the status code (a 404 is not a Go error); for production, create an `http.Client{Timeout: 10 * time.Second}` instead of the default client, which never times out, and pass a context with `http.NewRequestWithContext`.
+
+## Middleware
+
+A **middleware** wraps a handler to add behaviour around every request (logging, authentication, recovering from panics, CORS). Because `http.Handler` is an interface with one method, middleware is just a function from handler to handler:
+
+```
+func logging(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		next.ServeHTTP(w, r)
+		log.Printf("%s %s %v", r.Method, r.URL.Path, time.Since(start))
+	})
+}
+
+http.ListenAndServe(":8080", logging(mux))
+```
+
+## Testing handlers without a network
+
+`httptest.NewRecorder()` is a fake `ResponseWriter` that records the status, headers and body, so a handler can be tested by calling it directly: `h.ServeHTTP(rec, httptest.NewRequest("GET", "/notes", nil))`. That's the approach in this lesson's exercise.
+
+Popular libraries build on `net/http` rather than replacing it: **chi** (a router), **Gin** and **Echo** (frameworks), and `database/sql` with **pgx** for PostgreSQL.
+
+~~~check
+? What does `r.PathValue("id")` return for the pattern "GET /users/{id}" and the path /users/42?
++ "42"
+- 42 as an int
+- "/users/42"
+- An error
+> Path values are strings; convert with strconv.
+~~~
+
+📚 **Go deeper:** the net/http and net/http/httptest package docs; The Go Blog, "Routing Enhancements for Go 1.22"; go.dev/doc/tutorial/web-service-gin; *The Go Programming Language*, sections 1.7 and 7.7.
+--- goals
+- write handlers with http.ResponseWriter and *http.Request
+- route requests with ServeMux method and path patterns, and read path values
+- send and receive JSON, status codes and errors
+- call services with http.Get/Post and close response bodies
+- write middleware and test handlers with httptest
+--- quiz
+? Which ServeMux pattern only matches POST requests to /orders?
++ "POST /orders"
+- "/orders"
+- "/orders?method=POST"
+- "orders:POST"
+> Methods in patterns arrived in Go 1.22.
+? Why must handlers be safe for concurrent use?
++ The server runs each request in its own goroutine
+- Go requires all functions to be
+- Handlers run twice
+- They don't need to be
+> Protect shared state.
+? What must you always do with resp.Body after a request?
++ Close it (defer resp.Body.Close())
+- Print it
+- Nothing
+- Parse it as JSON
+> Unclosed bodies leak connections.
+? What is a middleware in net/http?
++ A function that takes a handler and returns a handler wrapping it
+- A database layer
+- A goroutine pool
+- A JSON encoder
+> func(http.Handler) http.Handler.
+--- exercise code go
+::prompt
+Build a small **inventory API** with `http.ServeMux` and test it with `httptest.NewRecorder` (no network). The `Inventory` (given) holds stock behind a mutex. Write `func (inv *Inventory) Routes() http.Handler` with:
+
+- `GET /items/{name}` → `200` and JSON `{"name":"<name>","stock":<n>}`, or `404` with the body `unknown item` for an unknown name;
+- `POST /items/{name}/take?qty=<n>` → takes n units: `400` with `bad quantity` when qty isn't a positive integer, `404` for an unknown item, `409` with `not enough stock` when there are too few, otherwise `200` and the updated JSON.
+
+Use `http.Error` for error responses (it adds a line break). `main` (given) sends requests and prints the status and body:
+
+```
+GET /items/pen -> 200 {"name":"pen","stock":10}
+POST /items/pen/take?qty=3 -> 200 {"name":"pen","stock":7}
+POST /items/pen/take?qty=9 -> 409 not enough stock
+POST /items/pen/take?qty=zero -> 400 bad quantity
+GET /items/lamp -> 404 unknown item
+DELETE /items/pen -> 405 Method Not Allowed
+```
+::starter
+package main
+
+import (
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"sync"
+)
+
+type Inventory struct {
+	mu    sync.Mutex
+	stock map[string]int
+}
+
+func (inv *Inventory) Routes() http.Handler {
+	return http.NewServeMux()
+}
+
+func main() {
+	inv := &Inventory{stock: map[string]int{"pen": 10, "book": 2}}
+	h := inv.Routes()
+	for _, req := range []string{"GET /items/pen", "POST /items/pen/take?qty=3", "POST /items/pen/take?qty=9", "POST /items/pen/take?qty=zero", "GET /items/lamp", "DELETE /items/pen"} {
+		method, target, _ := strings.Cut(req, " ")
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(method, target, nil))
+		fmt.Printf("%s -> %d %s\n", req, rec.Code, strings.TrimSpace(rec.Body.String()))
+	}
+}
+::solution
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"strconv"
+	"strings"
+	"sync"
+)
+
+type Inventory struct {
+	mu    sync.Mutex
+	stock map[string]int
+}
+
+type item struct {
+	Name  string `json:"name"`
+	Stock int    `json:"stock"`
+}
+
+func writeJSON(w http.ResponseWriter, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(v)
+}
+
+func (inv *Inventory) Routes() http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /items/{name}", func(w http.ResponseWriter, r *http.Request) {
+		name := r.PathValue("name")
+		inv.mu.Lock()
+		n, ok := inv.stock[name]
+		inv.mu.Unlock()
+		if !ok {
+			http.Error(w, "unknown item", http.StatusNotFound)
+			return
+		}
+		writeJSON(w, item{name, n})
+	})
+	mux.HandleFunc("POST /items/{name}/take", func(w http.ResponseWriter, r *http.Request) {
+		qty, err := strconv.Atoi(r.URL.Query().Get("qty"))
+		if err != nil || qty <= 0 {
+			http.Error(w, "bad quantity", http.StatusBadRequest)
+			return
+		}
+		name := r.PathValue("name")
+		inv.mu.Lock()
+		defer inv.mu.Unlock()
+		n, ok := inv.stock[name]
+		if !ok {
+			http.Error(w, "unknown item", http.StatusNotFound)
+			return
+		}
+		if n < qty {
+			http.Error(w, "not enough stock", http.StatusConflict)
+			return
+		}
+		inv.stock[name] = n - qty
+		writeJSON(w, item{name, n - qty})
+	})
+	return mux
+}
+
+func main() {
+	inv := &Inventory{stock: map[string]int{"pen": 10, "book": 2}}
+	h := inv.Routes()
+	for _, req := range []string{"GET /items/pen", "POST /items/pen/take?qty=3", "POST /items/pen/take?qty=9", "POST /items/pen/take?qty=zero", "GET /items/lamp", "DELETE /items/pen"} {
+		method, target, _ := strings.Cut(req, " ")
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(method, target, nil))
+		fmt.Printf("%s -> %d %s\n", req, rec.Code, strings.TrimSpace(rec.Body.String()))
+	}
+}
+::expected
+GET /items/pen -> 200 {"name":"pen","stock":10}
+POST /items/pen/take?qty=3 -> 200 {"name":"pen","stock":7}
+POST /items/pen/take?qty=9 -> 409 not enough stock
+POST /items/pen/take?qty=zero -> 400 bad quantity
+GET /items/lamp -> 404 unknown item
+DELETE /items/pen -> 405 Method Not Allowed
+::hints
+- Register `"GET /items/{name}"` and `"POST /items/{name}/take"`; the query string isn't part of the pattern: read it with `r.URL.Query().Get("qty")`.
+- Lock the mutex around the check **and** the update in the take handler.
+- ServeMux answers 405 by itself when the path matches but the method doesn't.
+--- cards
+Handler :: func(w http.ResponseWriter, r *http.Request).
+ServeMux patterns :: "GET /items/{name}" + r.PathValue("name") (Go 1.22+).
+http.Error :: Sends a status and a plain-text message.
+Client :: http.Get/Post or http.Client{Timeout}; always close resp.Body.
+Middleware :: func(http.Handler) http.Handler.
+httptest :: NewServer (real local server) / NewRecorder (fake ResponseWriter).
+
+=== lesson go-reflection | Reflection and low-level Go | 55
+## reflect: looking at types at run time
+
+The **`reflect`** package inspects values whose type isn't known at compile time. It's what `encoding/json`, `fmt` and validation libraries use to walk through struct fields and read their tags:
+
+```go
+package main
+
+import (
+	"fmt"
+	"reflect"
+)
+
+type Config struct {
+	Host    string `env:"HOST" default:"localhost"`
+	Port    int    `env:"PORT" default:"8080"`
+	Debug   bool   `env:"DEBUG"`
+	secret  string
+}
+
+func main() {
+	c := Config{Host: "example.com", Port: 443, secret: "x"}
+	t := reflect.TypeOf(c)
+	v := reflect.ValueOf(c)
+	fmt.Println(t.Name(), t.Kind(), t.NumField())
+	for i := range t.NumField() {
+		f := t.Field(i)
+		if !f.IsExported() {
+			fmt.Println("skipping unexported", f.Name)
+			continue
+		}
+		fmt.Printf("%-6s %-7s env=%-6s default=%-10q value=%v\n", f.Name, f.Type, f.Tag.Get("env"), f.Tag.Get("default"), v.Field(i))
+	}
+
+	// to modify a value through reflection, start from a pointer
+	pv := reflect.ValueOf(&c).Elem()
+	pv.FieldByName("Port").SetInt(8443)
+	fmt.Println(c.Port)
+
+	for _, x := range []any{42, "hi", []int{1}, map[string]int{}, c, &c} {
+		fmt.Print(reflect.TypeOf(x).Kind(), " ")
+	}
+	fmt.Println()
+}
+```
+
+- `reflect.TypeOf(x)` describes the type (name, kind, fields, methods, tags); `reflect.ValueOf(x)` holds the value.
+- **Kind** is the basic category (`struct`, `slice`, `map`, `ptr`, `int`…), while the type can be a named type such as `Config`.
+- Setting values requires an **addressable** value: `reflect.ValueOf(&x).Elem()`.
+
+Reflection is **slow, verbose and checked only at run time**: a typo in a field name panics instead of failing to compile. Prefer interfaces and generics; use reflection for generic infrastructure (serialisation, validation, dependency injection), or generate code with **`go generate`** instead.
+
+## unsafe and the memory layout
+
+`unsafe` lets you step outside Go's type safety: convert between pointer types and inspect memory layout. It's used in performance-critical libraries and when talking to C; ordinary code never needs it. `unsafe.Sizeof` shows how struct **field order** affects size, because fields are aligned in memory:
+
+```go
+package main
+
+import (
+	"fmt"
+	"unsafe"
+)
+
+type Loose struct {
+	A bool  // 1 byte + 7 bytes padding
+	B int64 // 8 bytes
+	C bool  // 1 byte + 7 bytes padding
+}
+
+type Packed struct {
+	B int64 // 8 bytes
+	A bool  // 1 byte
+	C bool  // 1 byte + 6 bytes padding
+}
+
+func main() {
+	fmt.Println(unsafe.Sizeof(Loose{}), unsafe.Sizeof(Packed{}))
+	fmt.Println(unsafe.Sizeof(""), unsafe.Sizeof([]int{}), unsafe.Sizeof(map[int]int{}), unsafe.Sizeof(any(nil)))
+}
+```
+
+A string header is 16 bytes (pointer + length), a slice 24 (pointer, length, capacity), a map just a pointer, an interface 16 (type + data). Knowing this explains why passing slices and strings is cheap.
+
+## cgo and calling C
+
+**cgo** lets Go call C libraries (`import "C"` with a comment containing C code). It works, but it slows builds, complicates cross-compilation and makes each call more expensive, so Go programmers prefer pure-Go libraries whenever they exist.
+
+~~~check
+? Why does `reflect.ValueOf(c).Field(1).SetInt(9)` panic?
++ The value isn't addressable: use reflect.ValueOf(&c).Elem()
+- Port isn't an int
+- reflect can't set values
+- Fields start at index 0
+> Reflection follows Go's rules: you need a pointer to modify.
+~~~
+
+📚 **Go deeper:** The Go Blog, "The Laws of Reflection"; the reflect and unsafe package docs; *The Go Programming Language*, chapters 12 (Reflection) and 13 (Low-Level Programming).
+--- goals
+- inspect types, kinds, fields and struct tags with reflect
+- modify values through reflection using addressable values
+- explain the costs of reflection and when to prefer interfaces, generics or go generate
+- explain memory layout and padding with unsafe.Sizeof, and what cgo is for
+--- quiz
+? What does `reflect.TypeOf(x).Kind()` return for a `[]string`?
++ slice
+- []string
+- array
+- string
+> Kind is the category; Type is the full type.
+? How do you read the json tag of a struct field with reflect?
++ field.Tag.Get("json")
+- field.JSON
+- reflect.Tag(field, "json")
+- field.Name("json")
+> StructTag.Get parses the tag string.
+? Why might reordering struct fields reduce its size?
++ Fields are aligned, and the padding between them depends on their order
+- Go compresses structs
+- Field names take space
+- It can't
+> Largest fields first usually packs best.
+--- exercise code go
+::prompt
+Write a tag-driven **validator** with reflection. `func Validate(v any) []string` walks the exported fields of a struct (v may be a struct or a pointer to one: use `reflect.Indirect`) and checks the `validate` tag, a comma-separated list of rules:
+
+- `required`: a string must not be empty, an int must not be 0;
+- `min=N`: a string's length (in bytes) or an int's value must be at least N;
+- `max=N`: likewise, at most N.
+
+Each failure adds `<Field>: <rule>` (e.g. `Name: required`, `Age: min=18`). Fields are checked in order, rules in tag order. `main` is given:
+
+```
+valid
+Name: required
+Name: min=2
+Age: min=18
+Email: required
+Code: max=4
+Age: max=130
+```
+::starter
+package main
+
+import (
+	"fmt"
+	"reflect"
+)
+
+type SignUp struct {
+	Name  string `validate:"required,min=2"`
+	Age   int    `validate:"min=18,max=130"`
+	Email string `validate:"required"`
+	Note  string
+}
+
+type Coupon struct {
+	Code string `validate:"required,max=4"`
+}
+
+func Validate(v any) []string {
+	_ = reflect.TypeOf(v)
+	return nil
+}
+
+func main() {
+	inputs := []any{
+		SignUp{Name: "Ada", Age: 36, Email: "ada@example.com"},
+		&SignUp{Name: "", Age: 12},
+		Coupon{Code: "SUMMER"},
+		SignUp{Name: "Al", Age: 200, Email: "x"},
+	}
+	for _, in := range inputs {
+		errs := Validate(in)
+		if len(errs) == 0 {
+			fmt.Println("valid")
+		}
+		for _, e := range errs {
+			fmt.Println(e)
+		}
+	}
+}
+::solution
+package main
+
+import (
+	"fmt"
+	"reflect"
+	"strconv"
+	"strings"
+)
+
+type SignUp struct {
+	Name  string `validate:"required,min=2"`
+	Age   int    `validate:"min=18,max=130"`
+	Email string `validate:"required"`
+	Note  string
+}
+
+type Coupon struct {
+	Code string `validate:"required,max=4"`
+}
+
+func Validate(v any) []string {
+	var errs []string
+	val := reflect.Indirect(reflect.ValueOf(v))
+	t := val.Type()
+	for i := range t.NumField() {
+		f := t.Field(i)
+		tag := f.Tag.Get("validate")
+		if !f.IsExported() || tag == "" {
+			continue
+		}
+		fv := val.Field(i)
+		var size int
+		switch fv.Kind() {
+		case reflect.String:
+			size = fv.Len()
+		case reflect.Int:
+			size = int(fv.Int())
+		}
+		for _, rule := range strings.Split(tag, ",") {
+			name, arg, _ := strings.Cut(rule, "=")
+			n, _ := strconv.Atoi(arg)
+			failed := false
+			switch name {
+			case "required":
+				failed = fv.IsZero()
+			case "min":
+				failed = size < n
+			case "max":
+				failed = size > n
+			}
+			if failed {
+				errs = append(errs, f.Name+": "+rule)
+			}
+		}
+	}
+	return errs
+}
+
+func main() {
+	inputs := []any{
+		SignUp{Name: "Ada", Age: 36, Email: "ada@example.com"},
+		&SignUp{Name: "", Age: 12},
+		Coupon{Code: "SUMMER"},
+		SignUp{Name: "Al", Age: 200, Email: "x"},
+	}
+	for _, in := range inputs {
+		errs := Validate(in)
+		if len(errs) == 0 {
+			fmt.Println("valid")
+		}
+		for _, e := range errs {
+			fmt.Println(e)
+		}
+	}
+}
+::expected
+valid
+Name: required
+Name: min=2
+Age: min=18
+Email: required
+Code: max=4
+Age: max=130
+::hints
+- `reflect.Indirect(reflect.ValueOf(v))` follows a pointer if there is one.
+- For each rule, `strings.Cut(rule, "=")` splits the name from its number.
+- `fv.IsZero()` implements `required` for every kind; compare `fv.Len()` (strings) or `fv.Int()` (ints) for min and max.
+--- cards
+reflect.TypeOf / ValueOf :: Type description / value wrapper at run time.
+Kind :: The basic category: struct, slice, map, ptr, int, string…
+Tag.Get("key") :: Reads a struct tag value.
+Addressable :: reflect.ValueOf(&x).Elem() to set fields.
+unsafe.Sizeof :: Memory size; field order affects padding.
+cgo :: Calling C from Go; costly, avoid when a pure-Go library exists.
+
+=== lesson go-m7-test | Module 7 test | 160 | exam
+This test covers Module 7: packages and modules, files and JSON, testing, HTTP and reflection.
+
+Before you start, check that you can:
+
+- organise code in packages and design small APIs;
+- read and write files and JSON;
+- write table-driven tests;
+- write and test HTTP handlers.
+--- goals
+- combine input parsing, JSON, aggregation and clean error handling in a tool
+--- quiz
+? Which file name makes Go treat the file as tests?
++ store_test.go
+- test_store.go
+- store.test.go
+- tests/store.go
+> The _test.go suffix.
+? What does json.Unmarshal do with JSON fields that the struct doesn't have?
++ Ignores them
+- Returns an error
+- Panics
+- Adds them to the struct
+> Use a Decoder with DisallowUnknownFields to be strict.
+? How do you test a handler without starting a server?
++ Call h.ServeHTTP with httptest.NewRecorder() and httptest.NewRequest(...)
+- You can't
+- Use curl
+- Call the handler with nil arguments
+> The recorder captures the response.
+? Who can import a package in shop/internal/db?
++ Code inside the shop module's tree
+- Any Go program
+- Only main
+- Only tests
+> internal is enforced by the compiler.
+--- exercise code go
+::prompt
+**A log summary tool.** The input has one JSON object per line (JSON Lines), like `{"level":"error","service":"api","ms":120,"msg":"timeout"}`. Read it from standard input and:
+
+- decode each non-empty line into `type Entry struct` (fields `Level`, `Service`, `Ms`, `Msg` with tags `level`, `service`, `ms`, `msg`); count lines that fail to decode as `invalid`;
+- build a `Summary` with: `total` (valid entries), `invalid`, `by_level` (map level → count), `slowest` (the entry with the highest `ms`, first one on a tie) and `services` (sorted names of services that logged an `error`, without duplicates);
+- print the summary as indented JSON (two spaces). Maps are printed with sorted keys by encoding/json.
+
+```
+{
+  "total": 5,
+  "invalid": 1,
+  "by_level": {
+    "error": 2,
+    "info": 2,
+    "warn": 1
+  },
+  "slowest": {
+    "level": "warn",
+    "service": "db",
+    "ms": 950,
+    "msg": "slow query"
+  },
+  "services": [
+    "api",
+    "payments"
+  ]
+}
+```
+::stdin
+{"level":"info","service":"api","ms":12,"msg":"started"}
+{"level":"error","service":"payments","ms":300,"msg":"card declined"}
+not json
+
+{"level":"warn","service":"db","ms":950,"msg":"slow query"}
+{"level":"error","service":"api","ms":120,"msg":"timeout"}
+{"level":"info","service":"api","ms":8,"msg":"ok"}
+::starter
+package main
+
+import (
+	"bufio"
+	"fmt"
+	"os"
+)
+
+func main() {
+	in := bufio.NewScanner(os.Stdin)
+	lines := 0
+	for in.Scan() {
+		lines++
+	}
+	fmt.Println(lines, "lines")
+}
+::solution
+package main
+
+import (
+	"bufio"
+	"encoding/json"
+	"fmt"
+	"os"
+	"slices"
+	"strings"
+)
+
+type Entry struct {
+	Level   string `json:"level"`
+	Service string `json:"service"`
+	Ms      int    `json:"ms"`
+	Msg     string `json:"msg"`
+}
+
+type Summary struct {
+	Total    int            `json:"total"`
+	Invalid  int            `json:"invalid"`
+	ByLevel  map[string]int `json:"by_level"`
+	Slowest  *Entry         `json:"slowest,omitempty"`
+	Services []string       `json:"services"`
+}
+
+func summarize(sc *bufio.Scanner) Summary {
+	s := Summary{ByLevel: map[string]int{}, Services: []string{}}
+	for sc.Scan() {
+		line := strings.TrimSpace(sc.Text())
+		if line == "" {
+			continue
+		}
+		var e Entry
+		if err := json.Unmarshal([]byte(line), &e); err != nil {
+			s.Invalid++
+			continue
+		}
+		s.Total++
+		s.ByLevel[e.Level]++
+		if s.Slowest == nil || e.Ms > s.Slowest.Ms {
+			s.Slowest = &e
+		}
+		if e.Level == "error" && !slices.Contains(s.Services, e.Service) {
+			s.Services = append(s.Services, e.Service)
+		}
+	}
+	slices.Sort(s.Services)
+	return s
+}
+
+func main() {
+	s := summarize(bufio.NewScanner(os.Stdin))
+	out, err := json.MarshalIndent(s, "", "  ")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	fmt.Println(string(out))
+}
+::expected
+{
+  "total": 5,
+  "invalid": 1,
+  "by_level": {
+    "error": 2,
+    "info": 2,
+    "warn": 1
+  },
+  "slowest": {
+    "level": "warn",
+    "service": "db",
+    "ms": 950,
+    "msg": "slow query"
+  },
+  "services": [
+    "api",
+    "payments"
+  ]
+}
+::cases
+>>> {"level":"info","service":"web","ms":5,"msg":"hi"}
+{
+  "total": 1,
+  "invalid": 0,
+  "by_level": {
+    "info": 1
+  },
+  "slowest": {
+    "level": "info",
+    "service": "web",
+    "ms": 5,
+    "msg": "hi"
+  },
+  "services": []
+}
+::hints
+- Initialise `ByLevel` with `map[string]int{}` and `Services` with `[]string{}` so they print as `{}` and `[]`, not `null`.
+- Keep a `*Entry` for the slowest; `e` is a new variable each iteration, so `&e` is safe.
+- `slices.Contains` avoids duplicate services; sort them at the end.
