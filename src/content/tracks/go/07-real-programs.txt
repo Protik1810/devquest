@@ -91,8 +91,9 @@ func NewServer(addr string, opts ...Option) *Server {
 }
 
 func main() {
-	fmt.Printf("%+v\n", *NewServer(":8080"))
-	fmt.Printf("%+v\n", *NewServer(":9090", WithTimeout(5*time.Second), WithLogging()))
+	for _, s := range []*Server{NewServer(":8080"), NewServer(":9090", WithTimeout(5*time.Second), WithLogging())} {
+		fmt.Println(s.addr, s.timeout, s.maxConns, s.logging)
+	}
 }
 ```
 

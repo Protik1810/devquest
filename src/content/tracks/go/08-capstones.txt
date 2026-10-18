@@ -1,0 +1,2033 @@
+=== module Capstone projects
+
+=== lesson go-project | Capstone 1: an inventory command-line tool | 400
+Go is famous for command-line tools, so the first capstone builds one in two steps: first the **domain** (products, stock, sales and errors), then a **command interpreter** that reads commands from standard input and prints a JSON report. Step 2's starter contains step 1's solution, so you can continue even if step 1 gave you trouble.
+
+## How a task like this is approached
+
+1. **Model the domain** before the user interface: a `Product` is plain data, the `Inventory` owns the state and enforces the rules, and prices are **integer cents** (never floats for money).
+2. **Make errors part of the design**: a sentinel `ErrNotFound` for "no such product" and a custom `*StockError` that tells the caller how much is left, so the interface can phrase its own message with `errors.Is` and `errors.As`.
+3. **Keep parsing separate from logic**: the interpreter turns text into calls and formats results; the inventory knows nothing about text. Each part is easy to test alone.
+4. **Report with encoding/json**: a separate report type with struct tags keeps the JSON format independent of the internal types.
+
+`main` is the specification: its printed output must match exactly. Don't change it.
+--- goals
+- model a domain with structs, maps of pointers and integer cents
+- design errors with a sentinel value and a custom error type
+- parse line-based commands robustly and report every problem with its line number
+- produce a JSON report with dedicated types and struct tags
+
+--- exercise code go
+::prompt
+**Step 1: the inventory.** `Product`, `ErrNotFound` and `StockError` are given. Complete the `Inventory` methods:
+
+- `Add(sku, name, priceCents, qty)`: errors `add: sku is required`, `add <sku>: price must be positive`, `add <sku>: quantity can't be negative` (checked in that order); adding an existing SKU updates its name and price and **adds** to its quantity;
+- `Sell(sku, qty)` returns the revenue in cents; an unknown SKU returns `sell <sku>: not found` wrapping `ErrNotFound` (`%w`); too little stock returns `&StockError{SKU, Have, Want}` and changes nothing; a sale adds to the total revenue;
+- `Restock(sku, qty)`: `restock <sku>: quantity must be positive` for qty ≤ 0, `restock <sku>: not found` (wrapping `ErrNotFound`) for an unknown SKU;
+- `LowStock(threshold)` returns copies of the products with at most `threshold` units, fewest first, ties by SKU (sort the SKUs first, then `slices.SortStableFunc` by quantity).
+
+Expected output:
+
+```
+error: add: sku is required
+error: add MUG: price must be positive
+sold 30 PEN-1 for 52.50
+cannot sell 5 LAMP: only 3 left
+sold 12 NB-A5 for 51.00
+error: sell DESK: not found
+sold 2 LAMP for 65.98
+error: restock NB-A5: quantity must be positive
+error: restock CHAIR: not found
+low: LAMP "Desk lamp" 1
+low: NB-A5 "A5 notebook" 20
+low: PEN-1 "Blue pen (new)" 20
+revenue: 169.48
+```
+::starter
+package main
+
+import (
+	"errors"
+	"fmt"
+)
+
+func main() {
+	inv := NewInventory()
+	check := func(err error) {
+		if err != nil {
+			fmt.Println("error:", err)
+		}
+	}
+	check(inv.Add("PEN-1", "Blue pen", 150, 40))
+	check(inv.Add("NB-A5", "A5 notebook", 425, 12))
+	check(inv.Add("LAMP", "Desk lamp", 3299, 3))
+	check(inv.Add("", "Mystery", 100, 1))
+	check(inv.Add("MUG", "Mug", 0, 5))
+	check(inv.Add("PEN-1", "Blue pen (new)", 175, 10))
+
+	for _, s := range []struct {
+		sku string
+		qty int
+	}{{"PEN-1", 30}, {"LAMP", 5}, {"NB-A5", 12}, {"DESK", 1}, {"LAMP", 2}} {
+		revenue, err := inv.Sell(s.sku, s.qty)
+		var stockErr *StockError
+		switch {
+		case errors.As(err, &stockErr):
+			fmt.Printf("cannot sell %d %s: only %d left\n", stockErr.Want, stockErr.SKU, stockErr.Have)
+		case errors.Is(err, ErrNotFound):
+			fmt.Println("error:", err)
+		case err != nil:
+			fmt.Println("unexpected:", err)
+		default:
+			fmt.Printf("sold %d %s for %s\n", s.qty, s.sku, Money(revenue))
+		}
+	}
+	check(inv.Restock("NB-A5", 20))
+	check(inv.Restock("NB-A5", -1))
+	check(inv.Restock("CHAIR", 2))
+
+	for _, p := range inv.LowStock(20) {
+		fmt.Printf("low: %s %q %d\n", p.SKU, p.Name, p.Qty)
+	}
+	fmt.Println("revenue:", Money(inv.Revenue()))
+}
+
+// Money formats cents as euros: 1234 -> "12.34"
+func Money(cents int) string { return fmt.Sprintf("%d.%02d", cents/100, cents%100) }
+
+type Product struct {
+	SKU        string
+	Name       string
+	PriceCents int
+	Qty        int
+}
+
+var ErrNotFound = errors.New("not found")
+
+type StockError struct {
+	SKU        string
+	Have, Want int
+}
+
+func (e *StockError) Error() string {
+	return fmt.Sprintf("not enough %s: have %d, want %d", e.SKU, e.Have, e.Want)
+}
+
+type Inventory struct {
+	products map[string]*Product
+	revenue  int
+}
+
+func NewInventory() *Inventory {
+	return &Inventory{products: map[string]*Product{}}
+}
+
+func (inv *Inventory) Add(sku, name string, priceCents, qty int) error { return nil }
+
+func (inv *Inventory) Sell(sku string, qty int) (int, error) { return 0, nil }
+
+func (inv *Inventory) Restock(sku string, qty int) error { return nil }
+
+func (inv *Inventory) LowStock(threshold int) []Product { return nil }
+
+func (inv *Inventory) Revenue() int { return inv.revenue }
+::solution
+package main
+
+import (
+	"cmp"
+	"errors"
+	"fmt"
+	"maps"
+	"slices"
+)
+
+func main() {
+	inv := NewInventory()
+	check := func(err error) {
+		if err != nil {
+			fmt.Println("error:", err)
+		}
+	}
+	check(inv.Add("PEN-1", "Blue pen", 150, 40))
+	check(inv.Add("NB-A5", "A5 notebook", 425, 12))
+	check(inv.Add("LAMP", "Desk lamp", 3299, 3))
+	check(inv.Add("", "Mystery", 100, 1))
+	check(inv.Add("MUG", "Mug", 0, 5))
+	check(inv.Add("PEN-1", "Blue pen (new)", 175, 10))
+
+	for _, s := range []struct {
+		sku string
+		qty int
+	}{{"PEN-1", 30}, {"LAMP", 5}, {"NB-A5", 12}, {"DESK", 1}, {"LAMP", 2}} {
+		revenue, err := inv.Sell(s.sku, s.qty)
+		var stockErr *StockError
+		switch {
+		case errors.As(err, &stockErr):
+			fmt.Printf("cannot sell %d %s: only %d left\n", stockErr.Want, stockErr.SKU, stockErr.Have)
+		case errors.Is(err, ErrNotFound):
+			fmt.Println("error:", err)
+		case err != nil:
+			fmt.Println("unexpected:", err)
+		default:
+			fmt.Printf("sold %d %s for %s\n", s.qty, s.sku, Money(revenue))
+		}
+	}
+	check(inv.Restock("NB-A5", 20))
+	check(inv.Restock("NB-A5", -1))
+	check(inv.Restock("CHAIR", 2))
+
+	for _, p := range inv.LowStock(20) {
+		fmt.Printf("low: %s %q %d\n", p.SKU, p.Name, p.Qty)
+	}
+	fmt.Println("revenue:", Money(inv.Revenue()))
+}
+
+// Money formats cents as euros: 1234 -> "12.34"
+func Money(cents int) string { return fmt.Sprintf("%d.%02d", cents/100, cents%100) }
+
+type Product struct {
+	SKU        string
+	Name       string
+	PriceCents int
+	Qty        int
+}
+
+var ErrNotFound = errors.New("not found")
+
+type StockError struct {
+	SKU        string
+	Have, Want int
+}
+
+func (e *StockError) Error() string {
+	return fmt.Sprintf("not enough %s: have %d, want %d", e.SKU, e.Have, e.Want)
+}
+
+type Inventory struct {
+	products map[string]*Product
+	revenue  int
+}
+
+func NewInventory() *Inventory {
+	return &Inventory{products: map[string]*Product{}}
+}
+
+func (inv *Inventory) Add(sku, name string, priceCents, qty int) error {
+	switch {
+	case sku == "":
+		return errors.New("add: sku is required")
+	case priceCents <= 0:
+		return fmt.Errorf("add %s: price must be positive", sku)
+	case qty < 0:
+		return fmt.Errorf("add %s: quantity can't be negative", sku)
+	}
+	if p, ok := inv.products[sku]; ok {
+		p.Name, p.PriceCents = name, priceCents
+		p.Qty += qty
+		return nil
+	}
+	inv.products[sku] = &Product{sku, name, priceCents, qty}
+	return nil
+}
+
+func (inv *Inventory) Sell(sku string, qty int) (int, error) {
+	p, ok := inv.products[sku]
+	if !ok {
+		return 0, fmt.Errorf("sell %s: %w", sku, ErrNotFound)
+	}
+	if qty > p.Qty {
+		return 0, &StockError{SKU: sku, Have: p.Qty, Want: qty}
+	}
+	p.Qty -= qty
+	revenue := qty * p.PriceCents
+	inv.revenue += revenue
+	return revenue, nil
+}
+
+func (inv *Inventory) Restock(sku string, qty int) error {
+	if qty <= 0 {
+		return fmt.Errorf("restock %s: quantity must be positive", sku)
+	}
+	p, ok := inv.products[sku]
+	if !ok {
+		return fmt.Errorf("restock %s: %w", sku, ErrNotFound)
+	}
+	p.Qty += qty
+	return nil
+}
+
+func (inv *Inventory) LowStock(threshold int) []Product {
+	var low []Product
+	for _, sku := range slices.Sorted(maps.Keys(inv.products)) {
+		if p := inv.products[sku]; p.Qty <= threshold {
+			low = append(low, *p)
+		}
+	}
+	slices.SortStableFunc(low, func(a, b Product) int { return cmp.Compare(a.Qty, b.Qty) })
+	return low
+}
+
+func (inv *Inventory) Revenue() int { return inv.revenue }
+::expected
+error: add: sku is required
+error: add MUG: price must be positive
+sold 30 PEN-1 for 52.50
+cannot sell 5 LAMP: only 3 left
+sold 12 NB-A5 for 51.00
+error: sell DESK: not found
+sold 2 LAMP for 65.98
+error: restock NB-A5: quantity must be positive
+error: restock CHAIR: not found
+low: LAMP "Desk lamp" 1
+low: NB-A5 "A5 notebook" 20
+low: PEN-1 "Blue pen (new)" 20
+revenue: 169.48
+::hints
+- Store `*Product` values in the map so `Sell` and `Restock` can change them in place.
+- Check every error **before** changing any state.
+- `slices.Sorted(maps.Keys(inv.products))` gives the SKUs in order; a stable sort by quantity keeps that order for ties.
+
+--- exercise code go
+::prompt
+**Step 2: the command interpreter.** Your step 1 inventory is included. `main` reads commands from standard input (skipping blank lines and `#` comments) and prints `line <n>: error: <err>` for failures. Write:
+
+- `ParseCents(s)`: `"12"`, `"12.5"` and `"12.50"` become 1200, 1250 and 1250; anything else (more than two decimals, letters, a negative amount) is `bad price "<s>"`;
+- `Execute(inv, command)`, which supports:
+  - `add <sku> <name> <price> <qty>` (underscores in the name become spaces) → prints nothing;
+  - `sell <sku> <qty>` → `sold <qty> <sku> for <euros>`;
+  - `restock <sku> <qty>` → prints nothing;
+  - `low <threshold>` → `low stock: SKU(qty), SKU(qty)`;
+  - `report` → the JSON report;
+  - a wrong number of fields → `usage: <form>`; a quantity that isn't a positive integer → `bad quantity "<text>"`; anything else → `unknown command "<word>"`;
+- `Report(inv)`: indented JSON (two spaces) of `{"products": [...], "revenue": "<euros>"}`, products sorted by SKU with the fields `sku`, `name`, `price`, `qty` and `stock_value` (price × quantity), money formatted by `Money`.
+
+Expected output:
+
+```
+sold 30 PEN-1 for 45.00
+line 6: error: not enough LAMP: have 3, want 5
+line 7: error: sell DESK: not found
+line 9: error: bad price "3.5x"
+line 11: error: bad quantity "zero"
+line 12: error: unknown command "dance"
+low stock: LAMP(5), MUG(5)
+{
+  "products": [
+    {
+      "sku": "LAMP",
+      "name": "Desk lamp",
+      "price": "32.99",
+      "qty": 5,
+      "stock_value": "164.95"
+    },
+    {
+      "sku": "MUG",
+      "name": "Mug",
+      "price": "3.50",
+      "qty": 5,
+      "stock_value": "17.50"
+    },
+    {
+      "sku": "NB-A5",
+      "name": "A5 notebook",
+      "price": "4.25",
+      "qty": 12,
+      "stock_value": "51.00"
+    },
+    {
+      "sku": "PEN-1",
+      "name": "Blue pen",
+      "price": "1.50",
+      "qty": 10,
+      "stock_value": "15.00"
+    }
+  ],
+  "revenue": "45.00"
+}
+```
+::stdin
+# opening stock
+add PEN-1 Blue_pen 1.50 40
+add NB-A5 A5_notebook 4.25 12
+add LAMP Desk_lamp 32.99 3
+sell PEN-1 30
+sell LAMP 5
+sell DESK 1
+restock LAMP 2
+add MUG Mug 3.5x 5
+add MUG Mug 3.5 5
+sell MUG zero
+dance
+
+low 5
+report
+::starter
+package main
+
+import (
+	"bufio"
+	"cmp"
+	"errors"
+	"fmt"
+	"maps"
+	"os"
+	"slices"
+	"strings"
+)
+
+func main() {
+	inv := NewInventory()
+	in := bufio.NewScanner(os.Stdin)
+	for line := 1; in.Scan(); line++ {
+		text := strings.TrimSpace(in.Text())
+		if text == "" || strings.HasPrefix(text, "#") {
+			continue
+		}
+		out, err := Execute(inv, text)
+		if err != nil {
+			fmt.Printf("line %d: error: %v\n", line, err)
+			continue
+		}
+		if out != "" {
+			fmt.Println(out)
+		}
+	}
+}
+
+// Execute runs one command against the inventory and returns what to print.
+func Execute(inv *Inventory, command string) (string, error) {
+	return "", nil
+}
+
+// ParseCents turns "12", "12.5" or "12.50" into cents.
+func ParseCents(s string) (int, error) { return 0, nil }
+
+// Report returns the inventory as indented JSON, products sorted by SKU.
+func Report(inv *Inventory) (string, error) { return "", nil }
+
+// Money formats cents as euros: 1234 -> "12.34"
+func Money(cents int) string { return fmt.Sprintf("%d.%02d", cents/100, cents%100) }
+
+type Product struct {
+	SKU        string
+	Name       string
+	PriceCents int
+	Qty        int
+}
+
+var ErrNotFound = errors.New("not found")
+
+type StockError struct {
+	SKU        string
+	Have, Want int
+}
+
+func (e *StockError) Error() string {
+	return fmt.Sprintf("not enough %s: have %d, want %d", e.SKU, e.Have, e.Want)
+}
+
+type Inventory struct {
+	products map[string]*Product
+	revenue  int
+}
+
+func NewInventory() *Inventory {
+	return &Inventory{products: map[string]*Product{}}
+}
+
+func (inv *Inventory) Add(sku, name string, priceCents, qty int) error {
+	switch {
+	case sku == "":
+		return errors.New("add: sku is required")
+	case priceCents <= 0:
+		return fmt.Errorf("add %s: price must be positive", sku)
+	case qty < 0:
+		return fmt.Errorf("add %s: quantity can't be negative", sku)
+	}
+	if p, ok := inv.products[sku]; ok {
+		p.Name, p.PriceCents = name, priceCents
+		p.Qty += qty
+		return nil
+	}
+	inv.products[sku] = &Product{sku, name, priceCents, qty}
+	return nil
+}
+
+func (inv *Inventory) Sell(sku string, qty int) (int, error) {
+	p, ok := inv.products[sku]
+	if !ok {
+		return 0, fmt.Errorf("sell %s: %w", sku, ErrNotFound)
+	}
+	if qty > p.Qty {
+		return 0, &StockError{SKU: sku, Have: p.Qty, Want: qty}
+	}
+	p.Qty -= qty
+	revenue := qty * p.PriceCents
+	inv.revenue += revenue
+	return revenue, nil
+}
+
+func (inv *Inventory) Restock(sku string, qty int) error {
+	if qty <= 0 {
+		return fmt.Errorf("restock %s: quantity must be positive", sku)
+	}
+	p, ok := inv.products[sku]
+	if !ok {
+		return fmt.Errorf("restock %s: %w", sku, ErrNotFound)
+	}
+	p.Qty += qty
+	return nil
+}
+
+func (inv *Inventory) LowStock(threshold int) []Product {
+	var low []Product
+	for _, sku := range slices.Sorted(maps.Keys(inv.products)) {
+		if p := inv.products[sku]; p.Qty <= threshold {
+			low = append(low, *p)
+		}
+	}
+	slices.SortStableFunc(low, func(a, b Product) int { return cmp.Compare(a.Qty, b.Qty) })
+	return low
+}
+
+func (inv *Inventory) Revenue() int { return inv.revenue }
+::solution
+package main
+
+import (
+	"bufio"
+	"cmp"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"maps"
+	"os"
+	"slices"
+	"strconv"
+	"strings"
+)
+
+func main() {
+	inv := NewInventory()
+	in := bufio.NewScanner(os.Stdin)
+	for line := 1; in.Scan(); line++ {
+		text := strings.TrimSpace(in.Text())
+		if text == "" || strings.HasPrefix(text, "#") {
+			continue
+		}
+		out, err := Execute(inv, text)
+		if err != nil {
+			fmt.Printf("line %d: error: %v\n", line, err)
+			continue
+		}
+		if out != "" {
+			fmt.Println(out)
+		}
+	}
+}
+
+// Execute runs one command against the inventory and returns what to print.
+func Execute(inv *Inventory, command string) (string, error) {
+	f := strings.Fields(command)
+	need := func(n int, usage string) error {
+		if len(f) != n {
+			return fmt.Errorf("usage: %s", usage)
+		}
+		return nil
+	}
+	switch f[0] {
+	case "add":
+		if err := need(5, "add <sku> <name> <price> <qty>"); err != nil {
+			return "", err
+		}
+		price, err := ParseCents(f[3])
+		if err != nil {
+			return "", err
+		}
+		qty, err := strconv.Atoi(f[4])
+		if err != nil {
+			return "", fmt.Errorf("bad quantity %q", f[4])
+		}
+		return "", inv.Add(f[1], strings.ReplaceAll(f[2], "_", " "), price, qty)
+	case "sell", "restock":
+		if err := need(3, f[0]+" <sku> <qty>"); err != nil {
+			return "", err
+		}
+		qty, err := strconv.Atoi(f[2])
+		if err != nil || qty <= 0 {
+			return "", fmt.Errorf("bad quantity %q", f[2])
+		}
+		if f[0] == "restock" {
+			return "", inv.Restock(f[1], qty)
+		}
+		revenue, err := inv.Sell(f[1], qty)
+		if err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("sold %d %s for %s", qty, f[1], Money(revenue)), nil
+	case "low":
+		if err := need(2, "low <threshold>"); err != nil {
+			return "", err
+		}
+		n, err := strconv.Atoi(f[1])
+		if err != nil {
+			return "", fmt.Errorf("bad threshold %q", f[1])
+		}
+		var parts []string
+		for _, p := range inv.LowStock(n) {
+			parts = append(parts, fmt.Sprintf("%s(%d)", p.SKU, p.Qty))
+		}
+		return "low stock: " + strings.Join(parts, ", "), nil
+	case "report":
+		return Report(inv)
+	}
+	return "", fmt.Errorf("unknown command %q", f[0])
+}
+
+// ParseCents turns "12", "12.5" or "12.50" into cents.
+func ParseCents(s string) (int, error) {
+	whole, frac, _ := strings.Cut(s, ".")
+	if len(frac) > 2 {
+		return 0, fmt.Errorf("bad price %q", s)
+	}
+	frac += strings.Repeat("0", 2-len(frac))
+	euros, err1 := strconv.Atoi(whole)
+	cents, err2 := strconv.Atoi(frac)
+	if err1 != nil || err2 != nil || euros < 0 {
+		return 0, fmt.Errorf("bad price %q", s)
+	}
+	return euros*100 + cents, nil
+}
+
+type reportLine struct {
+	SKU   string `json:"sku"`
+	Name  string `json:"name"`
+	Price string `json:"price"`
+	Qty   int    `json:"qty"`
+	Value string `json:"stock_value"`
+}
+
+type report struct {
+	Products []reportLine `json:"products"`
+	Revenue  string       `json:"revenue"`
+}
+
+// Report returns the inventory as indented JSON, products sorted by SKU.
+func Report(inv *Inventory) (string, error) {
+	r := report{Products: []reportLine{}, Revenue: Money(inv.Revenue())}
+	for _, sku := range slices.Sorted(maps.Keys(inv.products)) {
+		p := inv.products[sku]
+		r.Products = append(r.Products, reportLine{p.SKU, p.Name, Money(p.PriceCents), p.Qty, Money(p.PriceCents * p.Qty)})
+	}
+	data, err := json.MarshalIndent(r, "", "  ")
+	return string(data), err
+}
+
+// Money formats cents as euros: 1234 -> "12.34"
+func Money(cents int) string { return fmt.Sprintf("%d.%02d", cents/100, cents%100) }
+
+type Product struct {
+	SKU        string
+	Name       string
+	PriceCents int
+	Qty        int
+}
+
+var ErrNotFound = errors.New("not found")
+
+type StockError struct {
+	SKU        string
+	Have, Want int
+}
+
+func (e *StockError) Error() string {
+	return fmt.Sprintf("not enough %s: have %d, want %d", e.SKU, e.Have, e.Want)
+}
+
+type Inventory struct {
+	products map[string]*Product
+	revenue  int
+}
+
+func NewInventory() *Inventory {
+	return &Inventory{products: map[string]*Product{}}
+}
+
+func (inv *Inventory) Add(sku, name string, priceCents, qty int) error {
+	switch {
+	case sku == "":
+		return errors.New("add: sku is required")
+	case priceCents <= 0:
+		return fmt.Errorf("add %s: price must be positive", sku)
+	case qty < 0:
+		return fmt.Errorf("add %s: quantity can't be negative", sku)
+	}
+	if p, ok := inv.products[sku]; ok {
+		p.Name, p.PriceCents = name, priceCents
+		p.Qty += qty
+		return nil
+	}
+	inv.products[sku] = &Product{sku, name, priceCents, qty}
+	return nil
+}
+
+func (inv *Inventory) Sell(sku string, qty int) (int, error) {
+	p, ok := inv.products[sku]
+	if !ok {
+		return 0, fmt.Errorf("sell %s: %w", sku, ErrNotFound)
+	}
+	if qty > p.Qty {
+		return 0, &StockError{SKU: sku, Have: p.Qty, Want: qty}
+	}
+	p.Qty -= qty
+	revenue := qty * p.PriceCents
+	inv.revenue += revenue
+	return revenue, nil
+}
+
+func (inv *Inventory) Restock(sku string, qty int) error {
+	if qty <= 0 {
+		return fmt.Errorf("restock %s: quantity must be positive", sku)
+	}
+	p, ok := inv.products[sku]
+	if !ok {
+		return fmt.Errorf("restock %s: %w", sku, ErrNotFound)
+	}
+	p.Qty += qty
+	return nil
+}
+
+func (inv *Inventory) LowStock(threshold int) []Product {
+	var low []Product
+	for _, sku := range slices.Sorted(maps.Keys(inv.products)) {
+		if p := inv.products[sku]; p.Qty <= threshold {
+			low = append(low, *p)
+		}
+	}
+	slices.SortStableFunc(low, func(a, b Product) int { return cmp.Compare(a.Qty, b.Qty) })
+	return low
+}
+
+func (inv *Inventory) Revenue() int { return inv.revenue }
+::expected
+sold 30 PEN-1 for 45.00
+line 6: error: not enough LAMP: have 3, want 5
+line 7: error: sell DESK: not found
+line 9: error: bad price "3.5x"
+line 11: error: bad quantity "zero"
+line 12: error: unknown command "dance"
+low stock: LAMP(5), MUG(5)
+{
+  "products": [
+    {
+      "sku": "LAMP",
+      "name": "Desk lamp",
+      "price": "32.99",
+      "qty": 5,
+      "stock_value": "164.95"
+    },
+    {
+      "sku": "MUG",
+      "name": "Mug",
+      "price": "3.50",
+      "qty": 5,
+      "stock_value": "17.50"
+    },
+    {
+      "sku": "NB-A5",
+      "name": "A5 notebook",
+      "price": "4.25",
+      "qty": 12,
+      "stock_value": "51.00"
+    },
+    {
+      "sku": "PEN-1",
+      "name": "Blue pen",
+      "price": "1.50",
+      "qty": 10,
+      "stock_value": "15.00"
+    }
+  ],
+  "revenue": "45.00"
+}
+::cases
+>>> add BOOK Go_book 39.90 2
+>>> sell BOOK 1
+>>> low 1
+sold 1 BOOK for 39.90
+low stock: BOOK(1)
+::hints
+- Split the command with `strings.Fields` and `switch` on the first word; a small `need(n, usage)` helper checks the field count.
+- In `ParseCents`, `strings.Cut(s, ".")` separates euros and cents; pad the cents to two digits with `strings.Repeat("0", 2-len(frac))`.
+- Define `reportLine` and `report` structs with JSON tags, and start `Products` as an empty slice so an empty inventory prints `[]`.
+
+--- cards
+Integer cents :: Store money as int cents; format with %d.%02d.
+Sentinel + custom error :: ErrNotFound for errors.Is; *StockError with fields for errors.As.
+Validate first :: Check everything before changing state, so failed calls change nothing.
+Interpreter :: strings.Fields + switch on the command; report errors with the line number and continue.
+Report types :: Separate structs with JSON tags define the output format.
+
+=== lesson go-capstone-concurrent | Capstone 2: a concurrent search index | 450
+Search engines build an **inverted index**: for each word, the documents that contain it and how often. This capstone indexes a folder of text files and answers multi-word queries, first one file at a time, then with a **pool of goroutines** that stops cleanly at the first broken file.
+
+## The design
+
+- `Tokenize(text)` turns text into lower-case words (letters and digits only), so "Go," and "go" are the same word.
+- The index is a `map[string]map[string]int`: word → document → count.
+- A query's words must **all** appear in a document (AND); its score is the total count of the query words, and results are sorted by score, then by name.
+- `indexFile` (given) reads one file; it simulates a slow disk (20 ms) and refuses binary files with `ErrBinary`. It also records how many files are being read at the same time, so the harness can tell whether your indexing really runs concurrently.
+
+## From sequential to concurrent
+
+Step 1 reads the files one after another: correct, but each file waits for the previous one. Step 2 keeps the same results and adds **concurrency**:
+
+1. a feeder goroutine sends the file paths into a channel (stopping when the context is cancelled);
+2. `workers` goroutines receive paths, index the files and merge them into the shared index, protected by a **mutex**;
+3. the first error is recorded once and **cancels** the context, so the remaining work stops;
+4. `BuildIndex` waits for the workers and returns the index or the first error, wrapped.
+--- goals
+- build an inverted index with nested maps and answer AND queries with ranking
+- tokenize text with strings.FieldsFunc and unicode
+- index files concurrently with a worker pool, a mutex and a WaitGroup
+- stop all workers at the first error with context cancellation
+
+--- exercise code go
+::prompt
+**Step 1: a sequential index.** `indexFile` and the types are given. Write:
+
+- `Tokenize(text)`: lower-case the text and split it with `strings.FieldsFunc`, treating everything that isn't a letter or digit (`unicode.IsLetter`, `unicode.IsDigit`) as a separator;
+- `(idx *Index) add(doc, counts)`: store each word's count for the document (creating the inner map on first use) and count the file;
+- `BuildIndex(dir)`: index every `*.txt` file (`filepath.Glob`) in order; on the first error return `build index: <err>` wrapping it;
+- `(idx *Index) Search(query)`: the documents that contain **every** word of the query, with the sum of the counts as the score, sorted by score (highest first) then by name.
+
+Expected output:
+
+```
+indexed 6 files, 44 distinct words
+max files read at once: 1
+"programming language" -> go.txt(2) python.txt(2) rust.txt(2)
+"garbage collector"   -> gc.txt(4) rust.txt(2)
+"goroutines"          -> channels.txt(1) go.txt(1)
+"go python"           -> gc.txt(2)
+"java"                -> (no results)
+error: build index: broken.txt: binary file
+is ErrBinary: true
+```
+::starter
+package main
+
+import (
+	"bufio"
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync/atomic"
+	"time"
+)
+
+var docs = map[string]string{
+	"go.txt":       "Go is an open source programming language. Go makes concurrency simple with goroutines and channels.",
+	"rust.txt":     "Rust is a systems programming language focused on safety. Rust has no garbage collector.",
+	"python.txt":   "Python is a programming language that is easy to read. Python is popular for data science.",
+	"channels.txt": "Channels connect goroutines. A channel can be buffered or unbuffered.",
+	"gc.txt":       "A garbage collector frees memory automatically. Go and Python use a garbage collector.",
+	"empty.txt":    "",
+}
+
+func main() {
+	dir, err := os.MkdirTemp("", "index-*")
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	defer os.RemoveAll(dir)
+	for name, text := range docs {
+		os.WriteFile(filepath.Join(dir, name), []byte(text), 0o644)
+	}
+
+	idx, err := BuildIndex(dir)
+	if err != nil {
+		fmt.Println("error:", err)
+		return
+	}
+	fmt.Printf("indexed %d files, %d distinct words\n", idx.Files(), idx.Words())
+	fmt.Println("max files read at once:", maxBusy.Load())
+	for _, q := range []string{"programming language", "garbage collector", "goroutines", "go python", "java"} {
+		hits := idx.Search(q)
+		var parts []string
+		for _, h := range hits {
+			parts = append(parts, fmt.Sprintf("%s(%d)", h.Doc, h.Score))
+		}
+		if len(parts) == 0 {
+			parts = []string{"(no results)"}
+		}
+		fmt.Printf("%-21q -> %s\n", q, strings.Join(parts, " "))
+	}
+
+	os.WriteFile(filepath.Join(dir, "broken.txt"), []byte("this file is \x00 binary"), 0o644)
+	_, err = BuildIndex(dir)
+	fmt.Println("error:", err)
+	fmt.Println("is ErrBinary:", errors.Is(err, ErrBinary))
+}
+
+var ErrBinary = errors.New("binary file")
+
+type Hit struct {
+	Doc   string
+	Score int
+}
+
+// Index maps each word to the number of times it appears in each document.
+type Index struct {
+	words map[string]map[string]int
+	files int
+}
+
+func (idx *Index) Files() int { return idx.files }
+func (idx *Index) Words() int { return len(idx.words) }
+
+// Tokenize splits text into lower-case words made of letters and digits.
+func Tokenize(text string) []string { return nil }
+
+var busy, maxBusy atomic.Int32
+
+// indexFile counts the words of one file. It simulates a slow disk (20 ms per file)
+// and records how many files are being read at the same time.
+func indexFile(path string) (map[string]int, error) {
+	now := busy.Add(1)
+	defer busy.Add(-1)
+	for {
+		m := maxBusy.Load()
+		if now <= m || maxBusy.CompareAndSwap(m, now) {
+			break
+		}
+	}
+	time.Sleep(20 * time.Millisecond)
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	counts := map[string]int{}
+	sc := bufio.NewScanner(f)
+	for sc.Scan() {
+		if strings.ContainsRune(sc.Text(), 0) {
+			return nil, fmt.Errorf("%s: %w", filepath.Base(path), ErrBinary)
+		}
+		for _, w := range Tokenize(sc.Text()) {
+			counts[w]++
+		}
+	}
+	return counts, sc.Err()
+}
+
+// add merges one file's counts into the index.
+func (idx *Index) add(doc string, counts map[string]int) {}
+
+// BuildIndex indexes every .txt file of dir, one after another, and stops at the first error.
+func BuildIndex(dir string) (*Index, error) {
+	return &Index{words: map[string]map[string]int{}}, nil
+}
+
+// Search returns the documents containing every word of the query,
+// scored by the total number of occurrences, best first, then by name.
+func (idx *Index) Search(query string) []Hit { return nil }
+
+::solution
+package main
+
+import (
+	"bufio"
+	"cmp"
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"slices"
+	"strings"
+	"sync/atomic"
+	"time"
+	"unicode"
+)
+
+var docs = map[string]string{
+	"go.txt":       "Go is an open source programming language. Go makes concurrency simple with goroutines and channels.",
+	"rust.txt":     "Rust is a systems programming language focused on safety. Rust has no garbage collector.",
+	"python.txt":   "Python is a programming language that is easy to read. Python is popular for data science.",
+	"channels.txt": "Channels connect goroutines. A channel can be buffered or unbuffered.",
+	"gc.txt":       "A garbage collector frees memory automatically. Go and Python use a garbage collector.",
+	"empty.txt":    "",
+}
+
+func main() {
+	dir, err := os.MkdirTemp("", "index-*")
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	defer os.RemoveAll(dir)
+	for name, text := range docs {
+		os.WriteFile(filepath.Join(dir, name), []byte(text), 0o644)
+	}
+
+	idx, err := BuildIndex(dir)
+	if err != nil {
+		fmt.Println("error:", err)
+		return
+	}
+	fmt.Printf("indexed %d files, %d distinct words\n", idx.Files(), idx.Words())
+	fmt.Println("max files read at once:", maxBusy.Load())
+	for _, q := range []string{"programming language", "garbage collector", "goroutines", "go python", "java"} {
+		hits := idx.Search(q)
+		var parts []string
+		for _, h := range hits {
+			parts = append(parts, fmt.Sprintf("%s(%d)", h.Doc, h.Score))
+		}
+		if len(parts) == 0 {
+			parts = []string{"(no results)"}
+		}
+		fmt.Printf("%-21q -> %s\n", q, strings.Join(parts, " "))
+	}
+
+	os.WriteFile(filepath.Join(dir, "broken.txt"), []byte("this file is \x00 binary"), 0o644)
+	_, err = BuildIndex(dir)
+	fmt.Println("error:", err)
+	fmt.Println("is ErrBinary:", errors.Is(err, ErrBinary))
+}
+
+var ErrBinary = errors.New("binary file")
+
+type Hit struct {
+	Doc   string
+	Score int
+}
+
+// Index maps each word to the number of times it appears in each document.
+type Index struct {
+	words map[string]map[string]int
+	files int
+}
+
+func (idx *Index) Files() int { return idx.files }
+func (idx *Index) Words() int { return len(idx.words) }
+
+// Tokenize splits text into lower-case words made of letters and digits.
+func Tokenize(text string) []string {
+	return strings.FieldsFunc(strings.ToLower(text), func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsDigit(r)
+	})
+}
+
+var busy, maxBusy atomic.Int32
+
+// indexFile counts the words of one file. It simulates a slow disk (20 ms per file)
+// and records how many files are being read at the same time.
+func indexFile(path string) (map[string]int, error) {
+	now := busy.Add(1)
+	defer busy.Add(-1)
+	for {
+		m := maxBusy.Load()
+		if now <= m || maxBusy.CompareAndSwap(m, now) {
+			break
+		}
+	}
+	time.Sleep(20 * time.Millisecond)
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	counts := map[string]int{}
+	sc := bufio.NewScanner(f)
+	for sc.Scan() {
+		if strings.ContainsRune(sc.Text(), 0) {
+			return nil, fmt.Errorf("%s: %w", filepath.Base(path), ErrBinary)
+		}
+		for _, w := range Tokenize(sc.Text()) {
+			counts[w]++
+		}
+	}
+	return counts, sc.Err()
+}
+
+// add merges one file's counts into the index.
+func (idx *Index) add(doc string, counts map[string]int) {
+	for w, n := range counts {
+		if idx.words[w] == nil {
+			idx.words[w] = map[string]int{}
+		}
+		idx.words[w][doc] = n
+	}
+	idx.files++
+}
+
+// BuildIndex indexes every .txt file of dir, one after another, and stops at the first error.
+func BuildIndex(dir string) (*Index, error) {
+	paths, err := filepath.Glob(filepath.Join(dir, "*.txt"))
+	if err != nil {
+		return nil, err
+	}
+	idx := &Index{words: map[string]map[string]int{}}
+	for _, p := range paths {
+		counts, err := indexFile(p)
+		if err != nil {
+			return nil, fmt.Errorf("build index: %w", err)
+		}
+		idx.add(filepath.Base(p), counts)
+	}
+	return idx, nil
+}
+
+// Search returns the documents containing every word of the query,
+// scored by the total number of occurrences, best first, then by name.
+func (idx *Index) Search(query string) []Hit {
+	words := Tokenize(query)
+	if len(words) == 0 {
+		return nil
+	}
+	scores := map[string]int{}
+	for doc, n := range idx.words[words[0]] {
+		scores[doc] = n
+	}
+	for _, w := range words[1:] {
+		for doc := range scores {
+			n, ok := idx.words[w][doc]
+			if !ok {
+				delete(scores, doc)
+				continue
+			}
+			scores[doc] += n
+		}
+	}
+	var hits []Hit
+	for doc, s := range scores {
+		hits = append(hits, Hit{doc, s})
+	}
+	slices.SortFunc(hits, func(a, b Hit) int {
+		return cmp.Or(cmp.Compare(b.Score, a.Score), cmp.Compare(a.Doc, b.Doc))
+	})
+	return hits
+}
+::expected
+indexed 6 files, 44 distinct words
+max files read at once: 1
+"programming language" -> go.txt(2) python.txt(2) rust.txt(2)
+"garbage collector"   -> gc.txt(4) rust.txt(2)
+"goroutines"          -> channels.txt(1) go.txt(1)
+"go python"           -> gc.txt(2)
+"java"                -> (no results)
+error: build index: broken.txt: binary file
+is ErrBinary: true
+::hints
+- In `Search`, start with the documents of the first word, then for each other word delete the documents that lack it (deleting while ranging over a map is allowed in Go) and add the counts of the others.
+- Sort with `slices.SortFunc` and `cmp.Or(cmp.Compare(b.Score, a.Score), cmp.Compare(a.Doc, b.Doc))`.
+- Wrap with `fmt.Errorf("build index: %w", err)` so `errors.Is(err, ErrBinary)` still works.
+
+--- exercise code go
+::prompt
+**Step 2: index concurrently.** `BuildIndex` now takes a context and a number of workers. Rewrite it as a **worker pool**: a feeder goroutine sends the paths into a channel (with a `select` on `ctx.Done()`), `workers` goroutines index files and call `add`, and the first error cancels a derived context (`context.WithCancel`) and is returned wrapped as before. Since several workers now call `add` at the same time, protect the index with a `sync.Mutex`.
+
+The harness checks that 3 files were read at the same time.
+
+Expected output:
+
+```
+indexed 6 files, 44 distinct words
+max files read at once: 3
+"programming language" -> go.txt(2) python.txt(2) rust.txt(2)
+"garbage collector"   -> gc.txt(4) rust.txt(2)
+"goroutines"          -> channels.txt(1) go.txt(1)
+"go python"           -> gc.txt(2)
+"java"                -> (no results)
+error: build index: broken.txt: binary file
+is ErrBinary: true
+```
+::starter
+package main
+
+import (
+	"bufio"
+	"cmp"
+	"context"
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"slices"
+	"strings"
+	"sync/atomic"
+	"time"
+	"unicode"
+)
+
+var docs = map[string]string{
+	"go.txt":       "Go is an open source programming language. Go makes concurrency simple with goroutines and channels.",
+	"rust.txt":     "Rust is a systems programming language focused on safety. Rust has no garbage collector.",
+	"python.txt":   "Python is a programming language that is easy to read. Python is popular for data science.",
+	"channels.txt": "Channels connect goroutines. A channel can be buffered or unbuffered.",
+	"gc.txt":       "A garbage collector frees memory automatically. Go and Python use a garbage collector.",
+	"empty.txt":    "",
+}
+
+func main() {
+	dir, err := os.MkdirTemp("", "index-*")
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	defer os.RemoveAll(dir)
+	for name, text := range docs {
+		os.WriteFile(filepath.Join(dir, name), []byte(text), 0o644)
+	}
+
+	idx, err := BuildIndex(context.Background(), dir, 3)
+	if err != nil {
+		fmt.Println("error:", err)
+		return
+	}
+	fmt.Printf("indexed %d files, %d distinct words\n", idx.Files(), idx.Words())
+	fmt.Println("max files read at once:", maxBusy.Load())
+	for _, q := range []string{"programming language", "garbage collector", "goroutines", "go python", "java"} {
+		hits := idx.Search(q)
+		var parts []string
+		for _, h := range hits {
+			parts = append(parts, fmt.Sprintf("%s(%d)", h.Doc, h.Score))
+		}
+		if len(parts) == 0 {
+			parts = []string{"(no results)"}
+		}
+		fmt.Printf("%-21q -> %s\n", q, strings.Join(parts, " "))
+	}
+
+	os.WriteFile(filepath.Join(dir, "broken.txt"), []byte("this file is \x00 binary"), 0o644)
+	_, err = BuildIndex(context.Background(), dir, 3)
+	fmt.Println("error:", err)
+	fmt.Println("is ErrBinary:", errors.Is(err, ErrBinary))
+}
+
+var ErrBinary = errors.New("binary file")
+
+type Hit struct {
+	Doc   string
+	Score int
+}
+
+// Index maps each word to the number of times it appears in each document.
+type Index struct {
+	words map[string]map[string]int
+	files int
+}
+
+func (idx *Index) Files() int { return idx.files }
+func (idx *Index) Words() int { return len(idx.words) }
+
+// Tokenize splits text into lower-case words made of letters and digits.
+func Tokenize(text string) []string {
+	return strings.FieldsFunc(strings.ToLower(text), func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsDigit(r)
+	})
+}
+
+var busy, maxBusy atomic.Int32
+
+// indexFile counts the words of one file. It simulates a slow disk (20 ms per file)
+// and records how many files are being read at the same time.
+func indexFile(path string) (map[string]int, error) {
+	now := busy.Add(1)
+	defer busy.Add(-1)
+	for {
+		m := maxBusy.Load()
+		if now <= m || maxBusy.CompareAndSwap(m, now) {
+			break
+		}
+	}
+	time.Sleep(20 * time.Millisecond)
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	counts := map[string]int{}
+	sc := bufio.NewScanner(f)
+	for sc.Scan() {
+		if strings.ContainsRune(sc.Text(), 0) {
+			return nil, fmt.Errorf("%s: %w", filepath.Base(path), ErrBinary)
+		}
+		for _, w := range Tokenize(sc.Text()) {
+			counts[w]++
+		}
+	}
+	return counts, sc.Err()
+}
+
+// add merges one file's counts into the index.
+func (idx *Index) add(doc string, counts map[string]int) {
+	for w, n := range counts {
+		if idx.words[w] == nil {
+			idx.words[w] = map[string]int{}
+		}
+		idx.words[w][doc] = n
+	}
+	idx.files++
+}
+
+// BuildIndex indexes every .txt file of dir, one after another, and stops at the first error.
+func BuildIndex(ctx context.Context, dir string, workers int) (*Index, error) {
+	paths, err := filepath.Glob(filepath.Join(dir, "*.txt"))
+	if err != nil {
+		return nil, err
+	}
+	idx := &Index{words: map[string]map[string]int{}}
+	for _, p := range paths {
+		counts, err := indexFile(p)
+		if err != nil {
+			return nil, fmt.Errorf("build index: %w", err)
+		}
+		idx.add(filepath.Base(p), counts)
+	}
+	return idx, nil
+}
+
+// Search returns the documents containing every word of the query,
+// scored by the total number of occurrences, best first, then by name.
+func (idx *Index) Search(query string) []Hit {
+	words := Tokenize(query)
+	if len(words) == 0 {
+		return nil
+	}
+	scores := map[string]int{}
+	for doc, n := range idx.words[words[0]] {
+		scores[doc] = n
+	}
+	for _, w := range words[1:] {
+		for doc := range scores {
+			n, ok := idx.words[w][doc]
+			if !ok {
+				delete(scores, doc)
+				continue
+			}
+			scores[doc] += n
+		}
+	}
+	var hits []Hit
+	for doc, s := range scores {
+		hits = append(hits, Hit{doc, s})
+	}
+	slices.SortFunc(hits, func(a, b Hit) int {
+		return cmp.Or(cmp.Compare(b.Score, a.Score), cmp.Compare(a.Doc, b.Doc))
+	})
+	return hits
+}
+::solution
+package main
+
+import (
+	"bufio"
+	"cmp"
+	"context"
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"slices"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
+	"unicode"
+)
+
+var docs = map[string]string{
+	"go.txt":       "Go is an open source programming language. Go makes concurrency simple with goroutines and channels.",
+	"rust.txt":     "Rust is a systems programming language focused on safety. Rust has no garbage collector.",
+	"python.txt":   "Python is a programming language that is easy to read. Python is popular for data science.",
+	"channels.txt": "Channels connect goroutines. A channel can be buffered or unbuffered.",
+	"gc.txt":       "A garbage collector frees memory automatically. Go and Python use a garbage collector.",
+	"empty.txt":    "",
+}
+
+func main() {
+	dir, err := os.MkdirTemp("", "index-*")
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	defer os.RemoveAll(dir)
+	for name, text := range docs {
+		os.WriteFile(filepath.Join(dir, name), []byte(text), 0o644)
+	}
+
+	idx, err := BuildIndex(context.Background(), dir, 3)
+	if err != nil {
+		fmt.Println("error:", err)
+		return
+	}
+	fmt.Printf("indexed %d files, %d distinct words\n", idx.Files(), idx.Words())
+	fmt.Println("max files read at once:", maxBusy.Load())
+	for _, q := range []string{"programming language", "garbage collector", "goroutines", "go python", "java"} {
+		hits := idx.Search(q)
+		var parts []string
+		for _, h := range hits {
+			parts = append(parts, fmt.Sprintf("%s(%d)", h.Doc, h.Score))
+		}
+		if len(parts) == 0 {
+			parts = []string{"(no results)"}
+		}
+		fmt.Printf("%-21q -> %s\n", q, strings.Join(parts, " "))
+	}
+
+	os.WriteFile(filepath.Join(dir, "broken.txt"), []byte("this file is \x00 binary"), 0o644)
+	_, err = BuildIndex(context.Background(), dir, 3)
+	fmt.Println("error:", err)
+	fmt.Println("is ErrBinary:", errors.Is(err, ErrBinary))
+}
+
+var ErrBinary = errors.New("binary file")
+
+type Hit struct {
+	Doc   string
+	Score int
+}
+
+// Index maps each word to the number of times it appears in each document.
+type Index struct {
+	mu    sync.Mutex
+	words map[string]map[string]int
+	files int
+}
+
+func (idx *Index) Files() int { return idx.files }
+func (idx *Index) Words() int { return len(idx.words) }
+
+// Tokenize splits text into lower-case words made of letters and digits.
+func Tokenize(text string) []string {
+	return strings.FieldsFunc(strings.ToLower(text), func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsDigit(r)
+	})
+}
+
+var busy, maxBusy atomic.Int32
+
+// indexFile counts the words of one file. It simulates a slow disk (20 ms per file)
+// and records how many files are being read at the same time.
+func indexFile(path string) (map[string]int, error) {
+	now := busy.Add(1)
+	defer busy.Add(-1)
+	for {
+		m := maxBusy.Load()
+		if now <= m || maxBusy.CompareAndSwap(m, now) {
+			break
+		}
+	}
+	time.Sleep(20 * time.Millisecond)
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	counts := map[string]int{}
+	sc := bufio.NewScanner(f)
+	for sc.Scan() {
+		if strings.ContainsRune(sc.Text(), 0) {
+			return nil, fmt.Errorf("%s: %w", filepath.Base(path), ErrBinary)
+		}
+		for _, w := range Tokenize(sc.Text()) {
+			counts[w]++
+		}
+	}
+	return counts, sc.Err()
+}
+
+// add merges one file's counts into the index.
+func (idx *Index) add(doc string, counts map[string]int) {
+	idx.mu.Lock()
+	defer idx.mu.Unlock()
+	for w, n := range counts {
+		if idx.words[w] == nil {
+			idx.words[w] = map[string]int{}
+		}
+		idx.words[w][doc] = n
+	}
+	idx.files++
+}
+
+// BuildIndex indexes every .txt file of dir with a pool of workers and stops at the first error.
+func BuildIndex(ctx context.Context, dir string, workers int) (*Index, error) {
+	paths, err := filepath.Glob(filepath.Join(dir, "*.txt"))
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	jobs := make(chan string)
+	go func() {
+		defer close(jobs)
+		for _, p := range paths {
+			select {
+			case jobs <- p:
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+
+	idx := &Index{words: map[string]map[string]int{}}
+	var once sync.Once
+	var firstErr error
+	var wg sync.WaitGroup
+	for range workers {
+		wg.Go(func() {
+			for p := range jobs {
+				if ctx.Err() != nil {
+					continue
+				}
+				counts, err := indexFile(p)
+				if err != nil {
+					once.Do(func() { firstErr = err })
+					cancel()
+					continue
+				}
+				idx.add(filepath.Base(p), counts)
+			}
+		})
+	}
+	wg.Wait()
+	if firstErr != nil {
+		return nil, fmt.Errorf("build index: %w", firstErr)
+	}
+	return idx, nil
+}
+
+// Search returns the documents containing every word of the query,
+// scored by the total number of occurrences, best first, then by name.
+func (idx *Index) Search(query string) []Hit {
+	words := Tokenize(query)
+	if len(words) == 0 {
+		return nil
+	}
+	scores := map[string]int{}
+	for doc, n := range idx.words[words[0]] {
+		scores[doc] = n
+	}
+	for _, w := range words[1:] {
+		for doc := range scores {
+			n, ok := idx.words[w][doc]
+			if !ok {
+				delete(scores, doc)
+				continue
+			}
+			scores[doc] += n
+		}
+	}
+	var hits []Hit
+	for doc, s := range scores {
+		hits = append(hits, Hit{doc, s})
+	}
+	slices.SortFunc(hits, func(a, b Hit) int {
+		return cmp.Or(cmp.Compare(b.Score, a.Score), cmp.Compare(a.Doc, b.Doc))
+	})
+	return hits
+}
+::expected
+indexed 6 files, 44 distinct words
+max files read at once: 3
+"programming language" -> go.txt(2) python.txt(2) rust.txt(2)
+"garbage collector"   -> gc.txt(4) rust.txt(2)
+"goroutines"          -> channels.txt(1) go.txt(1)
+"go python"           -> gc.txt(2)
+"java"                -> (no results)
+error: build index: broken.txt: binary file
+is ErrBinary: true
+::hints
+- Add `mu sync.Mutex` to `Index` and lock it in `add`.
+- Record the first error with `sync.Once` (or under a mutex), then call `cancel()`; workers skip remaining paths once `ctx.Err() != nil`.
+- Close the jobs channel from the feeder with `defer close(jobs)`, and `wg.Wait()` for the workers before returning.
+
+--- cards
+Inverted index :: word → document → count; the core of search engines.
+strings.FieldsFunc :: Splits text wherever a function says a rune is a separator.
+AND query :: Intersect the documents of every query word; score by total count.
+Worker pool + mutex :: N goroutines share a jobs channel; shared results are protected by a mutex.
+Cancel at first error :: Record it once, call cancel(), let the workers drain and stop.
+
+=== lesson go-capstone-solo | Capstone 3: build it from a spec | 450
+The final capstone gives you a **specification** and a test harness, and nothing else: you design and write the types from scratch. You'll build a tiny in-memory **key-value store** in the spirit of Redis: values with expiry times, counters and **nested transactions**.
+
+## The specification
+
+**Types and functions** (names fixed by the harness):
+
+- `ErrNotInteger` (`value is not an integer`) and `ErrNoTransaction` (`no transaction`), sentinel errors;
+- `type Clock interface { Now() time.Time }` (the harness passes a fake clock it advances by hand);
+- `type Store struct` and `func NewStore(clock Clock) *Store`, with the methods below.
+
+**Rules:**
+
+1. `Set(key, value)` stores a value without expiry; `SetTTL(key, value, ttl)` stores one that expires `ttl` after the clock's current time. A key is **expired** once the clock reaches its expiry time; expired keys behave exactly like missing ones everywhere.
+2. `Get(key) (string, bool)`; `Delete(key) bool` (false when the key is missing or expired).
+3. `Incr(key) (int, error)`: a missing key counts as 0; a value that isn't an integer returns `incr <key>: value is not an integer` wrapping `ErrNotInteger`; the expiry of an existing key is kept.
+4. `TTL(key) (time.Duration, bool)`: the remaining time, or false when the key is missing, expired or has no expiry.
+5. `Keys(prefix) []string`: the live keys starting with the prefix, sorted (an empty slice, not nil, when there are none).
+6. `Begin()` starts a transaction; transactions can be **nested**. Changes inside a transaction are visible immediately. `Rollback()` undoes every change made since the matching `Begin` (including deletes and new keys); `Commit()` keeps the changes, but if an outer transaction is open, rolling **it** back must still undo them. Both return `ErrNoTransaction` when no transaction is open. `Depth()` returns the number of open transactions.
+
+## How to approach it
+
+1. Write the types and method signatures first, with placeholder bodies, so the harness compiles.
+2. Store entries as a value plus an expiry `time.Time` (the zero time meaning "never"); one helper `live(key)` that hides expired entries keeps every method simple.
+3. For transactions, keep a **stack of undo logs**: the first time a transaction changes a key, remember whether the key existed and its old entry. Rollback restores them; Commit hands the inner log to the outer transaction (keeping the outer's own records, which are older).
+4. Run the harness and compare the output line by line.
+--- goals
+- design a set of types from a written specification
+- inject a clock through an interface to make time testable
+- implement expiry consistently through one helper
+- implement nested transactions with a stack of undo logs
+
+--- exercise code go
+::prompt
+Implement the key-value store from the specification above. The harness (`FakeClock` and `main`) must print exactly the expected output; don't change it. All your code goes below it.
+
+Expected output:
+
+```
+user:1 = "ada"
+keys user: [user:1 user:2]
+ttl: 30s true
+user:1 has ttl: false
+ttl after 20s: 10s
+session:abc is missing
+all keys: [user:1 user:2]
+visits: 4 <nil>
+incr user:1: incr user:1: value is not an integer true
+deleted user:2: true again: false
+rollback without tx: no transaction
+user:1 = "ADA"
+tmp is missing
+inner rollback: <nil>
+tmp = "x"
+user:3 is missing
+inner commit: <nil>
+visits in tx: 6
+outer rollback: <nil>
+user:1 = "ada"
+tmp is missing
+visits after rollback: 4
+commit: <nil> depth: 0
+user:1 = "Ada Lovelace"
+cache is missing
+commit without tx: no transaction
+final keys: [user:1 visits]
+```
+::starter
+package main
+
+import (
+	"errors"
+	"fmt"
+	"time"
+)
+
+// FakeClock is a clock the harness moves forward by hand.
+type FakeClock struct{ now time.Time }
+
+func (c *FakeClock) Now() time.Time          { return c.now }
+func (c *FakeClock) Advance(d time.Duration) { c.now = c.now.Add(d) }
+
+func main() {
+	clock := &FakeClock{time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)}
+	db := NewStore(clock)
+	show := func(key string) {
+		if v, ok := db.Get(key); ok {
+			fmt.Printf("%s = %q\n", key, v)
+		} else {
+			fmt.Printf("%s is missing\n", key)
+		}
+	}
+
+	db.Set("user:1", "ada")
+	db.Set("user:2", "bob")
+	db.SetTTL("session:abc", "user:1", 30*time.Second)
+	show("user:1")
+	fmt.Println("keys user:", db.Keys("user:"))
+	ttl, ok := db.TTL("session:abc")
+	fmt.Println("ttl:", ttl, ok)
+	_, ok = db.TTL("user:1")
+	fmt.Println("user:1 has ttl:", ok)
+
+	clock.Advance(20 * time.Second)
+	ttl, _ = db.TTL("session:abc")
+	fmt.Println("ttl after 20s:", ttl)
+	clock.Advance(10 * time.Second)
+	show("session:abc")
+	fmt.Println("all keys:", db.Keys(""))
+
+	for range 3 {
+		db.Incr("visits")
+	}
+	n, err := db.Incr("visits")
+	fmt.Println("visits:", n, err)
+	_, err = db.Incr("user:1")
+	fmt.Println("incr user:1:", err, errors.Is(err, ErrNotInteger))
+	fmt.Println("deleted user:2:", db.Delete("user:2"), "again:", db.Delete("user:2"))
+
+	fmt.Println("rollback without tx:", db.Rollback())
+	db.Begin()
+	db.Set("user:1", "ADA")
+	db.Incr("visits")
+	db.Set("tmp", "x")
+	show("user:1")
+	db.Begin()
+	db.Delete("tmp")
+	db.Set("user:3", "cy")
+	show("tmp")
+	fmt.Println("inner rollback:", db.Rollback())
+	show("tmp")
+	show("user:3")
+	db.Begin()
+	db.Incr("visits")
+	fmt.Println("inner commit:", db.Commit())
+	v, _ := db.Get("visits")
+	fmt.Println("visits in tx:", v)
+	fmt.Println("outer rollback:", db.Rollback())
+	show("user:1")
+	show("tmp")
+	v, _ = db.Get("visits")
+	fmt.Println("visits after rollback:", v)
+
+	db.Begin()
+	db.SetTTL("cache", "warm", time.Minute)
+	db.Set("user:1", "Ada Lovelace")
+	fmt.Println("commit:", db.Commit(), "depth:", db.Depth())
+	show("user:1")
+	clock.Advance(time.Minute)
+	show("cache")
+	fmt.Println("commit without tx:", db.Commit())
+	fmt.Println("final keys:", db.Keys(""))
+}
+
+// Your types and functions go here: ErrNotInteger, ErrNoTransaction, Clock, Store and NewStore.
+
+::solution
+package main
+
+import (
+	"errors"
+	"fmt"
+	"slices"
+	"strconv"
+	"strings"
+	"time"
+)
+
+// FakeClock is a clock the harness moves forward by hand.
+type FakeClock struct{ now time.Time }
+
+func (c *FakeClock) Now() time.Time          { return c.now }
+func (c *FakeClock) Advance(d time.Duration) { c.now = c.now.Add(d) }
+
+func main() {
+	clock := &FakeClock{time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)}
+	db := NewStore(clock)
+	show := func(key string) {
+		if v, ok := db.Get(key); ok {
+			fmt.Printf("%s = %q\n", key, v)
+		} else {
+			fmt.Printf("%s is missing\n", key)
+		}
+	}
+
+	db.Set("user:1", "ada")
+	db.Set("user:2", "bob")
+	db.SetTTL("session:abc", "user:1", 30*time.Second)
+	show("user:1")
+	fmt.Println("keys user:", db.Keys("user:"))
+	ttl, ok := db.TTL("session:abc")
+	fmt.Println("ttl:", ttl, ok)
+	_, ok = db.TTL("user:1")
+	fmt.Println("user:1 has ttl:", ok)
+
+	clock.Advance(20 * time.Second)
+	ttl, _ = db.TTL("session:abc")
+	fmt.Println("ttl after 20s:", ttl)
+	clock.Advance(10 * time.Second)
+	show("session:abc")
+	fmt.Println("all keys:", db.Keys(""))
+
+	for range 3 {
+		db.Incr("visits")
+	}
+	n, err := db.Incr("visits")
+	fmt.Println("visits:", n, err)
+	_, err = db.Incr("user:1")
+	fmt.Println("incr user:1:", err, errors.Is(err, ErrNotInteger))
+	fmt.Println("deleted user:2:", db.Delete("user:2"), "again:", db.Delete("user:2"))
+
+	fmt.Println("rollback without tx:", db.Rollback())
+	db.Begin()
+	db.Set("user:1", "ADA")
+	db.Incr("visits")
+	db.Set("tmp", "x")
+	show("user:1")
+	db.Begin()
+	db.Delete("tmp")
+	db.Set("user:3", "cy")
+	show("tmp")
+	fmt.Println("inner rollback:", db.Rollback())
+	show("tmp")
+	show("user:3")
+	db.Begin()
+	db.Incr("visits")
+	fmt.Println("inner commit:", db.Commit())
+	v, _ := db.Get("visits")
+	fmt.Println("visits in tx:", v)
+	fmt.Println("outer rollback:", db.Rollback())
+	show("user:1")
+	show("tmp")
+	v, _ = db.Get("visits")
+	fmt.Println("visits after rollback:", v)
+
+	db.Begin()
+	db.SetTTL("cache", "warm", time.Minute)
+	db.Set("user:1", "Ada Lovelace")
+	fmt.Println("commit:", db.Commit(), "depth:", db.Depth())
+	show("user:1")
+	clock.Advance(time.Minute)
+	show("cache")
+	fmt.Println("commit without tx:", db.Commit())
+	fmt.Println("final keys:", db.Keys(""))
+}
+
+var (
+	ErrNotInteger    = errors.New("value is not an integer")
+	ErrNoTransaction = errors.New("no transaction")
+)
+
+type Clock interface{ Now() time.Time }
+
+type entry struct {
+	value   string
+	expires time.Time // zero: never
+}
+
+// undo remembers a key's state before the current transaction first changed it.
+type undo struct {
+	existed bool
+	old     entry
+}
+
+type Store struct {
+	clock Clock
+	data  map[string]entry
+	txs   []map[string]undo
+}
+
+func NewStore(clock Clock) *Store {
+	return &Store{clock: clock, data: map[string]entry{}}
+}
+
+func (s *Store) live(key string) (entry, bool) {
+	e, ok := s.data[key]
+	if !ok || (!e.expires.IsZero() && !s.clock.Now().Before(e.expires)) {
+		return entry{}, false
+	}
+	return e, true
+}
+
+// remember records the key's state the first time the innermost transaction touches it.
+func (s *Store) remember(key string) {
+	if len(s.txs) == 0 {
+		return
+	}
+	tx := s.txs[len(s.txs)-1]
+	if _, seen := tx[key]; seen {
+		return
+	}
+	e, ok := s.live(key)
+	tx[key] = undo{ok, e}
+}
+
+func (s *Store) Set(key, value string) { s.SetTTL(key, value, 0) }
+
+func (s *Store) SetTTL(key, value string, ttl time.Duration) {
+	s.remember(key)
+	e := entry{value: value}
+	if ttl > 0 {
+		e.expires = s.clock.Now().Add(ttl)
+	}
+	s.data[key] = e
+}
+
+func (s *Store) Get(key string) (string, bool) {
+	e, ok := s.live(key)
+	return e.value, ok
+}
+
+func (s *Store) Delete(key string) bool {
+	if _, ok := s.live(key); !ok {
+		return false
+	}
+	s.remember(key)
+	delete(s.data, key)
+	return true
+}
+
+func (s *Store) Incr(key string) (int, error) {
+	e, ok := s.live(key)
+	n := 0
+	if ok {
+		var err error
+		if n, err = strconv.Atoi(e.value); err != nil {
+			return 0, fmt.Errorf("incr %s: %w", key, ErrNotInteger)
+		}
+	}
+	s.remember(key)
+	e.value = strconv.Itoa(n + 1)
+	s.data[key] = e
+	return n + 1, nil
+}
+
+func (s *Store) TTL(key string) (time.Duration, bool) {
+	e, ok := s.live(key)
+	if !ok || e.expires.IsZero() {
+		return 0, false
+	}
+	return e.expires.Sub(s.clock.Now()), true
+}
+
+func (s *Store) Keys(prefix string) []string {
+	keys := []string{}
+	for k := range s.data {
+		if _, ok := s.live(k); ok && strings.HasPrefix(k, prefix) {
+			keys = append(keys, k)
+		}
+	}
+	slices.Sort(keys)
+	return keys
+}
+
+func (s *Store) Begin()     { s.txs = append(s.txs, map[string]undo{}) }
+func (s *Store) Depth() int { return len(s.txs) }
+
+func (s *Store) Rollback() error {
+	if len(s.txs) == 0 {
+		return ErrNoTransaction
+	}
+	tx := s.txs[len(s.txs)-1]
+	s.txs = s.txs[:len(s.txs)-1]
+	for key, u := range tx {
+		if u.existed {
+			s.data[key] = u.old
+		} else {
+			delete(s.data, key)
+		}
+	}
+	return nil
+}
+
+func (s *Store) Commit() error {
+	if len(s.txs) == 0 {
+		return ErrNoTransaction
+	}
+	tx := s.txs[len(s.txs)-1]
+	s.txs = s.txs[:len(s.txs)-1]
+	if len(s.txs) > 0 { // the outer transaction must be able to undo these changes too
+		outer := s.txs[len(s.txs)-1]
+		for key, u := range tx {
+			if _, seen := outer[key]; !seen {
+				outer[key] = u
+			}
+		}
+	}
+	return nil
+}
+::expected
+user:1 = "ada"
+keys user: [user:1 user:2]
+ttl: 30s true
+user:1 has ttl: false
+ttl after 20s: 10s
+session:abc is missing
+all keys: [user:1 user:2]
+visits: 4 <nil>
+incr user:1: incr user:1: value is not an integer true
+deleted user:2: true again: false
+rollback without tx: no transaction
+user:1 = "ADA"
+tmp is missing
+inner rollback: <nil>
+tmp = "x"
+user:3 is missing
+inner commit: <nil>
+visits in tx: 6
+outer rollback: <nil>
+user:1 = "ada"
+tmp is missing
+visits after rollback: 4
+commit: <nil> depth: 0
+user:1 = "Ada Lovelace"
+cache is missing
+commit without tx: no transaction
+final keys: [user:1 visits]
+::hints
+- An expired entry: `!e.expires.IsZero() && !now.Before(e.expires)`.
+- Call a `remember(key)` helper at the start of every change (Set, SetTTL, Delete, Incr); it records the old state only the first time per transaction.
+- In `Commit`, copy the inner log's records into the outer log only for keys the outer log doesn't already have.
+
+--- cards
+Spec first :: Write types and signatures before logic, so the harness compiles and guides you.
+Injected clock :: type Clock interface{ Now() time.Time } makes expiry testable.
+One helper for expiry :: live(key) hides expired keys from every method.
+Undo log :: Remember a key's old state the first time a transaction changes it; restore on rollback.
+Nested commit :: Merge the inner log into the outer one, keeping the outer's older records.
+
+=== lesson go-whats-next | What's next after Go | 50
+## You've learned Go
+
+You can now write and run Go programs, use its types precisely (integers, floats, strings as UTF-8 bytes and runes), control flow with `if`, `switch` and `for`, functions with several results and closures, **errors as values** with wrapping, slices, maps, structs and pointers, methods and interfaces, generics and iterators, goroutines, channels, `select`, mutexes and `context`, packages and modules, files and JSON, table-driven tests, HTTP servers and clients, and reflection. That's the toolkit professional Go developers use every day.
+
+## Where to go from here
+
+- **Back-end services**: `net/http` plus `database/sql` with **pgx** (PostgreSQL; the SQL course helps), structured logging with **`log/slog`**, configuration from environment variables, graceful shutdown with `context`, and containers. Routers such as **chi** and frameworks like **Gin** or **Echo** are popular.
+- **Cloud and DevOps tooling**: Kubernetes controllers and operators (client-go, kubebuilder), Terraform providers, CLIs with **cobra**, gRPC services with Protocol Buffers.
+- **Systems and networking**: proxies, load balancers and databases are often written in Go; study the `net` package and profiling with **pprof**.
+- **Deepen your Go**: *The Go Programming Language* (Donovan & Kernighan) is still the classic; read **Effective Go**, the **Go Code Review Comments** wiki, the Go blog, and the standard library's source code, which is clear and idiomatic.
+- **Other languages**: DevQuest teaches one language at a time. Next in the order is **C**: Go's ancestor in spirit (Ken Thompson worked on both), where you manage memory yourself. It will show you what Go's garbage collector, bounds checks and slices do for you.
+
+## Keep your skills alive
+
+- Build something end to end: a JSON API with PostgreSQL, tests (with `-race`), a Dockerfile and graceful shutdown.
+- Run `go vet` and **staticcheck** on everything; they teach idioms.
+- Profile before optimising: `go test -bench . -cpuprofile cpu.out` and `go tool pprof`.
+- Practise on Exercism's Go track, Advent of Code, or the DSA track in DevQuest.
+
+📚 **Go deeper:** Alan Donovan and Brian Kernighan, *The Go Programming Language*; go.dev/doc/effective_go; go.dev/blog; Jon Bodner, *Learning Go*.
+--- goals
+- review what the Go course covered
+- choose next steps: back-end services, cloud tooling, systems programming or deeper Go
+- keep Go skills sharp with practice and good tools
+--- quiz
+? Which standard package provides structured logging in modern Go?
++ log/slog
+- fmt
+- log4go
+- syslog only
+> Added in Go 1.21.
+? Which tool finds bugs and style problems beyond go vet?
++ staticcheck
+- gofmt
+- go mod tidy
+- pprof
+> Run both in CI.
+? Which language comes next in DevQuest after Go?
++ C
+- Kotlin
+- Rust
+- Swift
+> Manual memory management will show what Go does for you.
+--- cards
+Go in one line :: A small, compiled, garbage-collected language with errors as values and built-in concurrency (goroutines, channels).
+Next steps :: net/http + pgx + slog services, Kubernetes tooling, gRPC, pprof; then C in DevQuest.
