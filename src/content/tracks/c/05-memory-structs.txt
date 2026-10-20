@@ -1,0 +1,1220 @@
+=== module Module 5 · Memory and structures
+
+=== lesson c-memory | Dynamic memory | 85
+## Stack and heap
+
+A C program's data lives in three places:
+
+| Where | What | Lifetime |
+|---|---|---|
+| **static storage** | globals, `static` variables, string literals | the whole program |
+| **stack** | local variables and parameters | until the function (block) returns; automatic, fast, limited (a few MB) |
+| **heap** | memory you request with `malloc` | until **you** call `free` |
+
+The heap is for data whose size is known only at run time, or that must outlive the function that creates it.
+
+## malloc, calloc, realloc, free
+
+```c
+#include <stdio.h>
+#include <stdlib.h>
+
+int main(void) {
+    size_t n = 5;
+    int *squares = malloc(n * sizeof *squares);   // room for 5 ints, uninitialised
+    if (squares == NULL) {                        // allocation can fail: always check
+        fprintf(stderr, "out of memory\n");
+        return 1;
+    }
+    for (size_t i = 0; i < n; i++) squares[i] = (int)(i * i);
+
+    int *grown = realloc(squares, 2 * n * sizeof *grown); // resize (may move the block)
+    if (grown == NULL) {
+        free(squares);                            // the old block is still valid on failure
+        return 1;
+    }
+    squares = grown;
+    for (size_t i = n; i < 2 * n; i++) squares[i] = (int)(i * i);
+
+    for (size_t i = 0; i < 2 * n; i++) printf("%d ", squares[i]);
+    printf("\n");
+
+    double *zeros = calloc(4, sizeof *zeros);     // 4 doubles, all zero
+    printf("%.1f\n", zeros ? zeros[3] : -1.0);
+
+    free(squares);                                // give the memory back
+    free(zeros);
+    squares = NULL;                               // avoid keeping a dangling pointer
+    return 0;
+}
+```
+
+- `malloc(bytes)` returns a `void *` to uninitialised memory, or `NULL`. Write `malloc(n * sizeof *p)`: the size follows the pointer's type automatically.
+- `calloc(count, size)` zeroes the memory; `realloc(p, bytes)` resizes, possibly moving the data. **Assign realloc's result to a temporary**: on failure it returns `NULL` and the original block must still be freed.
+- Every successful allocation needs **exactly one** `free`. `free(NULL)` does nothing.
+
+## The four classic memory bugs
+
+```
+int *p = malloc(10 * sizeof *p);
+p[10] = 1;          // 1. heap buffer overflow: index 10 of a 10-element block
+free(p);
+printf("%d", p[0]); // 2. use after free: p now dangles
+free(p);            // 3. double free: corrupts the allocator
+int *q = malloc(100);
+q = NULL;           // 4. memory leak: the block can never be freed now
+```
+
+None of them is reliably caught at run time: they corrupt memory, crash later somewhere else, or become security holes. Defences:
+
+1. **Clear ownership**: for every pointer, know which part of the program must free it. Document it ("the caller frees the returned string").
+2. Set pointers to `NULL` after `free`.
+3. Free in one place, with the `goto cleanup` pattern for functions that acquire several resources.
+4. Use tools: **AddressSanitizer** (`-fsanitize=address`) reports overflows, use-after-free and double frees with stack traces; **Valgrind** and ASan's **LeakSanitizer** report leaks.
+
+## Returning heap memory from functions
+
+Heap memory outlives the function that allocated it, so functions can build results of any size. The caller becomes the **owner**:
+
+```c
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+// returns a new string: the caller must free it
+char *repeat(const char *s, int times) {
+    size_t len = strlen(s);
+    char *out = malloc(len * (size_t)times + 1);
+    if (out == NULL) return NULL;
+    char *p = out;
+    for (int i = 0; i < times; i++) {
+        memcpy(p, s, len);
+        p += len;
+    }
+    *p = '\0';
+    return out;
+}
+
+int main(void) {
+    char *line = repeat("ab-", 4);
+    if (line != NULL) {
+        printf("%s (%zu chars)\n", line, strlen(line));
+        free(line);
+    }
+    return 0;
+}
+```
+
+## A growable array
+
+The most useful dynamic structure: an array that **doubles its capacity** when it's full, so adding is fast on average (amortised O(1)). It's what Python lists, C++ `std::vector` and Go slices do inside:
+
+```c
+#include <stdio.h>
+#include <stdlib.h>
+
+int main(void) {
+    size_t len = 0, cap = 2;
+    int *items = malloc(cap * sizeof *items);
+    if (items == NULL) return 1;
+    for (int v = 1; v <= 10; v++) {
+        if (len == cap) {
+            size_t new_cap = cap * 2;
+            int *bigger = realloc(items, new_cap * sizeof *bigger);
+            if (bigger == NULL) {
+                free(items);
+                return 1;
+            }
+            items = bigger;
+            cap = new_cap;
+            printf("grew to %zu\n", cap);
+        }
+        items[len++] = v * 10;
+    }
+    printf("len %zu, cap %zu, last %d\n", len, cap, items[len - 1]);
+    free(items);
+    return 0;
+}
+```
+
+~~~check
+? What must you do with the pointer returned by malloc when you're done?
++ Pass it to free exactly once
+- Nothing: C frees it automatically
+- Set it to NULL only
+- Call delete
+> Not freeing is a leak; freeing twice is undefined behaviour.
+~~~
+
+📚 **Go deeper:** cppreference.com, "malloc", "realloc" and "free"; the AddressSanitizer documentation; K&R section 8.7 (a storage allocator); *C: The Complete Reference*, chapter 17 (Dynamic Allocation Functions).
+--- goals
+- explain static, stack and heap storage
+- allocate, resize and free memory with malloc, calloc, realloc and free, checking for NULL
+- recognise overflows, use after free, double frees and leaks, and the tools that find them
+- return heap memory with clear ownership rules
+- build a growable array with capacity doubling
+--- quiz
+? What does malloc return when it can't allocate?
++ NULL
+- 0 bytes of memory
+- It crashes
+- An error code
+> Always check.
+? Why assign realloc's result to a temporary pointer?
++ If it fails it returns NULL, and you still need the old pointer to free it
+- realloc always moves the block
+- It's faster
+- realloc returns an int
+> p = realloc(p, n) leaks on failure.
+? What is a memory leak?
++ Allocated memory that is never freed because nothing points to it any more
+- Reading freed memory
+- A stack overflow
+- Writing past an array's end
+> Long-running programs eventually run out of memory.
+? Which tool reports use-after-free with stack traces?
++ AddressSanitizer (-fsanitize=address)
+- -Wall
+- printf
+- gofmt
+> Valgrind too.
+--- exercise code c
+::prompt
+Write a few string functions that **return heap memory** (the caller frees it):
+
+- `char *str_dup(const char *s)`: a copy of s;
+- `char *join(const char **parts, size_t n, const char *sep)`: all parts joined by sep (compute the total length first, then allocate once);
+- `char **split(const char *s, char sep, size_t *count)`: an allocated array of allocated strings, with the number of pieces stored in `*count`;
+- `void free_strings(char **items, size_t n)`: frees every string and the array.
+
+Every allocation must be checked (return `NULL` on failure). `main` (given) prints:
+
+```
+copy: hello
+joined: red, green, blue
+4 pieces: [a] [bb] [] [ccc]
+round trip: a|bb||ccc
+```
+::starter
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+char *str_dup(const char *s) { return (char *)s; }
+
+char *join(const char **parts, size_t n, const char *sep) { return NULL; }
+
+char **split(const char *s, char sep, size_t *count) { *count = 0; return NULL; }
+
+void free_strings(char **items, size_t n) {}
+
+int main(void) {
+    char *copy = str_dup("hello");
+    printf("copy: %s\n", copy);
+    return 0;
+}
+::solution
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+char *str_dup(const char *s) {
+    size_t len = strlen(s);
+    char *copy = malloc(len + 1);
+    if (copy == NULL) return NULL;
+    memcpy(copy, s, len + 1);
+    return copy;
+}
+
+char *join(const char **parts, size_t n, const char *sep) {
+    size_t sep_len = strlen(sep), total = 1;
+    for (size_t i = 0; i < n; i++) total += strlen(parts[i]) + (i > 0 ? sep_len : 0);
+    char *out = malloc(total);
+    if (out == NULL) return NULL;
+    char *p = out;
+    for (size_t i = 0; i < n; i++) {
+        if (i > 0) {
+            memcpy(p, sep, sep_len);
+            p += sep_len;
+        }
+        size_t len = strlen(parts[i]);
+        memcpy(p, parts[i], len);
+        p += len;
+    }
+    *p = '\0';
+    return out;
+}
+
+void free_strings(char **items, size_t n) {
+    if (items == NULL) return;
+    for (size_t i = 0; i < n; i++) free(items[i]);
+    free(items);
+}
+
+char **split(const char *s, char sep, size_t *count) {
+    size_t pieces = 1;
+    for (const char *p = s; *p; p++) if (*p == sep) pieces++;
+    char **items = malloc(pieces * sizeof *items);
+    if (items == NULL) return NULL;
+    const char *start = s;
+    for (size_t i = 0; i < pieces; i++) {
+        const char *end = strchr(start, sep);
+        size_t len = end ? (size_t)(end - start) : strlen(start);
+        items[i] = malloc(len + 1);
+        if (items[i] == NULL) {
+            free_strings(items, i);
+            return NULL;
+        }
+        memcpy(items[i], start, len);
+        items[i][len] = '\0';
+        start = end ? end + 1 : start + len;
+    }
+    *count = pieces;
+    return items;
+}
+
+int main(void) {
+    char *copy = str_dup("hello");
+    if (copy == NULL) return 1;
+    printf("copy: %s\n", copy);
+    free(copy);
+
+    const char *colors[] = {"red", "green", "blue"};
+    char *joined = join(colors, 3, ", ");
+    if (joined == NULL) return 1;
+    printf("joined: %s\n", joined);
+    free(joined);
+
+    size_t n = 0;
+    char **pieces = split("a,bb,,ccc", ',', &n);
+    if (pieces == NULL) return 1;
+    printf("%zu pieces:", n);
+    for (size_t i = 0; i < n; i++) printf(" [%s]", pieces[i]);
+    printf("\n");
+    char *back = join((const char **)pieces, n, "|");
+    if (back == NULL) return 1;
+    printf("round trip: %s\n", back);
+    free(back);
+    free_strings(pieces, n);
+    return 0;
+}
+::expected
+copy: hello
+joined: red, green, blue
+4 pieces: [a] [bb] [] [ccc]
+round trip: a|bb||ccc
+::hints
+- Allocate `strlen(s) + 1` bytes: the `'\0'` needs room too.
+- In `join`, add up the lengths first so there's a single `malloc`.
+- In `split`, count the separators to know how many pieces to allocate; if an allocation fails halfway, free what you already allocated.
+- `main` also joins `{"red", "green", "blue"}` with `", "`, splits `"a,bb,,ccc"` on `','`, and joins the pieces back with `"|"`, freeing everything.
+--- cards
+Stack vs heap :: Locals die when the function returns; heap memory lives until free.
+malloc / calloc / realloc / free :: Allocate / allocate zeroed / resize / release; check for NULL.
+p = malloc(n * sizeof *p) :: The idiomatic allocation size.
+Ownership :: Decide and document who frees each allocation.
+Memory bugs :: Overflow, use after free, double free, leak; find them with ASan and Valgrind.
+Growable array :: Double the capacity when full: amortised O(1) appends.
+
+=== lesson c-structs | Structs, unions and enums | 75
+## Grouping data with struct
+
+A **struct** groups named fields of different types into one type:
+
+```c
+#include <stdio.h>
+#include <string.h>
+
+struct point {
+    double x, y;
+};
+
+typedef struct {              // typedef gives the type a one-word name
+    char name[32];
+    int age;
+    struct point home;        // structs can contain structs
+} Person;
+
+int main(void) {
+    struct point p = {1.5, -2.0};
+    Person ada = {.name = "Ada", .age = 36, .home = {0.0, 51.5}}; // designated initialisers
+    ada.age++;
+    printf("(%g, %g)\n", p.x, p.y);
+    printf("%s, %d, lives at (%g, %g)\n", ada.name, ada.age, ada.home.x, ada.home.y);
+
+    Person copy = ada;        // structs are copied field by field, arrays inside included
+    strcpy(copy.name, "Grace");
+    printf("%s / %s\n", ada.name, copy.name);
+    return 0;
+}
+```
+
+- Access fields with `.`; through a **pointer**, use `->`: `pp->age` is `(*pp).age`.
+- Structs can be assigned and passed by value (copied), but **not compared** with `==`: compare field by field.
+- **Designated initialisers** (`.name = "Ada"`) name the fields; missing fields are zeroed.
+
+## Passing structs to functions
+
+Large structs are usually passed by **pointer**: to avoid copying, and to let the function modify them. Use `const` when it only reads:
+
+```c
+#include <stdio.h>
+
+typedef struct {
+    char owner[32];
+    long balance_cents;
+} Account;
+
+void deposit(Account *acc, long cents) {
+    acc->balance_cents += cents;
+}
+
+void print_account(const Account *acc) {
+    printf("%s: %ld.%02ld\n", acc->owner, acc->balance_cents / 100, acc->balance_cents % 100);
+}
+
+int main(void) {
+    Account accounts[] = {{"ada", 1000}, {"bob", 250}};
+    deposit(&accounts[1], 1999);
+    for (size_t i = 0; i < sizeof accounts / sizeof accounts[0]; i++) {
+        print_account(&accounts[i]);
+    }
+    return 0;
+}
+```
+
+This "struct plus functions that take a pointer to it" style is how C does **object-oriented design**: the struct is the object's data, the functions are its methods (`account_deposit(Account *self, ...)`), and keeping the struct's definition in a `.c` file (an *opaque type*, Module 6) gives encapsulation.
+
+## Memory layout and padding
+
+The compiler may insert **padding** between fields so each one is aligned to its natural boundary. Field order changes the size:
+
+```c
+#include <stdio.h>
+#include <stddef.h>
+
+struct loose { char a; double b; char c; };
+struct tight { double b; char a; char c; };
+
+int main(void) {
+    printf("loose %zu bytes, tight %zu bytes\n", sizeof(struct loose), sizeof(struct tight));
+    printf("in loose, b starts at offset %zu\n", offsetof(struct loose, b));
+    return 0;
+}
+```
+
+## Unions, enums and bit-fields
+
+A **union** stores **one** of several members in the same memory: its size is that of the largest member. A struct with an enum "tag" saying which member is active makes a **tagged union**, C's way to represent "one of several kinds":
+
+```c
+#include <stdio.h>
+
+enum shape_kind { CIRCLE, RECTANGLE };
+
+typedef struct {
+    enum shape_kind kind;               // which union member is valid
+    union {
+        struct { double r; } circle;
+        struct { double w, h; } rect;
+    };                                  // anonymous union (C11)
+} Shape;
+
+double area(const Shape *s) {
+    switch (s->kind) {
+    case CIRCLE:
+        return 3.14159265358979 * s->circle.r * s->circle.r;
+    case RECTANGLE:
+        return s->rect.w * s->rect.h;
+    }
+    return 0.0;
+}
+
+struct flags {
+    unsigned visible : 1;               // bit-fields: 1 bit each
+    unsigned locked : 1;
+    unsigned priority : 3;              // 0..7
+};
+
+int main(void) {
+    Shape shapes[] = {{.kind = CIRCLE, .circle = {1.0}}, {.kind = RECTANGLE, .rect = {2.0, 3.5}}};
+    for (int i = 0; i < 2; i++) printf("area %.2f\n", area(&shapes[i]));
+    struct flags f = {.visible = 1, .priority = 5};
+    printf("visible %u, locked %u, priority %u, size %zu\n", f.visible, f.locked, f.priority, sizeof f);
+    return 0;
+}
+```
+
+~~~check
+? How do you access a field through a pointer `p` to a struct?
++ p->field
+- p.field
+- *p.field
+- p::field
+> p->field is (*p).field.
+~~~
+
+📚 **Go deeper:** K&R chapter 6 (Structures); Eric S. Raymond, "The Lost Art of Structure Packing"; *C: The Complete Reference*, chapter 7 (Structures, Unions, Enumerations, and typedef).
+--- goals
+- declare structs, use typedef and designated initialisers
+- access fields with . and ->, and copy structs by assignment
+- pass structs by pointer, with const for read-only access
+- explain padding and alignment, and measure them with sizeof and offsetof
+- model variants with tagged unions, and use enums and bit-fields
+--- quiz
+? Can two structs be compared with `==` in C?
++ No: compare field by field
+- Yes
+- Only if they have no arrays
+- Only with typedef
+> == isn't defined for structs.
+? What's the size of a union?
++ At least the size of its largest member
+- The sum of its members
+- Always 8 bytes
+- The size of its first member
+> Members share the same memory.
+? Why might `struct { char a; double b; char c; }` take 24 bytes?
++ Padding aligns b to 8 bytes and rounds the size up
+- chars take 8 bytes
+- The compiler wastes memory randomly
+- It takes 10 bytes
+> Order fields from largest to smallest to reduce padding.
+? What does `typedef struct { int x; } Pt;` let you write?
++ Pt p; instead of struct ... p;
+- A class
+- A pointer type
+- Nothing
+> A shorter type name.
+--- exercise code c
+::prompt
+Model a small **library catalogue** with structs:
+
+- `typedef enum { BOOK, DVD, MAGAZINE } Kind;`
+- `typedef struct { char title[48]; Kind kind; int year; int on_loan; } Item;`
+- `typedef struct { Item items[16]; int count; } Catalogue;`
+
+Write `int add_item(Catalogue *c, const char *title, Kind kind, int year)` (returns 0, or -1 when the catalogue is full or the title is longer than 47 characters), `int lend(Catalogue *c, const char *title)` (0 on success, -1 if not found, -2 if already on loan), `const char *kind_name(Kind k)` and `void print_catalogue(const Catalogue *c)` which prints each item as `%-22s %-8s %d %s` (with `on loan` or `available`) and then the number available.
+
+```
+lend Dune: 0
+lend Dune: -2
+lend Zelda: -1
+Dune                   book     1965 on loan
+The Matrix             dvd      1999 available
+Byte                   magazine 1984 available
+available: 2 of 3
+```
+::starter
+#include <stdio.h>
+#include <string.h>
+
+int main(void) {
+    printf("lend Dune: ?\n");
+    return 0;
+}
+::solution
+#include <stdio.h>
+#include <string.h>
+
+typedef enum { BOOK, DVD, MAGAZINE } Kind;
+
+typedef struct {
+    char title[48];
+    Kind kind;
+    int year;
+    int on_loan;
+} Item;
+
+typedef struct {
+    Item items[16];
+    int count;
+} Catalogue;
+
+int add_item(Catalogue *c, const char *title, Kind kind, int year) {
+    if (c->count >= 16 || strlen(title) > 47) return -1;
+    Item *it = &c->items[c->count++];
+    strcpy(it->title, title);
+    it->kind = kind;
+    it->year = year;
+    it->on_loan = 0;
+    return 0;
+}
+
+int lend(Catalogue *c, const char *title) {
+    for (int i = 0; i < c->count; i++) {
+        Item *it = &c->items[i];
+        if (strcmp(it->title, title) == 0) {
+            if (it->on_loan) return -2;
+            it->on_loan = 1;
+            return 0;
+        }
+    }
+    return -1;
+}
+
+const char *kind_name(Kind k) {
+    switch (k) {
+    case BOOK: return "book";
+    case DVD: return "dvd";
+    case MAGAZINE: return "magazine";
+    }
+    return "?";
+}
+
+void print_catalogue(const Catalogue *c) {
+    int available = 0;
+    for (int i = 0; i < c->count; i++) {
+        const Item *it = &c->items[i];
+        printf("%-22s %-8s %d %s\n", it->title, kind_name(it->kind), it->year, it->on_loan ? "on loan" : "available");
+        if (!it->on_loan) available++;
+    }
+    printf("available: %d of %d\n", available, c->count);
+}
+
+int main(void) {
+    Catalogue cat = {.count = 0};
+    add_item(&cat, "Dune", BOOK, 1965);
+    add_item(&cat, "The Matrix", DVD, 1999);
+    add_item(&cat, "Byte", MAGAZINE, 1984);
+    printf("lend Dune: %d\n", lend(&cat, "Dune"));
+    printf("lend Dune: %d\n", lend(&cat, "Dune"));
+    printf("lend Zelda: %d\n", lend(&cat, "Zelda"));
+    print_catalogue(&cat);
+    return 0;
+}
+::expected
+lend Dune: 0
+lend Dune: -2
+lend Zelda: -1
+Dune                   book     1965 on loan
+The Matrix             dvd      1999 available
+Byte                   magazine 1984 available
+available: 2 of 3
+::hints
+- `Item *it = &c->items[c->count++];` takes the next free slot.
+- Compare titles with `strcmp`; return different negative codes for different errors.
+- A `switch` over the enum maps each kind to its name.
+- `main` adds Dune (book, 1965), The Matrix (dvd, 1999) and Byte (magazine, 1984), then lends Dune twice and Zelda once.
+--- cards
+struct :: Groups named fields; copied by assignment; not comparable with ==.
+typedef :: Gives a type a new name: typedef struct {...} Person;
+. and -> :: Field access on a struct / through a pointer to one.
+Designated initialiser :: {.name = "Ada", .age = 36}; missing fields are zero.
+Padding :: Alignment gaps between fields; order fields large to small.
+Tagged union :: An enum tag plus a union: one of several kinds of data.
+
+=== lesson c-data-structures | Linked lists, stacks and trees | 85
+## Self-referential structs
+
+A struct can contain a **pointer to its own type**. That's the building block of linked data structures, whose nodes are allocated one by one on the heap and connected by pointers:
+
+```c
+#include <stdio.h>
+#include <stdlib.h>
+
+typedef struct Node {
+    int value;
+    struct Node *next;          // the struct's own name is needed here
+} Node;
+
+Node *push_front(Node *head, int value) {
+    Node *n = malloc(sizeof *n);
+    if (n == NULL) return head;
+    n->value = value;
+    n->next = head;
+    return n;                   // the new node is the new head
+}
+
+void free_list(Node *head) {
+    while (head != NULL) {
+        Node *next = head->next; // save before freeing
+        free(head);
+        head = next;
+    }
+}
+
+int main(void) {
+    Node *list = NULL;          // an empty list
+    for (int i = 1; i <= 4; i++) list = push_front(list, i * 10);
+    for (Node *p = list; p != NULL; p = p->next) printf("%d -> ", p->value);
+    printf("NULL\n");
+    free_list(list);
+    return 0;
+}
+```
+
+Compared with an array, a linked list inserts and removes at a known position in O(1), but finding the i-th element takes O(n), and each node costs an allocation and extra memory. In practice growable arrays usually win; linked lists shine for queues, free lists and when elements must never move.
+
+## Pointer to pointer: editing a list in place
+
+Removing a node means changing the `next` field of the previous node, or the head itself. A pointer to the **link** being examined (`Node **`) handles both cases with the same code:
+
+```c
+#include <stdio.h>
+#include <stdlib.h>
+
+typedef struct Node {
+    int value;
+    struct Node *next;
+} Node;
+
+void append(Node **head, int value) {
+    Node **link = head;
+    while (*link != NULL) link = &(*link)->next;    // walk to the last link
+    Node *n = malloc(sizeof *n);
+    if (n == NULL) return;
+    n->value = value;
+    n->next = NULL;
+    *link = n;
+}
+
+int remove_value(Node **head, int value) {
+    for (Node **link = head; *link != NULL; link = &(*link)->next) {
+        if ((*link)->value == value) {
+            Node *dead = *link;
+            *link = dead->next;                     // unlink: works for the head too
+            free(dead);
+            return 1;
+        }
+    }
+    return 0;
+}
+
+int main(void) {
+    Node *list = NULL;
+    for (int i = 1; i <= 5; i++) append(&list, i);
+    remove_value(&list, 1);
+    remove_value(&list, 4);
+    for (Node *p = list; p != NULL; p = p->next) printf("%d ", p->value);
+    printf("\n");
+    while (list != NULL) {
+        Node *next = list->next;
+        free(list);
+        list = next;
+    }
+    return 0;
+}
+```
+
+## A stack on a growable array
+
+Many structures don't need nodes at all. A **stack** (last in, first out) is a growable array with push and pop at the end:
+
+```c
+#include <stdio.h>
+#include <stdlib.h>
+
+typedef struct {
+    int *data;
+    size_t len, cap;
+} Stack;
+
+int stack_push(Stack *s, int v) {
+    if (s->len == s->cap) {
+        size_t cap = s->cap ? s->cap * 2 : 4;
+        int *data = realloc(s->data, cap * sizeof *data);
+        if (data == NULL) return -1;
+        s->data = data;
+        s->cap = cap;
+    }
+    s->data[s->len++] = v;
+    return 0;
+}
+
+int stack_pop(Stack *s, int *out) {
+    if (s->len == 0) return -1;
+    *out = s->data[--s->len];
+    return 0;
+}
+
+int main(void) {
+    Stack s = {0};                 // {NULL, 0, 0}: an empty stack
+    for (int i = 1; i <= 6; i++) stack_push(&s, i * i);
+    int v;
+    while (stack_pop(&s, &v) == 0) printf("%d ", v);
+    printf("\n");
+    free(s.data);
+    return 0;
+}
+```
+
+## Binary search trees
+
+A **binary search tree** keeps smaller keys in the left subtree and larger ones in the right, so finding, inserting and listing in order take O(log n) on a balanced tree. Recursion makes the code short:
+
+```c
+#include <stdio.h>
+#include <stdlib.h>
+
+typedef struct Tree {
+    int key;
+    struct Tree *left, *right;
+} Tree;
+
+Tree *insert(Tree *t, int key) {
+    if (t == NULL) {
+        t = calloc(1, sizeof *t);
+        if (t != NULL) t->key = key;
+        return t;
+    }
+    if (key < t->key) t->left = insert(t->left, key);
+    else if (key > t->key) t->right = insert(t->right, key);
+    return t;
+}
+
+void in_order(const Tree *t) {
+    if (t == NULL) return;
+    in_order(t->left);
+    printf("%d ", t->key);
+    in_order(t->right);
+}
+
+int height(const Tree *t) {
+    if (t == NULL) return 0;
+    int l = height(t->left), r = height(t->right);
+    return 1 + (l > r ? l : r);
+}
+
+void free_tree(Tree *t) {
+    if (t == NULL) return;
+    free_tree(t->left);
+    free_tree(t->right);
+    free(t);
+}
+
+int main(void) {
+    int keys[] = {50, 30, 70, 20, 40, 60, 80, 35};
+    Tree *root = NULL;
+    for (size_t i = 0; i < sizeof keys / sizeof keys[0]; i++) root = insert(root, keys[i]);
+    in_order(root);
+    printf("\nheight %d\n", height(root));
+    free_tree(root);
+    return 0;
+}
+```
+
+~~~check
+? Why save `head->next` before `free(head)` when freeing a list?
++ After free, reading head->next is a use after free
+- free changes next to NULL
+- It's faster
+- It isn't necessary
+> Never touch freed memory.
+~~~
+
+📚 **Go deeper:** K&R section 6.5 (self-referential structures); *C: The Complete Reference*, chapter 22 (Queues, Stacks, Linked Lists, and Trees); Robert Sedgewick, *Algorithms in C*.
+--- goals
+- build linked lists with self-referential structs and free them correctly
+- edit lists with pointers to pointers
+- implement a stack on a growable array
+- insert into, traverse and free a binary search tree recursively
+- compare arrays and linked structures
+--- quiz
+? What's the cost of reaching the i-th element of a linked list?
++ O(n): you follow i links
+- O(1)
+- O(log n)
+- O(n²)
+> Arrays index in O(1).
+? Why does `append(Node **head, ...)` take a pointer to the head pointer?
++ So it can change the head when the list is empty
+- Lists need two stars
+- To copy the list
+- It doesn't need to
+> Otherwise the caller's head would stay NULL.
+? In which order does in-order traversal of a BST print keys?
++ Ascending order
+- Insertion order
+- Descending order
+- Random order
+> Left subtree, node, right subtree.
+--- exercise code c
+::prompt
+Implement a **queue** (first in, first out) as a linked list with head and tail pointers, so both enqueue and dequeue are O(1):
+
+- `typedef struct QNode { char name[32]; struct QNode *next; } QNode;` and `typedef struct { QNode *head, *tail; size_t size; } Queue;`
+- `int enqueue(Queue *q, const char *name)` (0, or -1 when out of memory; use `snprintf` to copy the name);
+- `int dequeue(Queue *q, char *out, size_t out_size)` (0, or -1 when empty);
+- `void queue_free(Queue *q)` frees every node and leaves an empty queue.
+
+`main` (given) simulates a ticket desk:
+
+```
+queue: ada bob cy (3)
+serving ada
+serving bob
+queue: cy dee (2)
+serving cy
+serving dee
+queue is empty
+queue: (0)
+```
+::starter
+#include <stdio.h>
+#include <stdlib.h>
+
+typedef struct QNode {
+    char name[32];
+    struct QNode *next;
+} QNode;
+
+typedef struct {
+    QNode *head, *tail;
+    size_t size;
+} Queue;
+
+int enqueue(Queue *q, const char *name) { return -1; }
+
+int dequeue(Queue *q, char *out, size_t out_size) { return -1; }
+
+void queue_free(Queue *q) {}
+
+void print_queue(const Queue *q) {
+    printf("queue:");
+    for (const QNode *n = q->head; n != NULL; n = n->next) printf(" %s", n->name);
+    printf(" (%zu)\n", q->size);
+}
+
+int main(void) {
+    Queue q = {0};
+    enqueue(&q, "ada");
+    enqueue(&q, "bob");
+    enqueue(&q, "cy");
+    print_queue(&q);
+    char name[32];
+    for (int i = 0; i < 2; i++) {
+        if (dequeue(&q, name, sizeof name) == 0) printf("serving %s\n", name);
+    }
+    enqueue(&q, "dee");
+    print_queue(&q);
+    while (dequeue(&q, name, sizeof name) == 0) printf("serving %s\n", name);
+    printf("queue is empty\n");
+    enqueue(&q, "eve");
+    queue_free(&q);
+    print_queue(&q);
+    return 0;
+}
+::solution
+#include <stdio.h>
+#include <stdlib.h>
+
+typedef struct QNode {
+    char name[32];
+    struct QNode *next;
+} QNode;
+
+typedef struct {
+    QNode *head, *tail;
+    size_t size;
+} Queue;
+
+int enqueue(Queue *q, const char *name) {
+    QNode *n = malloc(sizeof *n);
+    if (n == NULL) return -1;
+    snprintf(n->name, sizeof n->name, "%s", name);
+    n->next = NULL;
+    if (q->tail != NULL) q->tail->next = n;
+    else q->head = n;
+    q->tail = n;
+    q->size++;
+    return 0;
+}
+
+int dequeue(Queue *q, char *out, size_t out_size) {
+    QNode *n = q->head;
+    if (n == NULL) return -1;
+    snprintf(out, out_size, "%s", n->name);
+    q->head = n->next;
+    if (q->head == NULL) q->tail = NULL;
+    q->size--;
+    free(n);
+    return 0;
+}
+
+void queue_free(Queue *q) {
+    QNode *n = q->head;
+    while (n != NULL) {
+        QNode *next = n->next;
+        free(n);
+        n = next;
+    }
+    q->head = q->tail = NULL;
+    q->size = 0;
+}
+
+void print_queue(const Queue *q) {
+    printf("queue:");
+    for (const QNode *n = q->head; n != NULL; n = n->next) printf(" %s", n->name);
+    printf(" (%zu)\n", q->size);
+}
+
+int main(void) {
+    Queue q = {0};
+    enqueue(&q, "ada");
+    enqueue(&q, "bob");
+    enqueue(&q, "cy");
+    print_queue(&q);
+    char name[32];
+    for (int i = 0; i < 2; i++) {
+        if (dequeue(&q, name, sizeof name) == 0) printf("serving %s\n", name);
+    }
+    enqueue(&q, "dee");
+    print_queue(&q);
+    while (dequeue(&q, name, sizeof name) == 0) printf("serving %s\n", name);
+    printf("queue is empty\n");
+    enqueue(&q, "eve");
+    queue_free(&q);
+    print_queue(&q);
+    return 0;
+}
+::expected
+queue: ada bob cy (3)
+serving ada
+serving bob
+queue: cy dee (2)
+serving cy
+serving dee
+queue is empty
+queue: (0)
+::hints
+- Enqueue at the tail: link the old tail to the new node (or set the head if the queue was empty).
+- Dequeue from the head; when the queue becomes empty, set the tail to `NULL` too.
+- In `queue_free`, save `next` before freeing each node, then reset head, tail and size.
+--- cards
+Self-referential struct :: typedef struct Node { int v; struct Node *next; } Node;
+Linked list :: O(1) insert/remove at a known node, O(n) indexing; one allocation per node.
+Node ** :: A pointer to the link lets one loop edit the head and inner nodes alike.
+Stack / queue :: LIFO on a growable array / FIFO with head and tail pointers.
+BST :: Left < node < right; recursive insert, in-order traversal prints sorted keys.
+
+=== lesson c-m5-test | Module 5 test | 160 | exam
+This test covers Module 5: dynamic memory, structs, unions and enums, and linked data structures.
+
+Before you start, check that you can:
+
+- allocate, grow and free memory without leaks;
+- design structs and pass them by pointer;
+- build and free linked structures.
+--- goals
+- build a dynamic, heap-allocated data structure with clear ownership
+--- quiz
+? What's wrong with `p = realloc(p, bigger);`?
++ If realloc fails, p becomes NULL and the old block leaks
+- Nothing
+- realloc can't grow memory
+- p must be cast
+> Use a temporary.
+? Which allocation for an array of n structs `Item` is idiomatic?
++ Item *items = malloc(n * sizeof *items);
+- Item *items = malloc(n);
+- Item items = malloc(sizeof(Item));
+- Item *items = malloc(sizeof(items));
+> sizeof *items is the size of one Item.
+? Which statement about `free` is true?
++ free(NULL) is safe and does nothing
+- free sets the pointer to NULL
+- You may free the same pointer twice
+- free works on stack arrays
+> Only free what malloc/calloc/realloc returned, once.
+? How is a tagged union useful?
++ It stores one of several kinds of data, with a tag saying which
+- It makes structs faster
+- It saves strings
+- It replaces pointers
+> Like a sum type in other languages.
+--- exercise code c
+::prompt
+**A dynamic phone book.** Contacts are stored in a growable, heap-allocated array that **stays sorted by name** (insert in place, shifting the others with `memmove`):
+
+- `typedef struct { char *name; char *phone; } Contact;` (both strings allocated with your own `str_dup`);
+- `typedef struct { Contact *items; size_t len, cap; } Book;`
+- `int book_add(Book *b, const char *name, const char *phone)`: inserts in sorted position (doubling the capacity from 2 when full); if the name exists, replaces its phone (freeing the old one) and returns 1; returns 0 when added, -1 on allocation failure;
+- `const char *book_find(const Book *b, const char *name)`: **binary search**; returns the phone or `NULL`;
+- `int book_remove(Book *b, const char *name)`: 0 when removed, -1 when absent;
+- `void book_free(Book *b)`.
+
+`main` reads commands from the input: `add <name> <phone>`, `find <name>`, `del <name>` and `list`:
+
+```
+added ada
+added cy
+added bob
+updated ada
+ada: 555-0199
+zoe: not found
+removed cy
+del cy: not found
+ada 555-0199
+bob 555-0102
+2 contacts, capacity 4
+```
+::stdin
+add ada 555-0100
+add cy 555-0103
+add bob 555-0102
+add ada 555-0199
+find ada
+find zoe
+del cy
+del cy
+list
+::starter
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+int main(void) {
+    char line[128];
+    while (fgets(line, sizeof line, stdin) != NULL) {
+        printf("%s", line);
+    }
+    return 0;
+}
+::solution
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+typedef struct {
+    char *name;
+    char *phone;
+} Contact;
+
+typedef struct {
+    Contact *items;
+    size_t len, cap;
+} Book;
+
+static char *str_dup(const char *s) {
+    size_t n = strlen(s) + 1;
+    char *copy = malloc(n);
+    if (copy != NULL) memcpy(copy, s, n);
+    return copy;
+}
+
+/* Binary search: returns the index of name, or where it would be inserted (with *found = 0). */
+static size_t book_index(const Book *b, const char *name, int *found) {
+    size_t lo = 0, hi = b->len;
+    while (lo < hi) {
+        size_t mid = lo + (hi - lo) / 2;
+        int cmp = strcmp(b->items[mid].name, name);
+        if (cmp == 0) {
+            *found = 1;
+            return mid;
+        }
+        if (cmp < 0) lo = mid + 1;
+        else hi = mid;
+    }
+    *found = 0;
+    return lo;
+}
+
+int book_add(Book *b, const char *name, const char *phone) {
+    int found;
+    size_t at = book_index(b, name, &found);
+    char *phone_copy = str_dup(phone);
+    if (phone_copy == NULL) return -1;
+    if (found) {
+        free(b->items[at].phone);
+        b->items[at].phone = phone_copy;
+        return 1;
+    }
+    if (b->len == b->cap) {
+        size_t cap = b->cap ? b->cap * 2 : 2;
+        Contact *items = realloc(b->items, cap * sizeof *items);
+        if (items == NULL) {
+            free(phone_copy);
+            return -1;
+        }
+        b->items = items;
+        b->cap = cap;
+    }
+    char *name_copy = str_dup(name);
+    if (name_copy == NULL) {
+        free(phone_copy);
+        return -1;
+    }
+    memmove(&b->items[at + 1], &b->items[at], (b->len - at) * sizeof *b->items);
+    b->items[at] = (Contact){name_copy, phone_copy};
+    b->len++;
+    return 0;
+}
+
+const char *book_find(const Book *b, const char *name) {
+    int found;
+    size_t at = book_index(b, name, &found);
+    return found ? b->items[at].phone : NULL;
+}
+
+int book_remove(Book *b, const char *name) {
+    int found;
+    size_t at = book_index(b, name, &found);
+    if (!found) return -1;
+    free(b->items[at].name);
+    free(b->items[at].phone);
+    memmove(&b->items[at], &b->items[at + 1], (b->len - at - 1) * sizeof *b->items);
+    b->len--;
+    return 0;
+}
+
+void book_free(Book *b) {
+    for (size_t i = 0; i < b->len; i++) {
+        free(b->items[i].name);
+        free(b->items[i].phone);
+    }
+    free(b->items);
+    *b = (Book){0};
+}
+
+int main(void) {
+    Book book = {0};
+    char line[128];
+    while (fgets(line, sizeof line, stdin) != NULL) {
+        char cmd[8], name[48], phone[32];
+        int n = sscanf(line, "%7s %47s %31s", cmd, name, phone);
+        if (n == 3 && strcmp(cmd, "add") == 0) {
+            int r = book_add(&book, name, phone);
+            printf(r == 1 ? "updated %s\n" : r == 0 ? "added %s\n" : "failed to add %s\n", name);
+        } else if (n == 2 && strcmp(cmd, "find") == 0) {
+            const char *p = book_find(&book, name);
+            printf("%s: %s\n", name, p ? p : "not found");
+        } else if (n == 2 && strcmp(cmd, "del") == 0) {
+            if (book_remove(&book, name) == 0) printf("removed %s\n", name);
+            else printf("del %s: not found\n", name);
+        } else if (n >= 1 && strcmp(cmd, "list") == 0) {
+            for (size_t i = 0; i < book.len; i++) printf("%s %s\n", book.items[i].name, book.items[i].phone);
+            printf("%zu contacts, capacity %zu\n", book.len, book.cap);
+        }
+    }
+    book_free(&book);
+    return 0;
+}
+::expected
+added ada
+added cy
+added bob
+updated ada
+ada: 555-0199
+zoe: not found
+removed cy
+del cy: not found
+ada 555-0199
+bob 555-0102
+2 contacts, capacity 4
+::cases
+>>> add max 1
+>>> add al 2
+>>> add mo 3
+>>> list
+added max
+added al
+added mo
+al 2
+max 1
+mo 3
+3 contacts, capacity 4
+::hints
+- Write one binary search that returns either the index of the name or the position where it should go.
+- `memmove(&items[at + 1], &items[at], (len - at) * sizeof *items)` opens a gap (memmove handles overlapping memory; memcpy doesn't).
+- Free both strings of a contact before removing it, and every remaining string in `book_free`.
