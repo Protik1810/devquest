@@ -1,0 +1,1823 @@
+=== module Capstone projects
+
+=== lesson c-project | Capstone 1: a gradebook with file storage | 400
+The first capstone builds a complete little C application in two steps: a **gradebook** library on a growable heap array, then a **command interpreter** that saves and loads the data as a CSV file. Step 2's starter contains step 1's solution.
+
+## How a task like this is approached in C
+
+1. **Design the data first**: a `Student` holds a fixed-size name and up to 8 scores; the `Gradebook` is a growable array of students (`items`, `len`, `cap`), like the stack in Module 5.
+2. **Decide how errors are reported**: every function returns an `int` code (`GB_OK`, `GB_EXISTS`, `GB_NOT_FOUND`...), and `gb_error(code)` turns it into a message. C has no exceptions, so this is the standard style.
+3. **Decide who owns memory**: the gradebook owns its array; `gb_free` releases it. Students are stored by value, so no other allocation is needed.
+4. **Keep I/O at the edges**: the library functions don't print (except the report, which writes to a `FILE *` it's given), so the same code could serve a GUI or a web server.
+
+`main` is the specification: its output must match exactly. Don't change it.
+--- goals
+- design a growable array of structs with clear error codes
+- validate input and keep refused operations free of side effects
+- sort structs with qsort and a two-key comparator
+- save and load data as CSV text, skipping malformed lines
+- build a line-based command interpreter
+
+--- exercise code c
+::prompt
+**Step 1: the gradebook library.** The types, the error codes, `gb_error` and `main` are given. Write:
+
+- `gb_find(gb, name)`: a pointer to the student, or `NULL`;
+- `gb_add_student(gb, name)`: `GB_INVALID` for an empty name or one of 32 characters or more, `GB_EXISTS` for a duplicate; otherwise appends a zeroed student (growing the array by doubling, starting at 4) and returns `GB_OK` (`GB_NO_MEMORY` if `realloc` fails);
+- `gb_add_score(gb, name, score)`: `GB_INVALID` outside 0–100, `GB_NOT_FOUND`, `GB_FULL` when the student already has 8 scores;
+- `gb_remove(gb, name)`: removes the student, keeping the others in order (`memmove`);
+- `gb_average(student)` (0 with no scores), `gb_rank(gb)` (qsort: average descending, then name), `gb_report(gb, out)` (one line per student: `%zu. %-8s %6.2f  [scores separated by spaces]`) and `gb_free(gb)`.
+
+Expected output:
+
+```
+add "ada": already exists
+add "": invalid value
+score eve 101: invalid value
+eve's 9th score: too many scores
+remove zed: not found
+remove bob: ok
+1. ada       87.50  [90 85]
+2. cy        87.00  [95 79]
+3. dee       79.50  [60 99]
+4. eve       53.50  [50 51 52 53 54 55 56 57]
+4 students, capacity 8
+```
+::starter
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#define NAME_LEN 32
+#define MAX_SCORES 8
+
+typedef struct {
+    char name[NAME_LEN];
+    int scores[MAX_SCORES];
+    int count;
+} Student;
+
+typedef struct {
+    Student *items;
+    size_t len, cap;
+} Gradebook;
+
+/* Error codes returned by the gradebook functions */
+enum { GB_OK = 0, GB_EXISTS = -1, GB_NOT_FOUND = -2, GB_FULL = -3, GB_INVALID = -4, GB_NO_MEMORY = -5 };
+
+const char *gb_error(int code) {
+    switch (code) {
+    case GB_OK: return "ok";
+    case GB_EXISTS: return "already exists";
+    case GB_NOT_FOUND: return "not found";
+    case GB_FULL: return "too many scores";
+    case GB_INVALID: return "invalid value";
+    case GB_NO_MEMORY: return "out of memory";
+    }
+    return "unknown error";
+}
+
+Student *gb_find(Gradebook *gb, const char *name) {
+    return NULL;
+}
+
+int gb_add_student(Gradebook *gb, const char *name) {
+    return GB_INVALID;
+}
+
+int gb_add_score(Gradebook *gb, const char *name, int score) {
+    return GB_INVALID;
+}
+
+int gb_remove(Gradebook *gb, const char *name) {
+    return GB_NOT_FOUND;
+}
+
+double gb_average(const Student *s) {
+    return 0.0;
+}
+
+
+void gb_rank(Gradebook *gb) {
+    /* sort by average, highest first, then by name (qsort) */
+}
+
+void gb_report(const Gradebook *gb, FILE *out) {
+    /* 1. ada       87.50  [90 85] */
+}
+
+void gb_free(Gradebook *gb) {
+    /* free the array and reset the fields */
+}
+
+int main(void) {
+    Gradebook gb = {0};
+    const char *names[] = {"ada", "bob", "cy", "dee", "eve", "ada", ""};
+    for (int i = 0; i < 7; i++) {
+        int r = gb_add_student(&gb, names[i]);
+        if (r != GB_OK) printf("add \"%s\": %s\n", names[i], gb_error(r));
+    }
+    int scores[][2] = {{0, 90}, {0, 85}, {1, 70}, {1, 88}, {2, 95}, {3, 60}, {4, 101}, {2, 79}, {3, 99}};
+    for (int i = 0; i < 9; i++) {
+        int r = gb_add_score(&gb, names[scores[i][0]], scores[i][1]);
+        if (r != GB_OK) printf("score %s %d: %s\n", names[scores[i][0]], scores[i][1], gb_error(r));
+    }
+    for (int i = 0; i < MAX_SCORES; i++) gb_add_score(&gb, "eve", 50 + i);
+    printf("eve's 9th score: %s\n", gb_error(gb_add_score(&gb, "eve", 100)));
+    printf("remove zed: %s\n", gb_error(gb_remove(&gb, "zed")));
+    printf("remove bob: %s\n", gb_error(gb_remove(&gb, "bob")));
+    gb_rank(&gb);
+    gb_report(&gb, stdout);
+    printf("%zu students, capacity %zu\n", gb.len, gb.cap);
+    gb_free(&gb);
+    return 0;
+}
+::solution
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#define NAME_LEN 32
+#define MAX_SCORES 8
+
+typedef struct {
+    char name[NAME_LEN];
+    int scores[MAX_SCORES];
+    int count;
+} Student;
+
+typedef struct {
+    Student *items;
+    size_t len, cap;
+} Gradebook;
+
+/* Error codes returned by the gradebook functions */
+enum { GB_OK = 0, GB_EXISTS = -1, GB_NOT_FOUND = -2, GB_FULL = -3, GB_INVALID = -4, GB_NO_MEMORY = -5 };
+
+const char *gb_error(int code) {
+    switch (code) {
+    case GB_OK: return "ok";
+    case GB_EXISTS: return "already exists";
+    case GB_NOT_FOUND: return "not found";
+    case GB_FULL: return "too many scores";
+    case GB_INVALID: return "invalid value";
+    case GB_NO_MEMORY: return "out of memory";
+    }
+    return "unknown error";
+}
+
+Student *gb_find(Gradebook *gb, const char *name) {
+    for (size_t i = 0; i < gb->len; i++) {
+        if (strcmp(gb->items[i].name, name) == 0) return &gb->items[i];
+    }
+    return NULL;
+}
+
+int gb_add_student(Gradebook *gb, const char *name) {
+    size_t len = strlen(name);
+    if (len == 0 || len >= NAME_LEN) return GB_INVALID;
+    if (gb_find(gb, name) != NULL) return GB_EXISTS;
+    if (gb->len == gb->cap) {
+        size_t cap = gb->cap ? gb->cap * 2 : 4;
+        Student *items = realloc(gb->items, cap * sizeof *items);
+        if (items == NULL) return GB_NO_MEMORY;
+        gb->items = items;
+        gb->cap = cap;
+    }
+    Student *s = &gb->items[gb->len++];
+    memset(s, 0, sizeof *s);
+    memcpy(s->name, name, len + 1);
+    return GB_OK;
+}
+
+int gb_add_score(Gradebook *gb, const char *name, int score) {
+    if (score < 0 || score > 100) return GB_INVALID;
+    Student *s = gb_find(gb, name);
+    if (s == NULL) return GB_NOT_FOUND;
+    if (s->count == MAX_SCORES) return GB_FULL;
+    s->scores[s->count++] = score;
+    return GB_OK;
+}
+
+int gb_remove(Gradebook *gb, const char *name) {
+    Student *s = gb_find(gb, name);
+    if (s == NULL) return GB_NOT_FOUND;
+    size_t i = (size_t)(s - gb->items);
+    memmove(&gb->items[i], &gb->items[i + 1], (gb->len - i - 1) * sizeof *gb->items);
+    gb->len--;
+    return GB_OK;
+}
+
+double gb_average(const Student *s) {
+    if (s->count == 0) return 0.0;
+    int sum = 0;
+    for (int i = 0; i < s->count; i++) sum += s->scores[i];
+    return (double)sum / s->count;
+}
+
+static int by_average_desc(const void *a, const void *b) {
+    const Student *x = a, *y = b;
+    double ax = gb_average(x), ay = gb_average(y);
+    if (ax != ay) return ax < ay ? 1 : -1;
+    return strcmp(x->name, y->name);
+}
+
+void gb_rank(Gradebook *gb) {
+    if (gb->len > 1) qsort(gb->items, gb->len, sizeof *gb->items, by_average_desc);
+}
+
+void gb_report(const Gradebook *gb, FILE *out) {
+    for (size_t i = 0; i < gb->len; i++) {
+        const Student *s = &gb->items[i];
+        fprintf(out, "%zu. %-8s %6.2f  [", i + 1, s->name, gb_average(s));
+        for (int j = 0; j < s->count; j++) fprintf(out, "%s%d", j ? " " : "", s->scores[j]);
+        fprintf(out, "]\n");
+    }
+}
+
+void gb_free(Gradebook *gb) {
+    free(gb->items);
+    gb->items = NULL;
+    gb->len = gb->cap = 0;
+}
+
+int main(void) {
+    Gradebook gb = {0};
+    const char *names[] = {"ada", "bob", "cy", "dee", "eve", "ada", ""};
+    for (int i = 0; i < 7; i++) {
+        int r = gb_add_student(&gb, names[i]);
+        if (r != GB_OK) printf("add \"%s\": %s\n", names[i], gb_error(r));
+    }
+    int scores[][2] = {{0, 90}, {0, 85}, {1, 70}, {1, 88}, {2, 95}, {3, 60}, {4, 101}, {2, 79}, {3, 99}};
+    for (int i = 0; i < 9; i++) {
+        int r = gb_add_score(&gb, names[scores[i][0]], scores[i][1]);
+        if (r != GB_OK) printf("score %s %d: %s\n", names[scores[i][0]], scores[i][1], gb_error(r));
+    }
+    for (int i = 0; i < MAX_SCORES; i++) gb_add_score(&gb, "eve", 50 + i);
+    printf("eve's 9th score: %s\n", gb_error(gb_add_score(&gb, "eve", 100)));
+    printf("remove zed: %s\n", gb_error(gb_remove(&gb, "zed")));
+    printf("remove bob: %s\n", gb_error(gb_remove(&gb, "bob")));
+    gb_rank(&gb);
+    gb_report(&gb, stdout);
+    printf("%zu students, capacity %zu\n", gb.len, gb.cap);
+    gb_free(&gb);
+    return 0;
+}
+::expected
+add "ada": already exists
+add "": invalid value
+score eve 101: invalid value
+eve's 9th score: too many scores
+remove zed: not found
+remove bob: ok
+1. ada       87.50  [90 85]
+2. cy        87.00  [95 79]
+3. dee       79.50  [60 99]
+4. eve       53.50  [50 51 52 53 54 55 56 57]
+4 students, capacity 8
+::hints
+- `gb_add_student` validates before growing, so a refused call changes nothing.
+- `memmove(&items[i], &items[i + 1], (len - i - 1) * sizeof *items)` closes the gap after a removal.
+- In the comparator, compare the averages first (return -1 or 1), then `strcmp` the names.
+
+--- exercise code c
+::prompt
+**Step 2: commands and files.** Your step 1 library is included. Write:
+
+- `gb_save(gb, path)`: one line per student, `name,score,score,...`; returns `GB_INVALID` if the file can't be opened or closed;
+- `gb_load(gb, path, &skipped)`: replaces the contents with the file's students (`GB_NOT_FOUND` if it can't be opened); a line with an invalid name, a duplicate or a bad score is skipped and counted; returns the number of students loaded;
+- `run_command(gb, line)`: `add NAME`, `score NAME N`, `remove NAME`, `report` (ranks, then prints), `save FILE` (prints `saved <n> students to <file>`), `load FILE` (prints `loaded <n> students from <file> (<k> skipped)`); a failed command prints `<command>: <error message>`, an unknown one `unknown command: <word>`.
+
+`main` reads commands from the input until the end.
+
+Expected output:
+
+```
+score: invalid value
+score: not found
+unknown command: fly
+1. cy        88.00  [88]
+2. ada       85.50  [90 81]
+3. bob       72.00  [72]
+saved 3 students to grades.csv
+1. dee       99.00  [99]
+2. cy        88.00  [88]
+3. ada       85.50  [90 81]
+loaded 3 students from grades.csv (0 skipped)
+1. cy        88.00  [88]
+2. ada       85.50  [90 81]
+3. bob       72.00  [72]
+load: not found
+```
+::stdin
+add ada
+add bob
+add cy
+score ada 90
+score bob 72
+score cy 88
+score ada 81
+score bob 101
+score zed 50
+fly away
+report
+save grades.csv
+remove bob
+add dee
+score dee 99
+report
+load grades.csv
+report
+load missing.csv
+::starter
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#define NAME_LEN 32
+#define MAX_SCORES 8
+
+typedef struct {
+    char name[NAME_LEN];
+    int scores[MAX_SCORES];
+    int count;
+} Student;
+
+typedef struct {
+    Student *items;
+    size_t len, cap;
+} Gradebook;
+
+/* Error codes returned by the gradebook functions */
+enum { GB_OK = 0, GB_EXISTS = -1, GB_NOT_FOUND = -2, GB_FULL = -3, GB_INVALID = -4, GB_NO_MEMORY = -5 };
+
+const char *gb_error(int code) {
+    switch (code) {
+    case GB_OK: return "ok";
+    case GB_EXISTS: return "already exists";
+    case GB_NOT_FOUND: return "not found";
+    case GB_FULL: return "too many scores";
+    case GB_INVALID: return "invalid value";
+    case GB_NO_MEMORY: return "out of memory";
+    }
+    return "unknown error";
+}
+
+Student *gb_find(Gradebook *gb, const char *name) {
+    for (size_t i = 0; i < gb->len; i++) {
+        if (strcmp(gb->items[i].name, name) == 0) return &gb->items[i];
+    }
+    return NULL;
+}
+
+int gb_add_student(Gradebook *gb, const char *name) {
+    size_t len = strlen(name);
+    if (len == 0 || len >= NAME_LEN) return GB_INVALID;
+    if (gb_find(gb, name) != NULL) return GB_EXISTS;
+    if (gb->len == gb->cap) {
+        size_t cap = gb->cap ? gb->cap * 2 : 4;
+        Student *items = realloc(gb->items, cap * sizeof *items);
+        if (items == NULL) return GB_NO_MEMORY;
+        gb->items = items;
+        gb->cap = cap;
+    }
+    Student *s = &gb->items[gb->len++];
+    memset(s, 0, sizeof *s);
+    memcpy(s->name, name, len + 1);
+    return GB_OK;
+}
+
+int gb_add_score(Gradebook *gb, const char *name, int score) {
+    if (score < 0 || score > 100) return GB_INVALID;
+    Student *s = gb_find(gb, name);
+    if (s == NULL) return GB_NOT_FOUND;
+    if (s->count == MAX_SCORES) return GB_FULL;
+    s->scores[s->count++] = score;
+    return GB_OK;
+}
+
+int gb_remove(Gradebook *gb, const char *name) {
+    Student *s = gb_find(gb, name);
+    if (s == NULL) return GB_NOT_FOUND;
+    size_t i = (size_t)(s - gb->items);
+    memmove(&gb->items[i], &gb->items[i + 1], (gb->len - i - 1) * sizeof *gb->items);
+    gb->len--;
+    return GB_OK;
+}
+
+double gb_average(const Student *s) {
+    if (s->count == 0) return 0.0;
+    int sum = 0;
+    for (int i = 0; i < s->count; i++) sum += s->scores[i];
+    return (double)sum / s->count;
+}
+
+static int by_average_desc(const void *a, const void *b) {
+    const Student *x = a, *y = b;
+    double ax = gb_average(x), ay = gb_average(y);
+    if (ax != ay) return ax < ay ? 1 : -1;
+    return strcmp(x->name, y->name);
+}
+
+void gb_rank(Gradebook *gb) {
+    if (gb->len > 1) qsort(gb->items, gb->len, sizeof *gb->items, by_average_desc);
+}
+
+void gb_report(const Gradebook *gb, FILE *out) {
+    for (size_t i = 0; i < gb->len; i++) {
+        const Student *s = &gb->items[i];
+        fprintf(out, "%zu. %-8s %6.2f  [", i + 1, s->name, gb_average(s));
+        for (int j = 0; j < s->count; j++) fprintf(out, "%s%d", j ? " " : "", s->scores[j]);
+        fprintf(out, "]\n");
+    }
+}
+
+void gb_free(Gradebook *gb) {
+    free(gb->items);
+    gb->items = NULL;
+    gb->len = gb->cap = 0;
+}
+
+/* Saves one line per student: name,score,score,...  Returns GB_OK or GB_INVALID if the file can't be written. */
+int gb_save(const Gradebook *gb, const char *path) {
+    return GB_INVALID;
+}
+
+/* Replaces the gradebook's contents with the file's. Returns the number of students loaded,
+   or a negative error code; malformed lines are skipped and counted in *skipped. */
+int gb_load(Gradebook *gb, const char *path, int *skipped) {
+    *skipped = 0;
+    return GB_NOT_FOUND;
+}
+
+/* Runs one command line and prints its result. */
+void run_command(Gradebook *gb, char *line) {
+    printf("%s", line);
+}
+
+int main(void) {
+    Gradebook gb = {0};
+    char line[128];
+    while (fgets(line, sizeof line, stdin) != NULL) {
+        run_command(&gb, line);
+    }
+    gb_free(&gb);
+    remove("grades.csv");
+    return 0;
+}
+::solution
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#define NAME_LEN 32
+#define MAX_SCORES 8
+
+typedef struct {
+    char name[NAME_LEN];
+    int scores[MAX_SCORES];
+    int count;
+} Student;
+
+typedef struct {
+    Student *items;
+    size_t len, cap;
+} Gradebook;
+
+/* Error codes returned by the gradebook functions */
+enum { GB_OK = 0, GB_EXISTS = -1, GB_NOT_FOUND = -2, GB_FULL = -3, GB_INVALID = -4, GB_NO_MEMORY = -5 };
+
+const char *gb_error(int code) {
+    switch (code) {
+    case GB_OK: return "ok";
+    case GB_EXISTS: return "already exists";
+    case GB_NOT_FOUND: return "not found";
+    case GB_FULL: return "too many scores";
+    case GB_INVALID: return "invalid value";
+    case GB_NO_MEMORY: return "out of memory";
+    }
+    return "unknown error";
+}
+
+Student *gb_find(Gradebook *gb, const char *name) {
+    for (size_t i = 0; i < gb->len; i++) {
+        if (strcmp(gb->items[i].name, name) == 0) return &gb->items[i];
+    }
+    return NULL;
+}
+
+int gb_add_student(Gradebook *gb, const char *name) {
+    size_t len = strlen(name);
+    if (len == 0 || len >= NAME_LEN) return GB_INVALID;
+    if (gb_find(gb, name) != NULL) return GB_EXISTS;
+    if (gb->len == gb->cap) {
+        size_t cap = gb->cap ? gb->cap * 2 : 4;
+        Student *items = realloc(gb->items, cap * sizeof *items);
+        if (items == NULL) return GB_NO_MEMORY;
+        gb->items = items;
+        gb->cap = cap;
+    }
+    Student *s = &gb->items[gb->len++];
+    memset(s, 0, sizeof *s);
+    memcpy(s->name, name, len + 1);
+    return GB_OK;
+}
+
+int gb_add_score(Gradebook *gb, const char *name, int score) {
+    if (score < 0 || score > 100) return GB_INVALID;
+    Student *s = gb_find(gb, name);
+    if (s == NULL) return GB_NOT_FOUND;
+    if (s->count == MAX_SCORES) return GB_FULL;
+    s->scores[s->count++] = score;
+    return GB_OK;
+}
+
+int gb_remove(Gradebook *gb, const char *name) {
+    Student *s = gb_find(gb, name);
+    if (s == NULL) return GB_NOT_FOUND;
+    size_t i = (size_t)(s - gb->items);
+    memmove(&gb->items[i], &gb->items[i + 1], (gb->len - i - 1) * sizeof *gb->items);
+    gb->len--;
+    return GB_OK;
+}
+
+double gb_average(const Student *s) {
+    if (s->count == 0) return 0.0;
+    int sum = 0;
+    for (int i = 0; i < s->count; i++) sum += s->scores[i];
+    return (double)sum / s->count;
+}
+
+static int by_average_desc(const void *a, const void *b) {
+    const Student *x = a, *y = b;
+    double ax = gb_average(x), ay = gb_average(y);
+    if (ax != ay) return ax < ay ? 1 : -1;
+    return strcmp(x->name, y->name);
+}
+
+void gb_rank(Gradebook *gb) {
+    if (gb->len > 1) qsort(gb->items, gb->len, sizeof *gb->items, by_average_desc);
+}
+
+void gb_report(const Gradebook *gb, FILE *out) {
+    for (size_t i = 0; i < gb->len; i++) {
+        const Student *s = &gb->items[i];
+        fprintf(out, "%zu. %-8s %6.2f  [", i + 1, s->name, gb_average(s));
+        for (int j = 0; j < s->count; j++) fprintf(out, "%s%d", j ? " " : "", s->scores[j]);
+        fprintf(out, "]\n");
+    }
+}
+
+void gb_free(Gradebook *gb) {
+    free(gb->items);
+    gb->items = NULL;
+    gb->len = gb->cap = 0;
+}
+
+/* Saves one line per student: name,score,score,...  Returns GB_OK or GB_INVALID if the file can't be written. */
+int gb_save(const Gradebook *gb, const char *path) {
+    FILE *f = fopen(path, "w");
+    if (f == NULL) return GB_INVALID;
+    for (size_t i = 0; i < gb->len; i++) {
+        const Student *s = &gb->items[i];
+        fputs(s->name, f);
+        for (int j = 0; j < s->count; j++) fprintf(f, ",%d", s->scores[j]);
+        fputc('\n', f);
+    }
+    return fclose(f) == 0 ? GB_OK : GB_INVALID;
+}
+
+/* Replaces the gradebook's contents with the file's. Returns the number of students loaded,
+   or a negative error code; malformed lines are skipped and counted in *skipped. */
+int gb_load(Gradebook *gb, const char *path, int *skipped) {
+    FILE *f = fopen(path, "r");
+    if (f == NULL) return GB_NOT_FOUND;
+    gb->len = 0;
+    *skipped = 0;
+    char line[256];
+    while (fgets(line, sizeof line, f) != NULL) {
+        line[strcspn(line, "\r\n")] = '\0';
+        char *field = strtok(line, ",");
+        if (field == NULL || gb_add_student(gb, field) != GB_OK) {
+            (*skipped)++;
+            continue;
+        }
+        const char *name = gb->items[gb->len - 1].name;
+        int ok = 1;
+        while ((field = strtok(NULL, ",")) != NULL) {
+            char *end;
+            long score = strtol(field, &end, 10);
+            if (*end != '\0' || gb_add_score(gb, name, (int)score) != GB_OK) ok = 0;
+        }
+        if (!ok) {
+            gb->len--;
+            (*skipped)++;
+        }
+    }
+    fclose(f);
+    return (int)gb->len;
+}
+
+/* Runs one command line and prints its result. */
+void run_command(Gradebook *gb, char *line) {
+    char cmd[16], arg[64];
+    int value;
+    int n = sscanf(line, "%15s %63s %d", cmd, arg, &value);
+    if (n <= 0) return;
+    int r = GB_INVALID;
+    if (strcmp(cmd, "add") == 0 && n >= 2) {
+        r = gb_add_student(gb, arg);
+    } else if (strcmp(cmd, "score") == 0 && n == 3) {
+        r = gb_add_score(gb, arg, value);
+    } else if (strcmp(cmd, "remove") == 0 && n >= 2) {
+        r = gb_remove(gb, arg);
+    } else if (strcmp(cmd, "report") == 0) {
+        gb_rank(gb);
+        gb_report(gb, stdout);
+        return;
+    } else if (strcmp(cmd, "save") == 0 && n >= 2) {
+        r = gb_save(gb, arg);
+        if (r == GB_OK) {
+            printf("saved %zu students to %s\n", gb->len, arg);
+            return;
+        }
+    } else if (strcmp(cmd, "load") == 0 && n >= 2) {
+        int skipped;
+        r = gb_load(gb, arg, &skipped);
+        if (r >= 0) {
+            printf("loaded %d students from %s (%d skipped)\n", r, arg, skipped);
+            return;
+        }
+    } else {
+        printf("unknown command: %s\n", cmd);
+        return;
+    }
+    if (r != GB_OK) printf("%s: %s\n", cmd, gb_error(r));
+}
+
+int main(void) {
+    Gradebook gb = {0};
+    char line[128];
+    while (fgets(line, sizeof line, stdin) != NULL) {
+        run_command(&gb, line);
+    }
+    gb_free(&gb);
+    remove("grades.csv");
+    return 0;
+}
+::expected
+score: invalid value
+score: not found
+unknown command: fly
+1. cy        88.00  [88]
+2. ada       85.50  [90 81]
+3. bob       72.00  [72]
+saved 3 students to grades.csv
+1. dee       99.00  [99]
+2. cy        88.00  [88]
+3. ada       85.50  [90 81]
+loaded 3 students from grades.csv (0 skipped)
+1. cy        88.00  [88]
+2. ada       85.50  [90 81]
+3. bob       72.00  [72]
+load: not found
+::cases
+>>> add zoe
+>>> score zoe 77
+>>> score zoe 83
+>>> add zoe
+>>> report
+add: already exists
+1. zoe       80.00  [77 83]
+::hints
+- Parse a command with `sscanf(line, "%15s %63s %d", cmd, arg, &value)` and look at how many fields it returned.
+- Load with `fgets`, then split the line with `strtok(line, ",")`; convert scores with `strtol` and check that the whole field was used (`*end == '\0'`).
+- If a loaded student has a bad score, drop that student again (`gb->len--`) and count the line as skipped.
+
+--- cards
+Growable array of structs :: items, len, cap; double the capacity with realloc.
+Error codes :: Return an int status; a function maps codes to messages.
+Validate first :: A refused operation must leave the data unchanged.
+CSV persistence :: fprintf to save; fgets + strtok + strtol to load, skipping bad lines.
+Command interpreter :: sscanf the command word and arguments, dispatch with strcmp.
+
+=== lesson c-capstone-hashmap | Capstone 2: a hash table | 450
+Python's dictionaries, JavaScript's objects, Go's maps and Java's `HashMap` are all **hash tables**. C has none built in, so C programmers write them, and doing it yourself shows exactly how they work.
+
+## How a hash table works
+
+1. A **hash function** turns a key (here a string) into a number. A good one spreads similar keys far apart; this capstone uses **FNV-1a**: start from 2166136261, and for each byte XOR it in and multiply by 16777619 (in 32-bit unsigned arithmetic, where overflow wraps around, which is exactly what we want).
+2. The table is an array of **buckets**; a key goes into bucket `hash % nbuckets`.
+3. Different keys can land in the same bucket (a **collision**). With **separate chaining**, each bucket is a linked list of entries.
+4. When the table fills up, chains get long and lookups slow down. Keeping the **load factor** (`size / nbuckets`) below 0.75 by **doubling** the bucket array and moving every entry keeps operations O(1) on average.
+
+The table **owns** copies of its keys (`malloc` + `memcpy`), so callers can reuse their buffers.
+--- goals
+- implement a string hash function with unsigned arithmetic
+- build a hash table with separate chaining: put, get, remove, free
+- use a pointer to a link (Entry **) to insert and unlink entries
+- resize the table to keep the load factor low
+- visit every entry with a callback function and a context pointer
+
+--- exercise code c
+::prompt
+**Step 1: a fixed-size table.** The types and `main` are given. Write:
+
+- `hash_string(s)`: FNV-1a as described above (`uint32_t h = 2166136261u;` then for each byte `h ^= byte; h *= 16777619u;`);
+- `hm_init(m, nbuckets)`: allocates zeroed buckets (`calloc`), returns 0 or -1;
+- `hm_put(m, key, value)`: updates an existing key (returns 0) or adds a new entry with its own copy of the key (returns 1; -1 when out of memory);
+- `hm_get(m, key, &value)`: returns 1 and stores the value, or 0;
+- `hm_remove(m, key)`: returns 1 if the key was removed, 0 if it wasn't there;
+- `hm_free(m)`: frees every entry, its key, and the bucket array.
+
+A private helper `Entry **hm_slot(m, key)` that returns the address of the link where the key is (or would be inserted) makes put, get and remove each a few lines.
+
+Expected output:
+
+```
+hash("") = 2166136261, hash("a") = 3826002220
+put ada again: 0
+ada: 36
+jon: 29
+zed: missing
+remove cy: 1, again: 0
+size 9 in 8 buckets
+longest chain: 3
+```
+::starter
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdint.h>
+
+typedef struct Entry {
+    char *key;
+    int value;
+    struct Entry *next;
+} Entry;
+
+typedef struct {
+    Entry **buckets;
+    size_t nbuckets;
+    size_t size;
+} HashMap;
+
+/* FNV-1a: a simple, well-distributed string hash */
+uint32_t hash_string(const char *s) {
+    return 0;
+}
+
+int hm_init(HashMap *m, size_t nbuckets) {
+    return -1;
+}
+
+
+int hm_put(HashMap *m, const char *key, int value) {
+    return -1;
+}
+
+int hm_get(const HashMap *m, const char *key, int *value) {
+    return 0;
+}
+
+int hm_remove(HashMap *m, const char *key) {
+    return 0;
+}
+
+void hm_free(HashMap *m) {
+    /* free every entry, its key, and the bucket array */
+}
+
+int main(void) {
+    printf("hash(\"\") = %u, hash(\"a\") = %u\n", hash_string(""), hash_string("a"));
+    HashMap ages;
+    if (hm_init(&ages, 8) != 0) return 1;
+    const char *names[] = {"ada", "bob", "cy", "dee", "eve", "fay", "gus", "hal", "ivy", "jon"};
+    for (int i = 0; i < 10; i++) hm_put(&ages, names[i], 20 + i);
+    printf("put ada again: %d\n", hm_put(&ages, "ada", 36));
+    int v;
+    printf("ada: %d\n", hm_get(&ages, "ada", &v) ? v : -1);
+    printf("jon: %d\n", hm_get(&ages, "jon", &v) ? v : -1);
+    printf("zed: %s\n", hm_get(&ages, "zed", &v) ? "found" : "missing");
+    int first = hm_remove(&ages, "cy");
+    int second = hm_remove(&ages, "cy");
+    printf("remove cy: %d, again: %d\n", first, second);
+    printf("size %zu in %zu buckets\n", ages.size, ages.nbuckets);
+    size_t longest = 0;
+    for (size_t i = 0; i < ages.nbuckets; i++) {
+        size_t len = 0;
+        for (Entry *e = ages.buckets[i]; e != NULL; e = e->next) len++;
+        if (len > longest) longest = len;
+    }
+    printf("longest chain: %zu\n", longest);
+    hm_free(&ages);
+    return 0;
+}
+::solution
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdint.h>
+
+typedef struct Entry {
+    char *key;
+    int value;
+    struct Entry *next;
+} Entry;
+
+typedef struct {
+    Entry **buckets;
+    size_t nbuckets;
+    size_t size;
+} HashMap;
+
+/* FNV-1a: a simple, well-distributed string hash */
+uint32_t hash_string(const char *s) {
+    uint32_t h = 2166136261u;
+    for (; *s; s++) {
+        h ^= (unsigned char)*s;
+        h *= 16777619u;
+    }
+    return h;
+}
+
+int hm_init(HashMap *m, size_t nbuckets) {
+    m->buckets = calloc(nbuckets, sizeof *m->buckets);
+    if (m->buckets == NULL) return -1;
+    m->nbuckets = nbuckets;
+    m->size = 0;
+    return 0;
+}
+
+static Entry **hm_slot(const HashMap *m, const char *key) {
+    Entry **link = &m->buckets[hash_string(key) % m->nbuckets];
+    while (*link != NULL && strcmp((*link)->key, key) != 0) link = &(*link)->next;
+    return link;
+}
+
+int hm_put(HashMap *m, const char *key, int value) {
+    Entry **link = hm_slot(m, key);
+    if (*link != NULL) {
+        (*link)->value = value;
+        return 0;
+    }
+    Entry *e = malloc(sizeof *e);
+    if (e == NULL) return -1;
+    size_t len = strlen(key) + 1;
+    e->key = malloc(len);
+    if (e->key == NULL) {
+        free(e);
+        return -1;
+    }
+    memcpy(e->key, key, len);
+    e->value = value;
+    e->next = NULL;
+    *link = e;
+    m->size++;
+    return 1;
+}
+
+int hm_get(const HashMap *m, const char *key, int *value) {
+    Entry *e = *hm_slot(m, key);
+    if (e == NULL) return 0;
+    *value = e->value;
+    return 1;
+}
+
+int hm_remove(HashMap *m, const char *key) {
+    Entry **link = hm_slot(m, key);
+    Entry *e = *link;
+    if (e == NULL) return 0;
+    *link = e->next;
+    free(e->key);
+    free(e);
+    m->size--;
+    return 1;
+}
+
+void hm_free(HashMap *m) {
+    for (size_t i = 0; i < m->nbuckets; i++) {
+        Entry *e = m->buckets[i];
+        while (e != NULL) {
+            Entry *next = e->next;
+            free(e->key);
+            free(e);
+            e = next;
+        }
+    }
+    free(m->buckets);
+    m->buckets = NULL;
+    m->nbuckets = m->size = 0;
+}
+
+int main(void) {
+    printf("hash(\"\") = %u, hash(\"a\") = %u\n", hash_string(""), hash_string("a"));
+    HashMap ages;
+    if (hm_init(&ages, 8) != 0) return 1;
+    const char *names[] = {"ada", "bob", "cy", "dee", "eve", "fay", "gus", "hal", "ivy", "jon"};
+    for (int i = 0; i < 10; i++) hm_put(&ages, names[i], 20 + i);
+    printf("put ada again: %d\n", hm_put(&ages, "ada", 36));
+    int v;
+    printf("ada: %d\n", hm_get(&ages, "ada", &v) ? v : -1);
+    printf("jon: %d\n", hm_get(&ages, "jon", &v) ? v : -1);
+    printf("zed: %s\n", hm_get(&ages, "zed", &v) ? "found" : "missing");
+    int first = hm_remove(&ages, "cy");
+    int second = hm_remove(&ages, "cy");
+    printf("remove cy: %d, again: %d\n", first, second);
+    printf("size %zu in %zu buckets\n", ages.size, ages.nbuckets);
+    size_t longest = 0;
+    for (size_t i = 0; i < ages.nbuckets; i++) {
+        size_t len = 0;
+        for (Entry *e = ages.buckets[i]; e != NULL; e = e->next) len++;
+        if (len > longest) longest = len;
+    }
+    printf("longest chain: %zu\n", longest);
+    hm_free(&ages);
+    return 0;
+}
+::expected
+hash("") = 2166136261, hash("a") = 3826002220
+put ada again: 0
+ada: 36
+jon: 29
+zed: missing
+remove cy: 1, again: 0
+size 9 in 8 buckets
+longest chain: 3
+::hints
+- `hash_string` must use unsigned arithmetic; cast each `char` to `unsigned char` before XOR-ing it.
+- `hm_slot`: start at `&m->buckets[hash % nbuckets]` and follow `&(*link)->next` until the key matches or the link is `NULL`.
+- Removing: `*link = e->next;` then free the key and the entry.
+
+--- exercise code c
+::prompt
+**Step 2: resizing and counting words.** Your step 1 table is included. Write:
+
+- `static int hm_grow(m)`: allocates twice as many buckets and **moves** each entry (no copying of keys) into its new bucket;
+- `hm_increment(m, key)`: adds 1 to the key's value (a new key starts at 0); before **adding** a new key, grows the table when `(size + 1) * 4 > nbuckets * 3` (load factor above 0.75);
+- `hm_each(m, fn, ctx)`: calls `fn(key, value, ctx)` for every entry.
+
+`main` (given) counts the words of the input in a table that starts with 4 buckets, collects the entries with `hm_each`, sorts them and prints the top 5 and the table's statistics.
+
+Expected output:
+
+```
+it     8
+of     8
+the    8
+was    8
+age    2
+48 words, 16 distinct, 32 buckets, longest chain 2
+```
+::stdin
+It was the best of times, it was the worst of times,
+it was the age of wisdom, it was the age of foolishness,
+it was the epoch of belief, it was the epoch of incredulity,
+it was the season of Light, it was the season of Darkness.
+::starter
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdint.h>
+#include <ctype.h>
+
+typedef struct Entry {
+    char *key;
+    int value;
+    struct Entry *next;
+} Entry;
+
+typedef struct {
+    Entry **buckets;
+    size_t nbuckets;
+    size_t size;
+} HashMap;
+
+/* FNV-1a: a simple, well-distributed string hash */
+uint32_t hash_string(const char *s) {
+    uint32_t h = 2166136261u;
+    for (; *s; s++) {
+        h ^= (unsigned char)*s;
+        h *= 16777619u;
+    }
+    return h;
+}
+
+int hm_init(HashMap *m, size_t nbuckets) {
+    m->buckets = calloc(nbuckets, sizeof *m->buckets);
+    if (m->buckets == NULL) return -1;
+    m->nbuckets = nbuckets;
+    m->size = 0;
+    return 0;
+}
+
+static Entry **hm_slot(const HashMap *m, const char *key) {
+    Entry **link = &m->buckets[hash_string(key) % m->nbuckets];
+    while (*link != NULL && strcmp((*link)->key, key) != 0) link = &(*link)->next;
+    return link;
+}
+
+int hm_put(HashMap *m, const char *key, int value) {
+    Entry **link = hm_slot(m, key);
+    if (*link != NULL) {
+        (*link)->value = value;
+        return 0;
+    }
+    Entry *e = malloc(sizeof *e);
+    if (e == NULL) return -1;
+    size_t len = strlen(key) + 1;
+    e->key = malloc(len);
+    if (e->key == NULL) {
+        free(e);
+        return -1;
+    }
+    memcpy(e->key, key, len);
+    e->value = value;
+    e->next = NULL;
+    *link = e;
+    m->size++;
+    return 1;
+}
+
+int hm_get(const HashMap *m, const char *key, int *value) {
+    Entry *e = *hm_slot(m, key);
+    if (e == NULL) return 0;
+    *value = e->value;
+    return 1;
+}
+
+int hm_remove(HashMap *m, const char *key) {
+    Entry **link = hm_slot(m, key);
+    Entry *e = *link;
+    if (e == NULL) return 0;
+    *link = e->next;
+    free(e->key);
+    free(e);
+    m->size--;
+    return 1;
+}
+
+void hm_free(HashMap *m) {
+    for (size_t i = 0; i < m->nbuckets; i++) {
+        Entry *e = m->buckets[i];
+        while (e != NULL) {
+            Entry *next = e->next;
+            free(e->key);
+            free(e);
+            e = next;
+        }
+    }
+    free(m->buckets);
+    m->buckets = NULL;
+    m->nbuckets = m->size = 0;
+}
+
+
+/* Adds 1 to key's value (starting from 0), growing the table when the load factor would pass 0.75. */
+int hm_increment(HashMap *m, const char *key) {
+    int value = 0;
+    hm_get(m, key, &value);
+    return hm_put(m, key, value + 1) < 0 ? -1 : 0;
+}
+
+/* Calls fn for every entry. */
+void hm_each(const HashMap *m, void (*fn)(const char *key, int value, void *ctx), void *ctx) {
+    /* call fn(key, value, ctx) for every entry */
+}
+
+typedef struct {
+    const char *key;
+    int value;
+} Pair;
+
+typedef struct {
+    Pair *items;
+    size_t len;
+} PairList;
+
+static void collect(const char *key, int value, void *ctx) {
+    PairList *list = ctx;
+    list->items[list->len++] = (Pair){key, value};
+}
+
+static int by_count_desc(const void *a, const void *b) {
+    const Pair *x = a, *y = b;
+    if (x->value != y->value) return (y->value > x->value) - (y->value < x->value);
+    return strcmp(x->key, y->key);
+}
+
+size_t longest_chain(const HashMap *m) {
+    size_t longest = 0;
+    for (size_t i = 0; i < m->nbuckets; i++) {
+        size_t len = 0;
+        for (Entry *e = m->buckets[i]; e != NULL; e = e->next) len++;
+        if (len > longest) longest = len;
+    }
+    return longest;
+}
+
+int main(void) {
+    HashMap words;
+    if (hm_init(&words, 4) != 0) return 1;
+    char line[256];
+    int total = 0;
+    while (fgets(line, sizeof line, stdin) != NULL) {
+        char word[64];
+        size_t len = 0;
+        for (const char *p = line;; p++) {
+            unsigned char c = (unsigned char)*p;
+            if (isalpha(c) || c == '\'') {
+                if (len < sizeof word - 1) word[len++] = (char)tolower(c);
+                continue;
+            }
+            if (len > 0) {
+                word[len] = '\0';
+                if (hm_increment(&words, word) != 0) {
+                    hm_free(&words);
+                    return 1;
+                }
+                total++;
+                len = 0;
+            }
+            if (c == '\0') break;
+        }
+    }
+    PairList list = {malloc((words.size ? words.size : 1) * sizeof(Pair)), 0};
+    if (list.items == NULL) {
+        hm_free(&words);
+        return 1;
+    }
+    hm_each(&words, collect, &list);
+    qsort(list.items, list.len, sizeof list.items[0], by_count_desc);
+    for (size_t i = 0; i < list.len && i < 5; i++) printf("%-6s %d\n", list.items[i].key, list.items[i].value);
+    printf("%d words, %zu distinct, %zu buckets, longest chain %zu\n", total, words.size, words.nbuckets, longest_chain(&words));
+    free(list.items);
+    hm_free(&words);
+    return 0;
+}
+::solution
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdint.h>
+#include <ctype.h>
+
+typedef struct Entry {
+    char *key;
+    int value;
+    struct Entry *next;
+} Entry;
+
+typedef struct {
+    Entry **buckets;
+    size_t nbuckets;
+    size_t size;
+} HashMap;
+
+/* FNV-1a: a simple, well-distributed string hash */
+uint32_t hash_string(const char *s) {
+    uint32_t h = 2166136261u;
+    for (; *s; s++) {
+        h ^= (unsigned char)*s;
+        h *= 16777619u;
+    }
+    return h;
+}
+
+int hm_init(HashMap *m, size_t nbuckets) {
+    m->buckets = calloc(nbuckets, sizeof *m->buckets);
+    if (m->buckets == NULL) return -1;
+    m->nbuckets = nbuckets;
+    m->size = 0;
+    return 0;
+}
+
+static Entry **hm_slot(const HashMap *m, const char *key) {
+    Entry **link = &m->buckets[hash_string(key) % m->nbuckets];
+    while (*link != NULL && strcmp((*link)->key, key) != 0) link = &(*link)->next;
+    return link;
+}
+
+int hm_put(HashMap *m, const char *key, int value) {
+    Entry **link = hm_slot(m, key);
+    if (*link != NULL) {
+        (*link)->value = value;
+        return 0;
+    }
+    Entry *e = malloc(sizeof *e);
+    if (e == NULL) return -1;
+    size_t len = strlen(key) + 1;
+    e->key = malloc(len);
+    if (e->key == NULL) {
+        free(e);
+        return -1;
+    }
+    memcpy(e->key, key, len);
+    e->value = value;
+    e->next = NULL;
+    *link = e;
+    m->size++;
+    return 1;
+}
+
+int hm_get(const HashMap *m, const char *key, int *value) {
+    Entry *e = *hm_slot(m, key);
+    if (e == NULL) return 0;
+    *value = e->value;
+    return 1;
+}
+
+int hm_remove(HashMap *m, const char *key) {
+    Entry **link = hm_slot(m, key);
+    Entry *e = *link;
+    if (e == NULL) return 0;
+    *link = e->next;
+    free(e->key);
+    free(e);
+    m->size--;
+    return 1;
+}
+
+void hm_free(HashMap *m) {
+    for (size_t i = 0; i < m->nbuckets; i++) {
+        Entry *e = m->buckets[i];
+        while (e != NULL) {
+            Entry *next = e->next;
+            free(e->key);
+            free(e);
+            e = next;
+        }
+    }
+    free(m->buckets);
+    m->buckets = NULL;
+    m->nbuckets = m->size = 0;
+}
+
+/* Doubles the number of buckets and moves every entry to its new bucket (no key is copied). */
+static int hm_grow(HashMap *m) {
+    size_t n = m->nbuckets * 2;
+    Entry **buckets = calloc(n, sizeof *buckets);
+    if (buckets == NULL) return -1;
+    for (size_t i = 0; i < m->nbuckets; i++) {
+        Entry *e = m->buckets[i];
+        while (e != NULL) {
+            Entry *next = e->next;
+            size_t b = hash_string(e->key) % n;
+            e->next = buckets[b];
+            buckets[b] = e;
+            e = next;
+        }
+    }
+    free(m->buckets);
+    m->buckets = buckets;
+    m->nbuckets = n;
+    return 0;
+}
+
+/* Adds 1 to key's value (starting from 0), growing the table when the load factor would pass 0.75. */
+int hm_increment(HashMap *m, const char *key) {
+    int value = 0;
+    if (!hm_get(m, key, &value) && (m->size + 1) * 4 > m->nbuckets * 3) {
+        if (hm_grow(m) != 0) return -1;
+    }
+    return hm_put(m, key, value + 1) < 0 ? -1 : 0;
+}
+
+/* Calls fn for every entry. */
+void hm_each(const HashMap *m, void (*fn)(const char *key, int value, void *ctx), void *ctx) {
+    for (size_t i = 0; i < m->nbuckets; i++) {
+        for (const Entry *e = m->buckets[i]; e != NULL; e = e->next) fn(e->key, e->value, ctx);
+    }
+}
+
+typedef struct {
+    const char *key;
+    int value;
+} Pair;
+
+typedef struct {
+    Pair *items;
+    size_t len;
+} PairList;
+
+static void collect(const char *key, int value, void *ctx) {
+    PairList *list = ctx;
+    list->items[list->len++] = (Pair){key, value};
+}
+
+static int by_count_desc(const void *a, const void *b) {
+    const Pair *x = a, *y = b;
+    if (x->value != y->value) return (y->value > x->value) - (y->value < x->value);
+    return strcmp(x->key, y->key);
+}
+
+size_t longest_chain(const HashMap *m) {
+    size_t longest = 0;
+    for (size_t i = 0; i < m->nbuckets; i++) {
+        size_t len = 0;
+        for (Entry *e = m->buckets[i]; e != NULL; e = e->next) len++;
+        if (len > longest) longest = len;
+    }
+    return longest;
+}
+
+int main(void) {
+    HashMap words;
+    if (hm_init(&words, 4) != 0) return 1;
+    char line[256];
+    int total = 0;
+    while (fgets(line, sizeof line, stdin) != NULL) {
+        char word[64];
+        size_t len = 0;
+        for (const char *p = line;; p++) {
+            unsigned char c = (unsigned char)*p;
+            if (isalpha(c) || c == '\'') {
+                if (len < sizeof word - 1) word[len++] = (char)tolower(c);
+                continue;
+            }
+            if (len > 0) {
+                word[len] = '\0';
+                if (hm_increment(&words, word) != 0) {
+                    hm_free(&words);
+                    return 1;
+                }
+                total++;
+                len = 0;
+            }
+            if (c == '\0') break;
+        }
+    }
+    PairList list = {malloc((words.size ? words.size : 1) * sizeof(Pair)), 0};
+    if (list.items == NULL) {
+        hm_free(&words);
+        return 1;
+    }
+    hm_each(&words, collect, &list);
+    qsort(list.items, list.len, sizeof list.items[0], by_count_desc);
+    for (size_t i = 0; i < list.len && i < 5; i++) printf("%-6s %d\n", list.items[i].key, list.items[i].value);
+    printf("%d words, %zu distinct, %zu buckets, longest chain %zu\n", total, words.size, words.nbuckets, longest_chain(&words));
+    free(list.items);
+    hm_free(&words);
+    return 0;
+}
+::expected
+it     8
+of     8
+the    8
+was    8
+age    2
+48 words, 16 distinct, 32 buckets, longest chain 2
+::cases
+>>> Go, go, GO! Stop.
+go     3
+stop   1
+4 words, 2 distinct, 4 buckets, longest chain 1
+::hints
+- In `hm_grow`, walk each old chain, saving `next` before you relink the entry at the head of its new bucket.
+- Grow only when the key is new: `if (!hm_get(m, key, &value) && (m->size + 1) * 4 > m->nbuckets * 3)`.
+- `hm_each` is two nested loops: over buckets, then down each chain.
+
+--- cards
+Hash table :: Array of buckets; key → hash % nbuckets; average O(1) operations.
+FNV-1a :: h = 2166136261; for each byte: h ^= byte; h *= 16777619 (uint32_t).
+Separate chaining :: Each bucket is a linked list of colliding entries.
+Load factor :: size / buckets; grow (double and rehash) above about 0.75.
+Callback + context :: void (*fn)(key, value, void *ctx) lets callers visit entries with their own state.
+
+=== lesson c-capstone-solo | Capstone 3: build it from a spec | 450
+The final capstone gives you a **specification** and a harness, and nothing else. You'll write an **expression calculator** with variables using **recursive descent**, the technique behind many real compilers and interpreters (and the subject of a chapter of *C: The Complete Reference*).
+
+## The specification
+
+The program reads lines from standard input. Blank lines are ignored. A line is either `let NAME = EXPRESSION` or an `EXPRESSION`:
+
+- an expression line prints `= <value>`; a `let` line stores the variable and prints `NAME = <value>` (values printed with `%g`);
+- numbers are decimals (`3`, `2.5`, `.5`); names start with a letter or `_` and contain letters, digits and `_` (at most 15 characters are kept);
+- operators, from lowest to highest priority: `+` and `-`; `*`, `/` and `%` (`fmod`); unary minus; `^` (power, **right-associative**: `2 ^ 3 ^ 2` is 512, and it binds tighter than unary minus: `-2 ^ 2` is -4);
+- parentheses, and two functions: `sqrt(x)` and `abs(x)`;
+- spaces and tabs may appear between any two tokens.
+
+**Errors** print `error: <message> at column <n>` (columns count from 1) and change nothing. Report only the **first** error of a line:
+
+| Situation | Message | Column of |
+|---|---|---|
+| unknown variable | `unknown variable 'x'` | the name |
+| unknown function | `unknown function 'f'` | the name |
+| division or `%` by zero | `division by zero` | the operator |
+| `sqrt` of a negative | `square root of a negative number` | `sqrt` |
+| missing `)` | `expected ')'` | where it was expected |
+| no operand where one is needed | `expected a number, a name or '('` | that position |
+| the line ends where an operand is needed | `unexpected end of input` | the end |
+| extra text after a complete expression | `unexpected 'c'` | that character |
+| `let` without a valid name | `expected a variable name` | the name position |
+| `let` with `sqrt`, `abs` or `let` as the name | `reserved name` | the name |
+| `let NAME` without `=` | `expected '='` | that position |
+
+The harness calls `int evaluate_line(const char *line, char *name_out, double *result, Parser *ps)` (0 on success; `name_out` is the variable name for a `let` line, otherwise empty) and `int set_var(const char *name, double value)`; on failure it prints `ps.message` and `ps.column`. Up to 32 variables.
+
+## How to approach it
+
+1. Turn the grammar into one function per level, each calling the next: `parse_expr` (+, -) → `parse_term` (*, /, %) → `parse_unary` (-, ^) → `parse_primary` (numbers, names, functions, parentheses). Loops handle left-associative operators; recursion handles `^` and unary minus.
+2. Keep the parser's state (`src`, current position `p`, the first error) in a struct passed by pointer.
+3. Record an error once, then let the functions return quickly; check `failed` at the end.
+4. Test the precedence cases first, then every error in the table.
+--- goals
+- turn a grammar into a recursive-descent parser
+- handle precedence and associativity with loops and recursion
+- report precise errors with positions, keeping only the first one
+- manage a symbol table of variables
+
+--- exercise code c
+::prompt
+Implement the calculator from the specification above. `main` (given) must print exactly the expected output for the input below; write everything else.
+
+Expected output:
+
+```
+= 7
+= 9
+= -4
+= 512
+r = 2.5
+area = 19.6349
+= 9.81747
+= 5
+= 9
+error: unknown variable 'bonus' at column 21
+error: division by zero at column 3
+error: expected ')' at column 7
+error: expected a number, a name or '(' at column 5
+error: unexpected '3' at column 3
+error: square root of a negative number at column 1
+error: expected a variable name at column 5
+error: unknown function 'foo' at column 1
+```
+::stdin
+1 + 2 * 3
+(1 + 2) * 3
+-2 ^ 2
+2 ^ 3 ^ 2
+let r = 2.5
+let area = 3.14159 * r ^ 2
+area / 2
+10 % 4 + abs(-3)
+sqrt(16) + sqrt(r * 10)
+
+let total = r * 4 + bonus
+7 / (r - 2.5)
+(1 + 2
+3 + * 4
+2 3
+sqrt(-1)
+let 9 = 3
+foo(2)
+::starter
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <ctype.h>
+#include <math.h>
+
+#define NAME_LEN 16
+
+/* Your code goes here: the variables table, the Parser type (with at least the
+   fields `message` and `column`), evaluate_line and set_var. */
+
+int main(void) {
+    char line[256];
+    while (fgets(line, sizeof line, stdin) != NULL) {
+        line[strcspn(line, "\r\n")] = '\0';
+        if (line[strspn(line, " \t")] == '\0') continue;
+        Parser ps;
+        char name[NAME_LEN];
+        double value;
+        if (evaluate_line(line, name, &value, &ps) != 0) {
+            printf("error: %s at column %d\n", ps.message, ps.column);
+        } else if (name[0] != '\0') {
+            if (set_var(name, value) != 0) printf("error: too many variables\n");
+            else printf("%s = %g\n", name, value);
+        } else {
+            printf("= %g\n", value);
+        }
+    }
+    return 0;
+}
+::solution
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <ctype.h>
+#include <math.h>
+
+#define MAX_VARS 32
+#define NAME_LEN 16
+
+typedef struct {
+    char name[NAME_LEN];
+    double value;
+} Var;
+
+static Var vars[MAX_VARS];
+static int nvars = 0;
+
+typedef struct {
+    const char *src; /* the whole line, to compute columns */
+    const char *p;   /* the current position */
+    int failed;
+    char message[80];
+    int column;
+} Parser;
+
+static double parse_expr(Parser *ps);
+
+static void fail(Parser *ps, const char *at, const char *message) {
+    if (ps->failed) return; /* keep the first error */
+    ps->failed = 1;
+    ps->column = (int)(at - ps->src) + 1;
+    snprintf(ps->message, sizeof ps->message, "%s", message);
+}
+
+static void skip_spaces(Parser *ps) {
+    while (*ps->p == ' ' || *ps->p == '\t') ps->p++;
+}
+
+static int read_name(Parser *ps, char *out) {
+    size_t len = 0;
+    while (isalnum((unsigned char)*ps->p) || *ps->p == '_') {
+        if (len < NAME_LEN - 1) out[len++] = *ps->p;
+        ps->p++;
+    }
+    out[len] = '\0';
+    return (int)len;
+}
+
+static Var *find_var(const char *name) {
+    for (int i = 0; i < nvars; i++) {
+        if (strcmp(vars[i].name, name) == 0) return &vars[i];
+    }
+    return NULL;
+}
+
+/* primary := NUMBER | NAME | FUNC '(' expr ')' | '(' expr ')' */
+static double parse_primary(Parser *ps) {
+    skip_spaces(ps);
+    const char *start = ps->p;
+    if (isdigit((unsigned char)*ps->p) || *ps->p == '.') {
+        char *end;
+        double v = strtod(ps->p, &end);
+        if (end == ps->p) {
+            fail(ps, start, "bad number");
+            return 0;
+        }
+        ps->p = end;
+        return v;
+    }
+    if (isalpha((unsigned char)*ps->p) || *ps->p == '_') {
+        char name[NAME_LEN];
+        read_name(ps, name);
+        skip_spaces(ps);
+        if (*ps->p == '(') {
+            int is_sqrt = strcmp(name, "sqrt") == 0, is_abs = strcmp(name, "abs") == 0;
+            if (!is_sqrt && !is_abs) {
+                char msg[64];
+                snprintf(msg, sizeof msg, "unknown function '%s'", name);
+                fail(ps, start, msg);
+                return 0;
+            }
+            ps->p++;
+            double arg = parse_expr(ps);
+            skip_spaces(ps);
+            if (*ps->p != ')') {
+                fail(ps, ps->p, "expected ')'");
+                return 0;
+            }
+            ps->p++;
+            if (is_sqrt && arg < 0) {
+                fail(ps, start, "square root of a negative number");
+                return 0;
+            }
+            return is_sqrt ? sqrt(arg) : fabs(arg);
+        }
+        Var *v = find_var(name);
+        if (v == NULL) {
+            char msg[64];
+            snprintf(msg, sizeof msg, "unknown variable '%s'", name);
+            fail(ps, start, msg);
+            return 0;
+        }
+        return v->value;
+    }
+    if (*ps->p == '(') {
+        ps->p++;
+        double v = parse_expr(ps);
+        skip_spaces(ps);
+        if (*ps->p != ')') {
+            fail(ps, ps->p, "expected ')'");
+            return 0;
+        }
+        ps->p++;
+        return v;
+    }
+    fail(ps, ps->p, *ps->p ? "expected a number, a name or '('" : "unexpected end of input");
+    return 0;
+}
+
+/* unary := '-' unary | primary ('^' unary)?      (^ is right-associative and binds tighter than unary minus) */
+static double parse_unary(Parser *ps) {
+    skip_spaces(ps);
+    if (*ps->p == '-') {
+        ps->p++;
+        return -parse_unary(ps);
+    }
+    double base = parse_primary(ps);
+    skip_spaces(ps);
+    if (*ps->p == '^') {
+        ps->p++;
+        return pow(base, parse_unary(ps));
+    }
+    return base;
+}
+
+/* term := unary (('*' | '/' | '%') unary)* */
+static double parse_term(Parser *ps) {
+    double v = parse_unary(ps);
+    for (;;) {
+        skip_spaces(ps);
+        char op = *ps->p;
+        if (op != '*' && op != '/' && op != '%') return v;
+        const char *at = ps->p++;
+        double rhs = parse_unary(ps);
+        if (op == '*') {
+            v *= rhs;
+        } else if (rhs == 0) {
+            fail(ps, at, "division by zero");
+            return 0;
+        } else {
+            v = op == '/' ? v / rhs : fmod(v, rhs);
+        }
+    }
+}
+
+/* expr := term (('+' | '-') term)* */
+static double parse_expr(Parser *ps) {
+    double v = parse_term(ps);
+    for (;;) {
+        skip_spaces(ps);
+        char op = *ps->p;
+        if (op != '+' && op != '-') return v;
+        ps->p++;
+        double rhs = parse_term(ps);
+        v = op == '+' ? v + rhs : v - rhs;
+    }
+}
+
+/* Evaluates a whole line: "let NAME = EXPR" or "EXPR". Returns 0 on success. */
+int evaluate_line(const char *line, char *name_out, double *result, Parser *ps) {
+    ps->src = ps->p = line;
+    ps->failed = 0;
+    name_out[0] = '\0';
+    skip_spaces(ps);
+    if (strncmp(ps->p, "let", 3) == 0 && ps->p[3] == ' ') {
+        ps->p += 3;
+        skip_spaces(ps);
+        const char *start = ps->p;
+        if (!isalpha((unsigned char)*ps->p) || read_name(ps, name_out) == 0) {
+            fail(ps, start, "expected a variable name");
+            return -1;
+        }
+        if (strcmp(name_out, "sqrt") == 0 || strcmp(name_out, "abs") == 0 || strcmp(name_out, "let") == 0) {
+            fail(ps, start, "reserved name");
+            return -1;
+        }
+        skip_spaces(ps);
+        if (*ps->p != '=') {
+            fail(ps, ps->p, "expected '='");
+            return -1;
+        }
+        ps->p++;
+    }
+    *result = parse_expr(ps);
+    skip_spaces(ps);
+    if (!ps->failed && *ps->p != '\0') {
+        char msg[32];
+        snprintf(msg, sizeof msg, "unexpected '%c'", *ps->p);
+        fail(ps, ps->p, msg);
+    }
+    return ps->failed ? -1 : 0;
+}
+
+int set_var(const char *name, double value) {
+    Var *v = find_var(name);
+    if (v == NULL) {
+        if (nvars == MAX_VARS) return -1;
+        v = &vars[nvars++];
+        snprintf(v->name, sizeof v->name, "%s", name);
+    }
+    v->value = value;
+    return 0;
+}
+
+int main(void) {
+    char line[256];
+    while (fgets(line, sizeof line, stdin) != NULL) {
+        line[strcspn(line, "\r\n")] = '\0';
+        if (line[strspn(line, " \t")] == '\0') continue;
+        Parser ps;
+        char name[NAME_LEN];
+        double value;
+        if (evaluate_line(line, name, &value, &ps) != 0) {
+            printf("error: %s at column %d\n", ps.message, ps.column);
+        } else if (name[0] != '\0') {
+            if (set_var(name, value) != 0) printf("error: too many variables\n");
+            else printf("%s = %g\n", name, value);
+        } else {
+            printf("= %g\n", value);
+        }
+    }
+    return 0;
+}
+::expected
+= 7
+= 9
+= -4
+= 512
+r = 2.5
+area = 19.6349
+= 9.81747
+= 5
+= 9
+error: unknown variable 'bonus' at column 21
+error: division by zero at column 3
+error: expected ')' at column 7
+error: expected a number, a name or '(' at column 5
+error: unexpected '3' at column 3
+error: square root of a negative number at column 1
+error: expected a variable name at column 5
+error: unknown function 'foo' at column 1
+::cases
+>>> let x = 4
+>>> x ^ 0.5 * -x
+>>> let x = x + 1
+>>> (x
+x = 4
+= -8
+x = 5
+error: expected ')' at column 3
+::hints
+- `strtod(ps->p, &end)` reads a number and tells you where it ended.
+- For `^`: parse a primary, then if the next character is `^`, return `pow(base, parse_unary(ps))`; the recursion makes it right-associative.
+- Compute a column as `(int)(position - ps->src) + 1`.
+
+--- cards
+Recursive descent :: One function per grammar level; each calls the next-higher-priority level.
+Left-associative :: A loop: v = v op next().
+Right-associative :: Recursion: base ^ parse_unary().
+Error position :: Keep a pointer to the start of the line; column = pointer difference + 1.
+First error wins :: Record once, return early, check at the end.
+
+=== lesson c-whats-next | What's next after C | 50
+## You've learned C
+
+You can now write C programs that compile without warnings, choose integer types deliberately, work with arrays, strings and pointers (including pointer arithmetic and function pointers), manage heap memory without leaks, design structs, unions and linked data structures, read and write files, split programs into modules with headers, use the standard library, and avoid undefined behaviour. That's the foundation of systems programming.
+
+## Where to go from here
+
+- **Systems programming**: the POSIX API (processes with `fork`/`exec`, signals, pipes, sockets, threads with `pthreads`); *The Linux Programming Interface* (Michael Kerrisk) and *Advanced Programming in the UNIX Environment* (Stevens) are the references. Write a small shell or an HTTP server.
+- **Embedded systems**: microcontrollers (Arduino, STM32, ESP32, Raspberry Pi Pico) are programmed in C: registers, interrupts, bit manipulation and tight memory.
+- **Operating systems and compilers**: the Linux kernel, xv6 (a small teaching OS), and *Crafting Interpreters* (Robert Nystrom), whose second half builds a bytecode virtual machine in C.
+- **Deepen your C**: *The C Programming Language* (Kernighan & Ritchie) remains the classic; *Modern C* (Jens Gustedt) covers C17 and C23; *Effective C* (Robert Seacord) focuses on safety. Read the SQLite or Redis source code.
+- **Other languages**: DevQuest teaches one language at a time. Next in the order is **C++**: it keeps C's control over memory and adds classes, templates, RAII (automatic clean-up) and a large standard library. Everything you learned here applies there.
+
+## Keep your skills alive
+
+- Always build with `-Wall -Wextra -Werror` and test with `-fsanitize=address,undefined`.
+- Use a debugger (gdb, lldb or VS Code) instead of guessing.
+- Practise on Exercism's C track, Advent of Code, or the DSA track in DevQuest.
+
+📚 **Go deeper:** Brian Kernighan and Dennis Ritchie, *The C Programming Language*; Jens Gustedt, *Modern C*; Robert Seacord, *Effective C*; Michael Kerrisk, *The Linux Programming Interface*.
+--- goals
+- review what the C course covered
+- choose next steps: systems programming, embedded, operating systems or deeper C
+- keep C skills sharp with warnings, sanitizers and practice
+--- quiz
+? Which API do Linux programs use to create processes?
++ POSIX: fork and exec
+- The C standard library's process.h
+- Win32 only
+- There isn't one
+> POSIX extends C with system interfaces.
+? Which compile flags should every C project use during development?
++ -Wall -Wextra and -fsanitize=address,undefined
+- -O3 only
+- -w (no warnings)
+- -std=c89
+> Warnings and sanitizers catch most bugs early.
+? What does C++ add that changes memory management most?
++ RAII: objects that free their resources automatically when they go out of scope
+- A garbage collector
+- Nothing
+- Pointer arithmetic
+> Destructors run at the end of a scope.
+--- cards
+C in one line :: A small, compiled language with direct memory access and no runtime safety nets: the language of systems.
+Next steps :: POSIX systems programming, embedded, OS and interpreter projects, Modern C; then C++ in DevQuest.

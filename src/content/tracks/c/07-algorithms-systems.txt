@@ -1,0 +1,937 @@
+=== module Module 7 · Algorithms and systems
+
+=== lesson c-algorithms | Sorting and searching algorithms | 80
+## Why write them yourself?
+
+`qsort` and `bsearch` cover everyday needs, but knowing how the classic algorithms work, and how fast they are, is part of being a professional programmer: it guides your choice of data structures, and it's a staple of interviews. C is the ideal language to see them clearly, because nothing is hidden.
+
+## Measuring cost: big O
+
+**Big O** describes how the work grows with the input size n:
+
+| Complexity | Example | 1,000 items | 1,000,000 items |
+|---|---|---|---|
+| O(1) | array indexing, hash lookup | 1 | 1 |
+| O(log n) | binary search | ~10 | ~20 |
+| O(n) | linear search, summing | 1,000 | 1,000,000 |
+| O(n log n) | merge sort, quicksort | ~10,000 | ~20,000,000 |
+| O(n²) | insertion sort, comparing all pairs | 1,000,000 | 10¹² (hours) |
+
+## Binary search
+
+On a **sorted** array, compare with the middle element and discard half of the range each time:
+
+```c
+#include <stdio.h>
+
+// returns the index of target, or -1
+int binary_search(const int *a, int n, int target) {
+    int lo = 0, hi = n - 1;
+    while (lo <= hi) {
+        int mid = lo + (hi - lo) / 2;   // not (lo + hi) / 2, which can overflow
+        if (a[mid] == target) return mid;
+        if (a[mid] < target) lo = mid + 1;
+        else hi = mid - 1;
+    }
+    return -1;
+}
+
+int main(void) {
+    int a[] = {2, 5, 8, 12, 16, 23, 38, 56, 72, 91};
+    printf("%d %d %d\n", binary_search(a, 10, 23), binary_search(a, 10, 2), binary_search(a, 10, 7));
+    return 0;
+}
+```
+
+## Merge sort: divide and conquer
+
+Split the array in two, sort each half recursively, then **merge** the two sorted halves. Always O(n log n), and **stable** (equal elements keep their order), but it needs a temporary buffer:
+
+```c
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+static void merge_sort_rec(int *a, int *tmp, size_t lo, size_t hi) { // sorts a[lo, hi)
+    if (hi - lo < 2) return;
+    size_t mid = lo + (hi - lo) / 2;
+    merge_sort_rec(a, tmp, lo, mid);
+    merge_sort_rec(a, tmp, mid, hi);
+    size_t i = lo, j = mid, k = lo;
+    while (i < mid && j < hi) tmp[k++] = a[i] <= a[j] ? a[i++] : a[j++];
+    while (i < mid) tmp[k++] = a[i++];
+    while (j < hi) tmp[k++] = a[j++];
+    memcpy(a + lo, tmp + lo, (hi - lo) * sizeof *a);
+}
+
+int merge_sort(int *a, size_t n) {
+    int *tmp = malloc(n * sizeof *tmp);
+    if (tmp == NULL) return -1;
+    merge_sort_rec(a, tmp, 0, n);
+    free(tmp);
+    return 0;
+}
+
+int main(void) {
+    int a[] = {38, 27, 43, 3, 9, 82, 10, 3};
+    merge_sort(a, 8);
+    for (int i = 0; i < 8; i++) printf("%d ", a[i]);
+    printf("\n");
+    return 0;
+}
+```
+
+## Quicksort
+
+Pick a **pivot**, move smaller elements before it and larger ones after (**partition**), then sort both sides recursively. On average O(n log n) and very fast in practice, in place, but O(n²) on unlucky inputs (for example an already sorted array with the first element as pivot), which is why real implementations pick pivots carefully. `qsort` is usually a tuned quicksort or introsort.
+
+```c
+#include <stdio.h>
+
+static void swap(int *x, int *y) {
+    int t = *x;
+    *x = *y;
+    *y = t;
+}
+
+// Lomuto partition with the middle element as pivot
+static void quicksort(int *a, int lo, int hi) {   // sorts a[lo..hi]
+    if (lo >= hi) return;
+    swap(&a[lo + (hi - lo) / 2], &a[hi]);
+    int pivot = a[hi], store = lo;
+    for (int i = lo; i < hi; i++) {
+        if (a[i] < pivot) swap(&a[i], &a[store++]);
+    }
+    swap(&a[store], &a[hi]);
+    quicksort(a, lo, store - 1);
+    quicksort(a, store + 1, hi);
+}
+
+int main(void) {
+    int a[] = {9, -3, 5, 2, 6, 8, -6, 1, 3};
+    quicksort(a, 0, 8);
+    for (int i = 0; i < 9; i++) printf("%d ", a[i]);
+    printf("\n");
+    return 0;
+}
+```
+
+~~~check
+? Why compute the middle as `lo + (hi - lo) / 2`?
++ (lo + hi) can overflow an int for very large arrays
+- It's faster
+- It rounds differently
+- It's required by C
+> A real bug found in Java's binary search in 2006.
+~~~
+
+📚 **Go deeper:** *C: The Complete Reference*, chapter 21 (Sorting and Searching); Robert Sedgewick, *Algorithms in C*; Jon Bentley, *Programming Pearls*, column 4 (binary search).
+--- goals
+- describe algorithm cost with big O
+- implement binary search without overflow bugs
+- implement merge sort and quicksort, and compare them
+- explain stability and worst cases of sorting algorithms
+--- quiz
+? How many comparisons does binary search need for a million sorted items, at most?
++ About 20
+- About 1,000
+- About 500,000
+- 1,000,000
+> log2(1,000,000) ≈ 20.
+? Which sort is always O(n log n) and stable, but needs extra memory?
++ Merge sort
+- Quicksort
+- Insertion sort
+- Bubble sort
+> Quicksort is in place but not stable.
+? When does a naive quicksort take O(n²)?
++ When the pivots split the array very unevenly, e.g. sorted input with the first element as pivot
+- Always
+- Never
+- When the array has negative numbers
+> Choose pivots carefully.
+--- exercise code c
+::prompt
+Implement **counting operations** to see complexity in practice. Write `insertion_sort` and `merge_sort` for an int array that both increment a global `comparisons` counter every time they compare two elements, and `binary_search` and `linear_search` that count comparisons the same way. `main` (given) sorts copies of the same 64 pseudo-random numbers and searches for one of them:
+
+```
+insertion sort: 1014 comparisons
+merge sort: 305 comparisons
+sorted the same: 1
+linear search: found at 62 after 63 comparisons
+binary search: found at 63 after 7 comparisons
+```
+
+Count one comparison per element comparison: in insertion sort, each `a[j - 1] > key` test; in merge sort, each comparison in the merge loop; in the searches, each comparison with the target (binary search compares for equality and then for order: count that as **one**). The largest value happens to appear twice: linear search returns the **first** copy, and binary search must return the **last** one (keep searching to the right after a match).
+::starter
+#include <stdio.h>
+#include <string.h>
+
+static long comparisons = 0;
+
+void insertion_sort(int *a, int n) {}
+
+void merge_sort(int *a, int *tmp, int lo, int hi) {}
+
+int linear_search(const int *a, int n, int target) { return -1; }
+
+int binary_search(const int *a, int n, int target) { return -1; }
+
+int main(void) {
+    int data[64], x[64], y[64], tmp[64];
+    unsigned state = 12345;
+    for (int i = 0; i < 64; i++) {
+        state = state * 1103515245u + 12345u;
+        data[i] = (int)((state >> 16) % 1000);
+    }
+    memcpy(x, data, sizeof data);
+    memcpy(y, data, sizeof data);
+    comparisons = 0;
+    insertion_sort(x, 64);
+    printf("insertion sort: %ld comparisons\n", comparisons);
+    comparisons = 0;
+    merge_sort(y, tmp, 0, 64);
+    printf("merge sort: %ld comparisons\n", comparisons);
+    printf("sorted the same: %d\n", memcmp(x, y, sizeof x) == 0);
+    int target = x[63];
+    comparisons = 0;
+    int at = linear_search(x, 64, target);
+    printf("linear search: found at %d after %ld comparisons\n", at, comparisons);
+    comparisons = 0;
+    at = binary_search(x, 64, target);
+    printf("binary search: found at %d after %ld comparisons\n", at, comparisons);
+    return 0;
+}
+::solution
+#include <stdio.h>
+#include <string.h>
+
+static long comparisons = 0;
+
+void insertion_sort(int *a, int n) {
+    for (int i = 1; i < n; i++) {
+        int key = a[i];
+        int j = i;
+        while (j > 0) {
+            comparisons++;
+            if (a[j - 1] <= key) break;
+            a[j] = a[j - 1];
+            j--;
+        }
+        a[j] = key;
+    }
+}
+
+void merge_sort(int *a, int *tmp, int lo, int hi) {
+    if (hi - lo < 2) return;
+    int mid = lo + (hi - lo) / 2;
+    merge_sort(a, tmp, lo, mid);
+    merge_sort(a, tmp, mid, hi);
+    int i = lo, j = mid, k = lo;
+    while (i < mid && j < hi) {
+        comparisons++;
+        tmp[k++] = a[i] <= a[j] ? a[i++] : a[j++];
+    }
+    while (i < mid) tmp[k++] = a[i++];
+    while (j < hi) tmp[k++] = a[j++];
+    memcpy(a + lo, tmp + lo, (size_t)(hi - lo) * sizeof *a);
+}
+
+int linear_search(const int *a, int n, int target) {
+    for (int i = 0; i < n; i++) {
+        comparisons++;
+        if (a[i] == target) return i;
+    }
+    return -1;
+}
+
+int binary_search(const int *a, int n, int target) {
+    int lo = 0, hi = n - 1, found = -1;
+    while (lo <= hi) {
+        int mid = lo + (hi - lo) / 2;
+        comparisons++;
+        if (a[mid] == target) {
+            found = mid;
+            lo = mid + 1; // keep looking right, to find the last equal element
+        } else if (a[mid] < target) {
+            lo = mid + 1;
+        } else {
+            hi = mid - 1;
+        }
+    }
+    return found;
+}
+
+int main(void) {
+    int data[64], x[64], y[64], tmp[64];
+    unsigned state = 12345;
+    for (int i = 0; i < 64; i++) {
+        state = state * 1103515245u + 12345u;
+        data[i] = (int)((state >> 16) % 1000);
+    }
+    memcpy(x, data, sizeof data);
+    memcpy(y, data, sizeof data);
+    comparisons = 0;
+    insertion_sort(x, 64);
+    printf("insertion sort: %ld comparisons\n", comparisons);
+    comparisons = 0;
+    merge_sort(y, tmp, 0, 64);
+    printf("merge sort: %ld comparisons\n", comparisons);
+    printf("sorted the same: %d\n", memcmp(x, y, sizeof x) == 0);
+    int target = x[63];
+    comparisons = 0;
+    int at = linear_search(x, 64, target);
+    printf("linear search: found at %d after %ld comparisons\n", at, comparisons);
+    comparisons = 0;
+    at = binary_search(x, 64, target);
+    printf("binary search: found at %d after %ld comparisons\n", at, comparisons);
+    return 0;
+}
+::expected
+insertion sort: 1014 comparisons
+merge sort: 305 comparisons
+sorted the same: 1
+linear search: found at 62 after 63 comparisons
+binary search: found at 63 after 7 comparisons
+::hints
+- Insertion sort: count before each `a[j - 1] > key` test, including the one that stops the inner loop.
+- Merge sort: count once per iteration of the merge loop where both halves still have elements.
+- Binary search: when you find the target, keep searching to the right, so a repeated value returns its **last** position, and stop only when the range is empty.
+--- cards
+Big O :: How work grows with n: O(1) < O(log n) < O(n) < O(n log n) < O(n²).
+Binary search :: Halve a sorted range; mid = lo + (hi - lo) / 2.
+Merge sort :: Divide, sort halves, merge: O(n log n), stable, needs a buffer.
+Quicksort :: Partition around a pivot: fast on average, in place, O(n²) worst case.
+Insertion sort :: O(n²), but fast for small or nearly sorted arrays.
+
+=== lesson c-bits-bytes | Bits, bytes and binary formats | 70
+## How integers are stored
+
+Integers are stored in **two's complement**: the highest bit has a negative weight, so for 8 bits `11111111` is -1 and `10000000` is -128. Larger integers take several bytes, and processors disagree on their **order**:
+
+- **little-endian** (x86, ARM in practice): the least significant byte first;
+- **big-endian** ("network byte order"): the most significant byte first, as in most file formats and network protocols.
+
+```c
+#include <stdio.h>
+#include <stdint.h>
+#include <string.h>
+
+int main(void) {
+    uint32_t value = 0x11223344;
+    unsigned char bytes[4];
+    memcpy(bytes, &value, sizeof value);         // look at the bytes as stored in memory
+    printf("in memory: %02x %02x %02x %02x -> %s-endian\n", bytes[0], bytes[1], bytes[2], bytes[3],
+           bytes[0] == 0x44 ? "little" : "big");
+
+    int8_t minus_one = -1;
+    printf("-1 as a byte: 0x%02x, -128 as a byte: 0x%02x\n", (uint8_t)minus_one, (uint8_t)INT8_MIN);
+    return 0;
+}
+```
+
+## Portable serialisation
+
+Writing a struct with `fwrite` copies its in-memory layout (padding, endianness), which differs between machines. Portable formats write each field **byte by byte in a defined order**, with shifts, and read it back the same way:
+
+```c
+#include <stdio.h>
+#include <stdint.h>
+
+void put_u32_be(unsigned char *out, uint32_t v) {   // big-endian, whatever the CPU
+    out[0] = (unsigned char)(v >> 24);
+    out[1] = (unsigned char)(v >> 16);
+    out[2] = (unsigned char)(v >> 8);
+    out[3] = (unsigned char)v;
+}
+
+uint32_t get_u32_be(const unsigned char *in) {
+    return (uint32_t)in[0] << 24 | (uint32_t)in[1] << 16 | (uint32_t)in[2] << 8 | in[3];
+}
+
+int main(void) {
+    unsigned char buf[4];
+    put_u32_be(buf, 3000000000u);
+    printf("%02X %02X %02X %02X -> %u\n", buf[0], buf[1], buf[2], buf[3], get_u32_be(buf));
+    return 0;
+}
+```
+
+The `(uint32_t)` casts matter: `in[0] << 24` would shift an `int`, and shifting into its sign bit is undefined.
+
+## Bit tricks worth knowing
+
+```c
+#include <stdio.h>
+#include <stdint.h>
+
+int popcount(uint32_t x) {            // number of 1 bits
+    int n = 0;
+    while (x) {
+        x &= x - 1;                   // clears the lowest set bit
+        n++;
+    }
+    return n;
+}
+
+int is_power_of_two(uint32_t x) { return x != 0 && (x & (x - 1)) == 0; }
+
+uint32_t round_up_pow2(uint32_t x) {  // smallest power of two >= x (for x >= 1)
+    x--;
+    x |= x >> 1;
+    x |= x >> 2;
+    x |= x >> 4;
+    x |= x >> 8;
+    x |= x >> 16;
+    return x + 1;
+}
+
+int main(void) {
+    printf("%d %d %d\n", popcount(0xF0F0), is_power_of_two(64), is_power_of_two(96));
+    printf("%u %u\n", round_up_pow2(100), round_up_pow2(1024));
+    uint8_t flags = 0;
+    flags |= 1u << 3;                 // set bit 3
+    printf("bit 3 set: %d, flags = 0x%02x\n", (flags >> 3) & 1, flags);
+    return 0;
+}
+```
+
+Compilers also offer built-ins (`__builtin_popcount` in GCC and Clang; C23 adds `<stdbit.h>` with `stdc_count_ones`).
+
+~~~check
+? On a little-endian machine, which byte of 0x11223344 is stored first?
++ 0x44
+- 0x11
+- 0x22
+- It depends on the compiler
+> Least significant byte first.
+~~~
+
+📚 **Go deeper:** Sean Eron Anderson, "Bit Twiddling Hacks"; Rob Pike, "The byte order fallacy"; Henry S. Warren, *Hacker's Delight*.
+--- goals
+- explain two's complement and endianness
+- inspect the bytes of a value with memcpy and unsigned char
+- serialise integers portably with shifts in a defined byte order
+- use classic bit tricks: popcount, power-of-two tests, setting and testing bits
+--- quiz
+? What is the 8-bit two's-complement pattern of -1?
++ 11111111
+- 10000001
+- 00000001
+- 11111110
+> All ones.
+? Why not fwrite a struct to a file meant for other computers?
++ Padding, type sizes and byte order can differ between machines
+- fwrite can't write structs
+- It's too slow
+- Files can't hold binary data
+> Write each field in a defined byte order.
+? What does `x & (x - 1)` do?
++ Clears the lowest set bit of x
+- Doubles x
+- Sets all bits
+- Reverses the bits
+> It's 0 exactly when x is a power of two (or 0).
+--- exercise code c
+::prompt
+Define a tiny **binary record format** for sensor readings, portable across machines: each record is 9 bytes, big-endian:
+
+| bytes | field |
+|---|---|
+| 0–1 | sensor id (`uint16_t`) |
+| 2–5 | timestamp in seconds (`uint32_t`) |
+| 6–7 | temperature in hundredths of a degree (`int16_t`, can be negative: store its two's-complement bits) |
+| 8 | checksum: XOR of bytes 0–7 |
+
+Write `void encode(const Reading *r, unsigned char out[9])` and `int decode(const unsigned char in[9], Reading *r)` (returns -1 if the checksum is wrong). `main` (given) encodes three readings, prints the bytes in hex, decodes them, and corrupts one byte to test the checksum:
+
+```
+00 07 69 B5 F1 00 09 0B 28 -> sensor 7 at 1773531392: 23.15 C
+01 2C 69 B5 F1 3C FC 18 D8 -> sensor 300 at 1773531452: -10.00 C
+FF FF 00 00 00 00 7F FF 80 -> sensor 65535 at 0: 327.67 C
+corrupted: checksum error
+```
+::starter
+#include <stdio.h>
+#include <stdint.h>
+
+typedef struct {
+    uint16_t sensor;
+    uint32_t time;
+    int16_t centi_celsius;
+} Reading;
+
+void encode(const Reading *r, unsigned char out[9]) {}
+
+int decode(const unsigned char in[9], Reading *r) { return -1; }
+
+int main(void) {
+    Reading readings[] = {{7, 1773531392u, 2315}, {300, 1773531452u, -1000}, {65535, 0, 32767}};
+    unsigned char buf[9];
+    for (int i = 0; i < 3; i++) {
+        encode(&readings[i], buf);
+        for (int b = 0; b < 9; b++) printf("%02X ", buf[b]);
+        Reading back;
+        if (decode(buf, &back) == 0) {
+            printf("-> sensor %u at %u: %.2f C\n", (unsigned)back.sensor, (unsigned)back.time, back.centi_celsius / 100.0);
+        }
+    }
+    buf[3] ^= 0x10;
+    Reading bad;
+    printf("corrupted: %s\n", decode(buf, &bad) == 0 ? "accepted?!" : "checksum error");
+    return 0;
+}
+::solution
+#include <stdio.h>
+#include <stdint.h>
+
+typedef struct {
+    uint16_t sensor;
+    uint32_t time;
+    int16_t centi_celsius;
+} Reading;
+
+void encode(const Reading *r, unsigned char out[9]) {
+    uint16_t t = (uint16_t)r->centi_celsius; // two's-complement bits of the signed value
+    out[0] = (unsigned char)(r->sensor >> 8);
+    out[1] = (unsigned char)r->sensor;
+    out[2] = (unsigned char)(r->time >> 24);
+    out[3] = (unsigned char)(r->time >> 16);
+    out[4] = (unsigned char)(r->time >> 8);
+    out[5] = (unsigned char)r->time;
+    out[6] = (unsigned char)(t >> 8);
+    out[7] = (unsigned char)t;
+    unsigned char sum = 0;
+    for (int i = 0; i < 8; i++) sum ^= out[i];
+    out[8] = sum;
+}
+
+int decode(const unsigned char in[9], Reading *r) {
+    unsigned char sum = 0;
+    for (int i = 0; i < 8; i++) sum ^= in[i];
+    if (sum != in[8]) return -1;
+    r->sensor = (uint16_t)((unsigned)in[0] << 8 | in[1]);
+    r->time = (uint32_t)in[2] << 24 | (uint32_t)in[3] << 16 | (uint32_t)in[4] << 8 | in[5];
+    r->centi_celsius = (int16_t)((unsigned)in[6] << 8 | in[7]);
+    return 0;
+}
+
+int main(void) {
+    Reading readings[] = {{7, 1773531392u, 2315}, {300, 1773531452u, -1000}, {65535, 0, 32767}};
+    unsigned char buf[9];
+    for (int i = 0; i < 3; i++) {
+        encode(&readings[i], buf);
+        for (int b = 0; b < 9; b++) printf("%02X ", buf[b]);
+        Reading back;
+        if (decode(buf, &back) == 0) {
+            printf("-> sensor %u at %u: %.2f C\n", (unsigned)back.sensor, (unsigned)back.time, back.centi_celsius / 100.0);
+        }
+    }
+    buf[3] ^= 0x10;
+    Reading bad;
+    printf("corrupted: %s\n", decode(buf, &bad) == 0 ? "accepted?!" : "checksum error");
+    return 0;
+}
+::expected
+00 07 69 B5 F1 00 09 0B 28 -> sensor 7 at 1773531392: 23.15 C
+01 2C 69 B5 F1 3C FC 18 D8 -> sensor 300 at 1773531452: -10.00 C
+FF FF 00 00 00 00 7F FF 80 -> sensor 65535 at 0: 327.67 C
+corrupted: checksum error
+::hints
+- Write each byte with a shift and a cast: `out[2] = (unsigned char)(r->time >> 24);`.
+- For the signed temperature, convert to `uint16_t` first; converting back with `(int16_t)` restores negative values.
+- Reading: shift **unsigned** values (`(uint32_t)in[2] << 24`) to avoid shifting into an int's sign bit.
+--- cards
+Two's complement :: Negative numbers: invert the bits and add 1; -1 is all ones.
+Endianness :: Little-endian stores the least significant byte first; network order is big-endian.
+Portable serialisation :: Write fields byte by byte with shifts, in a documented order.
+Bit tricks :: x & (x - 1) clears the lowest set bit; power of two ⇔ x && !(x & (x - 1)).
+Checksum :: A cheap check (XOR, CRC) that detects corrupted data.
+
+=== lesson c-command-line | Command-line programs | 60
+## argc and argv
+
+Command-line tools receive their arguments through `main`'s parameters: **`argc`** counts them and **`argv`** is an array of strings, with `argv[0]` the program's name and `argv[argc]` a `NULL` pointer:
+
+```
+$ ./grep -i -n pattern notes.txt
+argc = 5
+argv[0] = "./grep", argv[1] = "-i", argv[2] = "-n", argv[3] = "pattern", argv[4] = "notes.txt"
+```
+
+DevQuest runs programs without arguments, so the examples here pass their own `argv`-style array to a function that does the work, which is good design anyway: `main` stays tiny and the logic is testable.
+
+```c
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+
+typedef struct {
+    int ignore_case;
+    int line_numbers;
+    int count_only;
+    const char *pattern;
+    const char *file;
+} Options;
+
+/* Parses options like -i -n -c (also combined: -in); returns 0, or 2 on a usage error. */
+int parse_args(int argc, char *argv[], Options *opt) {
+    memset(opt, 0, sizeof *opt);
+    int i = 1;
+    for (; i < argc && argv[i][0] == '-' && argv[i][1] != '\0'; i++) {
+        if (strcmp(argv[i], "--") == 0) {        // "--" ends the options
+            i++;
+            break;
+        }
+        for (const char *f = argv[i] + 1; *f; f++) {
+            switch (*f) {
+            case 'i': opt->ignore_case = 1; break;
+            case 'n': opt->line_numbers = 1; break;
+            case 'c': opt->count_only = 1; break;
+            default:
+                fprintf(stderr, "%s: unknown option -%c\n", argv[0], *f);
+                return 2;
+            }
+        }
+    }
+    if (argc - i != 2) {
+        printf("usage: %s [-icn] PATTERN FILE\n", argv[0]);
+        return 2;
+    }
+    opt->pattern = argv[i];
+    opt->file = argv[i + 1];
+    return 0;
+}
+
+int main(void) {
+    char *args[] = {"grep", "-in", "error", "app.log", NULL};
+    Options opt;
+    if (parse_args(4, args, &opt) == 0) {
+        printf("pattern=%s file=%s ignore_case=%d line_numbers=%d count=%d\n",
+               opt.pattern, opt.file, opt.ignore_case, opt.line_numbers, opt.count_only);
+    }
+    char *bad[] = {"grep", "error", NULL};
+    return parse_args(2, bad, &opt) == 2 ? EXIT_SUCCESS : EXIT_FAILURE;
+}
+```
+
+On POSIX systems, **`getopt`** (`<unistd.h>`) parses options in the standard way; it isn't part of standard C, so portable programs either write their own parser or use a small library.
+
+## Conventions of well-behaved tools
+
+- Read from **standard input** when no file is given, and write results to **standard output**, so the tool works in pipelines (`cat log | mytool | sort`).
+- Write errors and diagnostics to **standard error**.
+- **Exit status**: 0 for success, 1 for "ran fine but found nothing" or a failure, 2 for usage errors (as `grep` does). Scripts rely on it.
+- `-h`/`--help` prints usage; unknown options are errors.
+- Environment variables (`getenv("HOME")`, `getenv("NO_COLOR")`) carry configuration; `getenv` returns `NULL` when the variable isn't set.
+
+```c
+#include <stdio.h>
+#include <stdlib.h>
+
+int main(void) {
+    const char *home = getenv("DEVQUEST_DOES_NOT_EXIST");
+    printf("variable is %s\n", home ? home : "(not set)");
+    const char *path = getenv("PATH");
+    printf("PATH is %s\n", path && *path ? "set" : "not set");
+    return 0;
+}
+```
+
+~~~check
+? What does argv[0] contain?
++ The program's name (as it was invoked)
+- The first user argument
+- The number of arguments
+- NULL
+> User arguments start at argv[1].
+~~~
+
+📚 **Go deeper:** the POSIX "Utility Conventions"; the getopt manual page; Eric S. Raymond, *The Art of Unix Programming*, chapter 10 ("Command-Line Options").
+--- goals
+- read command-line arguments through argc and argv
+- parse short options, combined flags and "--"
+- follow the conventions of well-behaved tools: stdin/stdout/stderr, exit codes, help
+- read configuration from environment variables with getenv
+--- quiz
+? For `./tool -v file.txt`, what is argc?
++ 3
+- 2
+- 1
+- 4
+> Program name plus two arguments.
+? Where should a command-line tool print its error messages?
++ To standard error
+- To standard output
+- To a log file only
+- Nowhere
+> So they don't mix with the real output in a pipeline.
+? What does getenv return for a variable that isn't set?
++ NULL
+- An empty string
+- "0"
+- It crashes
+> Check before using it.
+--- exercise code c
+::prompt
+Write a mini **`wc`** (word count). `int wc_main(int argc, char *argv[], const char *input)` handles the options `-l` (lines), `-w` (words) and `-c` (bytes), possibly combined (`-lw`); with no option it prints all three. The text to count is passed as `input` (a real tool would read the file named in the remaining argument, or stdin). It prints the selected counts in the order lines, words, bytes, each right-aligned in 6 characters, followed by a space and the file name (or `-` when none was given). An unknown option prints `wc: invalid option -- 'x'` and returns 2; success returns 0.
+
+`main` (given) calls it several times:
+
+```
+     3     9    44 notes.txt
+     3 notes.txt
+     9    44 -
+wc: invalid option -- 'z'
+exit 2
+```
+::starter
+#include <stdio.h>
+#include <string.h>
+#include <ctype.h>
+
+int wc_main(int argc, char *argv[], const char *input) {
+    return 0;
+}
+
+int main(void) {
+    const char *text = "the quick brown fox\njumps over\nthe lazy dog\n";
+    char *a1[] = {"wc", "notes.txt", NULL};
+    char *a2[] = {"wc", "-l", "notes.txt", NULL};
+    char *a3[] = {"wc", "-wc", NULL};
+    char *a4[] = {"wc", "-lz", "notes.txt", NULL};
+    wc_main(2, a1, text);
+    wc_main(3, a2, text);
+    wc_main(2, a3, text);
+    printf("exit %d\n", wc_main(3, a4, text));
+    return 0;
+}
+::solution
+#include <stdio.h>
+#include <string.h>
+#include <ctype.h>
+
+int wc_main(int argc, char *argv[], const char *input) {
+    int lines = 0, words = 0, bytes = 0;
+    int i = 1;
+    for (; i < argc && argv[i][0] == '-' && argv[i][1] != '\0'; i++) {
+        for (const char *f = argv[i] + 1; *f; f++) {
+            switch (*f) {
+            case 'l': lines = 1; break;
+            case 'w': words = 1; break;
+            case 'c': bytes = 1; break;
+            default:
+                printf("wc: invalid option -- '%c'\n", *f);
+                return 2;
+            }
+        }
+    }
+    if (!lines && !words && !bytes) lines = words = bytes = 1;
+    const char *name = i < argc ? argv[i] : "-";
+
+    int nl = 0, nw = 0, in_word = 0;
+    size_t nc = strlen(input);
+    for (const char *p = input; *p; p++) {
+        if (*p == '\n') nl++;
+        if (isspace((unsigned char)*p)) {
+            in_word = 0;
+        } else if (!in_word) {
+            in_word = 1;
+            nw++;
+        }
+    }
+    if (lines) printf("%6d", nl);
+    if (words) printf("%6d", nw);
+    if (bytes) printf("%6zu", nc);
+    printf(" %s\n", name);
+    return 0;
+}
+
+int main(void) {
+    const char *text = "the quick brown fox\njumps over\nthe lazy dog\n";
+    char *a1[] = {"wc", "notes.txt", NULL};
+    char *a2[] = {"wc", "-l", "notes.txt", NULL};
+    char *a3[] = {"wc", "-wc", NULL};
+    char *a4[] = {"wc", "-lz", "notes.txt", NULL};
+    wc_main(2, a1, text);
+    wc_main(3, a2, text);
+    wc_main(2, a3, text);
+    printf("exit %d\n", wc_main(3, a4, text));
+    return 0;
+}
+::expected
+     3     9    44 notes.txt
+     3 notes.txt
+     9    44 -
+wc: invalid option -- 'z'
+exit 2
+::hints
+- Loop over the arguments that start with `-`, then over each letter after the dash.
+- When no option was chosen, turn all three on.
+- A word starts at a non-space character that follows a space (or the beginning).
+--- cards
+argc / argv :: Argument count / array of strings; argv[0] is the program name; argv[argc] is NULL.
+Option parsing :: Combined short flags (-lw), "--" ends options; getopt on POSIX.
+Tool conventions :: stdin → stdout, errors to stderr, exit 0 / 1 / 2 (usage).
+getenv :: Reads an environment variable; NULL when unset.
+
+=== lesson c-m7-test | Module 7 test | 150 | exam
+This test covers Module 7: sorting and searching algorithms, bits, bytes and binary formats, and command-line programs.
+
+Before you start, check that you can:
+
+- implement and analyse classic algorithms;
+- handle bytes, endianness and bit operations;
+- structure a command-line tool.
+--- goals
+- combine algorithms, bit manipulation and careful parsing
+--- quiz
+? What's the time complexity of merge sort in the worst case?
++ O(n log n)
+- O(n²)
+- O(n)
+- O(log n)
+> Quicksort's worst case is O(n²).
+? What does `(x >> 8) & 0xFF` extract from a 32-bit x?
++ The second-lowest byte
+- The highest byte
+- The lowest byte
+- The number of set bits
+> Shift it down, then mask 8 bits.
+? Which exit status does grep use for a usage error?
++ 2
+- 0
+- 1
+- -1
+> 1 means "no match".
+--- exercise code c
+::prompt
+**Run-length encoding** of binary data, with a **frequency table**. Read lines of hex bytes from the input (like `41 41 41 42 00 00`), and for each line:
+
+- parse the hex bytes with `strtoul(p, &end, 16)` (reject values above 0xFF or bad text: print `line <n>: bad byte "<token>"` and skip the line);
+- encode it as pairs `count byte` (counts up to 255; a longer run is split) and print them in hex;
+- decode the pairs again and check that you get the original bytes back;
+- keep a 256-entry frequency table of all valid bytes.
+
+Finally print the three most frequent bytes (ties by byte value) using `qsort` on an index array.
+
+```
+line 1: 41 41 41 42 00 00 -> 03 41 01 42 02 00 (ok)
+line 2: bad byte "4G"
+line 3: FF -> 01 FF (ok)
+line 4: 07 07 07 07 07 07 07 07 07 07 -> 0A 07 (ok)
+top: 07 x10, 41 x3, 00 x2
+```
+::stdin
+41 41 41 42 00 00
+41 4G
+FF
+07 07 07 07 07 07 07 07 07 07
+::starter
+#include <stdio.h>
+
+int main(void) {
+    char line[512];
+    while (fgets(line, sizeof line, stdin) != NULL) {
+        printf("%s", line);
+    }
+    return 0;
+}
+::solution
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+static long freq[256];
+
+static size_t rle_encode(const unsigned char *in, size_t n, unsigned char *out) {
+    size_t o = 0;
+    for (size_t i = 0; i < n;) {
+        unsigned char b = in[i];
+        size_t run = 1;
+        while (i + run < n && in[i + run] == b && run < 255) run++;
+        out[o++] = (unsigned char)run;
+        out[o++] = b;
+        i += run;
+    }
+    return o;
+}
+
+static size_t rle_decode(const unsigned char *in, size_t n, unsigned char *out) {
+    size_t o = 0;
+    for (size_t i = 0; i + 1 < n; i += 2) {
+        for (unsigned c = 0; c < in[i]; c++) out[o++] = in[i + 1];
+    }
+    return o;
+}
+
+static int by_freq(const void *a, const void *b) {
+    int x = *(const int *)a, y = *(const int *)b;
+    if (freq[x] != freq[y]) return (freq[y] > freq[x]) - (freq[y] < freq[x]);
+    return x - y;
+}
+
+static void print_hex(const unsigned char *p, size_t n) {
+    for (size_t i = 0; i < n; i++) printf("%s%02X", i ? " " : "", p[i]);
+}
+
+int main(void) {
+    char line[512];
+    int number = 0;
+    while (fgets(line, sizeof line, stdin) != NULL) {
+        number++;
+        unsigned char data[256], packed[512], back[256];
+        size_t n = 0;
+        int ok = 1;
+        char *p = line;
+        while (n < sizeof data) {
+            while (*p == ' ' || *p == '\t') p++;
+            if (*p == '\n' || *p == '\r' || *p == '\0') break;
+            char *end;
+            unsigned long v = strtoul(p, &end, 16);
+            if (end == p || (*end != ' ' && *end != '\t' && *end != '\n' && *end != '\r' && *end != '\0') || v > 0xFF) {
+                size_t len = strcspn(p, " \t\r\n");
+                printf("line %d: bad byte \"%.*s\"\n", number, (int)len, p);
+                ok = 0;
+                break;
+            }
+            data[n++] = (unsigned char)v;
+            p = end;
+        }
+        if (!ok || n == 0) continue;
+        size_t packed_len = rle_encode(data, n, packed);
+        size_t back_len = rle_decode(packed, packed_len, back);
+        int same = back_len == n && memcmp(back, data, n) == 0;
+        printf("line %d: ", number);
+        print_hex(data, n);
+        printf(" -> ");
+        print_hex(packed, packed_len);
+        printf(" (%s)\n", same ? "ok" : "MISMATCH");
+        for (size_t i = 0; i < n; i++) freq[data[i]]++;
+    }
+    int order[256];
+    for (int i = 0; i < 256; i++) order[i] = i;
+    qsort(order, 256, sizeof order[0], by_freq);
+    printf("top:");
+    for (int i = 0; i < 3 && freq[order[i]] > 0; i++) {
+        printf("%s %02X x%ld", i ? "," : "", order[i], freq[order[i]]);
+    }
+    printf("\n");
+    return 0;
+}
+::expected
+line 1: 41 41 41 42 00 00 -> 03 41 01 42 02 00 (ok)
+line 2: bad byte "4G"
+line 3: FF -> 01 FF (ok)
+line 4: 07 07 07 07 07 07 07 07 07 07 -> 0A 07 (ok)
+top: 07 x10, 41 x3, 00 x2
+::cases
+>>> 01 02 02 03 03 03
+>>> 1FF
+line 1: 01 02 02 03 03 03 -> 01 01 02 02 03 03 (ok)
+line 2: bad byte "1FF"
+top: 03 x3, 02 x2, 01 x1
+::hints
+- `strtoul(p, &end, 16)` parses one hex number; check that `end` moved and stopped at a space or the end of the line.
+- Encoding: count how many times the same byte repeats (at most 255), then emit `count, byte`.
+- `%.*s` prints only `len` characters of a string: handy for printing the bad token.

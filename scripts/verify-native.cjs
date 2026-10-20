@@ -55,7 +55,7 @@ function applyVariants(code, variants) {
   }
   // Lesson examples must run, except those marked as showing an error ("// error" comment)
   const examplesFile = path.join(root, '.cache', 'examples.json');
-  const examples = fs.existsSync(examplesFile) ? JSON.parse(fs.readFileSync(examplesFile, 'utf8')).filter((x) => langs[x.lang] && (!only || x.lang === only || x.id.includes(only))) : [];
+  const examples = fs.existsSync(examplesFile) ? JSON.parse(fs.readFileSync(examplesFile, 'utf8')).filter((x) => langs[x.lang] && (!only || x.lang === only || x.id === only)) : [];
   let badExamples = 0;
   for (const x of examples) {
     // "// stdin: Ada | 36" gives an interactive example its typed lines
