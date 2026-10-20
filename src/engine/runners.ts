@@ -15,7 +15,7 @@ import { localTool, runLocal, runsInApp } from './localRun';
 import { LANG_META } from '../content/langMeta';
 
 /** `expected`: for a failed output check, the output that was expected (shown as a line-by-line comparison). */
-export type RunResult = { ok: boolean; output: string; error?: string; passed?: boolean; message?: string; expected?: string; table?: { columns: string[]; values: unknown[][] } };
+export type RunResult = { ok: boolean; output: string; error?: string; warnings?: string; passed?: boolean; message?: string; expected?: string; table?: { columns: string[]; values: unknown[][] } };
 
 // Pyodide and the React-lesson libraries ship inside the app (public/pyodide, public/vendor; see
 // scripts/fetch-runtimes.mjs), so Python works offline and no script is loaded from another site.
@@ -577,7 +577,8 @@ export async function runExample(lang: CodeLang, code: string, prelude?: string[
   if (!runsInApp(lang)) {
     if (!localTool(lang)) return { ok: false, output: '', error: `${LANG_META[lang].label} examples run in the DevQuest desktop app when ${LANG_META[lang].label} is installed on your computer.` };
     const r = await runLocal(lang as NativeLang, code, stdin);
-    return r.ok ? { ok: true, output: r.output } : { ok: false, output: r.output, error: r.error };
+    const warnings = r.warnings ? { warnings: r.warnings } : {};
+    return r.ok ? { ok: true, output: r.output, ...warnings } : { ok: false, output: r.output, error: r.error, ...warnings };
   }
   if (lang !== 'python') return runCode(lang, code, undefined, stdin);
   const r = await python.run(code, undefined, 15000, stdin, { prelude });

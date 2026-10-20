@@ -33,6 +33,7 @@ function applyVariants(code, variants) {
     const sol = await t.runProgram(e.lang, e.solution, e.check.stdin);
     const compileOnly = !!langs[e.lang].compileOnly;
     if (!sol.ok) problems.push(`solution failed: ${(sol.error || sol.output || '').slice(0, 300)}`);
+    if (sol.warnings) problems.push(`solution has compiler warnings:\n   ${sol.warnings.split('\n').slice(0, 3).join('\n   ')}`);
     else if (!compileOnly && norm(sol.output) !== norm(e.check.expected)) problems.push(`solution output differs:\n   got:  ${JSON.stringify(norm(sol.output)).slice(0, 300)}\n   want: ${JSON.stringify(norm(e.check.expected)).slice(0, 300)}`);
     if (!compileOnly) {
       const st = await t.runProgram(e.lang, e.starter, e.check.stdin);
@@ -61,9 +62,14 @@ function applyVariants(code, variants) {
     const typed = x.code.match(/^\s*\/\/ stdin: (.*)$/m)?.[1].split('|').map((s) => s.trim()).join('\n');
     const r = await t.runProgram(x.lang, x.code, typed);
     const shouldFail = /^\s*\/\/ error\b/im.test(x.code);
-    if (r.ok === shouldFail) {
+    // C/C++ examples that show compiler warnings on purpose say so with a "// warning" comment
+    const shouldWarn = /^\s*\/\/ warning\b/im.test(x.code);
+    let problem = null;
+    if (r.ok === shouldFail) problem = shouldFail ? 'marked "// error" but ran' : (r.error || '').split('\n').slice(0, 4).join('\n   ');
+    else if (!shouldFail && !!r.warnings !== shouldWarn) problem = shouldWarn ? 'marked "// warning" but compiled cleanly' : `compiler warnings:\n   ${r.warnings.split('\n').slice(0, 3).join('\n   ')}`;
+    if (problem) {
       badExamples++;
-      console.log(`✗ example in ${x.id}: ${shouldFail ? 'marked "// error" but ran' : (r.error || '').split('\n').slice(0, 4).join('\n   ')}\n   ${x.code.split('\n').find((l) => l.trim() && !l.startsWith('import'))}`);
+      console.log(`✗ example in ${x.id}: ${problem}\n   ${x.code.split('\n').find((l) => l.trim() && !l.startsWith('import') && !l.startsWith('#include'))}`);
     }
   }
   console.log(`\n${native.length - bad - skipped}/${native.length} OK${skipped ? `, ${skipped} skipped (toolchain not installed)` : ''}; ${examples.length - badExamples}/${examples.length} lesson examples OK`);

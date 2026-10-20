@@ -33,6 +33,9 @@ export const java = parseTrackFile(...Object.keys(javaFiles).sort().map((f) => j
 /** The Go course (tracks/go/NN-*.txt); programs run on the learner's own Go toolchain in the desktop app. */
 const goFiles = import.meta.glob<string>('./tracks/go/*.txt', { query: '?raw', import: 'default', eager: true });
 export const go = parseTrackFile(...Object.keys(goFiles).sort().map((f) => goFiles[f]));
+/** The C course (tracks/c/NN-*.txt); programs run on the learner's own C compiler in the desktop app. */
+const cFiles = import.meta.glob<string>('./tracks/c/*.txt', { query: '?raw', import: 'default', eager: true });
+export const c = parseTrackFile(...Object.keys(cFiles).sort().map((f) => cFiles[f]));
 /** The C# course (tracks/csharp/NN-*.txt); programs run on the learner's own .NET SDK in the desktop app. */
 const csharpFiles = import.meta.glob<string>('./tracks/csharp/*.txt', { query: '?raw', import: 'default', eager: true });
 export const csharp = parseTrackFile(...Object.keys(csharpFiles).sort().map((f) => csharpFiles[f]));
@@ -45,7 +48,6 @@ export const typescript = parseTrackFile(...Object.keys(typescriptFiles).sort().
 import { SKILL_TRACKS } from './skills';
 import { kotlin } from './langs/kotlin';
 import { rust } from './langs/rust';
-import { c } from './langs/c';
 import { cpp } from './langs/cpp';
 import { swift } from './langs/swift';
 import { dart } from './langs/dart';
@@ -63,6 +65,7 @@ Object.assign(javascript, { kind: 'language', lang: 'javascript', fields: ['Fron
 Object.assign(typescript, { kind: 'language', lang: 'typescript', fields: ['Frontend', 'Full-Stack', 'Backend (Node.js)'] });
 Object.assign(java, { kind: 'language', lang: 'java', fields: ['Backend (enterprise)', 'Android', 'Big data'] });
 Object.assign(go, { kind: 'language', lang: 'go', fields: ['Backend', 'DevOps & Cloud', 'CLI tools'] });
+Object.assign(c, { kind: 'language', lang: 'c', fields: ['Systems', 'Embedded & IoT', 'Operating systems'] });
 Object.assign(csharp, { kind: 'language', lang: 'csharp', fields: ['Game dev (Unity)', 'Backend (.NET)', 'Desktop apps'] });
 Object.assign(sql, { kind: 'language', lang: 'sql', fields: ['Backend', 'Data', 'Every developer'] });
 for (const t of [foundations, shell, git, dsa, systems, networking, web, devops, architecture, career]) t.kind = 'core';

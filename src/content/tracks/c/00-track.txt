@@ -1,0 +1,9 @@
++++ track
+id: c
+title: C
+icon: 🔧
+tier: 1
+color: #5c6bc0
+kind: language
+blurb: The language under everything: operating systems, embedded devices, databases and the runtimes of other languages, taught in modern C (C17, with C23 notes) from first principles to professional practice: types and operators, control flow and functions, arrays and strings, pointers and pointer arithmetic, dynamic memory, structs and unions, data structures, files, the preprocessor and multi-file programs, the standard library, undefined behaviour and writing safe C. Programs run on the C compiler installed on your computer (GCC, Clang or Visual Studio) in the desktop app.
++++

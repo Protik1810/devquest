@@ -32,6 +32,12 @@ export function ResultView({ result, lang, code }: { result: RunResult; lang: st
         result.output && <pre>{result.output}</pre>
       )}
       {result.error && <pre className="err">{result.error}</pre>}
+      {result.warnings && (
+        <details className="warnings" open>
+          <summary>⚠️ Compiler warnings: the program compiled, but these usually point to real bugs</summary>
+          <pre>{result.warnings}</pre>
+        </details>
+      )}
       {!result.output && !result.error && !result.table?.columns.length && result.passed === undefined && <pre className="muted">(no output)</pre>}
       {errText && <ErrorHelp lang={lang} code={code} error={errText} />}
     </div>

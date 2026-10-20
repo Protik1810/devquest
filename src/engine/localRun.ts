@@ -4,7 +4,7 @@ import type { CodeLang, NativeLang } from '../content/types';
 /** Desktop-only bridge to compilers/interpreters installed on the learner's PC (electron/toolchains.cjs). */
 type ToolsBridge = {
   detect: (force?: boolean) => Promise<Partial<Record<NativeLang, { tool: string; compileOnly?: boolean } | null>>>;
-  run: (lang: NativeLang, code: string, stdin?: string) => Promise<{ ok: boolean; output: string; error?: string; compileError?: boolean; missing?: boolean }>;
+  run: (lang: NativeLang, code: string, stdin?: string) => Promise<{ ok: boolean; output: string; error?: string; warnings?: string; compileError?: boolean; missing?: boolean }>;
 };
 
 const bridge = (globalThis as { devquestTools?: ToolsBridge }).devquestTools;

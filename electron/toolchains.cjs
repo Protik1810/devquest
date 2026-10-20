@@ -70,6 +70,32 @@ function which(name, extraDirs = []) {
 }
 
 // ---------- process helpers ----------
+/**
+ * A readable explanation when a native program crashed: Linux and macOS report a signal,
+ * Windows an NTSTATUS exit code (0xC0000005 is an access violation, the "segmentation fault").
+ */
+function crashMessage(code, signal) {
+  const signals = {
+    SIGSEGV: 'Segmentation fault: the program read or wrote memory it does not own (a NULL or dangling pointer, or an index out of bounds).',
+    SIGBUS: 'Bus error: an invalid memory access.',
+    SIGFPE: 'Arithmetic error: integer division by zero.',
+    SIGABRT: 'Aborted: the program called abort() (a failed assert, or memory corruption detected by the C library).',
+    SIGILL: 'Illegal instruction.',
+  };
+  if (signal) return `💥 ${signals[signal] ?? `Killed by ${signal}.`}`;
+  const windows = {
+    0xc0000005: signals.SIGSEGV.replace('Segmentation fault', 'Segmentation fault (access violation)'),
+    0xc0000094: signals.SIGFPE,
+    0xc00000fd: 'Stack overflow: probably a recursion without a base case.',
+    0xc0000409: 'Aborted: a buffer overrun was detected, or the program called abort().',
+    0xc000001d: signals.SIGILL,
+    0xc0000374: 'Heap corruption: memory was written past the end of an allocation, or freed twice.',
+  };
+  const status = code >>> 0;
+  if (isWin && windows[status]) return `💥 ${windows[status]} (exit code 0x${status.toString(16).toUpperCase()})`;
+  return '';
+}
+
 function run(cmd, args, { cwd, timeoutMs = 30000, verbatim = false, stdin } = {}) {
   return new Promise((resolve) => {
     // .bat/.cmd launchers (kotlinc, some SDK shims) must go through cmd.exe; quote everything ourselves
@@ -95,9 +121,9 @@ function run(cmd, args, { cwd, timeoutMs = 30000, verbatim = false, stdin } = {}
       clearTimeout(timer);
       resolve({ code: -1, stdout, stderr: String(e.message), timedOut });
     });
-    child.on('close', (code) => {
+    child.on('close', (code, signal) => {
       clearTimeout(timer);
-      resolve({ code, stdout: stdout.replace(/\r\n/g, '\n'), stderr: stderr.replace(/\r\n/g, '\n'), timedOut });
+      resolve({ code, signal, stdout: stdout.replace(/\r\n/g, '\n'), stderr: stderr.replace(/\r\n/g, '\n'), timedOut });
     });
   });
 }
@@ -249,8 +275,9 @@ async function runProgram(lang, code, stdin) {
       break;
     case 'c':
       write('main.c', code);
-      if (t.gcc || t.clang) steps.push([t.gcc ?? t.clang, ['main.c', '-std=c17', '-O1', '-o', exe, ...(isWin ? [] : ['-lm'])], {}, true]);
-      else steps.push(msvc('main.c', '/std:c17'));
+      // No optimisation, so mistakes (a NULL dereference...) behave as the C lessons describe; all warnings on
+      if (t.gcc || t.clang) steps.push([t.gcc ?? t.clang, ['main.c', '-std=c17', '-O0', '-Wall', '-Wextra', '-o', exe, ...(isWin ? [] : ['-lm'])], {}, true]);
+      else steps.push(msvc('main.c', '/std:c17 /W4'));
       steps.push([exe, [], {}, false]);
       break;
     case 'cpp':
@@ -316,6 +343,7 @@ async function runProgram(lang, code, stdin) {
   const hideDir = (text) => text.split(dir + path.sep).join('').split(dir.split(path.sep).join('/') + '/').join('');
   try {
     let output = '';
+    let warnings = '';
     for (const [cmd, args, opts, compile] of steps) {
       const r = await run(cmd, args, { cwd: dir, ...opts, ...(compile ? {} : { stdin }) });
       if (r.timedOut) return { ok: false, output, error: `⏱ Timed out after ${(opts.timeoutMs ?? 30000) / 1000}s.${compile ? '' : ' Is there an infinite loop?'}` };
@@ -323,19 +351,27 @@ async function runProgram(lang, code, stdin) {
         if (r.code !== 0) {
           // MSVC writes errors to stdout; drop its echo of the file name
           let lines = (r.stdout + r.stderr).split('\n').filter((l) => !/^\s*main\.(c|cpp)\s*$/.test(l));
-          // dotnet build prints each error twice, with the project file appended, among build chatter
           // go build adds a package header and ".\" before file names
           if (lang === 'go') lines = lines.filter((l) => !/^# /.test(l)).map((l) => l.replace(/^\.[\\/]/, ''));
+          // dotnet build prints each error twice, with the project file appended, among build chatter
           if (lang === 'csharp') lines = [...new Set(lines.filter((l) => /: error /.test(l)).map((l) => l.replace(/\s*\[[^\]]*\.csproj\]\s*$/, '')))];
           return { ok: false, output: '', error: `Compile error:\n${hideDir(lines.join('\n').trim())}`, compileError: true };
         }
         if (lang === 'solidity') output = '✔ Compiled successfully with solc.\n';
+        // C and C++ compilers report warnings on success: the program runs, but the learner should see them
+        if ((lang === 'c' || lang === 'cpp') && /warning/i.test(r.stdout + r.stderr)) {
+          warnings = hideDir((r.stdout + r.stderr).split('\n').filter((l) => !/^\s*main\.(c|cpp)\s*$/.test(l)).join('\n').trim());
+        }
         continue;
       }
       output += r.stdout;
-      if (r.code !== 0) return { ok: false, output, error: hideDir(r.stderr.trim()) || `Program exited with code ${r.code}` };
+      if (r.code !== 0 || r.signal) {
+        const crash = crashMessage(r.code, r.signal);
+        const err = [hideDir(r.stderr.trim()), crash].filter(Boolean).join('\n') || `Program exited with code ${r.code}`;
+        return { ok: false, output, error: err, ...(warnings ? { warnings } : {}) };
+      }
     }
-    return { ok: true, output, error: undefined };
+    return { ok: true, output, error: undefined, ...(warnings ? { warnings } : {}) };
   } finally {
     fs.rm(dir, { recursive: true, force: true }, () => {});
   }

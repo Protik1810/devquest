@@ -1,0 +1,694 @@
+=== module Module 1 · Getting started
+
+=== lesson c-why | What C is | 50
+## The language under everything
+
+**C** was created by Dennis Ritchie at Bell Labs between 1969 and 1973, to rewrite the **Unix** operating system in something more portable than assembly language. Brian Kernighan and Ritchie's book *The C Programming Language* (1978) made it famous, and it was standardised in 1989 (**C89**), then revised as C99, C11, C17 and **C23**.
+
+Half a century later, C is still everywhere:
+
+- **operating systems**: the Linux, Windows and macOS kernels are mostly C;
+- **embedded systems**: microcontrollers in cars, routers, washing machines and medical devices;
+- **infrastructure**: databases (SQLite, PostgreSQL, Redis), web servers (nginx), Git, curl;
+- **other languages' engines**: CPython, the Ruby and PHP interpreters, Lua, and the system libraries every language calls.
+
+## What makes C C
+
+- **Compiled to machine code**, with almost no runtime: a C program can run on a bare chip with no operating system.
+- **Close to the hardware**: you see memory directly through **pointers**, choose exact integer sizes, and decide when memory is allocated and freed.
+- **Small**: about 30 keywords and a modest standard library. There are no classes, no exceptions, no garbage collector, no strings as objects.
+- **Trusting**: the compiler assumes you know what you're doing. Reading past the end of an array or using freed memory isn't stopped: it's **undefined behaviour**, and the program may crash, print garbage, or seem to work. Much of learning C is learning the rules that keep you safe.
+
+```
+main.c  --compiler (gcc / clang / cl)-->  main.o  --linker-->  main.exe / main  --> runs directly
+```
+
+C's syntax (braces, `for`, `printf`-style formatting, `++`, `&&`) was copied by C++, Java, C#, JavaScript, Go and many more, so it will look familiar if you've taken those courses. What's new is what happens underneath: after this course you'll understand what those languages do for you.
+
+## Running C in DevQuest
+
+DevQuest compiles your C programs with the **C compiler installed on your computer** (GCC, Clang or Microsoft's Visual Studio Build Tools), in the desktop app, with **all warnings on**. Warnings are shown under the output: in C they very often point at real bugs. On the web and on Android, the AI tutor checks your code by tracing it, or you compare your answer with the solution. Press **▶ Run**:
+
+```c
+#include <stdio.h>
+
+int main(void) {
+    printf("Hello from C!\n");
+    printf("An int here takes %zu bytes, a pointer %zu.\n", sizeof(int), sizeof(void *));
+    return 0;
+}
+```
+
+~~~check
+? What happens when a C program reads past the end of an array?
++ Undefined behaviour: it may crash, print garbage, or seem to work
+- An exception is thrown
+- The compiler always refuses to compile it
+- The array grows automatically
+> C doesn't check bounds for you.
+~~~
+
+📚 **Go deeper:** Brian Kernighan and Dennis Ritchie, *The C Programming Language* (2nd ed.), chapter 1; Herbert Schildt, *C: The Complete Reference*, chapter 1 (An Overview of C); cppreference.com's C reference.
+--- goals
+- explain where C came from and where it's used today
+- describe how C source becomes a native executable (compile and link)
+- name C's main traits: close to the hardware, small, no runtime safety nets
+- explain what undefined behaviour means
+--- quiz
+? C was created to write which operating system?
++ Unix
+- Windows
+- MS-DOS
+- Linux
+> Linux came later, also written in C.
+? Which feature does C NOT have?
++ A garbage collector
+- Pointers
+- Functions
+- Structs
+> You free memory yourself.
+? What is "undefined behaviour"?
++ Code whose result the C standard doesn't define, so anything can happen
+- A compile error
+- A warning
+- A program that prints nothing
+> Avoiding it is a core C skill.
+? Which of these is written mostly in C?
++ The Linux kernel
+- The Java standard library
+- React
+- Kubernetes
+> Kubernetes is Go; React is JavaScript.
+--- exercise code c
+::prompt
+Change the program so it prints exactly:
+
+```
+C was born at Bell Labs.
+It powers Unix and Linux.
+printf needs \n for new lines.
+```
+
+In a C string, `\n` is a line break; to print a backslash itself, write `\\`.
+::starter
+#include <stdio.h>
+
+int main(void) {
+    printf("C was born at Bell Labs.");
+    return 0;
+}
+::solution
+#include <stdio.h>
+
+int main(void) {
+    printf("C was born at Bell Labs.\n");
+    printf("It powers Unix and Linux.\n");
+    printf("printf needs \\n for new lines.\n");
+    return 0;
+}
+::expected
+C was born at Bell Labs.
+It powers Unix and Linux.
+printf needs \n for new lines.
+::hints
+- `printf` doesn't add a line break: end each string with `\n`.
+- `\\n` inside a string prints a backslash followed by `n`.
+--- cards
+C :: A compiled, low-level language from Bell Labs (1972), used for operating systems, embedded systems and language runtimes.
+Compile and link :: The compiler turns .c files into object files; the linker joins them into an executable.
+Undefined behaviour :: Code the standard gives no meaning to (out-of-bounds access, using freed memory...): anything can happen.
+C standards :: C89, C99, C11, C17, C23.
+
+=== lesson c-setup | Compilers and the build process | 55
+## Installing a compiler
+
+C needs a **compiler**. The three big ones:
+
+| Compiler | Where | Install |
+|---|---|---|
+| **GCC** | Linux (standard), Windows (MinGW-w64, MSYS2) | `sudo apt install build-essential`; on Windows, MSYS2's `pacman -S mingw-w64-ucrt-x86_64-gcc` |
+| **Clang** | macOS (standard), Linux, Windows | `xcode-select --install` on macOS; LLVM installers on Windows |
+| **MSVC** (`cl`) | Windows | Visual Studio Build Tools with "Desktop development with C++" |
+
+Check it works in a terminal: `gcc --version` or `clang --version`. DevQuest's desktop app finds GCC, Clang or MSVC automatically (Settings → Local compilers).
+
+## Compiling by hand
+
+```
+gcc -std=c17 -Wall -Wextra -g -o hello hello.c
+./hello
+```
+
+| Flag | Meaning |
+|---|---|
+| `-std=c17` | which C standard to use (`c11`, `c17`, `c2x`/`c23`) |
+| `-Wall -Wextra` | turn on most warnings: **always use them** |
+| `-Werror` | treat warnings as errors (common in professional builds) |
+| `-g` | include debugging information |
+| `-O2` | optimise (for release builds) |
+| `-o hello` | name of the output file |
+| `-fsanitize=address,undefined` | add run-time checks for memory errors and undefined behaviour (GCC/Clang on Linux and macOS): invaluable while learning |
+
+## The four stages
+
+What `gcc hello.c` does, step by step (you can stop after each one):
+
+1. **Preprocessing** (`gcc -E`): handles lines starting with `#`: pastes the contents of `#include`d headers, expands macros.
+2. **Compiling** (`gcc -S`): turns C into assembly language for your processor.
+3. **Assembling** (`gcc -c`): turns assembly into machine code in an **object file** (`hello.o`).
+4. **Linking**: joins your object files with the libraries they use (the C standard library, `libm` for math) into an executable. "undefined reference to `foo`" is a **linker** error: something was declared but never defined.
+
+Bigger programs are split into several `.c` files compiled separately and linked together, usually driven by **make** or **CMake** (Module 6).
+
+## Tools you'll meet
+
+- **Debuggers**: `gdb` (GCC), `lldb` (Clang), the Visual Studio debugger; VS Code drives any of them.
+- **Sanitizers** and **Valgrind**: find memory errors at run time.
+- **clang-format** formats code; **clang-tidy** and **cppcheck** find bugs statically.
+
+## Exit status
+
+`main` returns an `int` to the operating system: **0 means success**, anything else failure (`EXIT_SUCCESS` and `EXIT_FAILURE` from `<stdlib.h>` say it explicitly). Shell scripts and build tools check it:
+
+```c
+#include <stdio.h>
+#include <stdlib.h>
+
+int main(void) {
+    int files_found = 3;
+    printf("found %d files\n", files_found);
+    return files_found > 0 ? EXIT_SUCCESS : EXIT_FAILURE;
+}
+```
+
+~~~check
+? What does "undefined reference to `parse`" mean?
++ A linker error: parse was declared but its definition wasn't found
+- A syntax error on the line with parse
+- A runtime crash
+- parse is a reserved word
+> Check that the file defining it is compiled and linked.
+~~~
+
+📚 **Go deeper:** the GCC manual ("Invoking GCC", "Warning Options"); Clang's "AddressSanitizer" documentation; *C: The Complete Reference*, chapter 12 (Linking, Libraries, and Headers).
+--- goals
+- install and check a C compiler
+- compile with standard, warning and debugging flags
+- describe preprocessing, compiling, assembling and linking
+- tell compiler errors from linker errors
+- return an exit status from main
+--- quiz
+? Which flags turn on most warnings in GCC and Clang?
++ -Wall -Wextra
+- -O2
+- -g
+- -std=c17
+> Use them for every build.
+? Which stage turns several object files into one executable?
++ Linking
+- Preprocessing
+- Assembling
+- Optimising
+> The linker also adds the standard library.
+? What does `return 0;` from main tell the operating system?
++ The program succeeded
+- The program failed
+- Nothing
+- Restart the program
+> Non-zero means failure.
+--- exercise code c
+::prompt
+A build report. Use `printf` with format **specifiers**: `%s` for a string, `%d` for an `int`, `%.1f` for a `double` with one decimal. Print:
+
+```
+compiler: clang
+warnings: 0
+build time: 1.4 s
+status: success
+```
+
+using the variables given, and return `EXIT_SUCCESS` when `warnings` is 0 (`EXIT_FAILURE` otherwise).
+::starter
+#include <stdio.h>
+#include <stdlib.h>
+
+int main(void) {
+    const char *compiler = "clang";
+    int warnings = 0;
+    double seconds = 1.4;
+    printf("compiler: ?\n");
+    return 1;
+}
+::solution
+#include <stdio.h>
+#include <stdlib.h>
+
+int main(void) {
+    const char *compiler = "clang";
+    int warnings = 0;
+    double seconds = 1.4;
+    printf("compiler: %s\n", compiler);
+    printf("warnings: %d\n", warnings);
+    printf("build time: %.1f s\n", seconds);
+    printf("status: %s\n", warnings == 0 ? "success" : "failure");
+    return warnings == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
+}
+::expected
+compiler: clang
+warnings: 0
+build time: 1.4 s
+status: success
+::hints
+- `printf("compiler: %s\n", compiler);` replaces `%s` with the string.
+- `condition ? a : b` picks one of two values.
+--- cards
+gcc -std=c17 -Wall -Wextra -g :: A good development build command.
+Preprocess → compile → assemble → link :: The four stages of building a C program.
+Linker error :: "undefined reference": declared but not defined (or not linked).
+Sanitizers :: -fsanitize=address,undefined adds run-time memory and UB checks.
+Exit status :: return 0 / EXIT_SUCCESS for success, non-zero for failure.
+
+=== lesson c-basics | Hello, C: the structure of a program | 65
+## Anatomy of a program
+
+```c
+#include <stdio.h>   /* the standard input/output declarations: printf, scanf... */
+
+/* A function that adds two ints and returns an int */
+int add(int a, int b) {
+    return a + b;
+}
+
+int main(void) {           // execution starts here
+    int sum = add(2, 3);   // declare a variable and initialise it
+    printf("2 + 3 = %d\n", sum);
+    return 0;              // 0: success
+}
+```
+
+- **`#include <stdio.h>`** is a preprocessor directive: it pastes the declarations of the standard I/O functions into your file. Without it, the compiler doesn't know `printf`.
+- Every program has exactly one **`main`** function. `int main(void)` takes no arguments; `int main(int argc, char *argv[])` receives command-line arguments.
+- Statements end with **`;`** and blocks are in **`{ }`**. Indentation is for humans only.
+- Comments: `/* ... */` (can span lines) and `// ...` (since C99).
+- A function must be **declared before it's used**: defining `add` above `main` does that (Module 3 shows prototypes).
+
+## Variables
+
+A variable has a **type**, fixed forever, and must be declared before use:
+
+```c
+#include <stdio.h>
+
+int main(void) {
+    int age = 36;            // whole number
+    double height = 1.68;    // decimal number
+    char initial = 'A';      // one character, in single quotes
+    const int max_users = 100;  // const: can't be changed
+
+    age = age + 1;
+    printf("%c is %d years old and %.2f m tall (limit %d)\n", initial, age, height, max_users);
+
+    int a = 7, b = 2;        // several in one declaration
+    printf("%d / %d = %d, remainder %d\n", a, b, a / b, a % b);
+    return 0;
+}
+```
+
+**Always initialise variables.** A local variable declared without a value (`int count;`) holds **garbage**: whatever bytes were in that memory. Reading it is undefined behaviour, and `-Wall` warns about it.
+
+## printf
+
+`printf` takes a **format string** with **conversion specifiers**, then the values to put in them, in order:
+
+| Specifier | For |
+|---|---|
+| `%d` | `int` |
+| `%ld`, `%lld` | `long`, `long long` |
+| `%u` | `unsigned int` |
+| `%zu` | `size_t` (sizes, from `sizeof`) |
+| `%f`, `%.2f` | `double` (2 decimals) |
+| `%e`, `%g` | scientific / shortest form |
+| `%c` | a character |
+| `%s` | a string |
+| `%p` | a pointer (address) |
+| `%x` | hexadecimal |
+| `%%` | a literal `%` |
+
+Width and alignment: `%5d` (right-aligned in 5), `%-10s` (left-aligned in 10), `%05d` (padded with zeros). **The specifier must match the type**: printing a `double` with `%d` is undefined behaviour, and the compiler warns you (that's why DevQuest always shows warnings).
+
+```c
+#include <stdio.h>
+
+int main(void) {
+    printf("|%5d|%-5d|%05d|\n", 42, 42, 42);
+    printf("|%8.3f|%-8s|%c|\n", 3.14159, "pi", 'x');
+    printf("%d%% done, hex %x, sci %e\n", 75, 255, 123456.0);
+    return 0;
+}
+```
+
+~~~check
+? What's in `int n;` (a local variable) before it's assigned?
++ An unpredictable garbage value; reading it is undefined behaviour
+- 0
+- NULL
+- A compile error
+> Initialise every variable.
+~~~
+
+📚 **Go deeper:** cppreference.com, "printf"; K&R chapter 1; *C: The Complete Reference*, chapters 2 (Expressions) and 8 (Console I/O).
+--- goals
+- write a program with #include, functions and main
+- declare and initialise int, double, char and const variables
+- print values with printf conversion specifiers, widths and precision
+- explain why uninitialised variables are dangerous
+--- quiz
+? What does `#include <stdio.h>` do?
++ Pastes the standard I/O declarations (printf...) into the file
+- Links the program
+- Starts the program
+- Imports a module at run time
+> It's done by the preprocessor.
+? Which specifier prints a double with two decimals?
++ %.2f
+- %d
+- %2d
+- %s
+> %f is for double.
+? How is a single character written in C?
++ 'A' (single quotes)
+- "A"
+- `A`
+- char(A)
+> "A" is a string.
+? What happens if printf's specifier doesn't match the value's type?
++ Undefined behaviour (the compiler warns)
+- It's converted automatically
+- A compile error, always
+- It prints nothing
+> Watch the warnings.
+--- exercise code c
+::prompt
+Write a **receipt** for 3 coffees at 2.40 each and 2 croissants at 1.85 each. Use `int` variables for the quantities, `double` for the prices, and print:
+
+```
+coffee     x3   7.20
+croissant  x2   3.70
+TOTAL          10.90
+```
+
+The names are left-aligned in 10 characters (`%-10s`), the quantity follows `x` with `%d`, and the amounts are right-aligned in 7 characters with 2 decimals (`%7.2f`).
+::starter
+#include <stdio.h>
+
+int main(void) {
+    printf("coffee x3 7.20\n");
+    return 0;
+}
+::solution
+#include <stdio.h>
+
+int main(void) {
+    int coffees = 3, croissants = 2;
+    double coffee_price = 2.40, croissant_price = 1.85;
+    double coffee_total = coffees * coffee_price;
+    double croissant_total = croissants * croissant_price;
+    printf("%-10s x%d%7.2f\n", "coffee", coffees, coffee_total);
+    printf("%-10s x%d%7.2f\n", "croissant", croissants, croissant_total);
+    printf("%-10s   %7.2f\n", "TOTAL", coffee_total + croissant_total);
+    return 0;
+}
+::expected
+coffee     x3   7.20
+croissant  x2   3.70
+TOTAL          10.90
+::variants
+coffees = 3 => coffees = 5
+::hints
+- `int * double` gives a `double`.
+- One `printf("%-10s x%d%7.2f\n", ...)` per item; the TOTAL line replaces `x%d` with three spaces.
+--- cards
+#include :: Pastes a header's declarations into the file (preprocessor).
+int main(void) :: The entry point; return 0 for success.
+Types :: int, double, char ('A'), const for values that never change.
+printf specifiers :: %d int, %f double, %c char, %s string, %zu size_t, %p pointer, %% percent.
+Uninitialised local :: Holds garbage; reading it is undefined behaviour.
+
+=== lesson c-errors | Errors, warnings and crashes | 60
+## Three kinds of problems
+
+1. **Compile errors**: the code isn't valid C; there's no program to run.
+2. **Warnings**: the code is valid, but probably wrong. **In C, take every warning seriously**: many of them are real bugs.
+3. **Run-time problems**: crashes (a **segmentation fault**), wrong results, or undefined behaviour that seems to work today and breaks tomorrow.
+
+## Reading compiler messages
+
+GCC and Clang print `file:line:column: error:` (or `warning:`), the message, and the line with a caret `^` under the problem. Fix the **first** error first: later ones are often consequences. This example doesn't compile; run it and read the messages:
+
+```c
+// error
+#include <stdio.h>
+
+int main(void) {
+    int total = 0
+    for (int i = 1; i <= 3; i++) {
+        total += i;
+    }
+    printf("%d\n", totl);
+    return 0;
+}
+```
+
+Common messages: `expected ';'` (a missing semicolon, often reported on the **next** line), `use of undeclared identifier` / `'x' undeclared` (a typo or missing declaration), `implicit declaration of function` (a missing `#include` or prototype), `incompatible types`.
+
+## Warnings are bugs waiting to happen
+
+This program compiles and runs, but it's full of mistakes. Run it, read the warnings, and notice that the `if` never prints:
+
+```c
+// warning
+#include <stdio.h>
+
+int main(void) {
+    int count;
+    double average = 7.5;
+    unsigned int items = 3;
+    int unused = 0;
+    if (items > -1) {
+        printf("items is bigger than -1\n");
+    }
+    printf("count = %d, average = %d\n", count, average);
+    return 0;
+}
+```
+
+- `count` is **uninitialised**: it prints garbage.
+- `%d` for a `double` is **undefined behaviour**: the printed value is nonsense.
+- `items > -1` compares unsigned with signed: `-1` is converted to a huge unsigned number, so the condition is **false**, the opposite of what it says. GCC warns about it with `-Wextra` (`-Wsign-compare`); Clang compiles it silently, which shows that warnings catch many bugs, not all of them.
+- `unused` is harmless, but often a sign of unfinished code.
+
+Professional C projects compile with `-Wall -Wextra -Werror`, so a warning stops the build.
+
+## Crashes
+
+A **segmentation fault** (Windows: access violation, exit code `0xC0000005`) means the program touched memory it doesn't own. The usual causes: using a `NULL` pointer, an index outside an array, using memory after `free`, or infinite recursion (a **stack overflow**):
+
+```c
+// error
+#include <stdio.h>
+
+int depth(int n) {
+    return depth(n + 1) + 1; // no base case: recursion never stops
+}
+
+int main(void) {
+    printf("starting\n");
+    fflush(stdout);
+    printf("%d\n", depth(0));
+    return 0;
+}
+```
+
+C prints no stack trace by itself. To find where it crashed, run the program in a **debugger** (`gdb ./prog`, then `run` and `backtrace`), or compile with `-g -fsanitize=address` to get a detailed report (on Linux and macOS).
+
+## Undefined behaviour
+
+The scariest bugs don't crash. Reading one element past an array's end might return a neighbouring variable's value; signed integer overflow might be "optimised" into an infinite loop. Because the result is **undefined**, the program can behave differently with another compiler, another flag or another day. The defence: warnings, sanitizers, careful code, and tests.
+
+~~~check
+? Where does GCC usually report a missing semicolon at the end of line 4?
++ On the next line (or the next token)
+- On line 1
+- At the end of the file
+- It doesn't report it
+> The compiler notices when the next token arrives.
+~~~
+
+📚 **Go deeper:** the GCC and Clang diagnostics documentation; John Regehr, "A Guide to Undefined Behavior in C and C++"; *C: The Complete Reference*, chapter 28 (Efficiency, Porting, and Debugging).
+--- goals
+- read compile errors and fix the first one first
+- recognise common warnings and the bugs behind them
+- explain segmentation faults and stack overflows
+- know the tools that find crashes: debuggers and sanitizers
+- explain why undefined behaviour is dangerous even when a program seems to work
+--- quiz
+? Why should C programmers treat warnings as bugs?
++ Many warnings point at real mistakes such as wrong printf types or uninitialised variables
+- Warnings slow the program down
+- Warnings stop the program from compiling
+- They don't need to
+> -Werror turns them into errors.
+? What usually causes a segmentation fault?
++ Accessing memory the program doesn't own (NULL pointer, bad index, freed memory)
+- A missing semicolon
+- Dividing doubles by zero
+- Printing too much
+> On Windows it's called an access violation.
+? `unsigned int u = 3; if (u > -1)` is...
++ False: -1 becomes a huge unsigned number
+- True
+- A compile error
+- Undefined behaviour
+> Signed/unsigned comparisons are a classic trap.
+--- exercise code c
+::prompt
+This program has a compile error and three warnings (and the warnings hide real bugs). Fix them all, so it compiles **without warnings** and prints:
+
+```
+items: 4
+average: 3.75
+largest: 7
+```
+::starter
+#include <stdio.h>
+
+int main(void) {
+    int values[4] = {2, 7, 1, 5};
+    int sum;
+    int largest = values[0];
+    unsigned int n = 4;
+    for (int i = 0; i < n; i++) {
+        sum += values[i];
+        if (values[i] > largest) largest = values[i];
+    }
+    printf("items: %d\n", n)
+    printf("average: %.2f\n", sum / n);
+    printf("largest: %d\n", largest);
+    return 0;
+}
+::solution
+#include <stdio.h>
+
+int main(void) {
+    int values[4] = {2, 7, 1, 5};
+    int sum = 0;
+    int largest = values[0];
+    int n = 4;
+    for (int i = 0; i < n; i++) {
+        sum += values[i];
+        if (values[i] > largest) largest = values[i];
+    }
+    printf("items: %d\n", n);
+    printf("average: %.2f\n", (double)sum / n);
+    printf("largest: %d\n", largest);
+    return 0;
+}
+::expected
+items: 4
+average: 3.75
+largest: 7
+::hints
+- The compile error: a missing `;` after the first `printf`.
+- `sum` must start at 0; make `n` an `int` so it compares cleanly with `i`.
+- `%.2f` needs a `double`: `(double)sum / n` converts before dividing (otherwise integer division gives 3).
+--- cards
+Compile error :: Invalid code: no program. Fix the first one first.
+Warning :: Valid but suspicious code; in C often a real bug. Compile with -Wall -Wextra (-Werror).
+Segmentation fault :: Touching memory you don't own; Windows calls it an access violation.
+Stack overflow :: Too-deep (often infinite) recursion.
+Debugger / sanitizer :: gdb backtrace, -fsanitize=address,undefined find where and why.
+
+=== lesson c-m1-test | Module 1 test | 120 | exam
+This test covers Module 1: what C is, compiling and linking, program structure, variables, printf, and errors, warnings and crashes.
+
+Before you start, check that you can:
+
+- write and compile a small C program;
+- print values with the right printf specifiers;
+- read compiler messages and fix warnings.
+--- goals
+- write, compile and fix a small C program
+--- quiz
+? Which header declares printf?
++ <stdio.h>
+- <stdlib.h>
+- <string.h>
+- <printf.h>
+> Standard Input/Output.
+? What does `printf("%5.1f|", 3.14159)` print?
++ "  3.1|"
+- "3.14159|"
+- "3.1|"
+- "    3|"
+> Width 5, one decimal.
+? What does the linker do?
++ Joins object files and libraries into an executable
+- Checks syntax
+- Expands #include
+- Runs the program
+> Linker errors mention undefined references.
+? What's the value of `7 / 2` in C?
++ 3
+- 3.5
+- 4
+- 3.0
+> Integer division truncates.
+--- exercise code c
+::prompt
+**Temperature table.** Print a table of Celsius temperatures from -10 to 40 in steps of 10 with their Fahrenheit equivalents (F = C × 9 / 5 + 32), using a `for` loop. Celsius is an `int` right-aligned in 4 characters, Fahrenheit a `double` with one decimal right-aligned in 7, then a label: `freezing` below 0, `cold` below 15, `mild` below 25, otherwise `warm`.
+
+```
+   C       F
+ -10    14.0 freezing
+   0    32.0 cold
+  10    50.0 cold
+  20    68.0 mild
+  30    86.0 warm
+  40   104.0 warm
+```
+
+Write a function `double to_fahrenheit(int celsius)` above `main`, and make sure there are no warnings.
+::starter
+#include <stdio.h>
+
+int main(void) {
+    printf("   C       F\n");
+    return 0;
+}
+::solution
+#include <stdio.h>
+
+double to_fahrenheit(int celsius) {
+    return celsius * 9.0 / 5.0 + 32.0;
+}
+
+int main(void) {
+    printf("   C       F\n");
+    for (int c = -10; c <= 40; c += 10) {
+        const char *label = c < 0 ? "freezing" : c < 15 ? "cold" : c < 25 ? "mild" : "warm";
+        printf("%4d %7.1f %s\n", c, to_fahrenheit(c), label);
+    }
+    return 0;
+}
+::expected
+   C       F
+ -10    14.0 freezing
+   0    32.0 cold
+  10    50.0 cold
+  20    68.0 mild
+  30    86.0 warm
+  40   104.0 warm
+::hints
+- `celsius * 9.0 / 5.0` uses doubles, so nothing is truncated.
+- `for (int c = -10; c <= 40; c += 10)`.
+- Pick the label with if/else or chained `? :`.

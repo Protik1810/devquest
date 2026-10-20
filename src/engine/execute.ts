@@ -79,22 +79,24 @@ export async function execute(lang: CodeLang, code: string, check: CodeCheck | u
   if (mode === 'local') {
     const tool = localTool(lang)!;
     const r = await runLocal(lang as NativeLang, code, check && 'stdin' in check ? check.stdin : stdin);
-    if (!r.ok) return { ok: false, output: r.output, error: r.error, passed: check ? false : undefined, mode, tool: tool.tool };
+    // C/C++ compiler warnings travel with every result, so the learner sees them even when the output is right
+    const warnings = r.warnings ? { warnings: r.warnings } : {};
+    if (!r.ok) return { ok: false, output: r.output, error: r.error, passed: check ? false : undefined, mode, tool: tool.tool, ...warnings };
     if (tool.compileOnly) {
       // Solidity: solc proves it compiles; behaviour is judged by the AI when available
       if (check && currentAI().ready && expected !== undefined) {
         const ai = await checkProgram({ lang: LANG_META[lang].label, task, code, expected });
-        return { ok: true, output: r.output, passed: ai.passed, message: [ai.feedback, ...ai.issues.map((i) => `• ${i}`)].join('\n'), mode, tool: tool.tool };
+        return { ok: true, output: r.output, passed: ai.passed, message: [ai.feedback, ...ai.issues.map((i) => `• ${i}`)].join('\n'), mode, tool: tool.tool, ...warnings };
       }
-      return { ok: true, output: r.output, passed: check ? true : undefined, message: check ? 'Compiles successfully.' : undefined, mode, tool: tool.tool };
+      return { ok: true, output: r.output, passed: check ? true : undefined, message: check ? 'Compiles successfully.' : undefined, mode, tool: tool.tool, ...warnings };
     }
-    if (expected === undefined) return { ok: true, output: r.output, mode, tool: tool.tool };
+    if (expected === undefined) return { ok: true, output: r.output, mode, tool: tool.tool, ...warnings };
     const passed = sameOutput(r.output, expected);
     if (passed && check) {
       const problem = await integrity(lang, mode, code, check, ref);
-      if (problem) return { ok: true, output: r.output, passed: false, message: problem, mode, tool: tool.tool };
+      if (problem) return { ok: true, output: r.output, passed: false, message: problem, mode, tool: tool.tool, ...warnings };
     }
-    return { ok: true, output: r.output, passed, message: passed ? 'Output matches!' : 'Your output differs from the expected output.', ...(passed ? {} : { expected }), mode, tool: tool.tool };
+    return { ok: true, output: r.output, passed, message: passed ? 'Output matches!' : 'Your output differs from the expected output.', ...(passed ? {} : { expected }), mode, tool: tool.tool, ...warnings };
   }
 
   if (mode === 'ai') {
