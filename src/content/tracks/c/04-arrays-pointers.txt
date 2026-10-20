@@ -1,0 +1,1113 @@
+=== module Module 4 · Arrays, pointers and strings
+
+=== lesson c-arrays | Arrays | 65
+## A fixed row of values
+
+An array stores a fixed number of elements of one type, **next to each other in memory**. Its size is fixed when it's declared:
+
+```c
+#include <stdio.h>
+
+int main(void) {
+    int scores[5] = {90, 72, 85, 64, 98};     // 5 ints
+    double prices[] = {1.5, 2.25, 3.0};       // size counted from the initialiser: 3
+    int zeros[100] = {0};                      // all 100 elements set to 0
+    int partial[5] = {1, 2};                   // the rest are 0: {1, 2, 0, 0, 0}
+
+    scores[1] = 75;                            // indexes go from 0 to size - 1
+    size_t count = sizeof scores / sizeof scores[0]; // number of elements
+    int sum = 0;
+    for (size_t i = 0; i < count; i++) {
+        sum += scores[i];
+    }
+    printf("%zu scores, average %.1f\n", count, (double)sum / count);
+    printf("%.2f %d %d\n", prices[2], zeros[99], partial[4]);
+    return 0;
+}
+```
+
+- **C doesn't check indexes.** `scores[5]` or `scores[-1]` compiles and reads or writes whatever memory is there: undefined behaviour, and the source of countless security holes ("buffer overflows").
+- `sizeof array / sizeof array[0]` gives the number of elements, but **only where the array was declared**: passed to a function, an array becomes a pointer and `sizeof` gives the pointer's size. Pass the length separately.
+- Arrays can't be assigned or compared as a whole (`a = b` doesn't compile); copy with a loop or `memcpy`.
+
+## Arrays and functions
+
+```c
+#include <stdio.h>
+
+// the array "decays" to a pointer to its first element, so pass the length
+void scale(double values[], size_t n, double factor) {
+    for (size_t i = 0; i < n; i++) {
+        values[i] *= factor;        // changes the caller's array
+    }
+}
+
+double max_of(const double values[], size_t n) {
+    double best = values[0];
+    for (size_t i = 1; i < n; i++) {
+        if (values[i] > best) best = values[i];
+    }
+    return best;
+}
+
+int main(void) {
+    double temps[] = {12.5, 18.0, 9.5, 21.0};
+    size_t n = sizeof temps / sizeof temps[0];
+    scale(temps, n, 2.0);
+    printf("max %.1f, first %.1f\n", max_of(temps, n), temps[0]);
+    return 0;
+}
+```
+
+## Multidimensional arrays
+
+A 2-D array is an array of arrays, stored row after row:
+
+```c
+#include <stdio.h>
+
+#define ROWS 3
+#define COLS 4
+
+void print_grid(int grid[][COLS], int rows) {   // every size but the first is needed
+    for (int r = 0; r < rows; r++) {
+        for (int c = 0; c < COLS; c++) {
+            printf("%3d", grid[r][c]);
+        }
+        printf("\n");
+    }
+}
+
+int main(void) {
+    int grid[ROWS][COLS];
+    for (int r = 0; r < ROWS; r++) {
+        for (int c = 0; c < COLS; c++) {
+            grid[r][c] = (r + 1) * (c + 1);
+        }
+    }
+    print_grid(grid, ROWS);
+    printf("grid takes %zu bytes\n", sizeof grid);
+    return 0;
+}
+```
+
+~~~check
+? What does C do when you write to arr[10] in an array of 10 elements?
++ Nothing stops it: it's undefined behaviour (a buffer overflow)
+- It throws an exception
+- It grows the array
+- It writes to arr[0]
+> Always check indexes yourself.
+~~~
+
+📚 **Go deeper:** K&R section 1.6 and chapter 5; *C: The Complete Reference*, chapter 4 (Arrays and Strings).
+--- goals
+- declare and initialise arrays, including partial and zero initialisation
+- compute an array's length with sizeof where it's declared
+- explain why C doesn't check bounds and what a buffer overflow is
+- pass arrays to functions with their length
+- use two-dimensional arrays
+--- quiz
+? What are the elements of `int a[4] = {7};`?
++ 7, 0, 0, 0
+- 7, 7, 7, 7
+- 7 and three garbage values
+- A compile error
+> Missing initialisers are zero.
+? Inside `void f(int a[])`, what is `sizeof a`?
++ The size of a pointer
+- The number of elements
+- The size of the whole array
+- 0
+> Arrays decay to pointers when passed.
+? How do you copy array b into array a of the same size?
++ memcpy(a, b, sizeof a) or a loop
+- a = b;
+- a == b;
+- strcpy(a, b) for any type
+> Arrays aren't assignable.
+--- exercise code c
+::prompt
+Write three array functions:
+
+- `void reverse(int a[], size_t n)` reverses the array **in place** (swap from both ends);
+- `size_t remove_value(int a[], size_t n, int value)` removes every occurrence of `value` by moving the other elements forward, and returns the new length;
+- `void print_array(const int a[], size_t n)` prints `[1, 2, 3]` (and `[]` when empty).
+
+`main` is given:
+
+```
+[1, 2, 3, 4, 5, 6]
+[6, 5, 4, 3, 2, 1]
+[6, 5, 4, 2, 1]
+[5, 4, 2, 1]
+[]
+```
+::starter
+#include <stdio.h>
+
+void reverse(int a[], size_t n) {}
+
+size_t remove_value(int a[], size_t n, int value) { return n; }
+
+void print_array(const int a[], size_t n) {}
+
+int main(void) {
+    int data[] = {1, 2, 3, 4, 5, 6};
+    size_t n = sizeof data / sizeof data[0];
+    print_array(data, n);
+    reverse(data, n);
+    print_array(data, n);
+    n = remove_value(data, n, 3);
+    print_array(data, n);
+    n = remove_value(data, n, 6);
+    print_array(data, n);
+    print_array(data, 0);
+    return 0;
+}
+::solution
+#include <stdio.h>
+
+void reverse(int a[], size_t n) {
+    for (size_t i = 0; i < n / 2; i++) {
+        int tmp = a[i];
+        a[i] = a[n - 1 - i];
+        a[n - 1 - i] = tmp;
+    }
+}
+
+size_t remove_value(int a[], size_t n, int value) {
+    size_t kept = 0;
+    for (size_t i = 0; i < n; i++) {
+        if (a[i] != value) {
+            a[kept++] = a[i];
+        }
+    }
+    return kept;
+}
+
+void print_array(const int a[], size_t n) {
+    printf("[");
+    for (size_t i = 0; i < n; i++) {
+        printf("%s%d", i > 0 ? ", " : "", a[i]);
+    }
+    printf("]\n");
+}
+
+int main(void) {
+    int data[] = {1, 2, 3, 4, 5, 6};
+    size_t n = sizeof data / sizeof data[0];
+    print_array(data, n);
+    reverse(data, n);
+    print_array(data, n);
+    n = remove_value(data, n, 3);
+    print_array(data, n);
+    n = remove_value(data, n, 6);
+    print_array(data, n);
+    print_array(data, 0);
+    return 0;
+}
+::expected
+[1, 2, 3, 4, 5, 6]
+[6, 5, 4, 3, 2, 1]
+[6, 5, 4, 2, 1]
+[5, 4, 2, 1]
+[]
+::hints
+- Reverse: swap `a[i]` and `a[n - 1 - i]` for `i < n / 2`.
+- Remove: keep a write index `kept`; copy each element you keep to `a[kept++]`.
+- Print the separator `", "` before every element except the first.
+--- cards
+Array :: Fixed size, contiguous elements, indexes 0..n-1, no bounds checking.
+Length :: sizeof arr / sizeof arr[0], only where arr is declared.
+Decay :: An array passed to a function becomes a pointer to its first element.
+Buffer overflow :: Writing past an array's end: undefined behaviour and a classic security hole.
+2-D array :: int g[R][C]; stored row by row; parameters need every size but the first.
+
+=== lesson c-pointers | Pointers | 80
+## Addresses
+
+Every variable lives at a **memory address**. A **pointer** is a variable that holds an address. `&x` gives the address of `x`; `*p` follows the pointer (**dereferences** it) to the value it points to:
+
+```c
+#include <stdio.h>
+
+int main(void) {
+    int x = 10;
+    int *p = &x;            // p points to x
+    printf("x = %d, *p = %d\n", x, *p);
+    *p = 20;                // write through the pointer
+    printf("x = %d\n", x);
+    printf("x is at %p, p holds %p, p itself is at %p\n", (void *)&x, (void *)p, (void *)&p);
+    printf("sizeof(int *) = %zu\n", sizeof p);
+
+    int *nothing = NULL;    // NULL: points nowhere
+    if (nothing == NULL) {
+        printf("nothing points nowhere\n");
+    }
+    return 0;
+}
+```
+
+- The type `int *` reads "pointer to int". In `int *p, q;` only `p` is a pointer: one more reason to declare one variable per line.
+- **`NULL`** means "no object". Dereferencing `NULL` is undefined behaviour (usually a segmentation fault): check pointers that might be `NULL`.
+- An uninitialised pointer holds a garbage address: worse than `NULL`, because it might point at something valid. Initialise pointers, to `NULL` if nothing else.
+
+## Why pointers?
+
+1. **Letting a function change the caller's variables** (C passes everything by value).
+2. **Working with arrays and strings**, which are passed as pointers to their first element.
+3. **Dynamic memory**: `malloc` returns a pointer to memory you requested at run time (Module 5).
+4. **Building data structures**: linked lists and trees link nodes with pointers.
+
+```c
+#include <stdio.h>
+
+void swap(int *a, int *b) {
+    int tmp = *a;
+    *a = *b;
+    *b = tmp;
+}
+
+// returns 0 on success, -1 on error; the result goes through a pointer
+int divide(int a, int b, int *quotient, int *remainder) {
+    if (b == 0) return -1;
+    *quotient = a / b;
+    *remainder = a % b;
+    return 0;
+}
+
+int main(void) {
+    int x = 1, y = 2;
+    swap(&x, &y);
+    printf("x=%d y=%d\n", x, y);
+
+    int q, r;
+    if (divide(17, 5, &q, &r) == 0) printf("17 = 5*%d + %d\n", q, r);
+    if (divide(1, 0, &q, &r) != 0) printf("cannot divide by zero\n");
+    return 0;
+}
+```
+
+The "return an error code, write results through pointers" pattern is everywhere in C APIs.
+
+## Pointers and const
+
+`const` can protect the pointed-to value, the pointer itself, or both. Read declarations **right to left**:
+
+```c
+#include <stdio.h>
+
+int main(void) {
+    int a = 1, b = 2;
+    const int *p = &a;     // pointer to const int: *p = 5 is an error, p = &b is fine
+    int *const q = &a;     // const pointer to int: *q = 5 is fine, q = &b is an error
+    p = &b;
+    *q = 5;
+    printf("%d %d %d\n", *p, *q, a);
+    return 0;
+}
+```
+
+Functions take `const T *` for inputs they only read: it documents the intent and lets the compiler catch accidental writes.
+
+## Dangling pointers
+
+A pointer to something that no longer exists is **dangling**. The classic case is returning the address of a local variable, which disappears when the function returns:
+
+```c
+// warning
+#include <stdio.h>
+
+int *broken(void) {
+    int local = 42;
+    return &local;     // local dies here: the caller gets a dangling pointer
+}
+
+int main(void) {
+    int *p = broken();
+    (void)p;           // using *p would be undefined behaviour
+    printf("the compiler warned about returning a local's address\n");
+    return 0;
+}
+```
+
+~~~check
+? What does `*p = 7;` do when p points to x?
++ Stores 7 in x
+- Makes p point to address 7
+- Multiplies p by 7
+- Declares a pointer
+> * dereferences.
+~~~
+
+📚 **Go deeper:** K&R chapter 5 (Pointers and Arrays); Ted Jensen, "A Tutorial on Pointers and Arrays in C"; *C: The Complete Reference*, chapter 5 (Pointers).
+--- goals
+- take addresses with & and dereference with *
+- use NULL and initialise every pointer
+- change caller variables and return several results through pointers
+- read and write const pointer declarations
+- recognise dangling pointers
+--- quiz
+? In `int *a, b;`, what is b?
++ An int
+- A pointer to int
+- A pointer to a pointer
+- A compile error
+> The * belongs to each declarator.
+? What's the difference between `const int *p` and `int *const p`?
++ The first can't change the value through p; the second can't change p itself
+- None
+- The first can't change p; the second can't change the value
+- Both make everything constant
+> Read right to left.
+? What does dereferencing NULL do?
++ Undefined behaviour, usually a crash
+- Returns 0
+- Returns NULL
+- Allocates memory
+> Check before dereferencing.
+? Why is returning the address of a local variable wrong?
++ The local stops existing when the function returns
+- Locals have no address
+- It's slow
+- It isn't wrong
+> The pointer would dangle.
+--- exercise code c
+::prompt
+Write pointer-based helpers:
+
+- `void min_max(const int *values, size_t n, int *min, int *max)`: writes the smallest and largest value; does nothing when `n` is 0;
+- `int *find(int *values, size_t n, int target)`: returns a pointer **to the element** equal to target, or `NULL`;
+- `void clamp_all(int *values, size_t n, int lo, int hi)`: limits every element to the range lo..hi.
+
+`main` is given; it uses the pointer returned by `find` to change the element it points to:
+
+```
+min 2, max 31
+found 17 at index 3
+after replacing: 12 2 31 99 8
+clamped: 12 5 20 20 8
+42 not found
+```
+::starter
+#include <stdio.h>
+
+void min_max(const int *values, size_t n, int *min, int *max) {}
+
+int *find(int *values, size_t n, int target) { return values; }
+
+void clamp_all(int *values, size_t n, int lo, int hi) {}
+
+int main(void) {
+    int data[] = {12, 2, 31, 17, 8};
+    size_t n = sizeof data / sizeof data[0];
+    int lo = 0, hi = 0;
+    min_max(data, n, &lo, &hi);
+    printf("min %d, max %d\n", lo, hi);
+    int *p = find(data, n, 17);
+    if (p != NULL) {
+        printf("found %d at index %td\n", *p, p - data);
+        *p = 99;
+    }
+    printf("after replacing:");
+    for (size_t i = 0; i < n; i++) printf(" %d", data[i]);
+    printf("\n");
+    clamp_all(data, n, 5, 20);
+    printf("clamped:");
+    for (size_t i = 0; i < n; i++) printf(" %d", data[i]);
+    printf("\n");
+    if (find(data, n, 42) == NULL) printf("42 not found\n");
+    return 0;
+}
+::solution
+#include <stdio.h>
+
+void min_max(const int *values, size_t n, int *min, int *max) {
+    if (n == 0) return;
+    *min = *max = values[0];
+    for (size_t i = 1; i < n; i++) {
+        if (values[i] < *min) *min = values[i];
+        if (values[i] > *max) *max = values[i];
+    }
+}
+
+int *find(int *values, size_t n, int target) {
+    for (size_t i = 0; i < n; i++) {
+        if (values[i] == target) return &values[i];
+    }
+    return NULL;
+}
+
+void clamp_all(int *values, size_t n, int lo, int hi) {
+    for (size_t i = 0; i < n; i++) {
+        if (values[i] < lo) values[i] = lo;
+        else if (values[i] > hi) values[i] = hi;
+    }
+}
+
+int main(void) {
+    int data[] = {12, 2, 31, 17, 8};
+    size_t n = sizeof data / sizeof data[0];
+    int lo = 0, hi = 0;
+    min_max(data, n, &lo, &hi);
+    printf("min %d, max %d\n", lo, hi);
+    int *p = find(data, n, 17);
+    if (p != NULL) {
+        printf("found %d at index %td\n", *p, p - data);
+        *p = 99;
+    }
+    printf("after replacing:");
+    for (size_t i = 0; i < n; i++) printf(" %d", data[i]);
+    printf("\n");
+    clamp_all(data, n, 5, 20);
+    printf("clamped:");
+    for (size_t i = 0; i < n; i++) printf(" %d", data[i]);
+    printf("\n");
+    if (find(data, n, 42) == NULL) printf("42 not found\n");
+    return 0;
+}
+::expected
+min 2, max 31
+found 17 at index 3
+after replacing: 12 2 31 99 8
+clamped: 12 5 20 20 8
+42 not found
+::hints
+- Write through the pointers: `*min = *max = values[0];`.
+- Return `&values[i]`, the address of the element, from `find`.
+- Subtracting two pointers into the same array (`p - data`) gives the distance in elements, printed with `%td`.
+--- cards
+&x / *p :: Address of x / the value p points to.
+NULL :: Points nowhere; dereferencing it is undefined behaviour.
+Out-parameters :: int f(..., int *result): return a status, write results through pointers.
+const int *p / int *const p :: Can't change *p / can't change p.
+Dangling pointer :: Points to something that no longer exists (a returned local, freed memory).
+
+=== lesson c-pointer-arithmetic | Pointer arithmetic, arrays and function pointers | 75
+## Arrays are pointers' best friends
+
+An array's name used in an expression **decays** to a pointer to its first element. Adding 1 to a pointer moves it to the **next element** (not the next byte): the address grows by `sizeof` the element. So `a[i]` is exactly `*(a + i)`:
+
+```c
+#include <stdio.h>
+
+int main(void) {
+    int a[] = {10, 20, 30, 40};
+    int *p = a;                       // same as &a[0]
+    printf("%d %d %d\n", *p, *(p + 2), p[3]);
+    printf("p+1 is %zu bytes after p\n", (size_t)((char *)(p + 1) - (char *)p));
+
+    int sum = 0;
+    for (int *it = a; it != a + 4; it++) {  // walk with a pointer, stop one past the end
+        sum += *it;
+    }
+    printf("sum %d\n", sum);
+
+    int *last = &a[3];
+    printf("distance: %td elements\n", last - p);
+    return 0;
+}
+```
+
+Rules: pointer arithmetic is only valid **inside one array** (plus the position just past its end, which may be compared but not dereferenced). Subtracting two pointers into the same array gives a `ptrdiff_t`, the number of elements between them.
+
+## Walking strings with pointers
+
+Strings are arrays of `char` ending with `'\0'`, so pointer loops are natural, and classic C code is full of them:
+
+```c
+#include <stdio.h>
+
+size_t my_strlen(const char *s) {
+    const char *p = s;
+    while (*p != '\0') p++;
+    return (size_t)(p - s);
+}
+
+void my_strcpy(char *dst, const char *src) {
+    while ((*dst++ = *src++) != '\0') {
+    }
+}
+
+int main(void) {
+    char copy[16];
+    my_strcpy(copy, "pointer");
+    printf("%s has %zu chars\n", copy, my_strlen(copy));
+    return 0;
+}
+```
+
+`*dst++ = *src++` copies one character and advances both pointers: compact, but write it only when it's clear to you and your readers.
+
+## Pointers to pointers
+
+A `char **` points to a `char *`. You meet it in arrays of strings (like `argv`), and when a function must change the caller's **pointer**:
+
+```c
+#include <stdio.h>
+
+void next_word(const char **cursor) {    // moves the caller's pointer past one word
+    while (**cursor != '\0' && **cursor != ' ') (*cursor)++;
+    while (**cursor == ' ') (*cursor)++;
+}
+
+int main(void) {
+    const char *names[] = {"ada", "grace", "linus"};  // an array of pointers
+    for (int i = 0; i < 3; i++) {
+        printf("%s has %c first\n", names[i], names[i][0]);
+    }
+
+    const char *text = "the quick brown fox";
+    const char *cursor = text;
+    next_word(&cursor);
+    next_word(&cursor);
+    printf("remaining: \"%s\"\n", cursor);
+    return 0;
+}
+```
+
+## Function pointers
+
+A function's name is also an address. A **function pointer** stores it, so you can pass behaviour to other functions, the way `qsort` takes a comparison function, or build tables of operations:
+
+```c
+#include <stdio.h>
+
+int add(int a, int b) { return a + b; }
+int sub(int a, int b) { return a - b; }
+int mul(int a, int b) { return a * b; }
+
+typedef int (*binary_op)(int, int);       // a name for "pointer to function (int, int) -> int"
+
+int fold(const int *values, size_t n, int start, binary_op op) {
+    int acc = start;
+    for (size_t i = 0; i < n; i++) acc = op(acc, values[i]);
+    return acc;
+}
+
+int main(void) {
+    binary_op ops[] = {add, sub, mul};
+    const char *names[] = {"add", "sub", "mul"};
+    int values[] = {1, 2, 3, 4};
+    for (int i = 0; i < 3; i++) {
+        printf("%s: %d\n", names[i], fold(values, 4, i == 2 ? 1 : 0, ops[i]));
+    }
+    return 0;
+}
+```
+
+Without the `typedef`, the declaration is `int (*op)(int, int)`: the parentheses around `*op` make it a pointer to a function, rather than a function returning `int *`.
+
+~~~check
+? If `int *p` points to a[1], where does `p + 2` point?
++ a[3]
+- Two bytes after a[1]
+- a[2]
+- a[1] + 2 (the value)
+> Pointer arithmetic counts elements.
+~~~
+
+📚 **Go deeper:** K&R sections 5.3–5.12; cdecl.org (explains declarations like `int (*f)(int)`); *C: The Complete Reference*, chapter 5 and section "Function Pointers" in chapter 6.
+--- goals
+- explain that a[i] is *(a + i) and that pointer arithmetic counts elements
+- walk arrays and strings with pointers, staying inside the array
+- use pointers to pointers for arrays of strings and to change a caller's pointer
+- declare and use function pointers and typedefs for them
+--- quiz
+? What is `a[i]` equivalent to?
++ *(a + i)
+- &a + i
+- *a + i
+- a + i
+> Indexing is pointer arithmetic.
+? What does subtracting two pointers into the same array give?
++ The number of elements between them (a ptrdiff_t)
+- The number of bytes between them
+- A new pointer
+- Undefined behaviour always
+> Only within the same array.
+? What does `int (*f)(double)` declare?
++ A pointer to a function taking a double and returning an int
+- A function returning a pointer to int
+- An array of functions
+- A double pointer
+> The parentheses matter.
+? Why does a function take `char **` to move the caller's string pointer?
++ It needs the address of the pointer to change it
+- Strings are two-dimensional
+- char * can't be passed
+- To copy the string
+> Same reason swap takes int *.
+--- exercise code c
+::prompt
+Write a **generic sorting function** for ints that takes a comparison function pointer: `void sort_ints(int *values, size_t n, int (*cmp)(int, int))` using insertion sort with **pointer arithmetic** (no `[]` inside `sort_ints`), and three comparators: `ascending`, `descending` and `by_last_digit` (by last digit, then by value). A comparator returns a negative, zero or positive int. Then print with `print_ints` (given):
+
+```
+ascending: 3 7 12 25 31 48 60
+descending: 60 48 31 25 12 7 3
+by last digit: 60 31 12 3 25 7 48
+```
+::starter
+#include <stdio.h>
+
+void print_ints(const char *label, const int *values, size_t n) {
+    printf("%s:", label);
+    for (const int *p = values; p < values + n; p++) printf(" %d", *p);
+    printf("\n");
+}
+
+int main(void) {
+    int values[] = {25, 3, 48, 12, 7, 60, 31};
+    size_t n = sizeof values / sizeof values[0];
+    print_ints("ascending", values, n);
+    return 0;
+}
+::solution
+#include <stdio.h>
+
+void print_ints(const char *label, const int *values, size_t n) {
+    printf("%s:", label);
+    for (const int *p = values; p < values + n; p++) printf(" %d", *p);
+    printf("\n");
+}
+
+int ascending(int a, int b) { return (a > b) - (a < b); }
+int descending(int a, int b) { return ascending(b, a); }
+int by_last_digit(int a, int b) {
+    int d = ascending(a % 10, b % 10);
+    return d != 0 ? d : ascending(a, b);
+}
+
+void sort_ints(int *values, size_t n, int (*cmp)(int, int)) {
+    for (int *i = values + 1; i < values + n; i++) {
+        int key = *i;
+        int *j = i;
+        while (j > values && cmp(*(j - 1), key) > 0) {
+            *j = *(j - 1);
+            j--;
+        }
+        *j = key;
+    }
+}
+
+int main(void) {
+    int values[] = {25, 3, 48, 12, 7, 60, 31};
+    size_t n = sizeof values / sizeof values[0];
+    sort_ints(values, n, ascending);
+    print_ints("ascending", values, n);
+    sort_ints(values, n, descending);
+    print_ints("descending", values, n);
+    sort_ints(values, n, by_last_digit);
+    print_ints("by last digit", values, n);
+    return 0;
+}
+::expected
+ascending: 3 7 12 25 31 48 60
+descending: 60 48 31 25 12 7 3
+by last digit: 60 31 12 3 25 7 48
+::hints
+- `(a > b) - (a < b)` returns -1, 0 or 1 without overflow (unlike `a - b`).
+- Insertion sort: take `key = *i`, shift larger elements one place right (`*j = *(j - 1)`), then store the key.
+- Pass the function's name: `sort_ints(values, n, descending);`.
+--- cards
+a[i] == *(a + i) :: Indexing is pointer arithmetic; p + 1 moves one element.
+One past the end :: Valid to compute and compare, never to dereference.
+char ** :: Array of strings, or a way to change a caller's char *.
+Function pointer :: int (*f)(int, int); call with f(a, b); typedef for readability.
+Comparator :: Returns <0, 0, >0; (a > b) - (a < b) avoids overflow.
+
+=== lesson c-strings | Strings | 75
+## Strings are char arrays ending in '\0'
+
+C has no string type. A **string** is a sequence of `char` ending with the **null character** `'\0'`. `"hi"` is stored as three bytes: `'h'`, `'i'`, `'\0'`. Everything that handles strings walks until it finds that terminator:
+
+```c
+#include <stdio.h>
+#include <string.h>
+
+int main(void) {
+    char word[] = "hello";          // a modifiable array of 6 chars (5 + '\0')
+    const char *literal = "world";  // points to a read-only string literal
+    printf("%s %s, %zu chars, array size %zu\n", word, literal, strlen(word), sizeof word);
+
+    word[0] = 'J';                  // fine: word is our own array
+    printf("%s\n", word);
+    // literal[0] = 'W';            // undefined behaviour: string literals are read-only
+
+    char name[8] = {'A', 'd', 'a', '\0'};
+    printf("%s has %zu letters\n", name, strlen(name));
+    return 0;
+}
+```
+
+- `strlen` counts characters **before** the `'\0'`; the array needs one more byte.
+- A string literal is read-only: point to it with `const char *`.
+- Forget the `'\0'` and every string function runs past the end of your array.
+
+## The string.h toolbox
+
+```c
+#include <stdio.h>
+#include <string.h>
+#include <ctype.h>
+
+int main(void) {
+    char buf[32] = "Hello";
+    strcat(buf, ", world");                       // append (buf must be big enough!)
+    printf("%s (%zu)\n", buf, strlen(buf));
+
+    printf("compare: %d %d\n", strcmp("apple", "banana") < 0, strcmp("go", "go") == 0);
+    printf("find: %s\n", strstr(buf, "world"));   // pointer to the match, or NULL
+    printf("char: %s\n", strchr(buf, ','));
+
+    char copy[32];
+    strcpy(copy, buf);                            // copy (copy must be big enough!)
+    for (char *p = copy; *p; p++) *p = (char)toupper((unsigned char)*p);
+    printf("%s\n", copy);
+
+    char csv[] = "red,green,blue";
+    for (char *tok = strtok(csv, ","); tok != NULL; tok = strtok(NULL, ",")) {
+        printf("[%s] ", tok);                     // strtok modifies csv
+    }
+    printf("\n");
+    return 0;
+}
+```
+
+- **Compare** strings with `strcmp` (0 means equal), never with `==`, which compares addresses.
+- `<ctype.h>` classifies and converts characters: `isalpha`, `isdigit`, `isspace`, `toupper`, `tolower`. Pass them an `unsigned char` value (cast), since negative `char` values are undefined.
+- `strtok` splits in place and keeps hidden state between calls; for anything serious, write your own loop with `strchr` or `strcspn`.
+
+## Writing safe string code
+
+`strcpy` and `strcat` don't know how big the destination is: give them a longer string and they overflow the buffer. Safer habits:
+
+- format and join with **`snprintf(dst, sizeof dst, ...)`**, which never writes past `sizeof dst` and always terminates the string;
+- check lengths before copying (`strlen(src) < sizeof dst`);
+- `strncpy` is **not** a safe `strcpy`: it doesn't add `'\0'` when the source is too long. Prefer `snprintf`.
+
+```c
+#include <stdio.h>
+#include <string.h>
+
+int main(void) {
+    char path[16];
+    const char *dir = "/home/ada", *file = "report.txt";
+    int needed = snprintf(path, sizeof path, "%s/%s", dir, file);
+    if (needed >= (int)sizeof path) {
+        printf("truncated: \"%s\" (needed %d chars)\n", path, needed);
+    }
+
+    char safe[8];
+    const char *src = "Lovelace";
+    if (strlen(src) < sizeof safe) {
+        strcpy(safe, src);
+    } else {
+        printf("\"%s\" doesn't fit in %zu bytes\n", src, sizeof safe);
+    }
+    return 0;
+}
+```
+
+~~~check
+? How many bytes does `char s[] = "cat";` occupy?
++ 4
+- 3
+- 8
+- It depends on the compiler
+> Three characters plus '\0'.
+~~~
+
+📚 **Go deeper:** cppreference.com, "Null-terminated byte strings"; the CERT C Coding Standard, rules STR31-C and STR32-C; *C: The Complete Reference*, chapters 4 and 14 (String and Character Functions).
+--- goals
+- explain null-terminated strings and the difference between arrays and literals
+- use strlen, strcmp, strcpy, strcat, strstr, strchr and strtok correctly
+- classify and convert characters with ctype.h
+- write string code that can't overflow, with snprintf and length checks
+--- quiz
+? How do you check whether two strings are equal?
++ strcmp(a, b) == 0
+- a == b
+- strlen(a) == strlen(b)
+- a.equals(b)
+> == compares addresses.
+? What's wrong with `char *s = "hi"; s[0] = 'H';`?
++ String literals are read-only: undefined behaviour
+- Nothing
+- s is too short
+- 'H' must be "H"
+> Use char s[] = "hi"; to get a modifiable copy.
+? Why is strcpy dangerous?
++ It doesn't know the destination's size and can overflow it
+- It's slow
+- It doesn't copy '\0'
+- It only copies one character
+> Check lengths or use snprintf.
+? What does strlen("hello") return?
++ 5
+- 6
+- 4
+- 8
+> The '\0' isn't counted.
+--- exercise code c
+::prompt
+Write four string functions **without using string.h** (use loops and pointers; `ctype.h` is allowed):
+
+- `size_t str_length(const char *s)`;
+- `void to_title(char *s)`: upper-cases the first letter of each word and lower-cases the rest (a word starts after a space or at the beginning);
+- `int count_words(const char *s)`: words are separated by one or more spaces;
+- `int is_palindrome(const char *s)`: ignores case and anything that isn't a letter or digit.
+
+```
+"hello world" has 11 chars
+title: Hello World
+title: The Quick Brown Fox
+"  spaced   out  words " has 3 words
+"A man, a plan, a canal: Panama" palindrome: 1
+"C programming" palindrome: 0
+```
+::starter
+#include <stdio.h>
+#include <ctype.h>
+
+size_t str_length(const char *s) { return 0; }
+
+void to_title(char *s) {}
+
+int count_words(const char *s) { return 0; }
+
+int is_palindrome(const char *s) { return 0; }
+
+int main(void) {
+    printf("\"%s\" has %zu chars\n", "hello world", str_length("hello world"));
+    return 0;
+}
+::solution
+#include <stdio.h>
+#include <ctype.h>
+
+size_t str_length(const char *s) {
+    const char *p = s;
+    while (*p) p++;
+    return (size_t)(p - s);
+}
+
+void to_title(char *s) {
+    int start = 1;
+    for (; *s; s++) {
+        unsigned char c = (unsigned char)*s;
+        *s = (char)(start ? toupper(c) : tolower(c));
+        start = c == ' ';
+    }
+}
+
+int count_words(const char *s) {
+    int words = 0, in_word = 0;
+    for (; *s; s++) {
+        if (*s == ' ') {
+            in_word = 0;
+        } else if (!in_word) {
+            in_word = 1;
+            words++;
+        }
+    }
+    return words;
+}
+
+int is_palindrome(const char *s) {
+    const char *left = s;
+    const char *right = s + str_length(s);
+    while (left < right) {
+        if (!isalnum((unsigned char)*left)) { left++; continue; }
+        if (!isalnum((unsigned char)*(right - 1))) { right--; continue; }
+        if (tolower((unsigned char)*left) != tolower((unsigned char)*(right - 1))) return 0;
+        left++;
+        right--;
+    }
+    return 1;
+}
+
+int main(void) {
+    printf("\"%s\" has %zu chars\n", "hello world", str_length("hello world"));
+    char a[] = "hello world";
+    char b[] = "tHE qUICK bROWN fOX";
+    to_title(a);
+    to_title(b);
+    printf("title: %s\ntitle: %s\n", a, b);
+    const char *spaced = "  spaced   out  words ";
+    printf("\"%s\" has %d words\n", spaced, count_words(spaced));
+    const char *tests[] = {"A man, a plan, a canal: Panama", "C programming"};
+    for (int i = 0; i < 2; i++) {
+        printf("\"%s\" palindrome: %d\n", tests[i], is_palindrome(tests[i]));
+    }
+    return 0;
+}
+::expected
+"hello world" has 11 chars
+title: Hello World
+title: The Quick Brown Fox
+"  spaced   out  words " has 3 words
+"A man, a plan, a canal: Panama" palindrome: 1
+"C programming" palindrome: 0
+::hints
+- `str_length`: advance a pointer to the `'\0'` and subtract.
+- `to_title`: remember whether the previous character was a space.
+- `is_palindrome`: two pointers moving toward each other, skipping characters that aren't `isalnum`.
+- `main` must also print the titles of `"hello world"` and `"tHE qUICK bROWN fOX"` (copied into arrays, since literals are read-only) and test the two palindrome phrases.
+--- cards
+String :: char array ending in '\0'; strlen doesn't count it.
+String literal :: Read-only: const char *s = "...".
+strcmp :: 0 when equal; never compare strings with ==.
+strcpy / strcat :: Don't check sizes: check lengths first or use snprintf.
+ctype.h :: isalpha, isdigit, isalnum, isspace, toupper, tolower (pass unsigned char).
+strncpy :: Doesn't always add '\0': not a safe strcpy.
+
+=== lesson c-m4-test | Module 4 test | 150 | exam
+This test covers Module 4: arrays, pointers, pointer arithmetic, function pointers and strings.
+
+Before you start, check that you can:
+
+- process arrays without going out of bounds;
+- use pointers to modify caller data and walk arrays;
+- manipulate strings safely.
+--- goals
+- process text with arrays, pointers and string functions
+--- quiz
+? What does `char *p = arr; p += 3;` make p point to?
++ arr[3]
+- The byte value 3
+- arr[0] + 3
+- The end of arr
+> Arithmetic in elements (chars here).
+? Which is a correct way to get the number of elements of `double v[10]` where it's declared?
++ sizeof v / sizeof v[0]
+- sizeof(v)
+- strlen(v)
+- v.length
+> sizeof v is 80 bytes; each element is 8.
+? What does `strstr("haystack", "st")` return?
++ A pointer to "stack" inside "haystack"
+- The index 3
+- 1
+- NULL
+> NULL when not found.
+? What's the type of the function pointer for `int cmp(const void *, const void *)`?
++ int (*)(const void *, const void *)
+- int *(const void *, const void *)
+- void (*)(int)
+- int (const void *)
+> That's what qsort expects.
+--- exercise code c
+::prompt
+**A word frequency counter for short texts.** Read lines until the end of the input. Split each line into words made of letters only (other characters separate words), lower-case them, and count them in a fixed table: `#define MAX_WORDS 100` and `#define MAX_LEN 32`, with `char words[MAX_WORDS][MAX_LEN]` and `int counts[MAX_WORDS]`. Ignore longer words (more than 31 letters).
+
+Then print the words sorted by count (highest first), ties alphabetically, as `%-8s %d`, and finally the number of distinct words. Use `qsort` with an index array and a comparator (`int (*)(const void *, const void *)`): the comparator can reach the tables because they are file-level `static` arrays.
+
+```
+the      4
+cat      2
+and      1
+dog      1
+mat      1
+on       1
+sat      1
+distinct: 7
+```
+::stdin
+The cat sat on the mat.
+The dog -- and THE cat!
+::starter
+#include <stdio.h>
+
+#define MAX_WORDS 100
+#define MAX_LEN 32
+
+int main(void) {
+    char line[256];
+    while (fgets(line, sizeof line, stdin) != NULL) {
+        printf("%s", line);
+    }
+    return 0;
+}
+::solution
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <ctype.h>
+
+#define MAX_WORDS 100
+#define MAX_LEN 32
+
+static char words[MAX_WORDS][MAX_LEN];
+static int counts[MAX_WORDS];
+static int distinct = 0;
+
+static void add_word(const char *w) {
+    for (int i = 0; i < distinct; i++) {
+        if (strcmp(words[i], w) == 0) {
+            counts[i]++;
+            return;
+        }
+    }
+    if (distinct < MAX_WORDS) {
+        snprintf(words[distinct], MAX_LEN, "%s", w);
+        counts[distinct++] = 1;
+    }
+}
+
+static int by_count(const void *a, const void *b) {
+    int i = *(const int *)a, j = *(const int *)b;
+    if (counts[i] != counts[j]) return counts[j] - counts[i];
+    return strcmp(words[i], words[j]);
+}
+
+int main(void) {
+    char line[256];
+    while (fgets(line, sizeof line, stdin) != NULL) {
+        char word[MAX_LEN + 1];
+        size_t len = 0;
+        int too_long = 0;
+        for (const char *p = line;; p++) {
+            unsigned char c = (unsigned char)*p;
+            if (isalpha(c)) {
+                if (len < MAX_LEN) word[len++] = (char)tolower(c);
+                else too_long = 1;
+                continue;
+            }
+            if (len > 0 && !too_long && len < MAX_LEN) {
+                word[len] = '\0';
+                add_word(word);
+            }
+            len = 0;
+            too_long = 0;
+            if (c == '\0') break;
+        }
+    }
+    int order[MAX_WORDS];
+    for (int i = 0; i < distinct; i++) order[i] = i;
+    qsort(order, (size_t)distinct, sizeof order[0], by_count);
+    for (int i = 0; i < distinct; i++) {
+        printf("%-8s %d\n", words[order[i]], counts[order[i]]);
+    }
+    printf("distinct: %d\n", distinct);
+    return 0;
+}
+::expected
+the      4
+cat      2
+and      1
+dog      1
+mat      1
+on       1
+sat      1
+distinct: 7
+::cases
+>>> Go go GO! Stop.
+go       3
+stop     1
+distinct: 2
+::hints
+- Walk each line character by character; collect letters into a small buffer, and when a non-letter (or the `'\0'`) arrives, finish the word.
+- Look the word up with `strcmp` in the table; add it with `snprintf(words[n], MAX_LEN, "%s", w)` if it's new.
+- `qsort` sorts an array of indexes; the comparator casts `const void *` to `const int *` and compares counts, then words.
