@@ -276,8 +276,9 @@ async function runProgram(lang, code, stdin) {
     case 'c':
       write('main.c', code);
       // No optimisation, so mistakes (a NULL dereference...) behave as the C lessons describe; all warnings on
-      if (t.gcc || t.clang) steps.push([t.gcc ?? t.clang, ['main.c', '-std=c17', '-O0', '-Wall', '-Wextra', '-o', exe, ...(isWin ? [] : ['-lm'])], {}, true]);
-      else steps.push(msvc('main.c', '/std:c17 /W4'));
+      // (on Windows, silence Microsoft's "use scanf_s instead" advice: the _s functions aren't portable C)
+      if (t.gcc || t.clang) steps.push([t.gcc ?? t.clang, ['main.c', '-std=c17', '-O0', '-Wall', '-Wextra', '-o', exe, ...(isWin ? ['-D_CRT_SECURE_NO_WARNINGS'] : ['-lm'])], {}, true]);
+      else steps.push(msvc('main.c', '/std:c17 /W4 /D_CRT_SECURE_NO_WARNINGS'));
       steps.push([exe, [], {}, false]);
       break;
     case 'cpp':

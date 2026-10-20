@@ -1,0 +1,780 @@
+=== module Module 2 · Data, operators and input
+
+=== lesson c-types | Types, sizes and limits | 70
+## Integer types
+
+C's integer types have **minimum** sizes, not exact ones: an `int` is at least 16 bits, in practice 32 on today's desktops. `sizeof` tells you the size in bytes on *this* machine:
+
+```c
+#include <stdio.h>
+#include <limits.h>
+#include <stdint.h>
+
+int main(void) {
+    printf("char %zu, short %zu, int %zu, long %zu, long long %zu bytes\n",
+           sizeof(char), sizeof(short), sizeof(int), sizeof(long), sizeof(long long));
+    printf("int range: %d to %d\n", INT_MIN, INT_MAX);
+    printf("unsigned int max: %u\n", UINT_MAX);
+
+    int32_t exact = 2000000000;      // exactly 32 bits (stdint.h)
+    uint8_t byte = 255;              // exactly 8 bits, unsigned
+    int64_t big = 9000000000;        // 64 bits for big values
+    printf("%d %d %lld\n", (int)exact, byte, (long long)big);
+    return 0;
+}
+```
+
+- `long` is 32 bits on Windows but 64 bits on Linux and macOS: one reason portable code uses the **fixed-width types** of `<stdint.h>`: `int8_t` … `int64_t`, `uint8_t` … `uint64_t`, and `size_t` for sizes and indexes.
+- **`unsigned`** types hold only non-negative values and **wrap around** (modulo 2ⁿ): `0u - 1` is `UINT_MAX`. That's defined behaviour.
+- **Signed overflow is undefined behaviour**: `INT_MAX + 1` is not guaranteed to wrap. Check before you add if values can be large.
+- `char` is a small integer (one byte) used for characters: `'A'` is the number 65.
+
+```c
+#include <stdio.h>
+#include <limits.h>
+
+int main(void) {
+    unsigned int u = 0;
+    u = u - 1;                         // wraps: defined for unsigned
+    printf("0u - 1 = %u\n", u);
+
+    char letter = 'A';
+    printf("%c is %d; next is %c\n", letter, letter, letter + 1);
+
+    int a = INT_MAX;
+    if (a > INT_MAX - 1) {            // check BEFORE adding, never after
+        printf("adding 1 to %d would overflow\n", a);
+    }
+    return 0;
+}
+```
+
+## Floating point
+
+`float` (about 7 significant digits) and `double` (about 15–16) store binary approximations; **use `double`** by default. Most decimals can't be represented exactly:
+
+```c
+#include <stdio.h>
+#include <math.h>
+
+int main(void) {
+    double x = 0.1 + 0.2;
+    printf("%.17f\n", x);
+    printf("equal to 0.3? %d\n", x == 0.3);
+    printf("close to 0.3? %d\n", fabs(x - 0.3) < 1e-9);
+    float f = 16777217.0f;             // float can't hold every integer above 2^24
+    printf("%.1f\n", f);
+    printf("%f %f\n", sqrt(2.0), pow(2.0, 10));
+    return 0;
+}
+```
+
+Compare floating-point numbers with a tolerance, never with `==`. Store money as integer cents.
+
+## bool
+
+Since C99, `<stdbool.h>` provides `bool`, `true` and `false` (C23 makes them keywords). Underneath, conditions are integers: **0 is false, anything else is true**.
+
+```c
+#include <stdio.h>
+#include <stdbool.h>
+
+int main(void) {
+    bool ready = true;
+    int count = 5;
+    if (count) {                       // non-zero: true
+        printf("count is non-zero\n");
+    }
+    printf("ready=%d, !ready=%d, (3 > 2)=%d\n", ready, !ready, 3 > 2);
+    return 0;
+}
+```
+
+## Constants and enums
+
+```c
+#include <stdio.h>
+
+#define MAX_PLAYERS 4                  // a preprocessor macro: text substitution
+enum level { EASY = 1, MEDIUM, HARD }; // named integer constants: 1, 2, 3
+
+int main(void) {
+    const double tax_rate = 0.2;       // a read-only variable
+    enum level l = MEDIUM;
+    printf("players %d, level %d, tax %.0f%%\n", MAX_PLAYERS, l, tax_rate * 100);
+    return 0;
+}
+```
+
+~~~check
+? Which type has exactly 32 bits on every platform?
++ int32_t
+- int
+- long
+- short
+> int is usually 32 bits, but only guaranteed to be at least 16.
+~~~
+
+📚 **Go deeper:** cppreference.com, "Arithmetic types" and "Fixed width integer types"; David Goldberg, "What Every Computer Scientist Should Know About Floating-Point Arithmetic"; *C: The Complete Reference*, chapter 2.
+--- goals
+- choose between int, long long, size_t and fixed-width types
+- use sizeof and the limits in limits.h
+- explain unsigned wrap-around and why signed overflow is undefined
+- compare floating-point numbers safely
+- use bool, #define constants and enums
+--- quiz
+? What is `sizeof(char)`?
++ Always 1
+- 2
+- Depends on the platform
+- 8
+> sizeof counts in chars.
+? What happens on `INT_MAX + 1`?
++ Undefined behaviour (signed overflow)
+- It wraps to INT_MIN, guaranteed
+- A compile error, always
+- It becomes a long
+> Unsigned arithmetic wraps; signed overflow is UB.
+? How should you compare two doubles a and b?
++ fabs(a - b) < a small tolerance
+- a == b
+- (int)a == (int)b
+- strcmp(a, b)
+> Floating point is approximate.
+? Which values are "true" in a C condition?
++ Any non-zero value
+- Only 1
+- Only true
+- Only positive values
+> 0 is false.
+--- exercise code c
+::prompt
+Print a table of integer types with their size in bytes and their range, using `sizeof` (print it with `%zu`) and the limits from `<limits.h>` and `<stdint.h>`:
+
+```
+type        bytes  min                   max
+int8_t      1      -128                  127
+uint8_t     1      0                     255
+int16_t     2      -32768                32767
+int32_t     4      -2147483648           2147483647
+int64_t     8      -9223372036854775808  9223372036854775807
+uint64_t    8      0                     18446744073709551615
+```
+
+Use `INT8_MIN`, `INT8_MAX`, `UINT8_MAX`, `INT16_MIN`, … `UINT64_MAX`. Print the min and max of signed types with `%lld` (cast to `long long`) and the unsigned ones with `%llu` (cast to `unsigned long long`). Columns: `%-12s%-7zu%-22lld%lld` (adapt for unsigned).
+::starter
+#include <stdio.h>
+#include <stdint.h>
+
+int main(void) {
+    printf("type        bytes  min                   max\n");
+    printf("int8_t      1      -128                  127\n");
+    return 0;
+}
+::solution
+#include <stdio.h>
+#include <stdint.h>
+
+int main(void) {
+    printf("type        bytes  min                   max\n");
+    printf("%-12s%-7zu%-22lld%lld\n", "int8_t", sizeof(int8_t), (long long)INT8_MIN, (long long)INT8_MAX);
+    printf("%-12s%-7zu%-22llu%llu\n", "uint8_t", sizeof(uint8_t), 0ULL, (unsigned long long)UINT8_MAX);
+    printf("%-12s%-7zu%-22lld%lld\n", "int16_t", sizeof(int16_t), (long long)INT16_MIN, (long long)INT16_MAX);
+    printf("%-12s%-7zu%-22lld%lld\n", "int32_t", sizeof(int32_t), (long long)INT32_MIN, (long long)INT32_MAX);
+    printf("%-12s%-7zu%-22lld%lld\n", "int64_t", sizeof(int64_t), (long long)INT64_MIN, (long long)INT64_MAX);
+    printf("%-12s%-7zu%-22llu%llu\n", "uint64_t", sizeof(uint64_t), 0ULL, (unsigned long long)UINT64_MAX);
+    return 0;
+}
+::expected
+type        bytes  min                   max
+int8_t      1      -128                  127
+uint8_t     1      0                     255
+int16_t     2      -32768                32767
+int32_t     4      -2147483648           2147483647
+int64_t     8      -9223372036854775808  9223372036854775807
+uint64_t    8      0                     18446744073709551615
+::hints
+- `sizeof(int16_t)` has type `size_t`: print it with `%zu`.
+- `(long long)INT8_MIN` makes the type match `%lld`.
+- The minimum of an unsigned type is 0: pass `0ULL` for `%llu`.
+--- cards
+Fixed-width types :: int8_t … int64_t, uint8_t … uint64_t in <stdint.h>.
+size_t :: Unsigned type for sizes and indexes; print with %zu.
+Unsigned wrap-around :: Defined: 0u - 1 == UINT_MAX.
+Signed overflow :: Undefined behaviour: check before you add.
+double :: Approximate; compare with a tolerance; money in integer cents.
+bool :: <stdbool.h> (keywords in C23); 0 is false, non-zero true.
+
+=== lesson c-operators | Operators, expressions and conversions | 65
+## Arithmetic
+
+```c
+#include <stdio.h>
+
+int main(void) {
+    int a = 17, b = 5;
+    printf("%d %d %d %d %d\n", a + b, a - b, a * b, a / b, a % b);
+    printf("%d %d\n", -17 / 5, -17 % 5);     // division truncates toward zero
+    printf("%.2f\n", (double)a / b);          // convert before dividing
+    printf("%.2f\n", (double)(a / b));        // too late: 3.00
+    return 0;
+}
+```
+
+Integer division by zero is **undefined behaviour** (usually a crash); floating-point division by zero gives infinity.
+
+## Increment, assignment and side effects
+
+```c
+#include <stdio.h>
+
+int main(void) {
+    int i = 5;
+    int a = i++;   // a = 5, then i becomes 6 (postfix: use, then increment)
+    int b = ++i;   // i becomes 7, then b = 7 (prefix: increment, then use)
+    printf("a=%d b=%d i=%d\n", a, b, i);
+
+    int total = 10;
+    total += 5;    // also -=, *=, /=, %=, <<=, &=, |=...
+    total *= 2;
+    printf("total=%d\n", total);
+    return 0;
+}
+```
+
+Never modify the same variable twice in one expression (`i = i++ + ++i;`): the result is undefined. Keep side effects in separate statements.
+
+## Comparison, logic and the conditional operator
+
+Comparisons (`== != < <= > >=`) give `int` 1 or 0. `&&` and `||` **short-circuit**: the right side is evaluated only when needed, which makes guards like `p != NULL && p->count > 0` safe. `cond ? a : b` picks a value:
+
+```c
+#include <stdio.h>
+
+int main(void) {
+    int age = 17;
+    int has_parent = 1;
+    int can_enter = age >= 18 || has_parent;
+    printf("can enter: %d\n", can_enter);
+    printf("%s\n", age >= 18 ? "adult" : "minor");
+    int x = 0;
+    if (x != 0 && 10 / x > 1) { // safe: 10 / x never runs when x is 0
+        printf("big\n");
+    }
+    return 0;
+}
+```
+
+The classic C bug: `if (x = 5)` **assigns** 5 (true), instead of comparing. Compilers warn about it (with `-Wall`).
+
+## Bitwise operators
+
+C is the language of bits: flags, hardware registers, network protocols, compression.
+
+```c
+#include <stdio.h>
+#include <stdint.h>
+
+#define FLAG_READ  (1u << 0)
+#define FLAG_WRITE (1u << 1)
+#define FLAG_EXEC  (1u << 2)
+
+int main(void) {
+    unsigned int perms = FLAG_READ | FLAG_WRITE;    // set bits
+    printf("can write: %d\n", (perms & FLAG_WRITE) != 0);
+    perms &= ~FLAG_WRITE;                           // clear a bit
+    perms ^= FLAG_EXEC;                             // toggle a bit
+    printf("perms = %u (0x%x)\n", perms, perms);
+
+    uint32_t color = 0x11AAFF;
+    unsigned red = (color >> 16) & 0xFF, green = (color >> 8) & 0xFF, blue = color & 0xFF;
+    printf("r=%u g=%u b=%u\n", red, green, blue);
+    return 0;
+}
+```
+
+Use **unsigned** types for bit manipulation: shifting negative numbers or shifting into the sign bit is undefined or implementation-defined.
+
+## Implicit conversions and casts
+
+In mixed expressions C converts operands to a common type: `int` + `double` → `double`. Small types (`char`, `short`) are **promoted** to `int` first. When signed meets unsigned of the same size, the signed value is converted to unsigned, which causes the famous `-1 > 0u` surprise. A **cast** `(type)value` converts explicitly:
+
+```c
+#include <stdio.h>
+
+int main(void) {
+    double price = 9.99;
+    int euros = (int)price;           // truncates: 9
+    int cents = (int)(price * 100 + 0.5);
+    printf("%d euros, %d cents in total\n", euros, cents);
+
+    unsigned int u = 1;
+    int s = -1;
+    printf("-1 < 1u? %d\n", s < (int)u); // cast so both are signed
+    char c = 'a';
+    printf("'a' + 1 = %d (%c)\n", c + 1, c + 1);
+    return 0;
+}
+```
+
+Precedence has 15 levels; the surprises are bitwise operators being **lower** than comparisons (`flags & MASK == 0` means `flags & (MASK == 0)`). When in doubt, add parentheses.
+
+~~~check
+? After `int i = 3; int j = i++;`, what are i and j?
++ i is 4, j is 3
+- i is 4, j is 4
+- i is 3, j is 4
+- i is 3, j is 3
+> Postfix returns the old value.
+~~~
+
+📚 **Go deeper:** cppreference.com, "C Operator Precedence" and "Implicit conversions"; *C: The Complete Reference*, chapter 2 (Expressions).
+--- goals
+- predict integer division, remainder and truncating casts
+- use prefix and postfix increment, and avoid multiple side effects in one expression
+- write safe conditions with short-circuit && and ||, and avoid = vs ==
+- set, clear, toggle and test bits with unsigned bitwise operators
+- explain implicit conversions, promotions and casts
+--- quiz
+? What does `(double)(7 / 2)` evaluate to?
++ 3.0
+- 3.5
+- 4.0
+- 3
+> The integer division happens before the cast.
+? What does `if (x = 0)` do?
++ Assigns 0 to x; the condition is false
+- Compares x with 0
+- A compile error
+- Sets x to 1
+> Use == for comparison.
+? How do you clear bit FLAG in flags?
++ flags &= ~FLAG;
+- flags |= FLAG;
+- flags ^= ~FLAG;
+- flags = !FLAG;
+> ~ inverts every bit.
+? Why is `flags & MASK == 0` a bug?
++ == binds tighter than &, so it means flags & (MASK == 0)
+- & isn't allowed on ints
+- It's fine
+- MASK must be a variable
+> Parenthesise bitwise expressions.
+--- exercise code c
+::prompt
+**Packing a date into 16 bits**, as the FAT file system does: bits 15–9 hold the year minus 1980, bits 8–5 the month, bits 4–0 the day. Write:
+
+- `uint16_t pack_date(int year, int month, int day)`;
+- `void unpack_date(uint16_t packed, int *year, int *month, int *day)` (it writes the results through pointers: `*year = ...;`, explained in Module 4).
+
+Print each date's packed value in hex (`0x%04X`) and decimal, then unpack it again:
+
+```
+2026-03-15 -> 0x5C6F (23663) -> 2026-03-15
+1980-01-01 -> 0x0021 (33) -> 1980-01-01
+2107-12-31 -> 0xFF9F (65439) -> 2107-12-31
+```
+::starter
+#include <stdio.h>
+#include <stdint.h>
+
+uint16_t pack_date(int year, int month, int day) {
+    return 0;
+}
+
+void unpack_date(uint16_t packed, int *year, int *month, int *day) {
+}
+
+int main(void) {
+    int dates[3][3] = {{2026, 3, 15}, {1980, 1, 1}, {2107, 12, 31}};
+    for (int i = 0; i < 3; i++) {
+        uint16_t p = pack_date(dates[i][0], dates[i][1], dates[i][2]);
+        int y = 0, m = 0, d = 0;
+        unpack_date(p, &y, &m, &d);
+        printf("%d-%02d-%02d -> 0x%04X (%u) -> %d-%02d-%02d\n", dates[i][0], dates[i][1], dates[i][2], (unsigned)p, (unsigned)p, y, m, d);
+    }
+    return 0;
+}
+::solution
+#include <stdio.h>
+#include <stdint.h>
+
+uint16_t pack_date(int year, int month, int day) {
+    return (uint16_t)(((unsigned)(year - 1980) << 9) | ((unsigned)month << 5) | (unsigned)day);
+}
+
+void unpack_date(uint16_t packed, int *year, int *month, int *day) {
+    *year = 1980 + (packed >> 9);
+    *month = (packed >> 5) & 0x0F;
+    *day = packed & 0x1F;
+}
+
+int main(void) {
+    int dates[3][3] = {{2026, 3, 15}, {1980, 1, 1}, {2107, 12, 31}};
+    for (int i = 0; i < 3; i++) {
+        uint16_t p = pack_date(dates[i][0], dates[i][1], dates[i][2]);
+        int y = 0, m = 0, d = 0;
+        unpack_date(p, &y, &m, &d);
+        printf("%d-%02d-%02d -> 0x%04X (%u) -> %d-%02d-%02d\n", dates[i][0], dates[i][1], dates[i][2], (unsigned)p, (unsigned)p, y, m, d);
+    }
+    return 0;
+}
+::expected
+2026-03-15 -> 0x5C6F (23663) -> 2026-03-15
+1980-01-01 -> 0x0021 (33) -> 1980-01-01
+2107-12-31 -> 0xFF9F (65439) -> 2107-12-31
+::hints
+- Shift each field to its position and combine with `|`: `(year - 1980) << 9 | month << 5 | day`.
+- Unpack with shifts and masks: the month is 4 bits (`& 0x0F`), the day 5 bits (`& 0x1F`).
+- Cast to `unsigned` before shifting, and to `uint16_t` for the result, to keep `-Wextra` quiet.
+--- cards
+Integer division :: Truncates toward zero: -17 / 5 == -3, -17 % 5 == -2.
+i++ vs ++i :: Postfix uses then increments; prefix increments then uses.
+Short circuit :: && and || skip the right side when the result is known.
+= vs == :: if (x = 5) assigns; -Wall warns.
+Bit operations :: set |=, clear &= ~, toggle ^=, test &; use unsigned types.
+Conversions :: Promotion to int, signed→unsigned surprises; cast with (type)value.
+
+=== lesson c-io | Input and output | 70
+## printf in depth
+
+You've used `printf`; two more members of the family are essential: **`fprintf(stderr, ...)`** writes error messages to the standard error stream (so they don't mix with normal output), and **`snprintf(buf, size, ...)`** formats into a string, never writing more than `size` bytes:
+
+```c
+#include <stdio.h>
+
+int main(void) {
+    char label[16];
+    int written = snprintf(label, sizeof label, "item-%03d", 7);
+    printf("%s (%d chars)\n", label, written);
+
+    char small[6];
+    snprintf(small, sizeof small, "%s", "truncated text"); // safely cut to 5 chars + '\0'
+    printf("%s\n", small);
+
+    fprintf(stderr, "this goes to the error stream\n");
+    return 0;
+}
+```
+
+(In a terminal you'd see the `stderr` line too; DevQuest shows only standard output for a program that succeeds, which is exactly why errors belong on `stderr`: they don't pollute the real output.)
+
+## Reading input: the safe way
+
+`scanf` is the textbook function, but it's full of traps: it leaves the line break in the input, stops at spaces, and `scanf("%s", buf)` can overflow `buf`. The robust pattern is: **read a whole line with `fgets`, then parse it**:
+
+```c
+// stdin: Ada Lovelace | 36
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+int main(void) {
+    char name[64];
+    char line[64];
+
+    printf("Name: ");
+    if (fgets(name, sizeof name, stdin) == NULL) return 1;
+    name[strcspn(name, "\n")] = '\0';          // remove the line break fgets keeps
+
+    printf("Age: ");
+    if (fgets(line, sizeof line, stdin) == NULL) return 1;
+    char *end;
+    long age = strtol(line, &end, 10);         // parse, and know where it stopped
+    if (end == line) {
+        printf("\nthat's not a number\n");
+        return 1;
+    }
+    printf("\nHello %s, next year you'll be %ld.\n", name, age + 1);
+    return 0;
+}
+```
+
+- **`fgets(buf, size, stdin)`** reads at most `size - 1` characters, stops after a line break (which it keeps) and adds the terminating `'\0'`. It returns `NULL` at the end of the input.
+- **`strtol(text, &end, 10)`** converts text to a `long` and tells you where it stopped (`end`), so you can detect garbage; `strtod` does the same for doubles. (`atoi` exists but can't report errors.)
+- **`sscanf(line, "%d %d", &a, &b)`** parses a line you've already read, and returns how many values it converted: always check it.
+
+## scanf, if you use it
+
+```c
+// stdin: 12 30
+#include <stdio.h>
+
+int main(void) {
+    int hours, minutes;
+    printf("Time (h m): ");
+    if (scanf("%d %d", &hours, &minutes) != 2) {   // returns the number of items read
+        printf("\nexpected two numbers\n");
+        return 1;
+    }
+    printf("\n%d minutes in total\n", hours * 60 + minutes);
+    return 0;
+}
+```
+
+Note the **`&`**: `scanf` needs the address of each variable to store into it (pointers, Module 4). Forgetting it is a classic crash. Never use `scanf("%s", ...)` without a width (`%63s`), and never use the removed function `gets`. (Microsoft's compiler goes further and calls `scanf`, `strcpy` and `fopen` "deprecated", suggesting `scanf_s` and friends; those aren't portable C, so DevQuest turns that particular warning off with `_CRT_SECURE_NO_WARNINGS`.)
+
+## Reading until the end
+
+```c
+// stdin: 4 | 8 | x | 15
+#include <stdio.h>
+
+int main(void) {
+    char line[64];
+    int sum = 0, count = 0;
+    while (fgets(line, sizeof line, stdin) != NULL) {
+        int n;
+        if (sscanf(line, "%d", &n) == 1) {
+            sum += n;
+            count++;
+        }
+    }
+    printf("%d numbers, sum %d\n", count, sum);
+    return 0;
+}
+```
+
+~~~check
+? What does fgets keep at the end of the line it read?
++ The line break '\n' (if it fit), followed by '\0'
+- Nothing
+- Only '\0'
+- A space
+> Remove it with line[strcspn(line, "\n")] = '\0'.
+~~~
+
+📚 **Go deeper:** cppreference.com, "fgets", "strtol" and "scanf"; *C: The Complete Reference*, chapters 8 (Console I/O) and 13 (I/O Functions).
+--- goals
+- format text safely with snprintf and write errors with fprintf(stderr, ...)
+- read lines with fgets and remove the trailing line break
+- convert text to numbers with strtol/strtod and sscanf, checking for errors
+- use scanf correctly when you must, and know its traps
+- read input until the end with a while (fgets) loop
+--- quiz
+? Why prefer fgets over scanf("%s")?
++ fgets limits how much it writes, so it can't overflow the buffer
+- fgets is faster
+- scanf can't read strings
+- fgets converts numbers
+> scanf("%s") has no limit unless you add a width.
+? What does `scanf("%d %d", &a, &b)` return when the input is "5 x"?
++ 1
+- 2
+- 0
+- -1
+> The number of items converted.
+? Why does scanf need `&age` rather than `age`?
++ It needs the variable's address to store the value
+- To print it
+- & means "integer"
+- It doesn't
+> Forgetting & usually crashes.
+? What does snprintf do when the text doesn't fit?
++ Writes as much as fits plus '\0' and returns the full length needed
+- Overflows the buffer
+- Returns an error and writes nothing
+- Allocates more memory
+> Compare the return value with the size to detect truncation.
+--- exercise code c
+::prompt
+Write an **interactive unit converter**. It reads lines like `12.5 km`, `3 mi`, `100 c` or `212 f` until the end of the input (use `fgets` and `sscanf(line, "%lf %15s", &value, unit)`), and prints the conversion:
+
+- `km` → miles (× 0.621371), `mi` → km (÷ 0.621371), `c` → Fahrenheit (× 9 / 5 + 32), `f` → Celsius ((value − 32) × 5 / 9);
+- a line that doesn't contain a number and a unit prints `cannot parse: <line>` (without its line break); an unknown unit prints `unknown unit: <unit>`.
+
+Results have two decimals:
+
+```
+12.50 km = 7.77 mi
+3.00 mi = 4.83 km
+cannot parse: hello
+100.00 c = 212.00 f
+unknown unit: kg
+212.00 f = 100.00 c
+```
+::stdin
+12.5 km
+3 mi
+hello
+100 c
+5 kg
+212 f
+::starter
+#include <stdio.h>
+
+int main(void) {
+    char line[64];
+    while (fgets(line, sizeof line, stdin) != NULL) {
+        printf("%s", line);
+    }
+    return 0;
+}
+::solution
+#include <stdio.h>
+#include <string.h>
+
+int main(void) {
+    char line[64];
+    while (fgets(line, sizeof line, stdin) != NULL) {
+        line[strcspn(line, "\n")] = '\0';
+        double value;
+        char unit[16];
+        if (sscanf(line, "%lf %15s", &value, unit) != 2) {
+            printf("cannot parse: %s\n", line);
+            continue;
+        }
+        if (strcmp(unit, "km") == 0) {
+            printf("%.2f km = %.2f mi\n", value, value * 0.621371);
+        } else if (strcmp(unit, "mi") == 0) {
+            printf("%.2f mi = %.2f km\n", value, value / 0.621371);
+        } else if (strcmp(unit, "c") == 0) {
+            printf("%.2f c = %.2f f\n", value, value * 9.0 / 5.0 + 32.0);
+        } else if (strcmp(unit, "f") == 0) {
+            printf("%.2f f = %.2f c\n", value, (value - 32.0) * 5.0 / 9.0);
+        } else {
+            printf("unknown unit: %s\n", unit);
+        }
+    }
+    return 0;
+}
+::expected
+12.50 km = 7.77 mi
+3.00 mi = 4.83 km
+cannot parse: hello
+100.00 c = 212.00 f
+unknown unit: kg
+212.00 f = 100.00 c
+::cases
+>>> 0 c
+>>> 1
+>>> 42 km
+0.00 c = 32.00 f
+cannot parse: 1
+42.00 km = 26.10 mi
+::hints
+- `line[strcspn(line, "\n")] = '\0';` removes the line break so the error message prints cleanly.
+- `sscanf` returns 2 only when it read both the number and the unit.
+- Compare strings with `strcmp(a, b) == 0` (never `==`, which compares addresses).
+--- cards
+snprintf :: Formats into a buffer, never past its size; returns the length needed.
+fprintf(stderr, ...) :: Error messages go to standard error.
+fgets :: Reads a line safely (keeps '\n', adds '\0'); NULL at end of input.
+strtol / strtod :: Text → number, reporting where parsing stopped.
+sscanf :: Parses a string; returns how many items it converted.
+scanf traps :: Needs &, leaves '\n' behind, %s needs a width; never use gets.
+
+=== lesson c-m2-test | Module 2 test | 130 | exam
+This test covers Module 2: types, sizes and limits, operators and conversions, and input and output.
+
+Before you start, check that you can:
+
+- pick the right integer type and print it correctly;
+- predict integer division, casts and bitwise operations;
+- read and validate input with fgets and strtol or sscanf.
+--- goals
+- read, validate and compute with numeric input
+--- quiz
+? Which printf specifier matches a size_t?
++ %zu
+- %d
+- %lu on every platform
+- %s
+> sizeof returns size_t.
+? What is `(unsigned char)300`?
++ 44
+- 300
+- 255
+- Undefined behaviour
+> Conversion to unsigned wraps modulo 256.
+? What does `5 / 2 * 2.0` evaluate to?
++ 4.0
+- 5.0
+- 4
+- 2.5
+> 5 / 2 is integer division (2), then × 2.0.
+? Which call reads a line of at most 99 characters safely into char buf[100]?
++ fgets(buf, sizeof buf, stdin)
+- gets(buf)
+- scanf("%s", buf)
+- fgets(buf, 1000, stdin)
+> The size argument must be the real buffer size.
+--- exercise code c
+::prompt
+**Bank statement.** Read lines of the form `<+/-amount> <description>` until the end of the input, where the amount has up to two decimals (like `+1200.00` or `-35.5`). Work in **integer cents** (`long long`): parse with `strtod` and round with `llround(value * 100)` (from `<math.h>`). For each valid line print the running balance; for an invalid line print `skipped: <line>`. Then print the totals:
+
+```
++1200.00  salary          balance  1200.00
+-35.50    groceries       balance  1164.50
+skipped: oops
+-800.00   rent            balance   364.50
++0.10     interest        balance   364.60
+in: 1200.10, out: 835.50, final: 364.60
+```
+
+Formats: `%+-9.2f %-15s balance %8.2f` for the amounts (convert cents to `double` only for printing) and `%.2f` in the totals. The description is the first word after the amount (use `sscanf(rest, "%31s", description)`).
+::stdin
++1200.00 salary
+-35.5 groceries
+oops
+-800 rent
++0.10 interest
+::starter
+#include <stdio.h>
+
+int main(void) {
+    char line[128];
+    while (fgets(line, sizeof line, stdin) != NULL) {
+        printf("%s", line);
+    }
+    return 0;
+}
+::solution
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <math.h>
+
+int main(void) {
+    char line[128];
+    long long balance = 0, in = 0, out = 0;
+    while (fgets(line, sizeof line, stdin) != NULL) {
+        line[strcspn(line, "\n")] = '\0';
+        char *rest;
+        double value = strtod(line, &rest);
+        char description[32];
+        if (rest == line || sscanf(rest, "%31s", description) != 1) {
+            printf("skipped: %s\n", line);
+            continue;
+        }
+        long long cents = llround(value * 100);
+        balance += cents;
+        if (cents >= 0) {
+            in += cents;
+        } else {
+            out -= cents;
+        }
+        printf("%+-9.2f %-15s balance %8.2f\n", cents / 100.0, description, balance / 100.0);
+    }
+    printf("in: %.2f, out: %.2f, final: %.2f\n", in / 100.0, out / 100.0, balance / 100.0);
+    return 0;
+}
+::expected
++1200.00  salary          balance  1200.00
+-35.50    groceries       balance  1164.50
+skipped: oops
+-800.00   rent            balance   364.50
++0.10     interest        balance   364.60
+in: 1200.10, out: 835.50, final: 364.60
+::cases
+>>> -10 coffee
+>>>
+>>> +5.555 refund
+-10.00    coffee          balance   -10.00
+skipped:
++5.56     refund          balance    -4.44
+in: 5.56, out: 10.00, final: -4.44
+::hints
+- `strtod(line, &rest)` returns the number and makes `rest` point just after it; if `rest == line`, there was no number.
+- `llround(value * 100)` turns 35.5 into 3550 cents, avoiding floating-point drift in the sums.
+- Divide by `100.0` (a double) when printing.
