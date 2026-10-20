@@ -1,0 +1,770 @@
+=== module Module 3 · Control flow and functions
+
+=== lesson c-control | Decisions: if and switch | 55
+## if, else if, else
+
+```c
+#include <stdio.h>
+
+int main(void) {
+    int temperature = 31;
+    if (temperature > 30) {
+        printf("hot\n");
+    } else if (temperature > 15) {
+        printf("mild\n");
+    } else {
+        printf("cold\n");
+    }
+
+    int stock = 0;
+    if (!stock) printf("sold out\n"); // braces are optional for one statement...
+    return 0;
+}
+```
+
+The condition is any expression: 0 means false, anything else true. Braces are optional around a single statement, but **always write them**: adding a second line later without braces is a famous source of bugs (Apple's 2014 "goto fail" security hole was exactly that).
+
+## switch
+
+`switch` compares an **integer** expression (including `char` and `enum`) with constant cases:
+
+```c
+#include <stdio.h>
+
+int main(void) {
+    char op = '*';
+    int a = 6, b = 7;
+    switch (op) {
+    case '+':
+        printf("%d\n", a + b);
+        break;
+    case '*':
+        printf("%d\n", a * b);
+        break;
+    case '/':
+        if (b == 0) {
+            printf("division by zero\n");
+            break;
+        }
+        printf("%d\n", a / b);
+        break;
+    default:
+        printf("unknown operator %c\n", op);
+    }
+
+    int month = 4, days;
+    switch (month) {
+    case 2:
+        days = 28;
+        break;
+    case 4: case 6: case 9: case 11: // several labels share one block
+        days = 30;
+        break;
+    default:
+        days = 31;
+    }
+    printf("month %d has %d days\n", month, days);
+    return 0;
+}
+```
+
+**C's switch falls through**: without `break`, execution continues into the next case. Forgetting a `break` is a classic bug; when you fall through on purpose, say so with a comment (C23 adds `[[fallthrough]];`). A `switch` can't compare strings: use `strcmp` in an `if` chain.
+
+~~~check
+? What happens in a C switch when a case has no break?
++ Execution continues into the next case
+- The switch ends
+- A compile error
+- The default case runs
+> Fall-through is C's default.
+~~~
+
+📚 **Go deeper:** K&R sections 3.1–3.4; *C: The Complete Reference*, chapter 3 (Statements).
+--- goals
+- write if/else chains with integer conditions
+- always use braces, and know why
+- use switch with break, shared labels and default
+- recognise fall-through bugs
+--- quiz
+? Which types can a switch test?
++ Integer types, including char and enums
+- Strings
+- Doubles
+- Any type
+> Strings need strcmp.
+? Why always write braces around if bodies?
++ So adding a statement later doesn't silently fall outside the if
+- The compiler requires them
+- They make code faster
+- To allow else
+> Remember "goto fail".
+? What does `if (x)` test when x is an int?
++ Whether x is non-zero
+- Whether x exists
+- Whether x is positive
+- Whether x is 1
+> 0 is false.
+--- exercise code c
+::prompt
+Write `const char *grade(int score)` returning `"invalid"` for scores outside 0–100, then `"A"` for 90 and above, `"B"` for 80–89, `"C"` for 70–79, `"D"` for 60–69 and `"F"` below 60. Use a `switch` on `score / 10` for the valid scores (cases 10 and 9 share `"A"`). Then print:
+
+```
+95: A
+100: A
+83: B
+70: C
+61: D
+42: F
+101: invalid
+-5: invalid
+```
+::starter
+#include <stdio.h>
+
+const char *grade(int score) {
+    return "F";
+}
+
+int main(void) {
+    int scores[] = {95, 100, 83, 70, 61, 42, 101, -5};
+    for (int i = 0; i < 8; i++) {
+        printf("%d: %s\n", scores[i], grade(scores[i]));
+    }
+    return 0;
+}
+::solution
+#include <stdio.h>
+
+const char *grade(int score) {
+    if (score < 0 || score > 100) {
+        return "invalid";
+    }
+    switch (score / 10) {
+    case 10:
+    case 9:
+        return "A";
+    case 8:
+        return "B";
+    case 7:
+        return "C";
+    case 6:
+        return "D";
+    default:
+        return "F";
+    }
+}
+
+int main(void) {
+    int scores[] = {95, 100, 83, 70, 61, 42, 101, -5};
+    for (int i = 0; i < 8; i++) {
+        printf("%d: %s\n", scores[i], grade(scores[i]));
+    }
+    return 0;
+}
+::expected
+95: A
+100: A
+83: B
+70: C
+61: D
+42: F
+101: invalid
+-5: invalid
+::hints
+- Check the range first and return `"invalid"` early.
+- `case 10: case 9: return "A";` shares one result; a `return` needs no `break`.
+--- cards
+if / else if / else :: Conditions are ints: 0 false, non-zero true. Always use braces.
+switch :: On integer types; case labels are constants; default for the rest.
+Fall-through :: Without break, execution continues into the next case.
+
+=== lesson c-loops | Loops | 60
+## while, do-while and for
+
+```c
+#include <stdio.h>
+
+int main(void) {
+    int n = 1;
+    while (n < 100) {           // test first: may run zero times
+        n *= 3;
+    }
+    printf("first power of 3 over 100: %d\n", n);
+
+    int tries = 0;
+    do {                        // test last: runs at least once
+        tries++;
+    } while (tries < 3);
+    printf("tries: %d\n", tries);
+
+    for (int i = 0; i < 5; i++) { // init; condition; step
+        printf("%d ", i * i);
+    }
+    printf("\n");
+
+    for (int i = 10, j = 0; i > j; i -= 3, j++) { // comma operator: several variables
+        printf("(%d,%d) ", i, j);
+    }
+    printf("\n");
+    return 0;
+}
+```
+
+`for (;;)` and `while (1)` loop forever, until a `break` or `return`.
+
+## break, continue and nested loops
+
+```c
+#include <stdio.h>
+
+int main(void) {
+    // print primes below 30
+    for (int n = 2; n < 30; n++) {
+        int prime = 1;
+        for (int d = 2; d * d <= n; d++) {
+            if (n % d == 0) {
+                prime = 0;
+                break;          // leaves only the inner loop
+            }
+        }
+        if (!prime) continue;   // skip to the next n
+        printf("%d ", n);
+    }
+    printf("\n");
+    return 0;
+}
+```
+
+C has no labelled `break`: to leave several loops, use a flag, put the loops in a function and `return`, or use `goto`.
+
+## goto for clean-up
+
+`goto` jumps to a label in the same function. It's rightly avoided for ordinary control flow, but one pattern is idiomatic in C (the Linux kernel uses it everywhere): **jumping to shared clean-up code** when an error happens halfway through acquiring resources:
+
+```c
+#include <stdio.h>
+#include <stdlib.h>
+
+int process(int fail_at) {
+    int result = -1;
+    int *a = NULL;
+    int *b = NULL;
+    a = malloc(100 * sizeof *a);
+    if (a == NULL) goto out;
+    b = malloc(100 * sizeof *b);
+    if (b == NULL) goto out;
+    if (fail_at == 2) {
+        printf("step 2 failed\n");
+        goto out;
+    }
+    printf("both buffers ready\n");
+    result = 0;
+out:
+    free(b); // free(NULL) does nothing, so one label can clean up everything
+    free(a);
+    return result;
+}
+
+int main(void) {
+    printf("result %d\n", process(0));
+    printf("result %d\n", process(2));
+    return 0;
+}
+```
+
+Every failure jumps to the same clean-up code, which releases resources in reverse order. Bigger functions use several labels (`free_b:`, `free_a:`), each freeing what was acquired before that point. It's a structured way to avoid leaks without repeating the clean-up code in every error branch.
+
+## Off-by-one errors
+
+Arrays of `n` elements have indexes `0` to `n - 1`, so the standard loop is `for (int i = 0; i < n; i++)`. Writing `<=` reads one element past the end: undefined behaviour that might "work" for years. When counting down with an **unsigned** index, `i >= 0` is always true: a classic infinite loop.
+
+~~~check
+? How many times does `do { ... } while (0);` run its body?
++ Once
+- Never
+- Forever
+- Twice
+> do-while tests after the body.
+~~~
+
+📚 **Go deeper:** K&R sections 3.5–3.8; *C: The Complete Reference*, chapter 3 (Statements).
+--- goals
+- choose between while, do-while and for
+- use break and continue, and leave nested loops cleanly
+- use goto only for shared clean-up code
+- avoid off-by-one errors and unsigned countdown traps
+--- quiz
+? Which loop always runs its body at least once?
++ do-while
+- while
+- for
+- None
+> The condition comes after the body.
+? What does `break` inside a nested inner loop do?
++ Leaves only the inner loop
+- Leaves all loops
+- Ends the program
+- Skips one iteration
+> C has no labelled break.
+? Why is `for (unsigned i = n - 1; i >= 0; i--)` a bug?
++ An unsigned value is always >= 0, so the loop never ends
+- It skips the last element
+- It doesn't compile
+- It's correct
+> Count down with a signed index or a different condition.
+--- exercise code c
+::prompt
+Print the **Collatz sequence** of several numbers: while n isn't 1, n becomes n / 2 if it's even, 3n + 1 if it's odd. For each starting number print the sequence (stopping after 1) and the number of steps, but if the sequence goes above 1000, stop it there and print `...` instead of the rest:
+
+```
+6: 6 3 10 5 16 8 4 2 1 (8 steps)
+7: 7 22 11 34 17 52 26 13 40 20 10 5 16 8 4 2 1 (16 steps)
+1: 1 (0 steps)
+27: 27 82 41 124 62 31 94 47 142 71 214 107 322 161 484 242 121 364 182 91 274 137 412 206 103 310 155 466 233 700 350 175 526 263 790 395 ... (too high)
+```
+::starter
+#include <stdio.h>
+
+int main(void) {
+    int starts[] = {6, 7, 1, 27};
+    for (int i = 0; i < 4; i++) {
+        printf("%d:\n", starts[i]);
+    }
+    return 0;
+}
+::solution
+#include <stdio.h>
+
+int main(void) {
+    int starts[] = {6, 7, 1, 27};
+    for (int i = 0; i < 4; i++) {
+        long n = starts[i];
+        int steps = 0;
+        int too_high = 0;
+        printf("%d:", starts[i]);
+        while (1) {
+            if (n > 1000) {
+                too_high = 1;
+                break;
+            }
+            printf(" %ld", n);
+            if (n == 1) break;
+            n = n % 2 == 0 ? n / 2 : 3 * n + 1;
+            steps++;
+        }
+        if (too_high) {
+            printf(" ... (too high)\n");
+        } else {
+            printf(" (%d steps)\n", steps);
+        }
+    }
+    return 0;
+}
+::expected
+6: 6 3 10 5 16 8 4 2 1 (8 steps)
+7: 7 22 11 34 17 52 26 13 40 20 10 5 16 8 4 2 1 (16 steps)
+1: 1 (0 steps)
+27: 27 82 41 124 62 31 94 47 142 71 214 107 322 161 484 242 121 364 182 91 274 137 412 206 103 310 155 466 233 700 350 175 526 263 790 395 ... (too high)
+::hints
+- A `while (1)` loop with two `break`s (reached 1, or went above 1000) is clearest here.
+- Print the number before computing the next one, and count a step for each change.
+- Remember which way the loop ended with a flag variable.
+--- cards
+while / do-while / for :: Test first / test last (runs once at least) / init; condition; step.
+break / continue :: Leave the innermost loop / skip to its next iteration.
+goto cleanup :: Jump to shared clean-up code that frees resources in reverse order.
+Off-by-one :: Valid indexes are 0..n-1: use i < n.
+
+=== lesson c-functions | Functions, scope and recursion | 75
+## Declarations and definitions
+
+A function must be **declared** before it's called. A **prototype** declares it (name, parameter types, return type) without the body; the **definition** can come later or in another file. Prototypes are what header files contain:
+
+```c
+#include <stdio.h>
+
+double average(const int values[], int count); // prototype
+void print_line(int width);
+
+int main(void) {
+    int scores[] = {80, 92, 75};
+    print_line(20);
+    printf("average: %.2f\n", average(scores, 3));
+    print_line(20);
+    return 0;
+}
+
+double average(const int values[], int count) {  // definition
+    if (count == 0) return 0.0;
+    int sum = 0;
+    for (int i = 0; i < count; i++) {
+        sum += values[i];
+    }
+    return (double)sum / count;
+}
+
+void print_line(int width) {                     // void: returns nothing
+    for (int i = 0; i < width; i++) putchar('-');
+    putchar('\n');
+}
+```
+
+- `void` as a return type: the function returns nothing. `f(void)` in a declaration: it takes no arguments (in C before C23, `f()` means "unknown arguments", so always write `void`).
+- An array parameter (`int values[]`) is really a **pointer** to the first element; the function can't know the length, so you pass it alongside. `const` promises not to modify the elements.
+
+## Pass by value
+
+Arguments are **copied** into the parameters. A function can't change the caller's variables, unless it receives their **addresses** (pointers):
+
+```c
+// warning
+#include <stdio.h>
+
+void try_to_double(int n) {
+    n *= 2;                 // changes the local copy only
+}
+
+void really_double(int *n) {
+    *n *= 2;                // changes the variable n points to
+}
+
+int main(void) {
+    int x = 21;
+    try_to_double(x);
+    printf("%d\n", x);      // 21
+    really_double(&x);
+    printf("%d\n", x);      // 42
+    return 0;
+}
+```
+
+The compiler even warns that `try_to_double` sets its parameter without using it: a hint that the change is lost. That's also how C functions return several results: through pointer parameters, as `scanf` does.
+
+## Scope and lifetime
+
+- A **local** variable exists from its declaration to the end of its block `{ }`, and is created anew on every call (on the **stack**).
+- A **global** variable (outside any function) lives for the whole program. Avoid them: any function can change them.
+- A **`static` local** keeps its value between calls: it's initialised once and lives for the whole program.
+- A **`static` function or global** is visible only in its own file: C's way to make something private.
+
+```c
+#include <stdio.h>
+
+static int calls = 0;               // file-private global
+
+int next_id(void) {
+    static int id = 100;            // initialised once, keeps its value
+    calls++;
+    return id++;
+}
+
+int main(void) {
+    printf("%d %d %d\n", next_id(), next_id(), next_id());
+    printf("calls: %d\n", calls);
+    return 0;
+}
+```
+
+Look at the order of the three ids: C doesn't specify the order in which a function's arguments are evaluated, and many compilers evaluate them right to left, printing `102 101 100`. When the order of side effects matters, call the functions in separate statements.
+
+## Recursion
+
+A function can call itself; each call gets its own locals on the stack, and a **base case** stops the recursion. Too deep a recursion overflows the stack (usually a few megabytes):
+
+```c
+#include <stdio.h>
+
+unsigned long long factorial(unsigned n) {
+    return n <= 1 ? 1 : n * factorial(n - 1);
+}
+
+void hanoi(int disks, char from, char to, char via, int *moves) {
+    if (disks == 0) return;
+    hanoi(disks - 1, from, via, to, moves);
+    (*moves)++;
+    hanoi(disks - 1, via, to, from, moves);
+}
+
+int main(void) {
+    printf("20! = %llu\n", factorial(20));
+    int moves = 0;
+    hanoi(10, 'A', 'C', 'B', &moves);
+    printf("10 disks: %d moves\n", moves);
+    return 0;
+}
+```
+
+~~~check
+? Why can't a C function change the caller's int argument directly?
++ Arguments are passed by value (copied)
+- ints are constant
+- Functions can only return void
+- They can
+> Pass a pointer to let it change the variable.
+~~~
+
+📚 **Go deeper:** K&R chapter 4 (Functions and Program Structure); *C: The Complete Reference*, chapter 6 (Functions).
+--- goals
+- declare functions with prototypes and define them separately
+- pass arrays with their length, and use const for read-only parameters
+- explain pass by value and change caller variables through pointers
+- explain local, global and static lifetime and visibility
+- write recursive functions with a base case
+--- quiz
+? What does a prototype contain?
++ The return type, name and parameter types, without a body
+- The full function
+- Only the name
+- The function's local variables
+> Headers are full of prototypes.
+? What does `static int count = 0;` inside a function mean?
++ count keeps its value between calls and is initialised once
+- count can't change
+- count is visible in all files
+- count is reset on every call
+> Static storage duration.
+? How does a function know the length of an array argument?
++ It doesn't: you pass the length as another parameter
+- With sizeof(values)
+- With values.length
+- The array stores it at index -1
+> Inside the function, sizeof gives the pointer size.
+? What does `static` mean on a function defined at file level?
++ It's visible only in that source file
+- It runs once
+- It can't have local variables
+- It's inline
+> C's "private".
+--- exercise code c
+::prompt
+Write three functions, declared with prototypes above `main` and defined below it:
+
+- `int gcd(int a, int b)`: the greatest common divisor, **recursively** with Euclid's rule (gcd(a, 0) = a; gcd(a, b) = gcd(b, a % b));
+- `void simplify(int *num, int *den)`: divides both by their gcd, and makes the denominator positive;
+- `void stats(const int values[], int count, int *min, int *max, double *mean)`: returns three results through pointers.
+
+```
+gcd(84, 36) = 12
+12/-18 -> -2/3
+100/25 -> 4/1
+min 3, max 42, mean 17.50
+```
+::starter
+#include <stdio.h>
+
+int main(void) {
+    printf("gcd(84, 36) = ?\n");
+    return 0;
+}
+::solution
+#include <stdio.h>
+
+int gcd(int a, int b);
+void simplify(int *num, int *den);
+void stats(const int values[], int count, int *min, int *max, double *mean);
+
+int main(void) {
+    printf("gcd(84, 36) = %d\n", gcd(84, 36));
+    int fractions[2][2] = {{12, -18}, {100, 25}};
+    for (int i = 0; i < 2; i++) {
+        int n = fractions[i][0], d = fractions[i][1];
+        simplify(&n, &d);
+        printf("%d/%d -> %d/%d\n", fractions[i][0], fractions[i][1], n, d);
+    }
+    int values[] = {12, 3, 42, 13};
+    int lo, hi;
+    double mean;
+    stats(values, 4, &lo, &hi, &mean);
+    printf("min %d, max %d, mean %.2f\n", lo, hi, mean);
+    return 0;
+}
+
+int gcd(int a, int b) {
+    if (a < 0) a = -a;
+    if (b < 0) b = -b;
+    return b == 0 ? a : gcd(b, a % b);
+}
+
+void simplify(int *num, int *den) {
+    int g = gcd(*num, *den);
+    *num /= g;
+    *den /= g;
+    if (*den < 0) {
+        *num = -*num;
+        *den = -*den;
+    }
+}
+
+void stats(const int values[], int count, int *min, int *max, double *mean) {
+    *min = *max = values[0];
+    int sum = 0;
+    for (int i = 0; i < count; i++) {
+        if (values[i] < *min) *min = values[i];
+        if (values[i] > *max) *max = values[i];
+        sum += values[i];
+    }
+    *mean = (double)sum / count;
+}
+::expected
+gcd(84, 36) = 12
+12/-18 -> -2/3
+100/25 -> 4/1
+min 3, max 42, mean 17.50
+::hints
+- In `gcd`, take absolute values first so negative inputs work.
+- Through a pointer: `*num /= g;`.
+- Call `stats(values, 4, &lo, &hi, &mean)` so it can fill your three variables.
+- `main` must print the fractions `12/-18` and `100/25` and the stats of `{12, 3, 42, 13}`.
+--- cards
+Prototype :: int f(int a); declares a function before its definition (headers).
+f(void) :: No parameters (f() means "unspecified" before C23).
+Pass by value :: Parameters are copies; pass &x to let a function change x.
+static local :: Keeps its value between calls.
+static global / function :: Private to its file.
+Recursion :: Each call has its own stack frame; needs a base case.
+
+=== lesson c-m3-test | Module 3 test | 140 | exam
+This test covers Module 3: if and switch, loops, functions, scope and recursion.
+
+Before you start, check that you can:
+
+- write decisions and loops without off-by-one errors;
+- split a program into functions with prototypes;
+- return several results through pointers.
+--- goals
+- combine control flow and functions in one program
+--- quiz
+? What prints after `int i = 0; while (i < 3) i++; printf("%d", i);`?
++ 3
+- 2
+- 4
+- 0
+> The loop stops when i reaches 3.
+? Which statement correctly leaves a switch case?
++ break;
+- continue;
+- exit;
+- end;
+> continue applies to loops.
+? Where do local variables of a function live?
++ On the stack, created anew for each call
+- In the heap
+- In the executable file
+- In registers only
+> That's why recursion uses stack space.
+? What's wrong with `int *make(void) { int x = 5; return &x; }`?
++ x no longer exists after the function returns: a dangling pointer
+- Nothing
+- It doesn't compile
+- x should be a double
+> The compiler warns about it.
+--- exercise code c
+::prompt
+**Number analyser.** Read integers, one per line, until the end of the input (skip lines that aren't integers). For each number print its properties using these functions (prototypes first, definitions after `main`):
+
+- `int is_prime(int n)`;
+- `int digit_sum(int n)` (recursive; works for negative numbers);
+- `int is_perfect(int n)`: the sum of its proper divisors equals n (6 = 1 + 2 + 3);
+- `const char *parity(int n)`: `"even"` or `"odd"`.
+
+Print `<n>: <parity>, digit sum <s>` followed by `, prime` and/or `, perfect` when they apply; finally print the count of primes:
+
+```
+6: even, digit sum 6, perfect
+7: odd, digit sum 7, prime
+28: even, digit sum 10, perfect
+-15: odd, digit sum 6
+97: odd, digit sum 16, prime
+primes: 2
+```
+::stdin
+6
+7
+abc
+28
+-15
+97
+::starter
+#include <stdio.h>
+
+int main(void) {
+    char line[64];
+    while (fgets(line, sizeof line, stdin) != NULL) {
+        printf("%s", line);
+    }
+    return 0;
+}
+::solution
+#include <stdio.h>
+
+int is_prime(int n);
+int digit_sum(int n);
+int is_perfect(int n);
+const char *parity(int n);
+
+int main(void) {
+    char line[64];
+    int primes = 0;
+    while (fgets(line, sizeof line, stdin) != NULL) {
+        int n;
+        if (sscanf(line, "%d", &n) != 1) continue;
+        printf("%d: %s, digit sum %d", n, parity(n), digit_sum(n));
+        if (is_prime(n)) {
+            printf(", prime");
+            primes++;
+        }
+        if (is_perfect(n)) printf(", perfect");
+        printf("\n");
+    }
+    printf("primes: %d\n", primes);
+    return 0;
+}
+
+int is_prime(int n) {
+    if (n < 2) return 0;
+    for (int d = 2; d * d <= n; d++) {
+        if (n % d == 0) return 0;
+    }
+    return 1;
+}
+
+int digit_sum(int n) {
+    if (n < 0) return digit_sum(-n);
+    if (n < 10) return n;
+    return n % 10 + digit_sum(n / 10);
+}
+
+int is_perfect(int n) {
+    if (n < 2) return 0;
+    int sum = 1;
+    for (int d = 2; d * d <= n; d++) {
+        if (n % d == 0) {
+            sum += d;
+            if (d != n / d) sum += n / d;
+        }
+    }
+    return sum == n;
+}
+
+const char *parity(int n) {
+    return n % 2 == 0 ? "even" : "odd";
+}
+::expected
+6: even, digit sum 6, perfect
+7: odd, digit sum 7, prime
+28: even, digit sum 10, perfect
+-15: odd, digit sum 6
+97: odd, digit sum 16, prime
+primes: 2
+::cases
+>>> 2
+>>> 496
+>>> 1
+2: even, digit sum 2, prime
+496: even, digit sum 19, perfect
+1: odd, digit sum 1
+primes: 1
+::hints
+- `sscanf(line, "%d", &n) != 1` skips non-numbers.
+- `-15 % 2` is `-1`, not 1: test evenness with `n % 2 == 0`.
+- For divisors, loop while `d * d <= n` and add both `d` and `n / d`.
