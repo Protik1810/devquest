@@ -1,0 +1,1193 @@
+=== module Module 6 · Real programs
+
+=== lesson c-files | Files | 75
+## FILE streams
+
+The standard library reads and writes files through **`FILE *`** streams. `fopen` opens one and returns `NULL` on failure; `fclose` flushes and closes it:
+
+```c
+#include <stdio.h>
+#include <string.h>
+#include <errno.h>
+
+int main(void) {
+    FILE *out = fopen("notes.txt", "w");          // "w": create or truncate for writing
+    if (out == NULL) {
+        perror("notes.txt");                      // prints the reason, from errno
+        return 1;
+    }
+    fprintf(out, "buy milk\n");
+    fputs("write report\n", out);
+    fclose(out);
+
+    FILE *app = fopen("notes.txt", "a");          // "a": append
+    if (app == NULL) return 1;
+    fprintf(app, "call %s\n", "Ada");
+    fclose(app);
+
+    FILE *in = fopen("notes.txt", "r");           // "r": read
+    if (in == NULL) return 1;
+    char line[128];
+    int n = 0;
+    while (fgets(line, sizeof line, in) != NULL) {
+        line[strcspn(line, "\n")] = '\0';
+        printf("%d: %s\n", ++n, line);
+    }
+    fclose(in);
+
+    FILE *missing = fopen("no-such-file.txt", "r");
+    if (missing == NULL) {
+        printf("cannot open: %s\n", strerror(errno));
+    }
+    remove("notes.txt");                          // delete the file
+    return 0;
+}
+```
+
+| Mode | Meaning |
+|---|---|
+| `"r"` | read; the file must exist |
+| `"w"` | write; creates or **empties** the file |
+| `"a"` | append at the end; creates if needed |
+| `"r+"`, `"w+"`, `"a+"` | read and write |
+| add `"b"` | binary mode (`"rb"`, `"wb"`): no line-ending translation on Windows |
+
+When a library function fails it sets **`errno`**; `perror(prefix)` and `strerror(errno)` turn it into a message. Every open file must be closed exactly once, like every `malloc` needs a `free`.
+
+## Binary files
+
+Text files are for humans; **binary** files store the bytes of your data directly. `fwrite` and `fread` copy whole arrays of structs, and `fseek`/`ftell` move around the file:
+
+```c
+#include <stdio.h>
+
+typedef struct {
+    int id;
+    double score;
+} Record;
+
+int main(void) {
+    Record records[] = {{1, 9.5}, {2, 7.25}, {3, 8.0}};
+    FILE *f = fopen("scores.bin", "wb");
+    if (f == NULL) return 1;
+    size_t written = fwrite(records, sizeof records[0], 3, f);
+    fclose(f);
+    printf("wrote %zu records\n", written);
+
+    f = fopen("scores.bin", "rb");
+    if (f == NULL) return 1;
+    fseek(f, 0, SEEK_END);
+    long size = ftell(f);                         // file size in bytes
+    printf("file is %ld bytes (%zu per record)\n", size, sizeof(Record));
+
+    fseek(f, (long)sizeof(Record), SEEK_SET);     // jump straight to the second record
+    Record r;
+    if (fread(&r, sizeof r, 1, f) == 1) {
+        printf("record %d: %.2f\n", r.id, r.score);
+    }
+    fclose(f);
+    remove("scores.bin");
+    return 0;
+}
+```
+
+Raw struct dumps are fast but **not portable**: padding, integer sizes and byte order (endianness) differ between machines. File formats meant to be shared define every byte explicitly, or use text (CSV, JSON).
+
+## Standard streams
+
+`stdin`, `stdout` and `stderr` are `FILE *` too: `fprintf(stderr, ...)`, `fgets(buf, n, stdin)`. Output to a file or a pipe is **buffered**: data is written in blocks, so call `fflush(stdout)` when output must appear right now (for example, before a crash you're investigating).
+
+~~~check
+? What does fopen("data.txt", "w") do to an existing data.txt?
++ Empties it (truncates to zero length)
+- Appends to it
+- Fails
+- Opens it read-only
+> Use "a" to append.
+~~~
+
+📚 **Go deeper:** cppreference.com, "File input/output"; K&R chapter 7; *C: The Complete Reference*, chapter 9 (File I/O).
+--- goals
+- open, read, write, append to and close text files, checking every fopen
+- report errors with errno, perror and strerror
+- read and write binary data with fread, fwrite, fseek and ftell
+- explain why raw binary struct files aren't portable
+- use the standard streams and fflush
+--- quiz
+? What does fopen return when the file can't be opened?
++ NULL, with errno set
+- -1
+- An empty FILE
+- It crashes
+> Always check it.
+? Which function moves to a byte position in a file?
++ fseek
+- fmove
+- ftell
+- rewind only
+> ftell tells you the current position.
+? Why add "b" to the mode on Windows for binary files?
++ Text mode translates line endings, which corrupts binary data
+- Binary files are bigger
+- It's required on Linux
+- To make it faster
+> On Linux "b" changes nothing.
+--- exercise code c
+::prompt
+Write a small **CSV report** tool. `main` (given) creates `sales.csv` with a header line and some rows like `north,widget,12,2.50`. Write `int report(const char *path)` that:
+
+- opens the file (on failure prints `cannot open <path>: <reason>` using `strerror(errno)` and returns -1);
+- skips the header, and parses every other line with `sscanf(line, "%15[^,],%15[^,],%d,%lf", region, product, &qty, &price)`; lines that don't give 4 values are counted as bad;
+- totals the revenue per region (at most 8 regions, kept in the order they first appear) and prints them, then the grand total and the number of bad lines;
+- closes the file and returns 0.
+
+```
+north    41.50
+south    48.00
+east      9.00
+total    98.50
+bad lines: 1
+cannot open missing.csv: No such file or directory
+```
+::starter
+#include <stdio.h>
+#include <string.h>
+#include <errno.h>
+
+int report(const char *path) {
+    return 0;
+}
+
+int main(void) {
+    FILE *f = fopen("sales.csv", "w");
+    if (f == NULL) return 1;
+    fputs("region,product,qty,price\n", f);
+    fputs("north,widget,12,2.50\n", f);
+    fputs("south,gadget,4,12.00\n", f);
+    fputs("north,gizmo,1,11.50\n", f);
+    fputs("oops\n", f);
+    fputs("east,widget,3,3.00\n", f);
+    fclose(f);
+    report("sales.csv");
+    report("missing.csv");
+    remove("sales.csv");
+    return 0;
+}
+::solution
+#include <stdio.h>
+#include <string.h>
+#include <errno.h>
+
+int report(const char *path) {
+    FILE *in = fopen(path, "r");
+    if (in == NULL) {
+        printf("cannot open %s: %s\n", path, strerror(errno));
+        return -1;
+    }
+    char regions[8][16];
+    double totals[8];
+    int count = 0, bad = 0;
+    char line[128];
+    fgets(line, sizeof line, in); // header
+    while (fgets(line, sizeof line, in) != NULL) {
+        char region[16], product[16];
+        int qty;
+        double price;
+        if (sscanf(line, "%15[^,],%15[^,],%d,%lf", region, product, &qty, &price) != 4) {
+            bad++;
+            continue;
+        }
+        int i = 0;
+        while (i < count && strcmp(regions[i], region) != 0) i++;
+        if (i == count) {
+            if (count == 8) continue;
+            strcpy(regions[count], region);
+            totals[count++] = 0.0;
+        }
+        totals[i] += qty * price;
+    }
+    fclose(in);
+    double total = 0.0;
+    for (int i = 0; i < count; i++) {
+        printf("%-6s %8.2f\n", regions[i], totals[i]);
+        total += totals[i];
+    }
+    printf("%-6s %8.2f\n", "total", total);
+    printf("bad lines: %d\n", bad);
+    return 0;
+}
+
+int main(void) {
+    FILE *f = fopen("sales.csv", "w");
+    if (f == NULL) return 1;
+    fputs("region,product,qty,price\n", f);
+    fputs("north,widget,12,2.50\n", f);
+    fputs("south,gadget,4,12.00\n", f);
+    fputs("north,gizmo,1,11.50\n", f);
+    fputs("oops\n", f);
+    fputs("east,widget,3,3.00\n", f);
+    fclose(f);
+    report("sales.csv");
+    report("missing.csv");
+    remove("sales.csv");
+    return 0;
+}
+::expected
+north     41.50
+south     48.00
+east       9.00
+total     98.50
+bad lines: 1
+cannot open missing.csv: No such file or directory
+::hints
+- `%15[^,]` reads up to 15 characters that aren't commas.
+- Find the region with a loop and `strcmp`; add it when it's new.
+- Print each line with `%-6s %8.2f`.
+--- cards
+fopen / fclose :: Open (NULL on failure) / flush and close; modes r, w, a, +, b.
+fgets / fprintf / fputs :: Read a line / write formatted text / write a string.
+errno / perror / strerror :: Why a library call failed, as a message.
+fread / fwrite / fseek / ftell :: Binary blocks and positioning.
+Buffering :: Output is buffered; fflush(stdout) forces it out.
+
+=== lesson c-preprocessor | The preprocessor and multi-file programs | 75
+## Before the compiler: the preprocessor
+
+Lines starting with `#` are handled by the **preprocessor**, a text-substitution pass that runs before compilation:
+
+```c
+#include <stdio.h>
+
+#define PI 3.14159265358979
+#define SQUARE(x) ((x) * (x))              // a function-like macro: parenthesise everything
+#define BAD_SQUARE(x) x * x
+#define MAX(a, b) ((a) > (b) ? (a) : (b))
+#define ARRAY_LEN(a) (sizeof (a) / sizeof (a)[0])
+#define DEBUG 1
+
+int main(void) {
+    printf("area %.2f\n", PI * SQUARE(2.0));
+    printf("SQUARE(1 + 2) = %d, BAD_SQUARE(1 + 2) = %d\n", SQUARE(1 + 2), BAD_SQUARE(1 + 2));
+    int i = 3;
+    int m = MAX(i, 2);
+    printf("max %d\n", m);
+    int data[] = {4, 8, 15, 16, 23, 42};
+    printf("%zu elements\n", ARRAY_LEN(data));
+#if DEBUG
+    printf("[debug] %s line %d, compiled on %s\n", __FILE__, __LINE__, __DATE__);
+#endif
+    return 0;
+}
+```
+
+- `BAD_SQUARE(1 + 2)` expands to `1 + 2 * 1 + 2`, which is 5: macros substitute **text**, not values. Parenthesise every parameter and the whole body.
+- A macro argument may be evaluated **twice**: `MAX(i++, 2)` increments `i` twice. Prefer `static inline` functions and `const` or `enum` constants when you can; use macros for what functions can't do (`ARRAY_LEN`, conditional compilation, `__FILE__` and `__LINE__`).
+- `#if`, `#ifdef`, `#ifndef`, `#elif`, `#else`, `#endif` include or exclude code, for debugging or for different platforms (`#ifdef _WIN32`). Compilers let you define macros on the command line: `gcc -DDEBUG=1`.
+
+## Splitting a program into files
+
+Real C programs are split into **modules**: a header (`.h`) declares the public interface, and a source file (`.c`) implements it.
+
+```
+// stack.h — the interface
+#ifndef STACK_H              // include guard: the header's content is seen only once
+#define STACK_H
+
+#include <stddef.h>
+
+typedef struct Stack Stack;  // opaque type: users can't see the fields
+
+Stack *stack_new(void);
+void stack_free(Stack *s);
+int stack_push(Stack *s, int value);
+int stack_pop(Stack *s, int *out);
+size_t stack_size(const Stack *s);
+
+#endif
+```
+
+```
+// stack.c — the implementation
+#include <stdlib.h>
+#include "stack.h"           // quotes: search the project's folders first
+
+struct Stack {               // the full definition is private to this file
+    int *data;
+    size_t len, cap;
+};
+
+static int grow(Stack *s) {  // static: not visible outside stack.c
+    size_t cap = s->cap ? s->cap * 2 : 8;
+    int *data = realloc(s->data, cap * sizeof *data);
+    if (data == NULL) return -1;
+    s->data = data;
+    s->cap = cap;
+    return 0;
+}
+
+Stack *stack_new(void) { return calloc(1, sizeof(Stack)); }
+/* ... the other functions ... */
+```
+
+```
+// main.c
+#include <stdio.h>
+#include "stack.h"
+
+int main(void) {
+    Stack *s = stack_new();
+    stack_push(s, 42);
+    printf("%zu\n", stack_size(s));
+    stack_free(s);
+}
+```
+
+Build it with `gcc -Wall -Wextra -o app main.c stack.c`. The **opaque type** is C's encapsulation: code outside `stack.c` can only use the functions, so the representation can change freely.
+
+- `extern int counter;` in a header **declares** a global defined (once) in one `.c` file. Defining a non-static global in a header gives "multiple definition" linker errors.
+- `static` functions and globals are private to their file.
+
+## Build tools
+
+Recompiling everything by hand gets slow. **make** rebuilds only what changed, from rules in a `Makefile`:
+
+```
+CC = gcc
+CFLAGS = -std=c17 -Wall -Wextra -g
+
+app: main.o stack.o
+	$(CC) $(CFLAGS) -o app main.o stack.o
+
+%.o: %.c stack.h
+	$(CC) $(CFLAGS) -c $<
+
+clean:
+	rm -f app *.o
+```
+
+**CMake** generates build files for any platform and IDE (`add_executable(app main.c stack.c)`), and is the usual choice for larger and cross-platform projects.
+
+~~~check
+? What does an include guard (#ifndef X_H / #define X_H / #endif) prevent?
++ The header's declarations being processed twice in one file
+- The header being found
+- Linking errors in all cases
+- Macros from being defined
+> Duplicate type definitions would be errors.
+~~~
+
+📚 **Go deeper:** cppreference.com, "Preprocessor"; the GNU make manual; K&R sections 4.5–4.11; *C: The Complete Reference*, chapter 10 (The Preprocessor and Comments).
+--- goals
+- define object-like and function-like macros safely, and know their pitfalls
+- use conditional compilation and predefined macros
+- split a program into headers and source files with include guards
+- hide implementation details with opaque types and static
+- describe how make and CMake build multi-file programs
+--- quiz
+? What does `#define DOUBLE(x) x + x` give for `DOUBLE(3) * 2`?
++ 9 (it expands to 3 + 3 * 2)
+- 12
+- 6
+- A compile error
+> Parenthesise the whole macro body.
+? Where should a global variable shared by several files be defined?
++ In exactly one .c file, with an extern declaration in a header
+- In the header
+- In every .c file
+- Nowhere: C has no globals
+> Otherwise: multiple definition errors.
+? What is an opaque type?
++ A struct declared in a header but defined only in its .c file
+- A struct with no fields
+- A void pointer
+- A macro
+> Users use it only through functions.
+? What's the difference between `#include <x.h>` and `#include "x.h"`?
++ Quotes search the project's folders first; angle brackets search the system's
+- None
+- Quotes are for C++
+- Angle brackets are for local files
+> Use quotes for your own headers.
+--- exercise code c
+::prompt
+Write a few **safe macros and inline functions** for a tiny logging and math helper:
+
+- `#define ARRAY_LEN(a)` — the number of elements of an array;
+- `#define CLAMP(x, lo, hi)` — fully parenthesised;
+- `#define LOG(level, msg)` — prints `[<level>] <file name only>: <msg>`, using `__FILE__` and a helper `const char *base_name(const char *path)` that returns the part after the last `/` or `\` (the runner's file is `main.c`);
+- `#define HERE() __LINE__`, which `main` uses to show that `__LINE__` is the line where the macro is used;
+- `static inline int max_int(int a, int b)`, safe from double evaluation.
+
+`main` (given) prints:
+
+```
+4 elements
+clamped: 0 5 10
+SQUARE-safe: max_int(i++, 3) = 5, i = 6
+[INFO] main.c: starting
+[WARN] main.c: low disk space
+lines apart: 1
+```
+::starter
+#include <stdio.h>
+#include <string.h>
+
+int main(void) {
+    int data[] = {3, 1, 4, 1};
+    printf("%d elements\n", 4);
+    return 0;
+}
+::solution
+#include <stdio.h>
+#include <string.h>
+
+#define ARRAY_LEN(a) (sizeof (a) / sizeof (a)[0])
+#define CLAMP(x, lo, hi) ((x) < (lo) ? (lo) : (x) > (hi) ? (hi) : (x))
+#define LOG(level, msg) printf("[%s] %s: %s\n", (level), base_name(__FILE__), (msg))
+#define HERE() __LINE__
+
+const char *base_name(const char *path) {
+    const char *slash = strrchr(path, '/');
+    const char *back = strrchr(path, '\\');
+    if (back != NULL && (slash == NULL || back > slash)) slash = back;
+    return slash ? slash + 1 : path;
+}
+
+static inline int max_int(int a, int b) {
+    return a > b ? a : b;
+}
+
+int main(void) {
+    int data[] = {3, 1, 4, 1};
+    printf("%zu elements\n", ARRAY_LEN(data));
+    printf("clamped: %d %d %d\n", CLAMP(-5, 0, 10), CLAMP(5, 0, 10), CLAMP(42, 0, 10));
+    int i = 5;
+    int m = max_int(i++, 3);
+    printf("SQUARE-safe: max_int(i++, 3) = %d, i = %d\n", m, i);
+    LOG("INFO", "starting");
+    LOG("WARN", "low disk space");
+    int first = HERE();
+    int second = HERE();
+    printf("lines apart: %d\n", second - first);
+    return 0;
+}
+::expected
+4 elements
+clamped: 0 5 10
+SQUARE-safe: max_int(i++, 3) = 5, i = 6
+[INFO] main.c: starting
+[WARN] main.c: low disk space
+lines apart: 1
+::hints
+- `strrchr(path, '/')` finds the last slash; on Windows the path may use `\`.
+- `__LINE__` expands to the line where the macro is **used**, so two `HERE()` calls on consecutive lines differ by 1.
+- An inline function evaluates each argument exactly once, so `i++` only increments once.
+--- cards
+#define :: Text substitution before compilation; parenthesise parameters and body.
+Double evaluation :: MAX(i++, j) increments twice: prefer static inline functions.
+#if / #ifdef :: Conditional compilation; -DNAME=value on the command line.
+Header + source :: .h declares the interface (with include guards), .c implements it.
+Opaque type :: typedef struct X X; in the header, fields only in the .c file.
+make / CMake :: Build tools that recompile only what changed.
+
+=== lesson c-stdlib | The standard library toolbox | 70
+## Sorting and searching
+
+`qsort` sorts any array, and `bsearch` searches a sorted one, given a **comparison function** that receives pointers to two elements as `const void *`:
+
+```c
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+typedef struct {
+    char name[16];
+    int score;
+} Player;
+
+static int by_score_desc(const void *a, const void *b) {
+    const Player *p = a, *q = b;
+    if (p->score != q->score) return (q->score > p->score) - (q->score < p->score);
+    return strcmp(p->name, q->name);
+}
+
+static int cmp_int(const void *a, const void *b) {
+    int x = *(const int *)a, y = *(const int *)b;
+    return (x > y) - (x < y);
+}
+
+int main(void) {
+    Player players[] = {{"cy", 70}, {"ada", 95}, {"bob", 70}, {"dee", 88}};
+    size_t n = sizeof players / sizeof players[0];
+    qsort(players, n, sizeof players[0], by_score_desc);
+    for (size_t i = 0; i < n; i++) printf("%s %d\n", players[i].name, players[i].score);
+
+    int primes[] = {2, 3, 5, 7, 11, 13, 17, 19};
+    int key = 13;
+    int *found = bsearch(&key, primes, 8, sizeof primes[0], cmp_int);
+    printf("13 %s at index %td\n", found ? "found" : "missing", found ? found - primes : -1);
+    return 0;
+}
+```
+
+`void *` is C's generic pointer: any object pointer converts to and from it without a cast. That's how `qsort`, `malloc` and `memcpy` work with any type.
+
+## Numbers, text and conversions
+
+| Header | Highlights |
+|---|---|
+| `<stdlib.h>` | `strtol`, `strtod`, `abs`, `llabs`, `div`, `malloc` family, `qsort`, `bsearch`, `rand`, `exit`, `atexit`, `getenv` |
+| `<math.h>` | `sqrt`, `pow`, `sin`, `exp`, `log`, `floor`, `ceil`, `round`, `fabs`, `fmod`, `hypot`, `isnan`, `INFINITY` (link with `-lm` on Linux) |
+| `<string.h>` | `memcpy`, `memmove`, `memset`, `memcmp`, plus the string functions |
+| `<ctype.h>` | `isalpha`, `isdigit`, `isspace`, `toupper`, `tolower` |
+| `<time.h>` | `time`, `clock`, `difftime`, `localtime`, `gmtime`, `strftime`, `mktime` |
+| `<assert.h>` | `assert(condition)`: aborts with a message when false (disabled by `-DNDEBUG`) |
+| `<limits.h>`, `<float.h>`, `<stdint.h>` | the ranges of every type |
+
+```c
+#include <stdio.h>
+#include <time.h>
+#include <math.h>
+#include <assert.h>
+
+int main(void) {
+    struct tm date = {.tm_year = 2026 - 1900, .tm_mon = 2, .tm_mday = 15, .tm_hour = 9};
+    time_t t = mktime(&date);                      // normalises the fields and fills the weekday
+    char buf[64];
+    strftime(buf, sizeof buf, "%A %d %B %Y, %H:%M", &date);
+    printf("%s\n", buf);
+
+    struct tm later = date;
+    later.tm_mday += 30;                           // mktime handles month overflow
+    mktime(&later);
+    strftime(buf, sizeof buf, "%Y-%m-%d", &later);
+    printf("30 days later: %s (%.0f days apart)\n", buf, difftime(mktime(&later), t) / 86400);
+
+    printf("%.3f %.1f %.1f %.1f\n", hypot(3, 4), floor(-2.5), round(2.5), fmod(10, 3));
+    assert(sqrt(16.0) == 4.0);
+    printf("assertions passed\n");
+    return 0;
+}
+```
+
+## Random numbers
+
+`rand()` returns pseudo-random numbers from 0 to `RAND_MAX`, seeded with `srand(seed)` (often `srand((unsigned)time(NULL))`). It's fine for games and simulations, but its quality and sequence differ between C libraries, and it must **never** be used for passwords or keys (use the operating system's cryptographic generator). For reproducible tests, write a small generator yourself, like this one (a *xorshift*):
+
+```c
+#include <stdio.h>
+#include <stdint.h>
+
+static uint32_t state = 2463534242u;
+
+uint32_t xorshift32(void) {
+    state ^= state << 13;
+    state ^= state >> 17;
+    state ^= state << 5;
+    return state;
+}
+
+int main(void) {
+    for (int i = 0; i < 5; i++) {
+        printf("dice: %u\n", xorshift32() % 6 + 1);
+    }
+    return 0;
+}
+```
+
+## Ending a program
+
+`return` from `main` or **`exit(status)`** anywhere ends the program normally: buffers are flushed and functions registered with `atexit` run. `abort()` ends it immediately (and `assert` uses it).
+
+~~~check
+? What type do qsort comparison functions receive?
++ const void * pointers to the two elements
+- The two elements by value
+- int indexes
+- char * strings
+> Cast them to pointers of the real type.
+~~~
+
+📚 **Go deeper:** cppreference.com, "C standard library headers"; *C: The Complete Reference*, chapters 13–18 (the standard library) and 21 (Sorting and Searching).
+--- goals
+- sort and search any array with qsort and bsearch and correct comparators
+- explain void * as C's generic pointer
+- use math.h, time.h (mktime, strftime) and assert
+- generate random numbers, and know rand's limits
+- end programs with return, exit and abort
+--- quiz
+? Why is `return a - b;` a risky int comparator?
++ It can overflow for large values of opposite signs
+- It sorts in reverse
+- qsort doesn't accept it
+- It's always correct
+> Use (a > b) - (a < b).
+? What does bsearch require of the array?
++ It must be sorted with the same comparison
+- Nothing
+- It must contain ints
+- It must be on the heap
+> Binary search halves a sorted range.
+? What does compiling with -DNDEBUG do to assert?
++ Turns every assert into nothing
+- Makes asserts print more
+- Makes asserts exit with 0
+- Nothing
+> Never put side effects inside assert.
+? Is rand() suitable for generating passwords?
++ No: it's predictable; use the OS's cryptographic generator
+- Yes, after srand(time(NULL))
+- Yes, if RAND_MAX is large
+- Only on Linux
+> Pseudo-random is not secure random.
+--- exercise code c
+::prompt
+Sort a **table of cities** in three ways with `qsort`, and search it with `bsearch`:
+
+- `typedef struct { char name[20]; char country[4]; int population; } City;`
+- comparators `by_name` (alphabetical), `by_population_desc` (largest first) and `by_country_then_name`;
+- after sorting by name, use `bsearch` with a key `City` (only the name filled in) to look up `"Lima"` and `"Atlantis"`.
+
+`print_cities` is given.
+
+```
+by name: Cairo, Lagos, Lima, Osaka, Tokyo
+by population: Tokyo, Cairo, Osaka, Lagos, Lima
+by country: Cairo (EG), Tokyo (JP), Osaka (JP), Lagos (NG), Lima (PE)
+Lima: PE, 10.1 million
+Atlantis: not found
+```
+
+Wait: ties by country must be alphabetical by name, so the third line is `Cairo (EG), Osaka (JP), Tokyo (JP), Lagos (NG), Lima (PE)`.
+::starter
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+typedef struct {
+    char name[20];
+    char country[4];
+    int population;
+} City;
+
+void print_cities(const char *label, const City *c, size_t n, int show_country) {
+    printf("%s:", label);
+    for (size_t i = 0; i < n; i++) {
+        printf("%s %s", i ? "," : "", c[i].name);
+        if (show_country) printf(" (%s)", c[i].country);
+    }
+    printf("\n");
+}
+
+int main(void) {
+    City cities[] = {
+        {"Lagos", "NG", 15388000}, {"Tokyo", "JP", 37115000}, {"Lima", "PE", 10092000},
+        {"Cairo", "EG", 22183000}, {"Osaka", "JP", 18967000},
+    };
+    size_t n = sizeof cities / sizeof cities[0];
+    print_cities("by name", cities, n, 0);
+    return 0;
+}
+::solution
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+typedef struct {
+    char name[20];
+    char country[4];
+    int population;
+} City;
+
+void print_cities(const char *label, const City *c, size_t n, int show_country) {
+    printf("%s:", label);
+    for (size_t i = 0; i < n; i++) {
+        printf("%s %s", i ? "," : "", c[i].name);
+        if (show_country) printf(" (%s)", c[i].country);
+    }
+    printf("\n");
+}
+
+static int by_name(const void *a, const void *b) {
+    const City *x = a, *y = b;
+    return strcmp(x->name, y->name);
+}
+
+static int by_population_desc(const void *a, const void *b) {
+    const City *x = a, *y = b;
+    return (y->population > x->population) - (y->population < x->population);
+}
+
+static int by_country_then_name(const void *a, const void *b) {
+    const City *x = a, *y = b;
+    int c = strcmp(x->country, y->country);
+    return c != 0 ? c : strcmp(x->name, y->name);
+}
+
+int main(void) {
+    City cities[] = {
+        {"Lagos", "NG", 15388000}, {"Tokyo", "JP", 37115000}, {"Lima", "PE", 10092000},
+        {"Cairo", "EG", 22183000}, {"Osaka", "JP", 18967000},
+    };
+    size_t n = sizeof cities / sizeof cities[0];
+    qsort(cities, n, sizeof cities[0], by_population_desc);
+    City by_pop[5];
+    memcpy(by_pop, cities, sizeof cities);
+    qsort(cities, n, sizeof cities[0], by_country_then_name);
+    City by_country[5];
+    memcpy(by_country, cities, sizeof cities);
+    qsort(cities, n, sizeof cities[0], by_name);
+    print_cities("by name", cities, n, 0);
+    print_cities("by population", by_pop, n, 0);
+    print_cities("by country", by_country, n, 1);
+    const char *wanted[] = {"Lima", "Atlantis"};
+    for (int i = 0; i < 2; i++) {
+        City key = {0};
+        snprintf(key.name, sizeof key.name, "%s", wanted[i]);
+        const City *c = bsearch(&key, cities, n, sizeof cities[0], by_name);
+        if (c) printf("%s: %s, %.1f million\n", c->name, c->country, c->population / 1e6);
+        else printf("%s: not found\n", wanted[i]);
+    }
+    return 0;
+}
+::expected
+by name: Cairo, Lagos, Lima, Osaka, Tokyo
+by population: Tokyo, Cairo, Osaka, Lagos, Lima
+by country: Cairo (EG), Osaka (JP), Tokyo (JP), Lagos (NG), Lima (PE)
+Lima: PE, 10.1 million
+Atlantis: not found
+::hints
+- A comparator converts its `const void *` arguments: `const City *x = a, *y = b;`.
+- `(y->population > x->population) - (y->population < x->population)` sorts descending without overflow.
+- `bsearch` needs the array sorted **by the same comparator** you search with: sort by name last.
+--- cards
+qsort / bsearch :: Generic sort and binary search with a const void * comparator.
+void * :: Generic object pointer; converts implicitly to and from other object pointers.
+mktime / strftime :: Normalise a struct tm / format a date.
+assert :: Checks an invariant; removed by -DNDEBUG.
+rand / srand :: Pseudo-random, library-specific, never for security.
+exit / abort / atexit :: Normal end (flushes) / immediate end / register clean-up.
+
+=== lesson c-safety | Modern, safe C | 80
+## C has evolved
+
+Code written in 1989 style still compiles, but modern C is safer and clearer:
+
+| Standard | Notable additions |
+|---|---|
+| **C99** | `//` comments, declarations anywhere (`for (int i = 0; ...)`), `bool`, `<stdint.h>`, `long long`, designated initialisers, compound literals, `inline`, `snprintf`, variable-length arrays |
+| **C11** | `_Static_assert`, anonymous structs and unions, `_Generic`, `<threads.h>` and atomics, `aligned_alloc`, removal of `gets` |
+| **C17** | bug fixes |
+| **C23** | `bool`, `true`, `false`, `nullptr` and `static_assert` as keywords, `constexpr`, `typeof`, `[[nodiscard]]` and other attributes, binary literals `0b1010`, digit separators `1'000'000`, `#embed` |
+
+```c
+#include <stdio.h>
+#include <stdint.h>
+#include <stdbool.h>
+
+typedef struct {
+    int x, y;
+} Point;
+
+_Static_assert(sizeof(int32_t) == 4, "int32_t must be 4 bytes"); // checked at compile time
+
+static int manhattan(Point a, Point b) {
+    int dx = a.x - b.x, dy = a.y - b.y;
+    return (dx < 0 ? -dx : dx) + (dy < 0 ? -dy : dy);
+}
+
+#define type_name(x) _Generic((x), int: "int", double: "double", const char *: "string", default: "other")
+
+int main(void) {
+    Point p = {.x = 3, .y = 4};                                 // designated initialiser
+    int d = manhattan(p, (Point){.x = 0, .y = 0});              // compound literal: an unnamed object
+    bool far = d > 5;
+    printf("distance %d, far %d\n", d, far);
+    printf("%s %s %s\n", type_name(42), type_name(2.5), type_name((const char *)"hi"));
+    int squares[5] = {[1] = 1, [4] = 16};                       // designated array elements
+    printf("%d %d %d\n", squares[0], squares[1], squares[4]);
+    return 0;
+}
+```
+
+## Undefined behaviour: the list to remember
+
+The compiler assumes your program **never** does any of these, and optimises accordingly. Code with undefined behaviour can work in a debug build and break in an optimised one:
+
+- reading or writing out of bounds (arrays, strings, heap blocks);
+- using memory after `free`, freeing twice, freeing what `malloc` didn't return;
+- dereferencing `NULL` or an uninitialised pointer;
+- reading an uninitialised variable;
+- signed integer overflow, shifting by a negative amount or by the type's width or more;
+- integer division by zero (and `INT_MIN / -1`);
+- modifying a string literal or a `const` object;
+- modifying a variable twice in one expression (`i = i++`);
+- a `printf`/`scanf` specifier that doesn't match the argument's type;
+- violating *strict aliasing* (reading a `float` through an `int *`): use `memcpy` instead.
+
+## Writing safe C
+
+Most security vulnerabilities in C code come from a few patterns. The defences are habits:
+
+1. **Bounds**: always carry sizes with buffers; check indexes; use `snprintf` instead of `sprintf`/`strcpy`/`strcat`; never `gets`.
+2. **Integer overflow**: check before arithmetic that can overflow, especially sizes passed to `malloc` (`n * size`).
+3. **Never use input as a format string**: `printf(user_text)` lets an attacker read memory with `%x` and even write it with `%n`. Write `printf("%s", user_text)`.
+4. **Memory**: one owner per allocation, `NULL` after `free`, the `goto cleanup` pattern.
+5. **Tools**: `-Wall -Wextra -Werror`, AddressSanitizer and UndefinedBehaviorSanitizer while testing, static analysers (clang-tidy, cppcheck), fuzzing (libFuzzer, AFL++).
+6. **const** everything that doesn't change, and give each function one clear job.
+
+```c
+#include <stdio.h>
+#include <stdint.h>
+#include <stdlib.h>
+
+// returns 0 and stores a * b in *out, or -1 if the product would overflow size_t
+int mul_size(size_t a, size_t b, size_t *out) {
+    if (a != 0 && b > SIZE_MAX / a) return -1;
+    *out = a * b;
+    return 0;
+}
+
+void *alloc_array(size_t count, size_t elem_size) {
+    size_t bytes;
+    if (mul_size(count, elem_size, &bytes) != 0) return NULL;   // refuse instead of wrapping
+    return malloc(bytes);
+}
+
+int main(void) {
+    void *ok = alloc_array(1000, sizeof(int));
+    void *huge = alloc_array(SIZE_MAX / 2, 4);
+    printf("ok allocated: %d, huge refused: %d\n", ok != NULL, huge == NULL);
+    free(ok);
+
+    const char *user_text = "100% safe";
+    printf("%s\n", user_text);       // never printf(user_text)
+    return 0;
+}
+```
+
+~~~check
+? Why is `printf(name);` dangerous when name comes from a user?
++ The user can put % specifiers in it and read or write memory
+- It's slow
+- It doesn't print anything
+- It's only a style issue
+> Always printf("%s", name).
+~~~
+
+📚 **Go deeper:** cppreference.com, "Undefined behavior"; the SEI CERT C Coding Standard; Jens Gustedt, *Modern C*; the GCC and Clang sanitizer documentation; *C: The Complete Reference*, chapter 11 (C99) and chapter 27 (Software Engineering Using C).
+--- goals
+- use modern C features: designated initialisers, compound literals, _Static_assert, _Generic
+- know what C23 adds
+- list the common kinds of undefined behaviour
+- prevent buffer overflows, integer overflow in sizes and format-string attacks
+- use warnings, sanitizers, static analysis and fuzzing to find bugs
+--- quiz
+? What does `(Point){.x = 1, .y = 2}` create?
++ An unnamed Point object (a compound literal)
+- A cast of two ints
+- A function call
+- A syntax error
+> Handy for arguments and returns.
+? Which check prevents `malloc(n * size)` from wrapping around?
++ if (n != 0 && size > SIZE_MAX / n) fail
+- if (n * size < 0) fail
+- if (n * size > SIZE_MAX) fail
+- No check is needed
+> The overflow happens before any comparison of the product.
+? What does `_Static_assert` check?
++ A condition at compile time
+- A condition at run time
+- A pointer is not NULL
+- A string is static
+> static_assert is a keyword in C23.
+? Which is NOT undefined behaviour?
++ Unsigned integer wrap-around
+- Signed integer overflow
+- Reading an uninitialised local
+- Dereferencing NULL
+> Unsigned arithmetic is modular by definition.
+--- exercise code c
+::prompt
+Harden a **buffer append** function. `typedef struct { char *data; size_t len, cap; } Buf;` is a growable string buffer. Write:
+
+- `int buf_append(Buf *b, const char *text, size_t text_len)`: appends `text_len` bytes and keeps the data `'\0'`-terminated. It must refuse (return -1, leaving the buffer unchanged) if `len + text_len + 1` would overflow `SIZE_MAX` or exceed the limit `BUF_MAX` (1024 bytes), and grow the capacity by doubling (starting at 16) until it fits;
+- `int buf_appendf(Buf *b, const char *fmt, ...)`-style formatting is out of scope: instead write `int buf_append_int(Buf *b, long value)` using `snprintf` into a small local array;
+- `void buf_free(Buf *b)`.
+
+`main` (given) checks the limits:
+
+```
+hello, world (12/16)
+count: 42 -7 (25/32)
+too big: -1, still 25 bytes
+overflow: -1
+data still ok: hello, world count: 42 -7
+```
+::starter
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdint.h>
+
+#define BUF_MAX 1024
+
+typedef struct {
+    char *data;
+    size_t len, cap;
+} Buf;
+
+int buf_append(Buf *b, const char *text, size_t text_len) { return -1; }
+
+int buf_append_int(Buf *b, long value) { return -1; }
+
+void buf_free(Buf *b) {}
+
+int main(void) {
+    Buf b = {0};
+    buf_append(&b, "hello, world", 12);
+    printf("%s (%zu/%zu)\n", b.data ? b.data : "", b.len, b.cap);
+    return 0;
+}
+::solution
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdint.h>
+
+#define BUF_MAX 1024
+
+typedef struct {
+    char *data;
+    size_t len, cap;
+} Buf;
+
+int buf_append(Buf *b, const char *text, size_t text_len) {
+    if (text_len > SIZE_MAX - b->len - 1) return -1;   // len + text_len + 1 would overflow
+    size_t needed = b->len + text_len + 1;
+    if (needed > BUF_MAX) return -1;
+    if (needed > b->cap) {
+        size_t cap = b->cap ? b->cap : 16;
+        while (cap < needed) cap *= 2;
+        char *data = realloc(b->data, cap);
+        if (data == NULL) return -1;
+        b->data = data;
+        b->cap = cap;
+    }
+    memcpy(b->data + b->len, text, text_len);
+    b->len += text_len;
+    b->data[b->len] = '\0';
+    return 0;
+}
+
+int buf_append_int(Buf *b, long value) {
+    char tmp[24];
+    int n = snprintf(tmp, sizeof tmp, "%ld", value);
+    if (n < 0 || (size_t)n >= sizeof tmp) return -1;
+    return buf_append(b, tmp, (size_t)n);
+}
+
+void buf_free(Buf *b) {
+    free(b->data);
+    *b = (Buf){0};
+}
+
+int main(void) {
+    Buf b = {0};
+    buf_append(&b, "hello, world", 12);
+    printf("%s (%zu/%zu)\n", b.data, b.len, b.cap);
+    buf_append(&b, " count: ", 8);
+    buf_append_int(&b, 42);
+    buf_append(&b, " ", 1);
+    buf_append_int(&b, -7);
+    printf("%s (%zu/%zu)\n", b.data + 13, b.len, b.cap);
+    char big[2000];
+    memset(big, 'x', sizeof big);
+    printf("too big: %d, still %zu bytes\n", buf_append(&b, big, sizeof big), b.len);
+    printf("overflow: %d\n", buf_append(&b, "x", SIZE_MAX));
+    printf("data still ok: %s\n", b.data);
+    buf_free(&b);
+    return 0;
+}
+::expected
+hello, world (12/16)
+count: 42 -7 (25/32)
+too big: -1, still 25 bytes
+overflow: -1
+data still ok: hello, world count: 42 -7
+::hints
+- Check overflow by rearranging: `text_len > SIZE_MAX - b->len - 1` can't overflow itself.
+- Grow with `realloc` into a temporary, doubling from 16 until the capacity fits.
+- `snprintf` returns the length it needed: compare it with the buffer size to detect truncation.
+- `main` appends `" count: "`, 42, `" "`, -7, then tries a 2000-byte append and one with length `SIZE_MAX`.
+--- cards
+C99 / C11 / C23 :: Designated initialisers, compound literals, bool, stdint / _Static_assert, _Generic / constexpr, nullptr, typeof.
+Undefined behaviour :: Out of bounds, use after free, NULL deref, signed overflow, uninitialised reads, bad format specifiers...
+Size overflow check :: if (n != 0 && size > SIZE_MAX / n) refuse.
+Format strings :: printf("%s", text), never printf(text).
+Safety tools :: -Wall -Wextra -Werror, ASan/UBSan, clang-tidy, fuzzing.
+
+=== lesson c-m6-test | Module 6 test | 160 | exam
+This test covers Module 6: files, the preprocessor and multi-file programs, the standard library, and modern, safe C.
+
+Before you start, check that you can:
+
+- read and write files and handle errors;
+- write safe macros and split code into modules;
+- sort and search with qsort and bsearch;
+- avoid undefined behaviour.
+--- goals
+- build a small, robust file-processing tool
+--- quiz
+? What must every successful fopen be matched with?
++ Exactly one fclose
+- A free
+- A fflush only
+- Nothing
+> Like malloc and free.
+? Which macro definition is safe?
++ #define TWICE(x) (2 * (x))
+- #define TWICE(x) 2 * x
+- #define TWICE(x) (2 * x)
+- #define TWICE x * 2
+> Parenthesise the parameter and the body.
+? What is wrong with `int *p = malloc(n * sizeof *p);` when n comes from a file?
++ n * sizeof *p can overflow, allocating too little
+- Nothing
+- sizeof *p is wrong
+- malloc can't allocate ints
+> Validate n or check the multiplication.
+? Where does `static` on a function make it visible?
++ Only in its own source file
+- Everywhere
+- Only in main
+- Only in headers
+> C's private.
+--- exercise code c
+::prompt
+**A log file analyser.** `main` (given) writes `app.log` with lines like `2026-03-15 10:02:11 ERROR payment: timeout after 30s`. Write `int analyse(const char *path, FILE *out)`:
+
+- open the file (return -1 and print `error: cannot open <path>` to `out` when it fails);
+- parse each line with `sscanf(line, "%10s %8s %7s %31[^:]: %127[^\n]", date, time, level, component, message)`; lines that don't produce 5 fields are malformed;
+- count lines per level (`INFO`, `WARN`, `ERROR`; other levels count as malformed);
+- remember the **first** and **last** ERROR (time and component) and count errors per component (up to 8 components, in order of first appearance);
+- print the report to `out` as shown, close the file, return the number of malformed lines.
+
+```
+lines: 7 (malformed: 2)
+INFO 2, WARN 1, ERROR 2
+first error: 10:02:11 payment
+last error: 11:15:40 db
+errors by component: payment=1 db=1
+malformed lines: 2
+error: cannot open nope.log
+```
+::starter
+#include <stdio.h>
+#include <string.h>
+
+int analyse(const char *path, FILE *out) {
+    return 0;
+}
+
+int main(void) {
+    FILE *f = fopen("app.log", "w");
+    if (f == NULL) return 1;
+    fputs("2026-03-15 09:58:00 INFO server: started on port 8080\n", f);
+    fputs("2026-03-15 10:02:11 ERROR payment: timeout after 30s\n", f);
+    fputs("garbage line\n", f);
+    fputs("2026-03-15 10:15:40 WARN db: slow query (2.1s)\n", f);
+    fputs("2026-03-15 10:30:00 DEBUG cache: miss\n", f);
+    fputs("2026-03-15 11:00:00 INFO server: health check ok\n", f);
+    fputs("2026-03-15 11:15:40 ERROR db: connection lost\n", f);
+    fclose(f);
+    int bad = analyse("app.log", stdout);
+    printf("malformed lines: %d\n", bad);
+    analyse("nope.log", stdout);
+    remove("app.log");
+    return 0;
+}
+::solution
+#include <stdio.h>
+#include <string.h>
+
+int analyse(const char *path, FILE *out) {
+    FILE *in = fopen(path, "r");
+    if (in == NULL) {
+        fprintf(out, "error: cannot open %s\n", path);
+        return -1;
+    }
+    int total = 0, malformed = 0, info = 0, warn = 0, error = 0;
+    char first[48] = "", last[48] = "";
+    char comps[8][32];
+    int comp_errors[8];
+    int ncomp = 0;
+    char line[256];
+    while (fgets(line, sizeof line, in) != NULL) {
+        total++;
+        char date[11], time[9], level[8], component[32], message[128];
+        if (sscanf(line, "%10s %8s %7s %31[^:]: %127[^\n]", date, time, level, component, message) != 5) {
+            malformed++;
+            continue;
+        }
+        if (strcmp(level, "INFO") == 0) {
+            info++;
+        } else if (strcmp(level, "WARN") == 0) {
+            warn++;
+        } else if (strcmp(level, "ERROR") == 0) {
+            error++;
+            snprintf(last, sizeof last, "%s %s", time, component);
+            if (first[0] == '\0') snprintf(first, sizeof first, "%s", last);
+            int i = 0;
+            while (i < ncomp && strcmp(comps[i], component) != 0) i++;
+            if (i == ncomp && ncomp < 8) {
+                snprintf(comps[ncomp], sizeof comps[0], "%s", component);
+                comp_errors[ncomp++] = 0;
+            }
+            if (i < ncomp) comp_errors[i]++;
+        } else {
+            malformed++;
+        }
+    }
+    fclose(in);
+    fprintf(out, "lines: %d (malformed: %d)\n", total, malformed);
+    fprintf(out, "INFO %d, WARN %d, ERROR %d\n", info, warn, error);
+    if (error > 0) {
+        fprintf(out, "first error: %s\n", first);
+        fprintf(out, "last error: %s\n", last);
+    }
+    fprintf(out, "errors by component:");
+    for (int i = 0; i < ncomp; i++) fprintf(out, " %s=%d", comps[i], comp_errors[i]);
+    fprintf(out, "\n");
+    return malformed;
+}
+
+int main(void) {
+    FILE *f = fopen("app.log", "w");
+    if (f == NULL) return 1;
+    fputs("2026-03-15 09:58:00 INFO server: started on port 8080\n", f);
+    fputs("2026-03-15 10:02:11 ERROR payment: timeout after 30s\n", f);
+    fputs("garbage line\n", f);
+    fputs("2026-03-15 10:15:40 WARN db: slow query (2.1s)\n", f);
+    fputs("2026-03-15 10:30:00 DEBUG cache: miss\n", f);
+    fputs("2026-03-15 11:00:00 INFO server: health check ok\n", f);
+    fputs("2026-03-15 11:15:40 ERROR db: connection lost\n", f);
+    fclose(f);
+    int bad = analyse("app.log", stdout);
+    printf("malformed lines: %d\n", bad);
+    analyse("nope.log", stdout);
+    remove("app.log");
+    return 0;
+}
+::expected
+lines: 7 (malformed: 2)
+INFO 2, WARN 1, ERROR 2
+first error: 10:02:11 payment
+last error: 11:15:40 db
+errors by component: payment=1 db=1
+malformed lines: 2
+error: cannot open nope.log
+::hints
+- `%31[^:]` reads the component up to the colon; the `: ` in the format then skips the colon and spaces.
+- Keep the first error only when the "first" string is still empty; overwrite "last" every time.
+- Write the report with `fprintf(out, ...)`: passing `stdout` makes it print, and the same function could write to a file.
